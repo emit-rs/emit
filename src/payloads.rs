@@ -4,7 +4,7 @@ use std::fmt::Write;
 use serde_json;
 
 pub fn format_payload(timestamp: chrono::DateTime<chrono::UTC>, template: &str, properties: &BTreeMap<&'static str, String>) -> String {
-    let mut body = "{\"Properties\":{".to_owned();
+    let mut body = "{\"Level\":\"Information\",\"Properties\":{".to_owned();
     
     let mut first = true;
     for (n,v) in properties {
