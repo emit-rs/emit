@@ -43,13 +43,21 @@ macro_rules! emit {
 mod tests {
     
     #[test]
-    fn it_works() {
-        emit!("Starting...");
-        
-        let u = "World";
+    fn unparameterized_templates_are_captured() {
+        let (template, properties) = get_event_data!("Starting...",);
+        assert!(template == "Starting...");
+        assert!(properties.len() == 0);
+    }
+    
+    #[test]
+    fn template_and_properties_are_captured() {
+        let u = "nblumhardt";
         let q = 42;
         
-        emit!("User {} exceeded quota of {}!", user: u, quota: q);
+        let (template, properties) = get_event_data!("User {} exceeded quota of {}!", user: u, quota: q);
+        assert!(template == "User {user} exceeded quota of {quota}!");
+        assert!(properties.get("user") == Some(&"\"nblumhardt\"".to_owned()));
+        assert!(properties.get("quota") == Some(&"42".to_owned()));
     }
     
 }
