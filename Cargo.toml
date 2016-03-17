@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Nicholas Blumhardt <nblumhardt@nblumhardt.com>"]
 description = "An experimental structured event emitter, currently work-in-progress."
 license = "Apache-2.0"
+homepage = "https://github.com/nblumhardt/emit"
 
 [dependencies]
 serde = "*"

@@ -1,5 +1,3 @@
-# emit
-
 I'm learning Rust by implementing a structured logging API similar to the one found in [Serilog](http://serilog.net).
 
 At the moment, just "making it work" end-to-end is the goal, with events like:
