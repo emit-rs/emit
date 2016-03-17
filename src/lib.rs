@@ -7,30 +7,33 @@ pub mod message_templates;
 pub mod payloads;
 pub mod pipeline;
 
-macro_rules! get_event_data {
+#[macro_export]
+#[doc(hidden)]
+macro_rules! emit_get_event_data__ {
     ($s:expr, $( $n:ident: $v:expr ),* ) => {{
+        #[allow(unused_imports)]
         use std::fmt::Write;
         use std::collections;
-        use serde_json;
 
-        let mut names: Vec<&str> = vec![];
-        let mut properties: collections::BTreeMap<&'static str, String> = collections::BTreeMap::new();
+        // Underscores avoid the unused_mut warning
+        let mut _names: Vec<&str> = vec![];
+        let mut _properties: collections::BTreeMap<&'static str, String> = collections::BTreeMap::new();
 
         $(
-            names.push(stringify!($n));
-            properties.insert(stringify!($n), serde_json::to_string(&$v).unwrap());            
+            _names.push(stringify!($n));
+            _properties.insert(stringify!($n), $crate::message_templates::capture(&$v));            
         )*
         
-        let template = $crate::message_templates::build_template($s, &names);
+        let template = $crate::message_templates::build_template($s, &_names);
                 
-        (template, properties)
+        (template, _properties)
     }};
 }
 
 #[macro_export]
 macro_rules! emit {
     ( $s:expr, $( $n:ident: $v:expr ),* ) => {{
-        let (template, properties) = get_event_data!($s, $($n: $v),*);
+        let (template, properties) = emit_get_event_data__!($s, $($n: $v),*);
         $crate::pipeline::emit(&template, &properties);
     }};
     
@@ -44,7 +47,7 @@ mod tests {
     
     #[test]
     fn unparameterized_templates_are_captured() {
-        let (template, properties) = get_event_data!("Starting...",);
+        let (template, properties) = emit_get_event_data__!("Starting...",);
         assert!(template == "Starting...");
         assert!(properties.len() == 0);
     }
@@ -54,7 +57,7 @@ mod tests {
         let u = "nblumhardt";
         let q = 42;
         
-        let (template, properties) = get_event_data!("User {} exceeded quota of {}!", user: u, quota: q);
+        let (template, properties) = emit_get_event_data__!("User {} exceeded quota of {}!", user: u, quota: q);
         assert!(template == "User {user} exceeded quota of {quota}!");
         assert!(properties.get("user") == Some(&"\"nblumhardt\"".to_owned()));
         assert!(properties.get("quota") == Some(&"42".to_owned()));

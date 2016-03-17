@@ -1,4 +1,6 @@
 use std::fmt::Write;
+use serde;
+use serde_json;
 
 pub fn build_template(s: &str, names: &[&str]) -> String {
     let mut template = "".to_owned();
@@ -21,6 +23,10 @@ pub fn build_template(s: &str, names: &[&str]) -> String {
     }
     
     template
+}
+
+pub fn capture<T: serde::ser::Serialize>(v: &T) -> String {
+    serde_json::to_string(v).unwrap()
 }
 
 #[cfg(test)]

@@ -11,7 +11,7 @@ pub fn emit(template: &str, properties: &BTreeMap<&'static str, String>) {
 
     let events = format!("{{\"Events\":[{}]}}", payload);
 
-    let mut client = Client::new();
+    let client = Client::new();
     let mut res = client.post("http://localhost:5341/api/events/raw/")
         .body(&events)
         .header(Connection::close())

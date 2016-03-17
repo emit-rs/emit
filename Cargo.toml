@@ -1,13 +1,13 @@
 [package]
 name = "emit"
-version = "0.2.0"
+version = "0.2.3"
 authors = ["Nicholas Blumhardt <nblumhardt@nblumhardt.com>"]
 description = "An experimental structured event emitter, currently work-in-progress."
 license = "Apache-2.0"
 homepage = "https://github.com/nblumhardt/emit"
 
 [dependencies]
-serde = "*"
-serde_json = "*"
-chrono = "*"
-hyper = "*"
+serde = "0.7"
+serde_json = "0.7"
+chrono = "0.2"
+hyper = "0.8"
