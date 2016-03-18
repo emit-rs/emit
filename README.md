@@ -1,12 +1,21 @@
 I'm learning Rust by implementing a structured logging API similar to the one found in [Serilog](http://serilog.net).
 
-At the moment, just "making it work" end-to-end is the goal, with events like:
+Events consist of a format and list of named arguments:
 
 ```rust
-emit!("Hello, {}!", name: "nblumhardt");
+#[macro_use]
+extern crate emit;
+
+use std::env;
+
+fn main() {
+    let _flush = emit::pipeline::init("http://localhost:5341/", None);
+            
+    emit!("Hello, {}!", name: env::var("USERNAME").unwrap());
+}
 ```
 
-Being sent to [Seq](https://getseq.net) as JSON payloads like:
+These end up in JSON payloads like:
 
 ```json
 {
@@ -18,4 +27,18 @@ Being sent to [Seq](https://getseq.net) as JSON payloads like:
 }
 ```
 
-At present, the `emit!` macro mostly works, as does JSON payload formatting. Everything else is work-in progress :-)
+Which can be rendered out to text or searched/sorted/filtered based on the event properties:
+
+![Event in Seq](https://raw.githubusercontent.com/nblumhardt/emit/master/asset/event_in_seq.png)
+
+I'm using Seq and its JSON format while I design the crate, but like Serilog this should eventually be pluggable to other log collectors and formats.
+
+**What about the `log` crate?**
+
+The `log!()` macro is obviously the best way to capture diagnostic events in Rust as it stands. Unfortunately `log` destructively renders events into text:
+
+```rust
+info!("Hello, {}!", env::var("USERNAME").unwrap());
+```
+
+There's no way further down the pipeline to pull the username value from this message except through handwritten parsers/regex. The idea of `emit` is that rendering _can_ happen at any point - but the original values are preserved for easy machine processing as well.
