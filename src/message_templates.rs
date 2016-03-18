@@ -40,7 +40,7 @@ mod tests {
         
         let built = build_template(s, &names);
         
-        assert!(built == s);
+        assert_eq!(built, s);
     }
 
     #[test]
@@ -50,7 +50,7 @@ mod tests {
         
         let built = build_template(s, &names);
         
-        assert!(built == "C {A} D {B} E");
+        assert_eq!(built, "C {A} D {B} E");
     }
 
     #[test]
@@ -60,7 +60,7 @@ mod tests {
         
         let built = build_template(s, &names);
         
-        assert!(built == "C {A} D");
+        assert_eq!(built, "C {A} D");
     }
 
     #[test]
@@ -70,7 +70,7 @@ mod tests {
         
         let built = build_template(s, &names);
         
-        assert!(built == "C {A} D {1} E");
+        assert_eq!(built, "C {A} D {1} E");
     }
 
     #[test]
@@ -80,7 +80,7 @@ mod tests {
         
         let built = build_template(s, &names);
         
-        assert!(built == "{A} D");
+        assert_eq!(built, "{A} D");
     }
 
     #[test]
@@ -90,7 +90,7 @@ mod tests {
         
         let built = build_template(s, &names);
         
-        assert!(built == "C {A}");
+        assert_eq!(built, "C {A}");
     }
 
 }
