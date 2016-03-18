@@ -1,6 +1,6 @@
-I'm learning Rust by implementing a structured logging API similar to the one found in [Serilog](http://serilog.net).
+> I'm learning Rust by implementing a structured logging API similar to the one found in [Serilog](http://serilog.net).
 
-Events consist of a format and list of named arguments:
+Log events consist of a format and list of *named* arguments:
 
 ```rust
 #[macro_use]
@@ -35,10 +35,12 @@ I'm using Seq and its JSON format while I design the crate, but like Serilog thi
 
 **What about the `log` crate?**
 
-The `log!()` macro is obviously the best way to capture diagnostic events in Rust as it stands. Unfortunately `log` destructively renders events into text:
+The `log!()` macros are obviously the best way to capture diagnostic events in Rust as it stands. However, `log` destructively renders events into text:
 
 ```rust
 info!("Hello, {}!", env::var("USERNAME").unwrap());
 ```
 
-There's no way further down the pipeline to pull the username value from this message except through handwritten parsers/regex. The idea of `emit` is that rendering _can_ happen at any point - but the original values are preserved for easy machine processing as well.
+There's no way for a log processing system to later pull the username value from this message except through handwritten parsers/regular expressions.
+
+The idea of `emit` is that rendering _can_ happen at any point - but the original values are preserved for easy machine processing as well.
