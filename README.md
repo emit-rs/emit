@@ -41,6 +41,6 @@ The `log!()` macros are obviously the best way to capture diagnostic events in R
 info!("Hello, {}!", env::var("USERNAME").unwrap());
 ```
 
-There's no way for a log processing system to later pull the username value from this message except through handwritten parsers/regular expressions.
+There's no way for a log processing system to later pull the username value from this message, except through handwritten parsers/regular expressions.
 
 The idea of `emit` is that rendering _can_ happen at any point - but the original values are preserved for easy machine processing as well.
