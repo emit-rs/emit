@@ -1,14 +1,12 @@
-use chrono::{DateTime,UTC};
-use std::collections::{BTreeMap};
-use payloads;
 use collectors;
+use events;
 use std::sync::mpsc::{channel, Sender};
 use std::thread;
 use std::mem;
 
 pub enum Item {
     Done,
-    Emit(String)
+    Emit(events::Event)
 }
 
 pub struct PipelineRef {
@@ -32,14 +30,13 @@ impl Drop for Pipeline {
     }
 }
     
-pub fn emit(template: &str, properties: &BTreeMap<&'static str, String>) {
+pub fn emit(event: events::Event) {
     // Should be an atomic read, etc.
     let p = unsafe { PIPELINE };    
     if p != 0 as *const PipelineRef {
-        let timestamp: DateTime<UTC> = UTC::now();
-        let payload = payloads::format_payload(timestamp, template, properties);
+        // Not sound, as chan is not Sync :-(
         unsafe {
-            (*p).chan.send(Item::Emit(payload)).is_ok();
+            (*p).chan.send(Item::Emit(event)).is_ok();
         }
     }
 }

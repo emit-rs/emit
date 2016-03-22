@@ -7,7 +7,7 @@ extern crate hyper;
 extern crate log;
 
 pub mod message_templates;
-pub mod payloads;
+pub mod events;
 pub mod pipeline;
 pub mod collectors;
 
@@ -21,18 +21,18 @@ macro_rules! __emit_get_event_data {
 
         // Underscores avoid the unused_mut warning
         let mut _names: Vec<&str> = vec![];
-        let mut _properties: collections::BTreeMap<&'static str, String> = collections::BTreeMap::new();
+        let mut properties: collections::BTreeMap<&'static str, String> = collections::BTreeMap::new();
 
         $(
             _names.push(stringify!($n));
-            _properties.insert(stringify!($n), $crate::message_templates::capture(&$v));            
+            properties.insert(stringify!($n), $crate::message_templates::capture(&$v));            
         )*
         
-        _properties.insert("target", $crate::message_templates::capture(&$target));
+        properties.insert("target", $crate::message_templates::capture(&$target));
         
         let template = $crate::message_templates::build_template($s, &_names);
                 
-        (template, _properties)
+        (template, properties)
     }};
 }
 
@@ -40,10 +40,11 @@ macro_rules! __emit_get_event_data {
 macro_rules! emit {
     ( target: $target:expr, $s:expr, $( $n:ident: $v:expr ),* ) => {{
         #[allow(unused_imports)]
-        use log::LogLevel;        
-        log!(target: $target, LogLevel::Info, $s, $($v),*);
+        use log;
+        log!(target: $target, log::LogLevel::Info, $s, $($v),*);
         let (template, properties) = __emit_get_event_data!($target, $s, $($n: $v),*);
-        $crate::pipeline::emit(&template, &properties);
+        let event = $crate::events::Event::new_now(template, properties);
+        $crate::pipeline::emit(event);
     }};
     
     ( target: $target:expr, $s:expr ) => {{
@@ -86,7 +87,7 @@ mod tests {
 
     #[test]
     pub fn emitted_events_are_flushed() {
-        let _flush = pipeline::init(seq::SeqCollector::local());
+        let _flush = pipeline::init(seq::SeqCollector::new_local());
         emit!("Hello, {}!", name: env::var("USERNAME").unwrap());
     }
 }
