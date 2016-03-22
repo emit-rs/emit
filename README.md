@@ -7,9 +7,11 @@ Log events consist of a format and list of *named* arguments:
 extern crate emit;
 
 use std::env;
+use emit::pipeline;
+use emit::collectors::seq;
 
 fn main() {
-    let _flush = emit::pipeline::init("http://localhost:5341/", None);
+    let _flush = pipeline::init(seq::SeqCollector::local());
             
     emit!("Hello, {}!", name: env::var("USERNAME").unwrap());
 }
@@ -44,3 +46,5 @@ info!("Hello, {}!", env::var("USERNAME").unwrap());
 There's no way for a log processing system to later pull the username value from this message, except through handwritten parsers/regular expressions.
 
 The idea of `emit` is that rendering _can_ happen at any point - but the original values are preserved for easy machine processing as well.
+
+To keep these two worlds in harmony, `emit` pushes all events through the `log` crate as well.
