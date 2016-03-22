@@ -6,11 +6,16 @@ Log events consist of a format and list of *named* arguments:
 #[macro_use]
 extern crate emit;
 
+#[macro_use]
+extern crate log;
+extern crate env_logger;
+
 use std::env;
 use emit::pipeline;
 use emit::collectors::seq;
 
 fn main() {
+    env_logger::init().unwrap();
     let _flush = pipeline::init(seq::SeqCollector::local());
             
     emit!("Hello, {}!", name: env::var("USERNAME").unwrap());
