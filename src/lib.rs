@@ -9,6 +9,7 @@ extern crate log;
 pub mod message_templates;
 pub mod payloads;
 pub mod pipeline;
+pub mod collectors;
 
 #[macro_export]
 #[doc(hidden)]
@@ -59,6 +60,7 @@ macro_rules! emit {
 
 #[cfg(test)]
 mod tests {
+    use collectors::seq;
     use pipeline;
     use std::env;
     
@@ -83,7 +85,7 @@ mod tests {
 
     #[test]
     pub fn emitted_events_are_flushed() {
-        let _flush = pipeline::init("http://localhost:5341/", None);
+        let _flush = pipeline::init(seq::SeqCollector::local());
         emit!("Hello, {}!", name: env::var("USERNAME").unwrap());
     }
 }

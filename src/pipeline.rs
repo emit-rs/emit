@@ -1,9 +1,8 @@
 use chrono::{DateTime,UTC};
 use std::collections::{BTreeMap};
 use payloads;
+use collectors;
 use std::io::Read;
-use hyper::Client;
-use hyper::header::Connection;
 use std::sync::mpsc::{channel, Sender};
 use std::thread;
 use std::mem;
@@ -46,22 +45,7 @@ pub fn emit(template: &str, properties: &BTreeMap<&'static str, String>) {
     }
 }
 
-fn dispatch(server_url: &str, api_key: Option<&str>, payload: String) {
-    let events = format!("{{\"Events\":[{}]}}", payload);
-
-    let client = Client::new();
-    let mut res = client.post(&format!("{}api/events/raw/", server_url))
-        .body(&events)
-        .header(Connection::close())
-        .send().unwrap();
-
-    let mut body = String::new();
-    res.read_to_string(&mut body).unwrap();
-
-    info!("Response: {}", body);
-}
-
-pub fn init(server_url: &str, api_key: Option<&str>) -> Pipeline {
+pub fn init<T: collectors::Collector + Send + 'static>(collector: T) -> Pipeline {
     let (tx, rx) = channel::<Item>();
     unsafe {
         let pr = Box::new(PipelineRef { chan: tx.clone() });
@@ -69,13 +53,13 @@ pub fn init(server_url: &str, api_key: Option<&str>) -> Pipeline {
         PIPELINE = mem::transmute::<Box<PipelineRef>, *const PipelineRef>(pr);
     }
     
-    let url = server_url.to_owned();
+    let coll = collector;
     let child = thread::spawn(move|| {
         loop {
             let done = match rx.recv().unwrap() {
                 Item::Done => true,
                 Item::Emit(payload) => {
-                    dispatch(&url, None, payload);
+                    coll.dispatch(&vec![payload]);
                     false
                 }
             };
