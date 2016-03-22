@@ -3,6 +3,7 @@ use events;
 use std::sync::mpsc::{channel, Sender};
 use std::thread;
 use std::mem;
+use std::sync;
 
 pub enum Item {
     Done,
@@ -10,7 +11,7 @@ pub enum Item {
 }
 
 pub struct PipelineRef {
-    chan: Sender<Item>
+    chan: sync::Mutex<Sender<Item>>
 }
 
 static mut PIPELINE: *const PipelineRef = 0 as *const PipelineRef;
@@ -34,9 +35,8 @@ pub fn emit(event: events::Event) {
     // Should be an atomic read, etc.
     let p = unsafe { PIPELINE };    
     if p != 0 as *const PipelineRef {
-        // Not sound, as chan is not Sync :-(
         unsafe {
-            (*p).chan.send(Item::Emit(event)).is_ok();
+            (*p).chan.lock().unwrap().send(Item::Emit(event)).is_ok();
         }
     }
 }
@@ -44,7 +44,7 @@ pub fn emit(event: events::Event) {
 pub fn init<T: collectors::Collector + Send + 'static>(collector: T) -> Pipeline {
     let (tx, rx) = channel::<Item>();
     unsafe {
-        let pr = Box::new(PipelineRef { chan: tx.clone() });
+        let pr = Box::new(PipelineRef { chan: sync::Mutex::new(tx.clone()) });
         // Should be atomic CAS etc.
         PIPELINE = mem::transmute::<Box<PipelineRef>, *const PipelineRef>(pr);
     }
