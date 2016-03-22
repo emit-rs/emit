@@ -5,7 +5,7 @@ use std::io::Read;
 
 pub const DEFAULT_EVENT_BODY_LIMIT_BYTES: usize = 1024 * 256;
 pub const DEFAULT_BATCH_LIMIT_BYTES: usize = 1024 * 1024 * 10;
-pub const LOCAL_SERVER_URL: &'static str = "http://localhost:5341";
+pub const LOCAL_SERVER_URL: &'static str = "http://localhost:5341/";
     
 pub struct SeqCollector {
     server_url: String, 

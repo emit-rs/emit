@@ -39,6 +39,7 @@ macro_rules! __emit_get_event_data {
 #[macro_export]
 macro_rules! emit {
     ( target: $target:expr, $s:expr, $( $n:ident: $v:expr ),* ) => {{
+        #[allow(unused_imports)]
         use log::LogLevel;        
         log!(target: $target, LogLevel::Info, $s, $($v),*);
         let (template, properties) = __emit_get_event_data!($target, $s, $($n: $v),*);

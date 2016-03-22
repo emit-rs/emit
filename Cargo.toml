@@ -1,6 +1,6 @@
 [package]
 name = "emit"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Nicholas Blumhardt <nblumhardt@nblumhardt.com>"]
 description = "An experimental structured event emitter, currently work-in-progress."
 license = "Apache-2.0"

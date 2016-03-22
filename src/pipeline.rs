@@ -2,7 +2,6 @@ use chrono::{DateTime,UTC};
 use std::collections::{BTreeMap};
 use payloads;
 use collectors;
-use std::io::Read;
 use std::sync::mpsc::{channel, Sender};
 use std::thread;
 use std::mem;
@@ -59,7 +58,9 @@ pub fn init<T: collectors::Collector + Send + 'static>(collector: T) -> Pipeline
             let done = match rx.recv().unwrap() {
                 Item::Done => true,
                 Item::Emit(payload) => {
-                    coll.dispatch(&vec![payload]);
+                    if let Err(e) = coll.dispatch(&vec![payload]) {
+                        error!("Could not dispatch events: {}", e);
+                    }
                     false
                 }
             };
