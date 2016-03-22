@@ -1,6 +1,5 @@
 use hyper;
 use hyper::header::Connection;
-use std::io;
 use std::io::Read;
 
 pub const DEFAULT_EVENT_BODY_LIMIT_BYTES: usize = 1024 * 256;
@@ -30,20 +29,20 @@ impl SeqCollector {
 }
 
 impl super::Collector for SeqCollector {
-    type Error = io::Error;
+    type Error = hyper::Error;
     
     fn dispatch(&self, events: &[String]) -> Result<(), Self::Error> {
         for payload in events {
             let el = format!("{{\"Events\":[{}]}}", payload);
-
+            let endpoint = format!("{}api/events/raw/", self.server_url);
             let client = hyper::Client::new();
-            let mut res = client.post(&format!("{}api/events/raw/", self.server_url))
+            let req = client.post(&endpoint)
                 .body(&el)
-                .header(Connection::close())
-                .send().unwrap();
+                .header(Connection::close());
+            let mut res = try!(req.send());
 
             let mut body = String::new();
-            try!(res.read_to_string(&mut body).map(|s| ()))
+            try!(res.read_to_string(&mut body).map(|_| ()))
         }
         
         Ok(())
