@@ -42,6 +42,21 @@ Which can be rendered out to text or searched/sorted/filtered based on the event
 
 I'm using [Seq](https://getseq.net) and its JSON format while I design the crate, but the aim is to be pluggable for other log collectors and formats.
 
+If you don't have Seq running, events can be written to `io::stdout` instead:
+
+```rust
+use emit::collectors::stdio;
+let _flush = pipeline::init(stdio::StdioCollector::new());
+```
+
+Produces:
+
+```
+emit 2016-03-24T05:03:36Z Hello, {name}!
+  name: "nblumhardt"
+  target: "web_we_are"
+```
+
 **What about the `log` crate?**
 
 The `log!()` macros are obviously the best way to capture diagnostic events in Rust as it stands. However, `log` destructively renders events into text:
