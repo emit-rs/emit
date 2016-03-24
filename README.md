@@ -1,6 +1,8 @@
-> I'm learning Rust by implementing a structured logging API similar to the one found in [Serilog](http://serilog.net).
+> I'm learning Rust by implementing a structured logging API similar to the one found in [Serilog](http://serilog.net). In systems programming, this style of logging is most often found in Windows' [ETW](https://msdn.microsoft.com/en-us/library/windows/desktop/aa363668(v=vs.85).aspx). Web and distributed applications use similar techniques to improve machine-readabililty when dealing with large event volumes.
 
-Log events consist of a format and list of *named* arguments:
+> The implementation here is currently a proof-of-concept.
+
+"Emitted" log events consist of a _format_ and list of _named properties_, as in the `emit!()` call below.
 
 ```rust
 #[macro_use]
