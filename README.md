@@ -40,7 +40,7 @@ Which can be rendered out to text or searched/sorted/filtered based on the event
 
 ![Event in Seq](https://raw.githubusercontent.com/nblumhardt/emit/master/asset/event_in_seq.png)
 
-I'm using Seq and its JSON format while I design the crate, but like Serilog this should eventually be pluggable to other log collectors and formats.
+I'm using [Seq](https://getseq.net) and its JSON format while I design the crate, but the aim is to be pluggable for other log collectors and formats.
 
 **What about the `log` crate?**
 
