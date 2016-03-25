@@ -24,19 +24,26 @@ fn main() {
 }
 ```
 
-These end up in JSON payloads like:
+These go through the standard `log` pipeline, for example to the console:
+
+```
+INFO:web_we_are: Hello, nblumhardt!
+```
+
+But the named arguments are captured as key/value properties that can be rendered in a structured format such as JSON:
 
 ```json
 {
   "Timestamp": "2016-03-17T00:17:01Z",
   "MessageTemplate": "Hello, {name}!",
   "Properties": {
-    "name": "nblumhardt"
+    "name": "nblumhardt",
+    "target": "web_we_are"
   }
 }
 ```
 
-Which can be rendered out to text or searched/sorted/filtered based on the event properties:
+This makes log searches in an appropriate back-end collector much simpler:
 
 ![Event in Seq](https://raw.githubusercontent.com/nblumhardt/emit/master/asset/event_in_seq.png)
 
