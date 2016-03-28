@@ -8,29 +8,18 @@
 #[macro_use]
 extern crate emit;
 
-#[macro_use]
-extern crate log;
-extern crate env_logger;
-
 use std::env;
 use emit::pipeline;
 use emit::collectors::seq;
 
 fn main() {
-    env_logger::init().unwrap();
     let _flush = pipeline::init(seq::SeqCollector::new_local());
             
     emit!("Hello, {}!", name: env::var("USERNAME").unwrap());
 }
 ```
 
-These go through the standard `log` pipeline, for example to the console:
-
-```
-INFO:web_we_are: Hello, nblumhardt!
-```
-
-But the named arguments are captured as key/value properties that can be rendered in a structured format such as JSON:
+The named arguments are captured as key/value properties that can be rendered in a structured format such as JSON:
 
 ```json
 {
@@ -66,7 +55,7 @@ emit 2016-03-24T05:03:36Z Hello, {name}!
 
 **What about the `log` crate?**
 
-The `log!()` macros are obviously the best way to capture diagnostic events in Rust as it stands. However, `log` destructively renders events into text:
+The `log!()` macros are the established way to capture diagnostic events in Rust today. However, `log` destructively renders events into text:
 
 ```rust
 info!("Hello, {}!", env::var("USERNAME").unwrap());
@@ -76,4 +65,4 @@ There's no way for a log processing system to later pull the username value from
 
 The idea of `emit` is that rendering _can_ happen at any point - but the original values are preserved for easy machine processing as well.
 
-To keep these two worlds in harmony, `emit` pushes all events through the `log` crate as well.
+To keep these two worlds in harmony, `emit` will be able to mirror events to `log` (#7).
