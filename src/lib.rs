@@ -16,7 +16,7 @@
 //! 
 //! The arguments passed to `emit` are named:
 //! 
-//! ```no_run
+//! ```ignore
 //! emit!("Hello, {}!", user: env::var("USERNAME").unwrap());
 //! ```
 //! 
@@ -109,31 +109,20 @@ macro_rules! __emit_get_event_data {
 
 #[macro_export]
 macro_rules! emit {
-    ( target: $target:expr, $s:expr, $( $n:ident: $v:expr ),* ) => {{
-        #[allow(unused_imports)]
-        use log;
-        log!(target: $target, log::LogLevel::Info, $s, $($v),*);
+    (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
         let (template, properties) = __emit_get_event_data!($target, $s, $($n: $v),*);
         let event = $crate::events::Event::new_now(template, properties);
         $crate::pipeline::emit(event);
     }};
     
-    ( target: $target:expr, $s:expr ) => {{
-        emit!(target: $target, $s,);
-    }};
-    
-    ( $s:expr, $( $n:ident: $v:expr ),* ) => {{
+    ($s:expr, $($n:ident: $v:expr),*) => {{
         emit!(target: module_path!(), $s, $($n: $v),*);
-    }};
-    
-    ( $s:expr ) => {{
-        emit!(target: module_path!(), $s,);
     }};
 }
 
 #[cfg(test)]
 mod tests {
-    use collectors::seq;
+    use collectors::stdio;
     use pipeline;
     use std::env;
     
@@ -158,7 +147,7 @@ mod tests {
 
     #[test]
     pub fn emitted_events_are_flushed() {
-        let _flush = pipeline::init(seq::SeqCollector::new_local());
+        let _flush = pipeline::init(stdio::StdioCollector::new());
         emit!("Hello, {}!", name: env::var("USERNAME").unwrap());
     }
 }
