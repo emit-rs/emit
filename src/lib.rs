@@ -1,16 +1,3 @@
-extern crate serde;
-extern crate serde_json;
-extern crate chrono;
-extern crate hyper;
-
-#[macro_use]
-extern crate log;
-
-pub mod message_templates;
-pub mod events;
-pub mod pipeline;
-pub mod collectors;
-
 //! Structured application logging.
 //!
 //! This module provides:
@@ -36,7 +23,7 @@ pub mod collectors;
 //! This event can be rendered into text identically to the `log` example, but structured data collectors also capture the
 //! aguments as a key/value property pairs.
 //! 
-//! ```json
+//! ```js
 //! {
 //!   "timestamp": "2016-03-17T00:17:01Z",
 //!   "messageTemplate": "Hello, {name}!",
@@ -78,9 +65,22 @@ pub mod collectors;
 //! ```text
 //! emit 2016-03-24T05:03:36Z Hello, {name}!
 //!   name: "nblumhardt"
-//!   target: "web_we_are"
+//!   target: "example_app"
 //! 
 //! ```
+
+extern crate serde;
+extern crate serde_json;
+extern crate chrono;
+extern crate hyper;
+
+#[macro_use]
+extern crate log;
+
+pub mod message_templates;
+pub mod events;
+pub mod pipeline;
+pub mod collectors;
 
 #[macro_export]
 #[doc(hidden)]
