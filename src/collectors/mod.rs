@@ -1,4 +1,5 @@
 pub mod seq;
+pub mod stdio;
 
 use std::error;
 use events;

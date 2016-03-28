@@ -18,7 +18,7 @@ use emit::collectors::seq;
 
 fn main() {
     env_logger::init().unwrap();
-    let _flush = pipeline::init(seq::SeqCollector::local());
+    let _flush = pipeline::init(seq::SeqCollector::new_local());
             
     emit!("Hello, {}!", name: env::var("USERNAME").unwrap());
 }

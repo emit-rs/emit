@@ -11,6 +11,77 @@ pub mod events;
 pub mod pipeline;
 pub mod collectors;
 
+//! Structured application logging.
+//!
+//! This module provides:
+//!
+//!  * The `emit!()` family of macros, for recording application events in an easily machine-readable format
+//!  * Collectors for transmitting these events to back-end logging servers
+//!
+//! The widely-used `log` crate doesn't preserve the structure of the events that are written through it. For example:
+//! 
+//! ```ignore
+//! info!("Hello, {}!", env::var("USERNAME").unwrap());
+//! ```
+//! 
+//! This writes `"Hello, nblumhardt!"` to the log as an block of text, that can't be broken apart to reveal the username except 
+//! with regular expressions.
+//! 
+//! The arguments passed to `emit` are named:
+//! 
+//! ```no_run
+//! emit!("Hello, {}!", user: env::var("USERNAME").unwrap());
+//! ```
+//! 
+//! This event can be rendered into text identically to the `log` example, but structured data collectors also capture the
+//! aguments as a key/value property pairs.
+//! 
+//! ```json
+//! {
+//!   "timestamp": "2016-03-17T00:17:01Z",
+//!   "messageTemplate": "Hello, {name}!",
+//!   "properties": {
+//!     "name": "nblumhardt",
+//!     "target": "example_app"
+//!   }
+//! }
+//! ```
+//! 
+//! Back-ends like Elasticsearch, Seq, and Splunk use these in queries like `user == "nblumhardt"` without up-front log parsing.
+//! 
+//! Arguments are captured using `serde`, so there's the potential for complex values to be logged so long as they're `serde::ser::Serialize`.
+//! 
+//! Further, because the template (format) itself is captured, it can be hashed to compute an "event type" for precisely finding
+//! all occurrences of the event regardless of the value of the `user` argument.
+//! 
+//! # Examples
+//! 
+//! The example below writes events to stdout.
+//! 
+//! ```
+//! #[macro_use]
+//! extern crate emit;
+//! 
+//! use std::env;
+//! use emit::pipeline;
+//! use emit::collectors::stdio;
+//! 
+//! fn main() {
+//!     let _flush = pipeline::init(stdio::StdioCollector::new());
+//! 
+//!     emit!("Hello, {}!", name: env::var("USERNAME").unwrap());
+//! }
+//! ```
+//! 
+//! Output:
+//! 
+//! ```text
+//! emit 2016-03-24T05:03:36Z Hello, {name}!
+//!   name: "nblumhardt"
+//!   target: "web_we_are"
+//! 
+//! ```
+
 #[macro_export]
 #[doc(hidden)]
 macro_rules! __emit_get_event_data {
