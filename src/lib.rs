@@ -205,8 +205,8 @@ mod tests {
     #[test]
     fn unparameterized_templates_are_captured() {
         let (template, properties) = __emit_get_event_data!("t", "Starting...",);
-        assert!(template == "Starting...");
-        assert!(properties.len() == 1);
+        assert_eq!(template, "Starting...");
+        assert_eq!(properties.len(), 1);
     }
     
     #[test]
@@ -215,10 +215,10 @@ mod tests {
         let q = 42;
         
         let (template, properties) = __emit_get_event_data!("t", "User {} exceeded quota of {}!", user: u, quota: q);
-        assert!(template == "User {user} exceeded quota of {quota}!");
-        assert!(properties.get("user") == Some(&"\"nblumhardt\"".to_owned()));
-        assert!(properties.get("quota") == Some(&"42".to_owned()));
-        assert!(properties.len() == 3);
+        assert_eq!(template, "User {user} exceeded quota of {quota}!");
+        assert_eq!(properties.get("user"), Some(&"\"nblumhardt\"".to_owned()));
+        assert_eq!(properties.get("quota"), Some(&"42".to_owned()));
+        assert_eq!(properties.len(), 3);
     }    
 
     #[test]
