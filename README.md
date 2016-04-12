@@ -1,8 +1,6 @@
-> I'm learning Rust by implementing a structured logging API similar to the one found in [Serilog](http://serilog.net). In systems programming, this style of logging is most often found in Windows' [ETW](https://msdn.microsoft.com/en-us/library/windows/desktop/aa363668(v=vs.85).aspx). Web and distributed applications use similar techniques to improve machine-readabililty when dealing with large event volumes.
+> This crate implements a structured logging API similar to the one found in [Serilog](http://serilog.net). In systems programming, this style of logging is most often found in Windows' [ETW](https://msdn.microsoft.com/en-us/library/windows/desktop/aa363668(v=vs.85).aspx). Web and distributed applications use similar techniques to improve machine-readabililty when dealing with large event volumes.
 
-> The implementation here is currently a proof-of-concept.
-
-"Emitted" log events consist of a _format_ and list of _named properties_, as in the `emit!()` call below.
+"Emitted" log events consist of a _format_ and list of _named properties_, as in the `eminfo!()` call below.
 
 ```rust
 #[macro_use]
@@ -15,7 +13,7 @@ use emit::collectors::seq;
 fn main() {
     let _flush = pipeline::init(seq::SeqCollector::new_local());
             
-    emit!("Hello, {}!", name: env::var("USERNAME").unwrap());
+    eminfo!("Hello, {}!", name: env::var("USERNAME").unwrap());
 }
 ```
 
@@ -24,6 +22,7 @@ The named arguments are captured as key/value properties that can be rendered in
 ```json
 {
   "Timestamp": "2016-03-17T00:17:01Z",
+  "Level": "Information",
   "MessageTemplate": "Hello, {name}!",
   "Properties": {
     "name": "nblumhardt",
@@ -48,7 +47,7 @@ let _flush = pipeline::init(stdio::StdioCollector::new());
 Produces:
 
 ```
-emit 2016-03-24T05:03:36Z Hello, {name}!
+emit 2016-03-24T05:03:36Z INFO  Hello, {name}!
   name: "nblumhardt"
   target: "web_we_are"
 ```

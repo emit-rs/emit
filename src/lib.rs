@@ -17,7 +17,7 @@
 //! The arguments passed to `emit` are named:
 //! 
 //! ```ignore
-//! emit!("Hello, {}!", user: env::var("USERNAME").unwrap());
+//! eminfo!("Hello, {}!", user: env::var("USERNAME").unwrap());
 //! ```
 //! 
 //! This event can be rendered into text identically to the `log` example, but structured data collectors also capture the
@@ -48,6 +48,7 @@
 //! ```
 //! #[macro_use]
 //! extern crate emit;
+//! # extern crate log;
 //! 
 //! use std::env;
 //! use emit::pipeline;
@@ -56,7 +57,7 @@
 //! fn main() {
 //!     let _flush = pipeline::init(stdio::StdioCollector::new());
 //! 
-//!     emit!("Hello, {}!", name: env::var("USERNAME").unwrap());
+//!     eminfo!("Hello, {}!", name: env::var("USERNAME").unwrap());
 //! }
 //! ```
 //! 
@@ -109,14 +110,89 @@ macro_rules! __emit_get_event_data {
 
 #[macro_export]
 macro_rules! emit {
-    (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
+    (target: $target:expr, $lvl:expr, $s:expr, $($n:ident: $v:expr),*) => {{
         let (template, properties) = __emit_get_event_data!($target, $s, $($n: $v),*);
-        let event = $crate::events::Event::new_now(template, properties);
+        let event = $crate::events::Event::new_now($lvl, template, properties);
         $crate::pipeline::emit(event);
     }};
     
+    ($lvl:expr, $s:expr, $($n:ident: $v:expr),*) => {{
+        emit!(target: module_path!(), $lvl, $s, $($n: $v),*);
+    }};
+}
+
+#[macro_export]
+macro_rules! emerror {
+    (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
+        #[allow(unused_imports)]
+        use log;
+        emit!(target: $target, log::LogLevel::Error, $s, $($n: $v),*);
+    }};
+    
     ($s:expr, $($n:ident: $v:expr),*) => {{
-        emit!(target: module_path!(), $s, $($n: $v),*);
+        #[allow(unused_imports)]
+        use log;
+        emit!(log::LogLevel::Error, $s, $($n: $v),*);
+    }};
+}
+
+#[macro_export]
+macro_rules! emwarn {
+    (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
+        #[allow(unused_imports)]
+        use log;
+        emit!(target: $target, log::LogLevel::Warn, $s, $($n: $v),*);
+    }};
+    
+    ($s:expr, $($n:ident: $v:expr),*) => {{
+        #[allow(unused_imports)]
+        use log;
+        emit!(log::LogLevel::Warn, $s, $($n: $v),*);
+    }};
+}
+
+#[macro_export]
+macro_rules! eminfo {
+    (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
+        #[allow(unused_imports)]
+        use log;
+        emit!(target: $target, log::LogLevel::Info, $s, $($n: $v),*);
+    }};
+    
+    ($s:expr, $($n:ident: $v:expr),*) => {{
+        #[allow(unused_imports)]
+        use log;
+        emit!(log::LogLevel::Info, $s, $($n: $v),*);
+    }};
+}
+
+#[macro_export]
+macro_rules! emdebug {
+    (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
+        #[allow(unused_imports)]
+        use log;
+        emit!(target: $target, log::LogLevel::Debug, $s, $($n: $v),*);
+    }};
+    
+    ($s:expr, $($n:ident: $v:expr),*) => {{
+        #[allow(unused_imports)]
+        use log;
+        emit!(log::LogLevel::Debug, $s, $($n: $v),*);
+    }};
+}
+
+#[macro_export]
+macro_rules! emtrace {
+    (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
+        #[allow(unused_imports)]
+        use log;
+        emit!(target: $target, log::LogLevel::Trace, $s, $($n: $v),*);
+    }};
+    
+    ($s:expr, $($n:ident: $v:expr),*) => {{
+        #[allow(unused_imports)]
+        use log;
+        emit!(log::LogLevel::Trace, $s, $($n: $v),*);
     }};
 }
 
@@ -146,8 +222,8 @@ mod tests {
     }    
 
     #[test]
-    pub fn emitted_events_are_flushed() {
+    fn emitted_events_are_flushed() {
         let _flush = pipeline::init(stdio::StdioCollector::new());
-        emit!("Hello, {}!", name: env::var("USERNAME").unwrap());
+        eminfo!("Hello, {}!", name: env::var("USERNAME").unwrap());        
     }
 }

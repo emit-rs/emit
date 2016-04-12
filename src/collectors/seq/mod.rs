@@ -4,11 +4,16 @@ use std::io::Read;
 use std::fmt::Write;
 use serde_json;
 use events;
+use log;
 
 pub const DEFAULT_EVENT_BODY_LIMIT_BYTES: usize = 1024 * 256;
 pub const DEFAULT_BATCH_LIMIT_BYTES: usize = 1024 * 1024 * 10;
 pub const LOCAL_SERVER_URL: &'static str = "http://localhost:5341/";
-    
+
+// 0 is "OFF", but fatal is the best effort for rendering this if we ever get an
+// event with that level.
+static SEQ_LEVEL_NAMES: [&'static str; 6] = ["Fatal", "Error", "Warning", "Information", "Debug", "Verbose"];
+
 pub struct SeqCollector {
     server_url: String, 
     api_key: Option<String>, 
@@ -54,7 +59,10 @@ impl super::Collector for SeqCollector {
 }
 
 fn format_payload(event: &events::Event) -> String {
-    let mut body = "{\"Level\":\"Information\",\"Properties\":{".to_owned();
+    let mut body = format!("{{\"Timestamp\":\"{}\",\"Level\":\"{}\",\"MessageTemplate\":{},\"Properties\":{{",
+        event.timestamp().format("%FT%TZ"),
+        to_seq_level(event.level()),
+        serde_json::to_string(event.message_template()).unwrap());
     
     let mut first = true;
     for (n,v) in event.properties() {
@@ -66,11 +74,32 @@ fn format_payload(event: &events::Event) -> String {
         }
         
         write!(&mut body, "\"{}\":{}", n, v).is_ok();            
-    }
-                    
-    write!(&mut body, "}},\"Timestamp\":\"{}\",\"MessageTemplate\":{}}}",
-        event.timestamp().format("%FT%TZ"),
-        serde_json::to_string(event.message_template()).unwrap()).is_ok();
+    }                    
+    body.push_str("}}");
     
     body     
+}
+
+fn to_seq_level(level: log::LogLevel) -> &'static str {
+    SEQ_LEVEL_NAMES[level as usize]
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections;
+    use chrono::UTC;
+    use chrono::offset::TimeZone;
+    use log;
+    use events;
+    use collectors::seq::format_payload;
+    
+    #[test]
+    fn events_are_formatted() {
+        let timestamp = UTC.ymd(2014, 7, 8).and_hms(9, 10, 11);  
+        let mut properties: collections::BTreeMap<&'static str, String> = collections::BTreeMap::new();
+        properties.insert("number", "42".to_owned());
+        let evt = events::Event::new(timestamp, log::LogLevel::Warn, "The number is {number}".to_owned(), properties);
+        let payload = format_payload(&evt);
+        assert_eq!(payload, "{\"Timestamp\":\"2014-07-08T09:10:11Z\",\"Level\":\"Warning\",\"MessageTemplate\":\"The number is {number}\",\"Properties\":{\"number\":42}}".to_owned());
+    }
 }
