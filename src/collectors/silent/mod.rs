@@ -2,6 +2,9 @@ use events;
 use std::error;
 use std::fmt;
 
+// Need to satisfy the contract of Collector but don't
+// have any error path so this for now.
+
 #[derive(Debug)]
 pub struct NoError { }
 

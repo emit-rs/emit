@@ -43,7 +43,14 @@ impl super::Collector for SeqCollector {
     
     fn dispatch(&self, events: &[events::Event]) -> Result<(), Self::Error> {     
         for event in events {
-            let payload = format_payload(event);
+            let mut payload = format_payload(event);
+            if payload.len() > self.event_body_limit_bytes {
+                payload = format_oversize_placeholder(event);
+                if payload.len() > self.event_body_limit_bytes {
+                    continue;
+                }
+            }
+            
             let el = format!("{{\"Events\":[{}]}}", payload);
             let endpoint = format!("{}api/events/raw/", self.server_url);
             let client = hyper::Client::new();
@@ -85,6 +92,19 @@ fn format_payload(event: &events::Event) -> String {
     body.push_str("}}");
     
     body     
+}
+
+fn format_oversize_placeholder(event: &events::Event) -> String {
+    let initial: String = if event.message_template().len() > 64 {
+        event.message_template().chars().take(64).into_iter().collect()
+    } else {
+        event.message_template().clone()
+    };
+    
+    format!("{{\"Timestamp\":\"{}\",\"Level\":\"{}\",\"MessageTemplate\":\"(Event too large) {{initial}}...\",\"Properties\":{{\"target\":\"emit::collectors::seq\",\"initial\":{}}}}}",
+        event.timestamp().format("%FT%TZ"),
+        to_seq_level(event.level()),
+        serde_json::to_string(&initial).unwrap())
 }
 
 fn to_seq_level(level: log::LogLevel) -> &'static str {
