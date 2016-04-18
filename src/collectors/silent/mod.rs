@@ -28,6 +28,7 @@ pub struct SilentCollector { }
 impl super::Collector for SilentCollector {
     type Error = NoError;
     
+    #[allow(unused_variables)]
     fn dispatch(&self, events: &[events::Event]) -> Result<(), Self::Error> {
         Ok(())
     }

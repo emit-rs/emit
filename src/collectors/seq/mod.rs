@@ -10,6 +10,8 @@ pub const DEFAULT_EVENT_BODY_LIMIT_BYTES: usize = 1024 * 256;
 pub const DEFAULT_BATCH_LIMIT_BYTES: usize = 1024 * 1024 * 10;
 pub const LOCAL_SERVER_URL: &'static str = "http://localhost:5341/";
 
+header! { (XSeqApiKey, "X-Seq-ApiKey") => [String] }
+
 // 0 is "OFF", but fatal is the best effort for rendering this if we ever get an
 // event with that level.
 static SEQ_LEVEL_NAMES: [&'static str; 6] = ["Fatal", "Error", "Warning", "Information", "Debug", "Verbose"];
@@ -45,9 +47,14 @@ impl super::Collector for SeqCollector {
             let el = format!("{{\"Events\":[{}]}}", payload);
             let endpoint = format!("{}api/events/raw/", self.server_url);
             let client = hyper::Client::new();
-            let req = client.post(&endpoint)
+            let mut req = client.post(&endpoint)
                 .body(&el)
                 .header(Connection::close());
+                
+            if let Some(ref api_key) = self.api_key {
+                req = req.header(XSeqApiKey(api_key.clone()));
+            }
+                
             let mut res = try!(req.send());
 
             let mut body = String::new();
