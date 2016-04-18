@@ -4,6 +4,7 @@ use std::sync::mpsc::{channel, Sender};
 use std::thread;
 use std::mem;
 use std::sync;
+use log;
 
 pub enum Item {
     Done,
@@ -11,7 +12,8 @@ pub enum Item {
 }
 
 pub struct PipelineRef {
-    chan: sync::Mutex<Sender<Item>>
+    chan: sync::Mutex<Sender<Item>>,
+    filter: log::LogLevelFilter
 }
 
 static mut PIPELINE: *const PipelineRef = 0 as *const PipelineRef;
@@ -30,6 +32,18 @@ impl Drop for Pipeline {
         }
     }
 }
+
+pub fn is_enabled(level: log::LogLevel) -> bool {
+    // Should be an atomic read, etc.
+    let p = unsafe { PIPELINE };    
+    if p != 0 as *const PipelineRef {
+        unsafe {
+            (*p).filter >= level
+        }
+    } else {
+        false
+    }
+}
     
 pub fn emit(event: events::Event) {
     // Should be an atomic read, etc.
@@ -41,10 +55,14 @@ pub fn emit(event: events::Event) {
     }
 }
 
-pub fn init<T: collectors::Collector + Send + 'static>(collector: T) -> Pipeline {
+pub fn init<T: collectors::Collector + Send + 'static>(collector: T, level: log::LogLevel) -> Pipeline {
     let (tx, rx) = channel::<Item>();
     unsafe {
-        let pr = Box::new(PipelineRef { chan: sync::Mutex::new(tx.clone()) });
+        let pr = Box::new(PipelineRef {
+                chan: sync::Mutex::new(tx.clone()),
+                filter: level.to_log_level_filter()
+            });
+            
         // Should be atomic CAS etc.
         PIPELINE = mem::transmute::<Box<PipelineRef>, *const PipelineRef>(pr);
     }
@@ -71,5 +89,30 @@ pub fn init<T: collectors::Collector + Send + 'static>(collector: T) -> Pipeline
     Pipeline {
          worker: Some(child),
          chan: tx
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pipeline;
+    use collectors::silent::SilentCollector;
+    use log;
+    
+    #[test]
+    fn info_is_enabled_at_info() {
+        let _flush = pipeline::init(SilentCollector::new(), log::LogLevel::Info);
+        assert!(pipeline::is_enabled(log::LogLevel::Info));
+    }
+    
+    #[test]
+    fn warn_is_enabled_at_info() {
+        let _flush = pipeline::init(SilentCollector::new(), log::LogLevel::Info);
+        assert!(pipeline::is_enabled(log::LogLevel::Warn));
+    }  
+      
+    #[test]
+    fn debug_is_disabled_at_info() {
+        let _flush = pipeline::init(SilentCollector::new(), log::LogLevel::Info);
+        assert!(!pipeline::is_enabled(log::LogLevel::Debug));
     }
 }

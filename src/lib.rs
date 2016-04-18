@@ -55,7 +55,7 @@
 //! use emit::collectors::stdio;
 //! 
 //! fn main() {
-//!     let _flush = pipeline::init(stdio::StdioCollector::new());
+//!     let _flush = pipeline::init(stdio::StdioCollector::new(), emit::LogLevel::Info);
 //! 
 //!     eminfo!("Hello, {}!", name: env::var("USERNAME").unwrap());
 //! }
@@ -82,6 +82,10 @@ pub mod message_templates;
 pub mod events;
 pub mod pipeline;
 pub mod collectors;
+
+/// Re-exports log::LogLevel so that users can initialize the emit
+/// crate without extra imports.
+pub use log::LogLevel;
 
 #[macro_export]
 #[doc(hidden)]
@@ -111,9 +115,12 @@ macro_rules! __emit_get_event_data {
 #[macro_export]
 macro_rules! emit {
     (target: $target:expr, $lvl:expr, $s:expr, $($n:ident: $v:expr),*) => {{
-        let (template, properties) = __emit_get_event_data!($target, $s, $($n: $v),*);
-        let event = $crate::events::Event::new_now($lvl, template, properties);
-        $crate::pipeline::emit(event);
+        let lvl = $lvl;
+        if $crate::pipeline::is_enabled(lvl) {
+            let (template, properties) = __emit_get_event_data!($target, $s, $($n: $v),*);
+            let event = $crate::events::Event::new_now(lvl, template, properties);
+            $crate::pipeline::emit(event);
+        }
     }};
     
     ($lvl:expr, $s:expr, $($n:ident: $v:expr),*) => {{
@@ -201,6 +208,7 @@ mod tests {
     use collectors::stdio;
     use pipeline;
     use std::env;
+    use log;
     
     #[test]
     fn unparameterized_templates_are_captured() {
@@ -223,7 +231,7 @@ mod tests {
 
     #[test]
     fn emitted_events_are_flushed() {
-        let _flush = pipeline::init(stdio::StdioCollector::new());
+        let _flush = pipeline::init(stdio::StdioCollector::new(), log::LogLevel::Info);
         eminfo!("Hello, {}!", name: env::var("USERNAME").unwrap());        
     }
 }

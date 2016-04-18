@@ -1,5 +1,6 @@
 pub mod seq;
 pub mod stdio;
+pub mod silent;
 
 use std::error;
 use events;
