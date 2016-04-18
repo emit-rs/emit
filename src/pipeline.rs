@@ -4,6 +4,7 @@ use std::sync::mpsc::{channel, Sender};
 use std::thread;
 use std::mem;
 use std::sync;
+use std::sync::atomic;
 use log;
 
 pub enum Item {
@@ -16,7 +17,7 @@ pub struct PipelineRef {
     filter: log::LogLevelFilter
 }
 
-static mut PIPELINE: *const PipelineRef = 0 as *const PipelineRef;
+static PIPELINE: atomic::AtomicUsize = atomic::ATOMIC_USIZE_INIT;
 
 pub struct Pipeline {
     chan: Sender<Item>,
@@ -34,8 +35,7 @@ impl Drop for Pipeline {
 }
 
 pub fn is_enabled(level: log::LogLevel) -> bool {
-    // Should be an atomic read, etc.
-    let p = unsafe { PIPELINE };    
+    let p = PIPELINE.load(atomic::Ordering::Relaxed) as *const PipelineRef;    
     if p != 0 as *const PipelineRef {
         unsafe {
             (*p).filter >= level
@@ -46,8 +46,7 @@ pub fn is_enabled(level: log::LogLevel) -> bool {
 }
     
 pub fn emit(event: events::Event) {
-    // Should be an atomic read, etc.
-    let p = unsafe { PIPELINE };    
+    let p = PIPELINE.load(atomic::Ordering::Relaxed) as *const PipelineRef;    
     if p != 0 as *const PipelineRef {
         unsafe {
             (*p).chan.lock().unwrap().send(Item::Emit(event)).is_ok();
@@ -57,15 +56,12 @@ pub fn emit(event: events::Event) {
 
 pub fn init<T: collectors::Collector + Send + 'static>(collector: T, level: log::LogLevel) -> Pipeline {
     let (tx, rx) = channel::<Item>();
-    unsafe {
-        let pr = Box::new(PipelineRef {
-                chan: sync::Mutex::new(tx.clone()),
-                filter: level.to_log_level_filter()
-            });
-            
-        // Should be atomic CAS etc.
-        PIPELINE = mem::transmute::<Box<PipelineRef>, *const PipelineRef>(pr);
-    }
+    let pr = Box::new(PipelineRef {
+            chan: sync::Mutex::new(tx.clone()),
+            filter: level.to_log_level_filter()
+        });
+        
+    PIPELINE.store(unsafe { mem::transmute::<Box<PipelineRef>, *const PipelineRef>(pr) } as usize, atomic::Ordering::SeqCst);
     
     let coll = collector;
     let child = thread::spawn(move|| {
