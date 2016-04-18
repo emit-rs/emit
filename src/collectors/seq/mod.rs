@@ -17,56 +17,84 @@ header! { (XSeqApiKey, "X-Seq-ApiKey") => [String] }
 static SEQ_LEVEL_NAMES: [&'static str; 6] = ["Fatal", "Error", "Warning", "Information", "Debug", "Verbose"];
 
 pub struct SeqCollector {
-    server_url: String, 
     api_key: Option<String>, 
     event_body_limit_bytes: usize, 
-    batch_limit_bytes: usize
+    batch_limit_bytes: usize,
+    endpoint: String
 }
 
 impl SeqCollector {
     pub fn new<'b>(server_url: &'b str, api_key: Option<&'b str>, event_body_limit_bytes: usize, batch_limit_bytes: usize) -> SeqCollector {
         SeqCollector {
-            server_url: server_url.to_owned(),
             api_key: api_key.map(|k| k.to_owned()),
             event_body_limit_bytes: event_body_limit_bytes,
-            batch_limit_bytes: batch_limit_bytes
+            batch_limit_bytes: batch_limit_bytes,
+            endpoint: format!("{}api/events/raw/", server_url)
         }
     }
     
     pub fn new_local() -> SeqCollector {
         Self::new(LOCAL_SERVER_URL, None, DEFAULT_EVENT_BODY_LIMIT_BYTES, DEFAULT_BATCH_LIMIT_BYTES)
     }
+    
+    fn send_batch(&self, payload: &String)  -> Result<(), <Self as super::Collector>::Error> {
+        let client = hyper::Client::new();
+        let mut req = client.post(&self.endpoint)
+            .body(payload)
+            .header(Connection::close());
+            
+        if let Some(ref api_key) = self.api_key {
+            req = req.header(XSeqApiKey(api_key.clone()));
+        }
+            
+        let mut res = try!(req.send());
+
+        let mut body = String::new();
+        try!(res.read_to_string(&mut body));
+        Ok(())
+    }
 }
+
+const HEADER: &'static str = "{\"Events\":[";
+const HEADER_LEN: usize = 11;
+const FOOTER: &'static str = "]}";
+const FOOTER_LEN: usize = 2;
 
 impl super::Collector for SeqCollector {
     type Error = hyper::Error;
     
-    fn dispatch(&self, events: &[events::Event]) -> Result<(), Self::Error> {     
+    fn dispatch(&self, events: &[events::Event]) -> Result<(), Self::Error> {
+        let mut next = HEADER.to_owned();
+        let mut count = HEADER_LEN + FOOTER_LEN;
+        let mut delim = "";
+        
         for event in events {
             let mut payload = format_payload(event);
             if payload.len() > self.event_body_limit_bytes {
                 payload = format_oversize_placeholder(event);
                 if payload.len() > self.event_body_limit_bytes {
+                    error!("An oversize event was detected but the size limit is so low a placeholder cannot be substituted");
                     continue;
                 }
             }
             
-            let el = format!("{{\"Events\":[{}]}}", payload);
-            let endpoint = format!("{}api/events/raw/", self.server_url);
-            let client = hyper::Client::new();
-            let mut req = client.post(&endpoint)
-                .body(&el)
-                .header(Connection::close());
+            // Make sure at least one event is included in each batch
+            if delim != "" && count + delim.len() + payload.len() > self.batch_limit_bytes {
+                write!(next, "{}", FOOTER).is_ok();
+                try!(self.send_batch(&next));
                 
-            if let Some(ref api_key) = self.api_key {
-                req = req.header(XSeqApiKey(api_key.clone()));
-            }
-                
-            let mut res = try!(req.send());
-
-            let mut body = String::new();
-            try!(res.read_to_string(&mut body).map(|_| ()))
+                next = format!("{}{}", HEADER, payload);
+                count = HEADER_LEN + FOOTER_LEN + payload.len();
+                delim = ",";
+            } else {
+                write!(next, "{}{}", delim, payload).is_ok();
+                count += delim.len() + payload.len();
+                delim = ",";
+            }            
         }
+
+        write!(next, "{}", FOOTER).is_ok();
+        try!(self.send_batch(&next));
         
         Ok(())
     }
@@ -88,9 +116,9 @@ fn format_payload(event: &events::Event) -> String {
         }
         
         write!(&mut body, "\"{}\":{}", n, v).is_ok();            
-    }                    
+    }
+             
     body.push_str("}}");
-    
     body     
 }
 

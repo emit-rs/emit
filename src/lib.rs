@@ -207,7 +207,8 @@ macro_rules! emtrace {
 
 #[cfg(test)]
 mod tests {
-    use collectors::stdio;
+    // use collectors::stdio;
+    use collectors::seq;
     use pipeline;
     use std::env;
     use log;
@@ -233,7 +234,8 @@ mod tests {
 
     #[test]
     fn emitted_events_are_flushed() {
-        let _flush = pipeline::init(stdio::StdioCollector::new(), log::LogLevel::Info);
+        // let _flush = pipeline::init(stdio::StdioCollector::new(), log::LogLevel::Info);
+        let _flush = pipeline::init(seq::SeqCollector::new_local(), log::LogLevel::Info);
         eminfo!("Hello, {}!", name: env::var("USERNAME").unwrap());        
     }
 }
