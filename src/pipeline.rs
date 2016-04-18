@@ -1,6 +1,6 @@
 use collectors;
 use events;
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{channel, Sender, Receiver};
 use std::thread;
 use std::mem;
 use std::sync;
@@ -63,8 +63,17 @@ pub fn init<T: collectors::Collector + Send + 'static>(collector: T, level: log:
         
     PIPELINE.store(unsafe { mem::transmute::<Box<PipelineRef>, *const PipelineRef>(pr) } as usize, atomic::Ordering::SeqCst);
     
+    let child = start_pump(collector, rx);
+    
+    Pipeline {
+         worker: Some(child),
+         chan: tx
+    }
+}
+
+fn start_pump<T: collectors::Collector + Send + 'static>(collector: T, rx: Receiver<Item>) -> thread::JoinHandle<()> {
     let coll = collector;
-    let child = thread::spawn(move|| {
+    thread::spawn(move|| {
         loop {
             let done = match rx.recv().unwrap() {
                 Item::Done => true,
@@ -80,12 +89,7 @@ pub fn init<T: collectors::Collector + Send + 'static>(collector: T, level: log:
                 break;
             }
         }
-    });
-    
-    Pipeline {
-         worker: Some(child),
-         chan: tx
-    }
+    })
 }
 
 #[cfg(test)]
