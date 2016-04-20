@@ -104,7 +104,7 @@ fn format_payload(event: &events::Event) -> String {
     let mut body = format!("{{\"Timestamp\":\"{}\",\"Level\":\"{}\",\"MessageTemplate\":{},\"Properties\":{{",
         event.timestamp().format("%FT%TZ"),
         to_seq_level(event.level()),
-        serde_json::to_string(event.message_template()).unwrap());
+        serde_json::to_string(event.message_template().text()).unwrap());
     
     let mut first = true;
     for (n,v) in event.properties() {
@@ -123,10 +123,10 @@ fn format_payload(event: &events::Event) -> String {
 }
 
 fn format_oversize_placeholder(event: &events::Event) -> String {
-    let initial: String = if event.message_template().len() > 64 {
-        event.message_template().chars().take(64).into_iter().collect()
+    let initial: String = if event.message_template().text().len() > 64 {
+        event.message_template().text().chars().take(64).into_iter().collect()
     } else {
-        event.message_template().clone()
+        event.message_template().text().clone()
     };
     
     format!("{{\"Timestamp\":\"{}\",\"Level\":\"{}\",\"MessageTemplate\":\"(Event too large) {{initial}}...\",\"Properties\":{{\"target\":\"emit::collectors::seq\",\"initial\":{}}}}}",
@@ -147,13 +147,14 @@ mod tests {
     use log;
     use events;
     use collectors::seq::format_payload;
+    use templates;
     
     #[test]
     fn events_are_formatted() {
         let timestamp = UTC.ymd(2014, 7, 8).and_hms(9, 10, 11);  
         let mut properties: collections::BTreeMap<&'static str, String> = collections::BTreeMap::new();
         properties.insert("number", "42".to_owned());
-        let evt = events::Event::new(timestamp, log::LogLevel::Warn, "The number is {number}".to_owned(), properties);
+        let evt = events::Event::new(timestamp, log::LogLevel::Warn, templates::MessageTemplate::new("The number is {number}"), properties);
         let payload = format_payload(&evt);
         assert_eq!(payload, "{\"Timestamp\":\"2014-07-08T09:10:11Z\",\"Level\":\"Warning\",\"MessageTemplate\":\"The number is {number}\",\"Properties\":{\"number\":42}}".to_owned());
     }

@@ -1,3 +1,6 @@
+//! An asynchronous/buffered log event pipeline from producers to a single dispatching consumer.
+//! Currently based on channels, but highly likely this will change.
+
 use collectors;
 use events;
 use std::sync::mpsc::{channel, Sender, Receiver};
@@ -7,18 +10,57 @@ use std::sync;
 use std::sync::atomic;
 use log;
 
-pub enum Item {
+enum Item {
     Done,
     Emit(events::Event)
 }
 
-pub struct PipelineRef {
+/// `PipelineRef` is the (eventually highly-concurrent) "mouth" of the pipeline,
+/// into which events are fed.
+struct PipelineRef {
     chan: sync::Mutex<Sender<Item>>,
     filter: log::LogLevelFilter
 }
 
-static PIPELINE: atomic::AtomicUsize = atomic::ATOMIC_USIZE_INIT;
+unsafe impl Sync for PipelineRef { }
 
+impl PipelineRef {
+    pub fn is_enabled(&self, level: log::LogLevel) -> bool {
+        self.filter >= level
+    }
+    
+    pub fn emit(&self, event: events::Event) {
+        self.chan.lock().unwrap().send(Item::Emit(event)).expect("The event could not be emitted to the pipeline");
+    }
+}
+
+static PIPELINE_REF: atomic::AtomicUsize = atomic::ATOMIC_USIZE_INIT;
+
+fn get_ambient_ref() -> *const PipelineRef {
+    PIPELINE_REF.load(atomic::Ordering::Relaxed) as *const PipelineRef
+}
+
+pub fn is_enabled(level: log::LogLevel) -> bool {
+    let p = get_ambient_ref();    
+    if p != 0 as *const PipelineRef {
+        unsafe {
+            (*p).is_enabled(level)
+        }
+    } else {
+        false
+    }
+}
+    
+pub fn emit(event: events::Event) {
+    let p = get_ambient_ref();    
+    if p != 0 as *const PipelineRef {
+        unsafe {
+            (*p).emit(event);
+        }
+    }
+}
+
+/// `Pipeline` is the  "consumer" end that dispatches events to collectors.
 pub struct Pipeline {
     chan: Sender<Item>,
     worker: Option<thread::JoinHandle<()>>
@@ -34,22 +76,30 @@ impl Drop for Pipeline {
     }
 }
 
-pub fn is_enabled(level: log::LogLevel) -> bool {
-    let p = PIPELINE.load(atomic::Ordering::Relaxed) as *const PipelineRef;    
-    if p != 0 as *const PipelineRef {
-        unsafe {
-            (*p).filter >= level
-        }
-    } else {
-        false
-    }
-}
-    
-pub fn emit(event: events::Event) {
-    let p = PIPELINE.load(atomic::Ordering::Relaxed) as *const PipelineRef;    
-    if p != 0 as *const PipelineRef {
-        unsafe {
-            (*p).chan.lock().unwrap().send(Item::Emit(event)).is_ok();
+impl Pipeline {
+    fn new<T: collectors::Collector + Send + 'static>(collector: T, tx: Sender<Item>, rx: Receiver<Item>) -> Pipeline {
+        let coll = collector;
+        let child = thread::spawn(move|| {
+            loop {
+                let done = match rx.recv().unwrap() {
+                    Item::Done => true,
+                    Item::Emit(payload) => {
+                        if let Err(e) = coll.dispatch(&vec![payload]) {
+                            error!("Could not dispatch events: {}", e);
+                        }
+                        false
+                    }
+                };
+                
+                if done {
+                    break;
+                }
+            }
+        });
+           
+        Pipeline {
+            worker: Some(child),
+            chan: tx
         }
     }
 }
@@ -61,35 +111,9 @@ pub fn init<T: collectors::Collector + Send + 'static>(collector: T, level: log:
             filter: level.to_log_level_filter()
         });
         
-    PIPELINE.store(unsafe { mem::transmute::<Box<PipelineRef>, *const PipelineRef>(pr) } as usize, atomic::Ordering::SeqCst);
+    PIPELINE_REF.store(unsafe { mem::transmute::<Box<PipelineRef>, *const PipelineRef>(pr) } as usize, atomic::Ordering::SeqCst);
     
-    let child = start_pump(collector, rx);
-    
-    Pipeline {
-         worker: Some(child),
-         chan: tx
-    }
-}
-
-fn start_pump<T: collectors::Collector + Send + 'static>(collector: T, rx: Receiver<Item>) -> thread::JoinHandle<()> {
-    let coll = collector;
-    thread::spawn(move|| {
-        loop {
-            let done = match rx.recv().unwrap() {
-                Item::Done => true,
-                Item::Emit(payload) => {
-                    if let Err(e) = coll.dispatch(&vec![payload]) {
-                        error!("Could not dispatch events: {}", e);
-                    }
-                    false
-                }
-            };
-            
-            if done {
-                break;
-            }
-        }
-    })
+    Pipeline::new(collector, tx, rx)
 }
 
 #[cfg(test)]

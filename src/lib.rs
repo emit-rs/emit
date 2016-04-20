@@ -80,7 +80,7 @@ extern crate hyper;
 #[macro_use]
 extern crate log;
 
-pub mod message_templates;
+pub mod templates;
 pub mod events;
 pub mod pipeline;
 pub mod collectors;
@@ -103,12 +103,12 @@ macro_rules! __emit_get_event_data {
 
         $(
             _names.push(stringify!($n));
-            properties.insert(stringify!($n), $crate::message_templates::capture(&$v));            
+            properties.insert(stringify!($n), $crate::events::capture_property_value(&$v));            
         )*
         
-        properties.insert("target", $crate::message_templates::capture(&$target));
+        properties.insert("target", $crate::events::capture_property_value(&$target));
         
-        let template = $crate::message_templates::build_template($s, &_names);
+        let template = $crate::templates::MessageTemplate::from_format($s, &_names);
                 
         (template, properties)
     }};
@@ -216,7 +216,7 @@ mod tests {
     #[test]
     fn unparameterized_templates_are_captured() {
         let (template, properties) = __emit_get_event_data!("t", "Starting...",);
-        assert_eq!(template, "Starting...");
+        assert_eq!(template.text(), "Starting...");
         assert_eq!(properties.len(), 1);
     }
     
@@ -226,7 +226,7 @@ mod tests {
         let q = 42;
         
         let (template, properties) = __emit_get_event_data!("t", "User {} exceeded quota of {}!", user: u, quota: q);
-        assert_eq!(template, "User {user} exceeded quota of {quota}!");
+        assert_eq!(template.text(), "User {user} exceeded quota of {quota}!");
         assert_eq!(properties.get("user"), Some(&"\"nblumhardt\"".to_owned()));
         assert_eq!(properties.get("quota"), Some(&"42".to_owned()));
         assert_eq!(properties.len(), 3);
