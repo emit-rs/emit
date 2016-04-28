@@ -84,6 +84,7 @@ pub mod templates;
 pub mod events;
 pub mod pipeline;
 pub mod collectors;
+pub mod elements;
 
 /// Re-exports log::LogLevel so that users can initialize the emit
 /// crate without extra imports.

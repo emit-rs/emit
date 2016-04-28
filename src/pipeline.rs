@@ -9,6 +9,7 @@ use std::mem;
 use std::sync;
 use std::sync::atomic;
 use log;
+use elements;
 
 enum Item {
     Done,
@@ -18,7 +19,7 @@ enum Item {
 /// `PipelineRef` is the (eventually highly-concurrent) "mouth" of the pipeline,
 /// into which events are fed.
 struct PipelineRef {
-    chan: sync::Mutex<Sender<Item>>,
+    head: Box<elements::ChainedElement>,
     filter: log::LogLevelFilter
 }
 
@@ -30,7 +31,7 @@ impl PipelineRef {
     }
     
     pub fn emit(&self, event: events::Event) {
-        self.chan.lock().unwrap().send(Item::Emit(event)).expect("The event could not be emitted to the pipeline");
+        self.head.emit(event);
     }
 }
 
@@ -104,10 +105,22 @@ impl Pipeline {
     }
 }
 
+struct ChainTerminator {
+    chan: sync::Mutex<Sender<Item>>
+}
+
+impl elements::ChainedElement for ChainTerminator {
+    fn emit(&self, event: events::Event) {
+        self.chan.lock().unwrap().send(Item::Emit(event)).expect("The event could not be emitted to the pipeline");
+    }
+}
+
 pub fn init<T: collectors::Collector + Send + 'static>(collector: T, level: log::LogLevel) -> Pipeline {
     let (tx, rx) = channel::<Item>();
+    let terminator = ChainTerminator { chan: sync::Mutex::new(tx.clone()) };
+    let head = elements::to_chain(vec![], Box::new(terminator));
     let pr = Box::new(PipelineRef {
-            chan: sync::Mutex::new(tx.clone()),
+            head: head,
             filter: level.to_log_level_filter()
         });
         
