@@ -115,10 +115,10 @@ impl elements::ChainedElement for ChainTerminator {
     }
 }
 
-pub fn init<T: collectors::Collector + Send + 'static>(collector: T, level: log::LogLevel) -> Pipeline {
+pub fn init<T: collectors::Collector + Send + 'static>(level: log::LogLevel, elements: Vec<Box<elements::PipelineElement>>, collector: T) -> Pipeline {
     let (tx, rx) = channel::<Item>();
     let terminator = ChainTerminator { chan: sync::Mutex::new(tx.clone()) };
-    let head = elements::to_chain(vec![], Box::new(terminator));
+    let head = elements::to_chain(elements, Box::new(terminator));
     let pr = Box::new(PipelineRef {
             head: head,
             filter: level.to_log_level_filter()
@@ -137,19 +137,19 @@ mod tests {
     
     #[test]
     fn info_is_enabled_at_info() {
-        let _flush = pipeline::init(SilentCollector::new(), log::LogLevel::Info);
+        let _flush = pipeline::init(log::LogLevel::Info, vec![], SilentCollector::new());
         assert!(pipeline::is_enabled(log::LogLevel::Info));
     }
     
     #[test]
     fn warn_is_enabled_at_info() {
-        let _flush = pipeline::init(SilentCollector::new(), log::LogLevel::Info);
+        let _flush = pipeline::init(log::LogLevel::Info, vec![], SilentCollector::new());
         assert!(pipeline::is_enabled(log::LogLevel::Warn));
     }  
       
     #[test]
     fn debug_is_disabled_at_info() {
-        let _flush = pipeline::init(SilentCollector::new(), log::LogLevel::Info);
+        let _flush = pipeline::init(log::LogLevel::Info, vec![], SilentCollector::new());
         assert!(!pipeline::is_enabled(log::LogLevel::Debug));
     }
 }

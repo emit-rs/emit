@@ -55,7 +55,7 @@
 //! use emit::collectors::stdio;
 //! 
 //! fn main() {
-//!     let _flush = pipeline::init(stdio::StdioCollector::new(), emit::LogLevel::Info);
+//!     let _flush = pipeline::init(emit::LogLevel::Info, vec![], stdio::StdioCollector::new());
 //! 
 //!     eminfo!("Hello, {}!", name: env::var("USERNAME").unwrap());
 //! }
@@ -85,6 +85,7 @@ pub mod events;
 pub mod pipeline;
 pub mod collectors;
 pub mod elements;
+pub mod enrichers;
 
 /// Re-exports log::LogLevel so that users can initialize the emit
 /// crate without extra imports.
@@ -210,6 +211,7 @@ macro_rules! emtrace {
 mod tests {
     use collectors::stdio;
     //use collectors::seq;
+    use enrichers::fixed_property::FixedPropertyEnricher;
     use pipeline;
     use std::env;
     use log;
@@ -235,8 +237,11 @@ mod tests {
 
     #[test]
     fn emitted_events_are_flushed() {
-        let _flush = pipeline::init(stdio::StdioCollector::new(), log::LogLevel::Info);
-        //let _flush = pipeline::init(seq::SeqCollector::new_local(), log::LogLevel::Info);
+        let enricher = Box::new(FixedPropertyEnricher::new("app", &"Test".to_owned()));
+        
+        let _flush = pipeline::init(log::LogLevel::Info, vec![enricher], stdio::StdioCollector::new());
+        //let _flush = pipeline::init(log::LogLevel::Info, vec![], seq::SeqCollector::new_local());
+        
         eminfo!("Hello, {}!", name: env::var("USERNAME").unwrap());        
     }
 }
