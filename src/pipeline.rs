@@ -17,8 +17,9 @@ enum Item {
 }
 
 /// `PipelineRef` is the (eventually highly-concurrent) "mouth" of the pipeline,
-/// into which events are fed.
-struct PipelineRef {
+/// into which events are fed. TODO: This type is misnamed, from the user's perspective
+/// it's the pipeline.
+pub struct PipelineRef {
     head: Box<elements::ChainedElement>,
     filter: log::LogLevelFilter
 }
@@ -61,7 +62,9 @@ pub fn emit(event: events::Event) {
     }
 }
 
-/// `Pipeline` is the  "consumer" end that dispatches events to collectors.
+/// `Pipeline` is the asynchronous "consumer" end that dispatches events to collectors.
+/// TODO: This type is mis-named: from the user's perspective it is more akin to `thread::JoinHandle`
+/// and needs a name echoing that role (`AsyncFlushHandle`?)
 pub struct Pipeline {
     chan: Sender<Item>,
     worker: Option<thread::JoinHandle<()>>
@@ -105,51 +108,103 @@ impl Pipeline {
     }
 }
 
-struct ChainTerminator {
+struct SenderElement {
     chan: sync::Mutex<Sender<Item>>
 }
 
-impl elements::ChainedElement for ChainTerminator {
+impl elements::ChainedElement for SenderElement {
     fn emit(&self, event: events::Event) {
         self.chan.lock().unwrap().send(Item::Emit(event)).expect("The event could not be emitted to the pipeline");
     }
 }
 
-pub fn init<T: collectors::Collector + Send + 'static>(level: log::LogLevel, elements: Vec<Box<elements::PipelineElement>>, collector: T) -> Pipeline {
-    let (tx, rx) = channel::<Item>();
-    let terminator = ChainTerminator { chan: sync::Mutex::new(tx.clone()) };
-    let head = elements::to_chain(elements, Box::new(terminator));
-    let pr = Box::new(PipelineRef {
-            head: head,
-            filter: level.to_log_level_filter()
-        });
-        
-    PIPELINE_REF.store(unsafe { mem::transmute::<Box<PipelineRef>, *const PipelineRef>(pr) } as usize, atomic::Ordering::SeqCst);
+struct TerminatingElement {}
+
+impl elements::ChainedElement for TerminatingElement {
+    #[allow(unused_variables)]
+    fn emit(&self, event: events::Event) {
+    }
+}
+
+pub struct PipelineBuilder {
+    level: log::LogLevel,
+    elements: Vec<Box<elements::PipelineElement>>,
+    terminator: Option<Box<elements::ChainedElement>>,
+    flush: Option<Pipeline>
+}
+
+impl PipelineBuilder {
+    pub fn at_level(mut self, level: log::LogLevel) -> PipelineBuilder {
+        self.level = level;
+        self
+    }
     
-    Pipeline::new(collector, tx, rx)
+    pub fn pipe(mut self, element: Box<elements::PipelineElement>) -> PipelineBuilder {
+        self.elements.push(element);
+        self
+    }
+
+    /// Send to a collector, asynchronously. Only one collector may receive events this way. (A non-consuming
+    /// alternative wired in with `pipe()` is intended.)
+    pub fn send_to<T: collectors::Collector + Send + 'static>(mut self, collector: T) -> PipelineBuilder {
+        let (tx, rx) = channel::<Item>();
+        self.terminator = Some(Box::new(SenderElement { chan: sync::Mutex::new(tx.clone()) }));
+        self.flush = Some(Pipeline::new(collector, tx, rx));
+        self
+    }
+    
+    /// Build the pipeline, but don't globally install it.
+    pub fn detach(self) -> (PipelineRef, Option<Pipeline>) {
+        let terminator = self.terminator.unwrap_or(Box::new(TerminatingElement {}));
+        let head = elements::to_chain(self.elements, terminator);
+        let pref = PipelineRef {
+            head: head,
+            filter: self.level.to_log_level_filter()
+        };
+            
+        (pref, self.flush)
+    }
+
+    /// Build and globally install the pipeline so that the `emit!()` macros can call it.
+    pub fn init(self) -> Option<Pipeline> {
+        let (pref, flush) = self.detach();
+            
+        let bpref = Box::new(pref);
+        PIPELINE_REF.store(unsafe { mem::transmute::<Box<PipelineRef>, *const PipelineRef>(bpref) } as usize, atomic::Ordering::SeqCst);
+        
+        flush
+    }
+}
+
+pub fn builder() -> PipelineBuilder {
+    PipelineBuilder { 
+        level: log::LogLevel::Info,
+        elements: vec![],
+        terminator: None,
+        flush: None
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use pipeline;
-    use collectors::silent::SilentCollector;
     use log;
     
     #[test]
     fn info_is_enabled_at_info() {
-        let _flush = pipeline::init(log::LogLevel::Info, vec![], SilentCollector::new());
-        assert!(pipeline::is_enabled(log::LogLevel::Info));
+        let (p, _flush) = pipeline::builder().detach();
+        assert!(p.is_enabled(log::LogLevel::Info));
     }
     
     #[test]
     fn warn_is_enabled_at_info() {
-        let _flush = pipeline::init(log::LogLevel::Info, vec![], SilentCollector::new());
-        assert!(pipeline::is_enabled(log::LogLevel::Warn));
+        let (p, _flush) = pipeline::builder().detach();
+        assert!(p.is_enabled(log::LogLevel::Warn));
     }  
       
     #[test]
     fn debug_is_disabled_at_info() {
-        let _flush = pipeline::init(log::LogLevel::Info, vec![], SilentCollector::new());
-        assert!(!pipeline::is_enabled(log::LogLevel::Debug));
+        let (p, _flush) = pipeline::builder().detach();
+        assert!(!p.is_enabled(log::LogLevel::Debug));
     }
 }

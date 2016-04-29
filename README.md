@@ -11,7 +11,10 @@ use emit::pipeline;
 use emit::collectors::seq;
 
 fn main() {
-    let _flush = pipeline::init(emit::LogLevel::Info, vec![], seq::SeqCollector::new_local());
+    let _flush = pipeline::builder()
+        .at_level(emit::LogLevel::Info)
+        .send_to(seq::SeqCollector::new_local())
+        .init();
             
     eminfo!("Hello, {}!", name: env::var("USERNAME").unwrap());
 }
@@ -41,7 +44,7 @@ If you don't have Seq running, events can be written to `io::stdout` instead:
 
 ```rust
 use emit::collectors::stdio;
-let _flush = pipeline::init(emit::LogLevel::Info, vec![], stdio::StdioCollector::new());
+let _flush = pipeline::builder().send_to(stdio::StdioCollector::new()).init();
 ```
 
 Produces:

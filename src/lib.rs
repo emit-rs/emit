@@ -55,7 +55,9 @@
 //! use emit::collectors::stdio;
 //! 
 //! fn main() {
-//!     let _flush = pipeline::init(emit::LogLevel::Info, vec![], stdio::StdioCollector::new());
+//!     let _flush = pipeline::builder()
+//!         .send_to(stdio::StdioCollector::new())
+//!         .init();
 //! 
 //!     eminfo!("Hello, {}!", name: env::var("USERNAME").unwrap());
 //! }
@@ -237,10 +239,11 @@ mod tests {
 
     #[test]
     fn emitted_events_are_flushed() {
-        let enricher = Box::new(FixedPropertyEnricher::new("app", &"Test".to_owned()));
-        
-        let _flush = pipeline::init(log::LogLevel::Info, vec![enricher], stdio::StdioCollector::new());
-        //let _flush = pipeline::init(log::LogLevel::Info, vec![], seq::SeqCollector::new_local());
+        let _flush = pipeline::builder()
+            .at_level(log::LogLevel::Info)
+            .pipe(Box::new(FixedPropertyEnricher::new("app", &"Test".to_owned())))
+            .send_to(stdio::StdioCollector::new())
+            .init();
         
         eminfo!("Hello, {}!", name: env::var("USERNAME").unwrap());        
     }
