@@ -1,10 +1,13 @@
 use std::io;
 use std::io::Write;
+use std::error::Error;
 use events;
 
 pub struct StdioCollector {
     _use_stderr: bool
 }
+
+unsafe impl Sync for StdioCollector {}
 
 impl StdioCollector {
     pub fn new() -> StdioCollector {
@@ -15,9 +18,7 @@ impl StdioCollector {
 }
 
 impl super::Collector for StdioCollector {
-    type Error = io::Error;
-    
-    fn dispatch(&self, events: &[events::Event]) -> Result<(), Self::Error> {
+    fn dispatch(&self, events: &[events::Event]) -> Result<(), Box<Error>> {
         let out = io::stdout();
         let mut handle = out.lock();
         for event in events {

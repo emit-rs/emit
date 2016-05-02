@@ -38,14 +38,14 @@ This makes log searches in an appropriate back-end collector much simpler:
 
 ![Event in Seq](https://raw.githubusercontent.com/nblumhardt/emit/master/asset/event_in_seq.png)
 
-I'm using [Seq](https://getseq.net) and its JSON format while I design the crate, but the aim is to be pluggable for other log collectors and formats.
+[Seq](https://getseq.net) and its JSON format are implemented for the work-in-progress here, but support for other log collectors and formats is on its way.
 
 If you don't have Seq running, events can be written to `io::stdout` instead:
 
 ```rust
 use emit::collectors::stdio::StdioCollector;
 let _flush = PipelineBuilder::new()
-    .send_to(StdioCollector::new())
+    .write_to(StdioCollector::new())
     .init();
 ```
 

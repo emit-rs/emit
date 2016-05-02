@@ -56,7 +56,7 @@
 //! 
 //! fn main() {
 //!     let _flush = PipelineBuilder::new()
-//!         .send_to(StdioCollector::new())
+//!         .write_to(StdioCollector::new())
 //!         .init();
 //! 
 //!     eminfo!("Hello, {}!", name: env::var("USERNAME").unwrap());
@@ -245,7 +245,7 @@ mod tests {
         let _flush = PipelineBuilder::new()
             .at_level(log::LogLevel::Info)
             .pipe(Box::new(FixedPropertyEnricher::new("app", &"Test")))
-            .send_to(stdio::StdioCollector::new())
+            .write_to(stdio::StdioCollector::new())
             .init();
         
         eminfo!("Hello, {}!", name: env::var("USERNAME").unwrap());        

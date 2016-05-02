@@ -1,6 +1,6 @@
-use collectors;
 use std::sync::mpsc::channel;
 use log;
+use collectors::{Collector,CollectorElement};
 use pipeline::chain;
 use pipeline::chain::{ChainedElement, PipelineElement};
 use pipeline::ambient;
@@ -46,10 +46,14 @@ impl PipelineBuilder {
         self.elements.push(element);
         self
     }
+    
+    /// Write to a collector, synchronously.
+    pub fn write_to<T: Collector + Sync + 'static>(self, collector: T) -> PipelineBuilder {
+        self.pipe(Box::new(CollectorElement::<T>::new(collector)))
+    }
 
-    /// Send to a collector, asynchronously. Only one collector may receive events this way. (A non-consuming
-    /// alternative wired in with `pipe()` is intended.)
-    pub fn send_to<T: collectors::Collector + Send + 'static>(mut self, collector: T) -> PipelineBuilder {
+    /// Send events to a collector, asynchronously. At present only one collector may receive events this way.
+    pub fn send_to<T: Collector + Send + 'static>(mut self, collector: T) -> PipelineBuilder {
         let (tx, rx) = channel::<Item>();
         self.terminator = Some(Box::new(SenderElement::new(tx.clone())));
         self.async_collector = Some(AsyncCollector::new(collector, tx, rx));
@@ -64,7 +68,7 @@ impl PipelineBuilder {
         (pref, AsyncFlushHandle {async_collector: self.async_collector})
     }
 
-    /// Build and globally install the AsyncCollectorso that the `emit!()` macros can call it.
+    /// Build and globally install the pipeline so that the `emit!()` macros can call it.
     pub fn init(self) -> AsyncFlushHandle {
         let (pref, flush) = self.detach();
             

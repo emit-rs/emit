@@ -1,6 +1,7 @@
 use hyper;
 use hyper::header::Connection;
 use std::io::Read;
+use std::error::Error;
 use std::fmt::Write;
 use serde_json;
 use events;
@@ -37,7 +38,7 @@ impl SeqCollector {
         Self::new(LOCAL_SERVER_URL, None, DEFAULT_EVENT_BODY_LIMIT_BYTES, DEFAULT_BATCH_LIMIT_BYTES)
     }
     
-    fn send_batch(&self, payload: &String)  -> Result<(), <Self as super::Collector>::Error> {
+    fn send_batch(&self, payload: &String)  -> Result<(), Box<Error>> {
         let client = hyper::Client::new();
         let mut req = client.post(&self.endpoint)
             .body(payload)
@@ -61,9 +62,7 @@ const FOOTER: &'static str = "]}";
 const FOOTER_LEN: usize = 2;
 
 impl super::Collector for SeqCollector {
-    type Error = hyper::Error;
-    
-    fn dispatch(&self, events: &[events::Event]) -> Result<(), Self::Error> {
+    fn dispatch(&self, events: &[events::Event]) -> Result<(), Box<Error>> {
         let mut next = HEADER.to_owned();
         let mut count = HEADER_LEN + FOOTER_LEN;
         let mut delim = "";
