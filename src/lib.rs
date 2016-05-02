@@ -51,12 +51,12 @@
 //! # extern crate log;
 //! 
 //! use std::env;
-//! use emit::pipeline;
-//! use emit::collectors::stdio;
+//! use emit::PipelineBuilder;
+//! use emit::collectors::stdio::StdioCollector;
 //! 
 //! fn main() {
-//!     let _flush = pipeline::builder()
-//!         .send_to(stdio::StdioCollector::new())
+//!     let _flush = PipelineBuilder::new()
+//!         .send_to(StdioCollector::new())
 //!         .init();
 //! 
 //!     eminfo!("Hello, {}!", name: env::var("USERNAME").unwrap());
@@ -86,12 +86,15 @@ pub mod templates;
 pub mod events;
 pub mod pipeline;
 pub mod collectors;
-pub mod elements;
 pub mod enrichers;
 
-/// Re-exports log::LogLevel so that users can initialize the emit
+/// Re-exports `log::LogLevel` so that users can initialize the emit
 /// crate without extra imports.
 pub use log::LogLevel;
+
+/// Re-export `pipeline::builder::PipelineBuilder` so that clients don't need to
+/// fully-qualify the hierarchy.
+pub use pipeline::builder::PipelineBuilder;
 
 #[macro_export]
 #[doc(hidden)]
@@ -122,10 +125,10 @@ macro_rules! __emit_get_event_data {
 macro_rules! emit {
     (target: $target:expr, $lvl:expr, $s:expr, $($n:ident: $v:expr),*) => {{
         let lvl = $lvl;
-        if $crate::pipeline::is_enabled(lvl) {
+        if $crate::pipeline::ambient::is_enabled(lvl) {
             let (template, properties) = __emit_get_event_data!($target, $s, $($n: $v),*);
             let event = $crate::events::Event::new_now(lvl, template, properties);
-            $crate::pipeline::emit(event);
+            $crate::pipeline::ambient::emit(event);
         }
     }};
     
@@ -214,7 +217,7 @@ mod tests {
     use collectors::stdio;
     //use collectors::seq;
     use enrichers::fixed_property::FixedPropertyEnricher;
-    use pipeline;
+    use pipeline::builder::PipelineBuilder;
     use std::env;
     use log;
     
@@ -239,9 +242,9 @@ mod tests {
 
     #[test]
     fn emitted_events_are_flushed() {
-        let _flush = pipeline::builder()
+        let _flush = PipelineBuilder::new()
             .at_level(log::LogLevel::Info)
-            .pipe(Box::new(FixedPropertyEnricher::new("app", &"Test".to_owned())))
+            .pipe(Box::new(FixedPropertyEnricher::new("app", &"Test")))
             .send_to(stdio::StdioCollector::new())
             .init();
         

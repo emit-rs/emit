@@ -1,5 +1,6 @@
 use events;
-use elements;
+use events::Event;
+use pipeline::chain::{ChainedElement,PipelineElement};
 use serde;
 
 pub struct FixedPropertyEnricher {
@@ -13,8 +14,8 @@ impl FixedPropertyEnricher {
     }
 }
 
-impl elements::PipelineElement for FixedPropertyEnricher {
-    fn emit(&self, event: events::Event, next: &elements::ChainedElement) {
+impl PipelineElement for FixedPropertyEnricher {
+    fn emit(&self, event: Event, next: &ChainedElement) {
         let mut e = event;
         e.add_or_update_property(self.name, self.value.clone());
         next.emit(e);

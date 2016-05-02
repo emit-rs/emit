@@ -7,11 +7,11 @@
 extern crate emit;
 
 use std::env;
-use emit::pipeline;
+use emit::PipelineBuilder;
 use emit::collectors::seq;
 
 fn main() {
-    let _flush = pipeline::builder()
+    let _flush = PipelineBuilder::new()
         .at_level(emit::LogLevel::Info)
         .send_to(seq::SeqCollector::new_local())
         .init();
@@ -43,8 +43,10 @@ I'm using [Seq](https://getseq.net) and its JSON format while I design the crate
 If you don't have Seq running, events can be written to `io::stdout` instead:
 
 ```rust
-use emit::collectors::stdio;
-let _flush = pipeline::builder().send_to(stdio::StdioCollector::new()).init();
+use emit::collectors::stdio::StdioCollector;
+let _flush = PipelineBuilder::new()
+    .send_to(StdioCollector::new())
+    .init();
 ```
 
 Produces:
