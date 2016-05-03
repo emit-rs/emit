@@ -5,13 +5,14 @@
 //!  * The `emit!()` family of macros, for recording application events in an easily machine-readable format
 //!  * Collectors for transmitting these events to back-end logging servers
 //!
-//! The widely-used `log` crate doesn't preserve the structure of the events that are written through it. For example:
+//! The emit macros are "structured" versions of the ones in the widely-used `log` crate. The `log` crate doesn't preserve the structure
+//! of the events that are written through it. For example:
 //! 
 //! ```ignore
 //! info!("Hello, {}!", env::var("USERNAME").unwrap());
 //! ```
 //! 
-//! This writes `"Hello, nblumhardt!"` to the log as an block of text, that can't be broken apart to reveal the username except 
+//! This writes `"Hello, nblumhardt!"` to the log as an block of text, which can't later be broken apart to reveal the username except 
 //! with regular expressions.
 //! 
 //! The arguments passed to `emit` are named:
@@ -26,15 +27,15 @@
 //! ```js
 //! {
 //!   "timestamp": "2016-03-17T00:17:01Z",
-//!   "messageTemplate": "Hello, {name}!",
+//!   "messageTemplate": "Hello, {user}!",
 //!   "properties": {
-//!     "name": "nblumhardt",
+//!     "user": "nblumhardt",
 //!     "target": "example_app"
 //!   }
 //! }
 //! ```
 //! 
-//! Back-ends like Elasticsearch, Seq, and Splunk use these in queries like `user == "nblumhardt"` without up-front log parsing.
+//! Back-ends like Elasticsearch, Seq, and Splunk use these in queries such as `user == "nblumhardt"` without up-front log parsing.
 //! 
 //! Arguments are captured using `serde`, so there's the potential for complex values to be logged so long as they're `serde::ser::Serialize`.
 //! 
@@ -121,6 +122,23 @@ macro_rules! __emit_get_event_data {
     }};
 }
 
+/// Emit an event to the ambient pipeline.
+///
+/// # Examples
+///
+/// The event below collects a `user` property and is emitted if the pipeline level includes
+/// `LogLevel::Info`.
+///
+/// ```ignore
+/// emit!(emit::LogLevel::Info, "Hello, {}!", user: env::var("USERNAME").unwrap());
+/// ```
+///
+/// A `target` expression may be specified if required. When omitted the `target` property
+/// will carry the current module name.
+///
+/// ```ignore
+/// emit!(target: "greetings", emit::LogLevel::Info, "Hello, {}!", user: env::var("USERNAME").unwrap());
+/// ```
 #[macro_export]
 macro_rules! emit {
     (target: $target:expr, $lvl:expr, $s:expr, $($n:ident: $v:expr),*) => {{
@@ -137,6 +155,15 @@ macro_rules! emit {
     }};
 }
 
+/// Emit an error event to the ambient pipeline.
+///
+/// # Examples
+///
+/// The example below will be emitted at the `emit::LogLevel::Error` level.
+///
+/// ```ignore
+/// emerror!("Could not start {} on {}", cmd: "emitd", machine: "s123456");
+/// ```
 #[macro_export]
 macro_rules! emerror {
     (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
@@ -152,6 +179,15 @@ macro_rules! emerror {
     }};
 }
 
+/// Emit a warning event to the ambient pipeline.
+///
+/// # Examples
+///
+/// The example below will be emitted at the `emit::LogLevel::Warn` level.
+///
+/// ```ignore
+/// emwarn!("SQL query took {} ms", elapsed: 7890);
+/// ```
 #[macro_export]
 macro_rules! emwarn {
     (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
@@ -167,6 +203,15 @@ macro_rules! emwarn {
     }};
 }
 
+/// Emit an informational event to the ambient pipeline.
+///
+/// # Examples
+///
+/// The example below will be emitted at the `emit::LogLevel::Info` level.
+///
+/// ```ignore
+/// eminfo!("Hello, {}!", user: env::var("USERNAME").unwrap());
+/// ```
 #[macro_export]
 macro_rules! eminfo {
     (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
@@ -182,6 +227,15 @@ macro_rules! eminfo {
     }};
 }
 
+/// Emit a debugging event to the ambient pipeline.
+///
+/// # Examples
+///
+/// The example below will be emitted at the `emit::LogLevel::Debug` level.
+///
+/// ```ignore
+/// emdebug!("Opening config file {}", filename: "dir/config.json");
+/// ```
 #[macro_export]
 macro_rules! emdebug {
     (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
@@ -197,6 +251,15 @@ macro_rules! emdebug {
     }};
 }
 
+/// Emit a trace event to the ambient pipeline.
+///
+/// # Examples
+///
+/// The example below will be emitted at the `emit::LogLevel::Trace` level.
+///
+/// ```ignore
+/// emdtrace!("{} called with arg {}", method: "start_frobbles()", count: 123);
+/// ```
 #[macro_export]
 macro_rules! emtrace {
     (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
@@ -248,6 +311,6 @@ mod tests {
             .write_to(stdio::StdioCollector::new())
             .init();
         
-        eminfo!("Hello, {}!", name: env::var("USERNAME").unwrap());        
+        eminfo!("Hello, {} at {} in {}!", name: env::var("USERNAME").unwrap(), time: 2139, room: "office");        
     }
 }
