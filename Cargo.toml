@@ -2,9 +2,10 @@
 name = "emit"
 version = "0.8.1"
 authors = ["Nicholas Blumhardt <nblumhardt@nblumhardt.com>"]
-description = "A structured event emitter in the style of Serilog."
+description = "A structured logger in the style of Serilog."
 license = "Apache-2.0"
 homepage = "https://github.com/emit-rs/emit"
+keywords = ["log", "logging"]
 
 [dependencies]
 serde = "0.7"
