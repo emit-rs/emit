@@ -1,5 +1,7 @@
 use std::fmt::Write;
 
+pub mod repl;
+
 pub struct MessageTemplate {
     text: String
 }
