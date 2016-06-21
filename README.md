@@ -6,6 +6,8 @@ This crate implements a structured logging API similar to the one in [Serilog](h
 
 ```rust
 #[macro_use]
+
+[![Join the chat at https://gitter.im/emit-rs/emit](https://badges.gitter.im/emit-rs/emit.svg)](https://gitter.im/emit-rs/emit?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 extern crate emit;
 
 use std::env;
