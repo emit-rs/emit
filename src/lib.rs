@@ -7,23 +7,23 @@
 //!
 //! The emit macros are "structured" versions of the ones in the widely-used `log` crate. The `log` crate doesn't preserve the structure
 //! of the events that are written through it. For example:
-//! 
+//!
 //! ```ignore
 //! info!("Hello, {}!", env::var("USERNAME").unwrap());
 //! ```
-//! 
-//! This writes `"Hello, nblumhardt!"` to the log as an block of text, which can't later be broken apart to reveal the username except 
+//!
+//! This writes `"Hello, nblumhardt!"` to the log as an block of text, which can't later be broken apart to reveal the username except
 //! with regular expressions.
-//! 
+//!
 //! The arguments passed to `emit` are named:
-//! 
+//!
 //! ```ignore
 //! eminfo!("Hello, {}!", user: env::var("USERNAME").unwrap());
 //! ```
-//! 
+//!
 //! This event can be rendered into text identically to the `log` example, but structured data collectors also capture the
 //! aguments as a key/value property pairs.
-//! 
+//!
 //! ```js
 //! {
 //!   "timestamp": "2016-03-17T00:17:01Z",
@@ -34,43 +34,43 @@
 //!   }
 //! }
 //! ```
-//! 
+//!
 //! Back-ends like Elasticsearch, Seq, and Splunk use these in queries such as `user == "nblumhardt"` without up-front log parsing.
-//! 
+//!
 //! Arguments are captured using `serde`, so there's the potential for complex values to be logged so long as they're `serde::ser::Serialize`.
-//! 
+//!
 //! Further, because the template (format) itself is captured, it can be hashed to compute an "event type" for precisely finding
 //! all occurrences of the event regardless of the value of the `user` argument.
-//! 
+//!
 //! # Examples
-//! 
+//!
 //! The example below writes events to stdout.
-//! 
+//!
 //! ```
 //! #[macro_use]
 //! extern crate emit;
 //! # extern crate log;
-//! 
+//!
 //! use std::env;
 //! use emit::PipelineBuilder;
 //! use emit::collectors::stdio::StdioCollector;
-//! 
+//!
 //! fn main() {
 //!     let _flush = PipelineBuilder::new()
 //!         .write_to(StdioCollector::new())
 //!         .init();
-//! 
-//!     eminfo!("Hello, {}!", name: env::var("USERNAME").unwrap());
+//!
+//!     eminfo!("Hello, {}!", name: env::var("USERNAME").unwrap_or("User".to_string()));
 //! }
 //! ```
-//! 
+//!
 //! Output:
-//! 
+//!
 //! ```text
 //! emit 2016-03-24T05:03:36Z Hello, {name}!
 //!   name: "nblumhardt"
 //!   target: "example_app"
-//! 
+//!
 //! ```
 
 extern crate serde;
@@ -111,13 +111,13 @@ macro_rules! __emit_get_event_data {
 
         $(
             _names.push(stringify!($n));
-            properties.insert(stringify!($n), $crate::events::capture_property_value(&$v));            
+            properties.insert(stringify!($n), $crate::events::capture_property_value(&$v));
         )*
-        
+
         properties.insert("target", $crate::events::capture_property_value(&$target));
-        
+
         let template = $crate::templates::MessageTemplate::from_format($s, &_names);
-                
+
         (template, properties)
     }};
 }
@@ -149,7 +149,7 @@ macro_rules! emit {
             $crate::pipeline::ambient::emit(event);
         }
     }};
-    
+
     ($lvl:expr, $s:expr, $($n:ident: $v:expr),*) => {{
         emit!(target: module_path!(), $lvl, $s, $($n: $v),*);
     }};
@@ -171,7 +171,7 @@ macro_rules! emerror {
         use log;
         emit!(target: $target, log::LogLevel::Error, $s, $($n: $v),*);
     }};
-    
+
     ($s:expr, $($n:ident: $v:expr),*) => {{
         #[allow(unused_imports)]
         use log;
@@ -195,7 +195,7 @@ macro_rules! emwarn {
         use log;
         emit!(target: $target, log::LogLevel::Warn, $s, $($n: $v),*);
     }};
-    
+
     ($s:expr, $($n:ident: $v:expr),*) => {{
         #[allow(unused_imports)]
         use log;
@@ -219,7 +219,7 @@ macro_rules! eminfo {
         use log;
         emit!(target: $target, log::LogLevel::Info, $s, $($n: $v),*);
     }};
-    
+
     ($s:expr, $($n:ident: $v:expr),*) => {{
         #[allow(unused_imports)]
         use log;
@@ -243,7 +243,7 @@ macro_rules! emdebug {
         use log;
         emit!(target: $target, log::LogLevel::Debug, $s, $($n: $v),*);
     }};
-    
+
     ($s:expr, $($n:ident: $v:expr),*) => {{
         #[allow(unused_imports)]
         use log;
@@ -267,7 +267,7 @@ macro_rules! emtrace {
         use log;
         emit!(target: $target, log::LogLevel::Trace, $s, $($n: $v),*);
     }};
-    
+
     ($s:expr, $($n:ident: $v:expr),*) => {{
         #[allow(unused_imports)]
         use log;
@@ -283,25 +283,25 @@ mod tests {
     use pipeline::builder::PipelineBuilder;
     use std::env;
     use log;
-    
+
     #[test]
     fn unparameterized_templates_are_captured() {
         let (template, properties) = __emit_get_event_data!("t", "Starting...",);
         assert_eq!(template.text(), "Starting...");
         assert_eq!(properties.len(), 1);
     }
-    
+
     #[test]
     fn template_and_properties_are_captured() {
         let u = "nblumhardt";
         let q = 42;
-        
+
         let (template, properties) = __emit_get_event_data!("t", "User {} exceeded quota of {}!", user: u, quota: q);
         assert_eq!(template.text(), "User {user} exceeded quota of {quota}!");
         assert_eq!(properties.get("user"), Some(&"\"nblumhardt\"".to_owned()));
         assert_eq!(properties.get("quota"), Some(&"42".to_owned()));
         assert_eq!(properties.len(), 3);
-    }    
+    }
 
     #[test]
     fn emitted_events_are_flushed() {
@@ -310,7 +310,7 @@ mod tests {
             .pipe(Box::new(FixedPropertyEnricher::new("app", &"Test")))
             .write_to(stdio::StdioCollector::new())
             .init();
-        
-        eminfo!("Hello, {} at {} in {}!", name: env::var("USERNAME").unwrap(), time: 2139, room: "office");        
+
+        eminfo!("Hello, {} at {} in {}!", name: env::var("USERNAME").unwrap_or("User".to_string()), time: 2139, room: "office");
     }
 }
