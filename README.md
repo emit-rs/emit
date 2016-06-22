@@ -51,7 +51,7 @@ let _flush = PipelineBuilder::new()
 Produces:
 
 ```
-emit 2016-03-24T05:03:36Z INFO  Hello, "nblumhardt"!
+2016-03-24T05:03:36Z INFO  Hello, "nblumhardt"!
 ```
 
 **What about the `log` crate?**
