@@ -7,7 +7,7 @@ use pipeline::chain::{PipelineElement, ChainedElement};
 
 pub trait Collector {
     // Could use a signature re-think here
-    fn dispatch(&self, events: &[Event]) -> Result<(), Box<Error>>;
+    fn dispatch(&self, events: &[Event<'static>]) -> Result<(), Box<Error>>;
 }
 
 pub struct CollectorElement<T: Collector + Sync> {
@@ -21,7 +21,7 @@ impl<T: Collector + Sync> CollectorElement<T> {
 }
 
 impl<T: Collector + Sync> PipelineElement for CollectorElement<T> {
-    fn emit(&self, event: Event, next: &ChainedElement) {
+    fn emit(&self, event: Event<'static>, next: &ChainedElement) {
         let mut batch = vec![event];
         if let Err(e) = self.collector.dispatch(&batch) {
             error!("Could not dispatch events: {}", e);

@@ -8,7 +8,7 @@ use pipeline::chain::ChainedElement;
 
 pub enum Item {
     Done,
-    Emit(Event)
+    Emit(Event<'static>)
 }
 
 pub struct AsyncCollector{
@@ -65,7 +65,7 @@ impl SenderElement {
 }
 
 impl ChainedElement for SenderElement {
-    fn emit(&self, event: Event) {
+    fn emit(&self, event: Event<'static>) {
         self.chan.lock().unwrap().send(Item::Emit(event)).expect("The event could not be emitted to the pipeline");
     }
 }

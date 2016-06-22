@@ -15,7 +15,7 @@ impl FixedPropertyEnricher {
 }
 
 impl PipelineElement for FixedPropertyEnricher {
-    fn emit(&self, event: Event, next: &ChainedElement) {
+    fn emit(&self, event: Event<'static>, next: &ChainedElement) {
         let mut e = event;
         e.add_or_update_property(self.name, self.value.clone());
         next.emit(e);

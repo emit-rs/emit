@@ -2,13 +2,13 @@ use events::Event;
 
 /// A link to the next element in a processing chain.
 pub trait ChainedElement : Sync {
-    fn emit(&self, event: Event);
+    fn emit(&self, event: Event<'static>);
 }
 
 /// An element within the processing chain that controls
 /// how an `Event` is passed through.
 pub trait PipelineElement : Sync {
-    fn emit(&self, event: Event, next: &ChainedElement);
+    fn emit(&self, event: Event<'static>, next: &ChainedElement);
 }
 
 struct ChainedPipelineElement {
@@ -17,7 +17,7 @@ struct ChainedPipelineElement {
 }
 
 impl ChainedElement for ChainedPipelineElement {
-    fn emit(&self, event: Event) {
+    fn emit(&self, event: Event<'static>) {
         self.current.emit(event, &*self.next);
     }
 }
@@ -26,7 +26,7 @@ struct TerminatingElement {}
 
 impl ChainedElement for TerminatingElement {
     #[allow(unused_variables)]
-    fn emit(&self, event: Event) {
+    fn emit(&self, event: Event<'static>) {
     }
 }
 
