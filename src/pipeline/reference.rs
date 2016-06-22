@@ -25,7 +25,7 @@ impl PipelineRef {
     
     /// Emit an event through the pipeline. Code wishing to _conditionally_
     /// emit events based on the level should call `is_enabled()` first.
-    pub fn emit(&self, event: Event) {
+    pub fn emit(&self, event: Event<'static>) {
         self.head.emit(event);
     }
 }

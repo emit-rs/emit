@@ -18,7 +18,7 @@ impl StdioCollector {
 }
 
 impl super::Collector for StdioCollector {
-    fn dispatch(&self, events: &[events::Event]) -> Result<(), Box<Error>> {
+    fn dispatch(&self, events: &[events::Event<'static>]) -> Result<(), Box<Error>> {
         let out = io::stdout();
         let mut handle = out.lock();
         for event in events {

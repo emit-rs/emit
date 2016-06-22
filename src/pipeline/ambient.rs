@@ -26,7 +26,7 @@ pub fn is_enabled(level: log::LogLevel) -> bool {
     }
 }
     
-pub fn emit(event: Event) {
+pub fn emit(event: Event<'static>) {
     let p = get_ambient_ref();    
     if p != 0 as *const PipelineRef {
         unsafe {
