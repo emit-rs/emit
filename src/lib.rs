@@ -88,6 +88,7 @@ pub mod events;
 pub mod pipeline;
 pub mod collectors;
 pub mod enrichers;
+pub mod formatters;
 
 /// Re-exports `log::LogLevel` so that users can initialize the emit
 /// crate without extra imports.
@@ -277,12 +278,12 @@ macro_rules! emtrace {
 
 #[cfg(test)]
 mod tests {
-    use collectors::stdio;
-    //use collectors::seq;
     use enrichers::fixed_property::FixedPropertyEnricher;
     use pipeline::builder::PipelineBuilder;
     use std::env;
     use log;
+    use collectors::stdio::StdioCollector;
+    use formatters::json::JsonFormatter;
 
     #[test]
     fn unparameterized_templates_are_captured() {
@@ -304,11 +305,22 @@ mod tests {
     }
 
     #[test]
-    fn emitted_events_are_flushed() {
+    fn stdout_example() {
         let _flush = PipelineBuilder::new()
             .at_level(log::LogLevel::Info)
             .pipe(Box::new(FixedPropertyEnricher::new("app", &"Test")))
-            .write_to(stdio::StdioCollector::new())
+            .write_to(StdioCollector::new())
+            .init();
+
+        eminfo!("Hello, {} at {} in {}!", name: env::var("USERNAME").unwrap_or("User".to_string()), time: 2139, room: "office");
+    }
+
+    #[test]
+    fn stdout_json_example() {
+        let _flush = PipelineBuilder::new()
+            .at_level(log::LogLevel::Info)
+            .pipe(Box::new(FixedPropertyEnricher::new("app", &"Test")))
+            .write_to(StdioCollector::new_format(Box::new(JsonFormatter::new())))
             .init();
 
         eminfo!("Hello, {} at {} in {}!", name: env::var("USERNAME").unwrap_or("User".to_string()), time: 2139, room: "office");

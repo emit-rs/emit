@@ -27,7 +27,7 @@ impl <'a> MessageTemplateRepl<'a> {
     }
 
     //TODO: DRY
-    pub fn replace(&self, values: &BTreeMap<&str, &str>) -> String {
+    pub fn replace(&self, values: &BTreeMap<&str, String>) -> String {
         let mut parts: Vec<&str> = Vec::new();
         let mut slice_iter = self.param_slices.iter();
         let mut last_index = 0;
@@ -193,8 +193,8 @@ mod tests {
         let template_repl = MessageTemplateRepl::new("C {A} D {Bert} E");
 
         let mut map = BTreeMap::new();
-        map.insert("A", "value1");
-        map.insert("Bert", "value2");
+        map.insert("A", "value1".to_string());
+        map.insert("Bert", "value2".to_string());
 
         let replaced = template_repl.replace(&map);
 
@@ -206,7 +206,7 @@ mod tests {
         let template_repl = MessageTemplateRepl::new("C {A} D {Bert} E");
 
         let mut map = BTreeMap::new();
-        map.insert("Bert", "value2");
+        map.insert("Bert", "value2".to_string());
 
         let replaced = template_repl.replace(&map);
 
@@ -218,8 +218,8 @@ mod tests {
         let template_repl = MessageTemplateRepl::new("C {A}{B} D {A} {B} E");
 
         let mut map = BTreeMap::new();
-        map.insert("A", "value1");
-        map.insert("B", "value2");
+        map.insert("A", "value1".to_string());
+        map.insert("B", "value2".to_string());
 
         let replaced = template_repl.replace(&map);
 
@@ -231,8 +231,8 @@ mod tests {
         let template_repl = MessageTemplateRepl::new("{A} DE {B} F");
 
         let mut map = BTreeMap::new();
-        map.insert("A", "value1");
-        map.insert("B", "value2");
+        map.insert("A", "value1".to_string());
+        map.insert("B", "value2".to_string());
 
         let replaced = template_repl.replace(&map);
 
@@ -244,8 +244,8 @@ mod tests {
         let template_repl = MessageTemplateRepl::new("C {A} D {B}");
 
         let mut map = BTreeMap::new();
-        map.insert("A", "value1");
-        map.insert("B", "value2");
+        map.insert("A", "value1".to_string());
+        map.insert("B", "value2".to_string());
 
         let replaced = template_repl.replace(&map);
 
@@ -258,8 +258,8 @@ mod tests {
         let template_repl = MessageTemplateRepl::new("C {A} D {{B}} {A");
 
         let mut map = BTreeMap::new();
-        map.insert("A", "value1");
-        map.insert("B", "value2");
+        map.insert("A", "value1".to_string());
+        map.insert("B", "value2".to_string());
 
         let replaced = template_repl.replace(&map);
 
