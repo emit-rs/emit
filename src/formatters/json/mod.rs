@@ -24,13 +24,31 @@ impl super::TextFormatter for JsonFormatter {
         }
 
         for (n,v) in event.properties() {
-            // TODO, escape '@'
-            let name = n;
-            try!(write!(to, ",\"{}\":{}", name, v));            
+            let bytes = n.as_bytes();
+            if bytes.len() > 0 && bytes[0] == b'@' {
+                try!(write!(to, ",\"@{}\":{}", n, v));            
+            } else {
+                try!(write!(to, ",\"{}\":{}", n, v));            
+            }
         }
                     
         try!(write!(to, "}}"));
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use formatters::TextFormatter;
+    use super::JsonFormatter;
+    use test_support;
+
+    #[test]
+    fn json_is_produced() {        
+        let fmt = JsonFormatter::new();
+        let evt = test_support::some_event();
+        let mut content = vec![];
+        fmt.format(&evt, &mut content).is_ok();
     }
 }

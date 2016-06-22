@@ -4,30 +4,22 @@ use std::error::Error;
 use events;
 use formatters;
 
-pub struct StdioCollector {
+pub struct StdioCollector<F> {
     use_stderr: bool,
-    formatter: Box<formatters::TextFormatter + Sync>
+    formatter: F
 }
 
-unsafe impl Sync for StdioCollector {}
+unsafe impl<F: Sync> Sync for StdioCollector<F> {}
 
-impl StdioCollector {
-    pub fn new() -> StdioCollector {
-        StdioCollector::new_format(Box::new(formatters::raw::RawFormatter::new()))
-    }
-
-    pub fn new_format(formatter: Box<formatters::TextFormatter + Sync>) -> StdioCollector {
+impl<F> StdioCollector<F> {
+    pub fn new(formatter: F) -> StdioCollector<F> {
         StdioCollector {
             use_stderr: false,
             formatter: formatter
         }
     }
 
-    pub fn new_stderr() -> StdioCollector {
-        StdioCollector::new_stderr_format(Box::new(formatters::raw::RawFormatter::new()))
-    }
-
-    pub fn new_stderr_format(formatter: Box<formatters::TextFormatter + Sync>) -> StdioCollector {
+    pub fn new_stderr(formatter: F) -> StdioCollector<F> {
         StdioCollector {
             use_stderr: true,
             formatter: formatter
@@ -35,7 +27,7 @@ impl StdioCollector {
     }
 }
 
-impl super::Collector for StdioCollector {
+impl<F: formatters::TextFormatter + Sync> super::Collector for StdioCollector<F> {
     fn dispatch(&self, events: &[events::Event<'static>]) -> Result<(), Box<Error>> {
         let out = io::stdout();
         let err = io::stderr();
