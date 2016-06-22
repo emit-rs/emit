@@ -3,27 +3,26 @@ pub mod stdio;
 
 use std::error::Error;
 use events::Event;
-use pipeline::chain::{PipelineElement, ChainedElement};
+use pipeline::chain::{Propagate,Emit};
 
-pub trait Collector {
-    // Could use a signature re-think here
-    fn dispatch(&self, events: &[Event<'static>]) -> Result<(), Box<Error>>;
+pub trait AcceptEvents {
+    fn accept_events(&self, events: &[Event<'static>]) -> Result<(), Box<Error>>;
 }
 
-pub struct CollectorElement<T: Collector + Sync> {
+pub struct CollectorElement<T: AcceptEvents + Sync> {
     collector: T
 }
 
-impl<T: Collector + Sync> CollectorElement<T> {
+impl<T: AcceptEvents + Sync> CollectorElement<T> {
     pub fn new(collector: T) -> CollectorElement<T> {
          CollectorElement {collector: collector}
     }
 }
 
-impl<T: Collector + Sync> PipelineElement for CollectorElement<T> {
-    fn emit(&self, event: Event<'static>, next: &ChainedElement) {
+impl<T: AcceptEvents + Sync> Propagate for CollectorElement<T> {
+    fn propagate(&self, event: Event<'static>, next: &Emit) {
         let mut batch = vec![event];
-        if let Err(e) = self.collector.dispatch(&batch) {
+        if let Err(e) = self.collector.accept_events(&batch) {
             error!("Could not dispatch events: {}", e);
         }
         next.emit(batch.pop().unwrap());

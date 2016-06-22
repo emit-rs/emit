@@ -12,8 +12,8 @@ impl JsonFormatter {
     }
 }
 
-impl super::TextFormatter for JsonFormatter {
-    fn format(&self, event: &Event<'static>, to: &mut Write) -> Result<(), Box<Error>> {
+impl super::WriteEvent for JsonFormatter {
+    fn write_event(&self, event: &Event<'static>, to: &mut Write) -> Result<(), Box<Error>> {
         let template = try!(serde_json::to_string(event.message_template().text()));
         let isots = event.timestamp().format("%FT%TZ");
 
@@ -40,7 +40,7 @@ impl super::TextFormatter for JsonFormatter {
 
 #[cfg(test)]
 mod tests {
-    use formatters::TextFormatter;
+    use formatters::WriteEvent;
     use super::JsonFormatter;
     use test_support;
 
@@ -49,6 +49,6 @@ mod tests {
         let fmt = JsonFormatter::new();
         let evt = test_support::some_event();
         let mut content = vec![];
-        fmt.format(&evt, &mut content).is_ok();
+        fmt.write_event(&evt, &mut content).is_ok();
     }
 }

@@ -27,18 +27,18 @@ impl<F> StdioCollector<F> {
     }
 }
 
-impl<F: formatters::TextFormatter + Sync> super::Collector for StdioCollector<F> {
-    fn dispatch(&self, events: &[events::Event<'static>]) -> Result<(), Box<Error>> {
+impl<F: formatters::WriteEvent + Sync> super::AcceptEvents for StdioCollector<F> {
+    fn accept_events(&self, events: &[events::Event<'static>]) -> Result<(), Box<Error>> {
         let out = io::stdout();
         let err = io::stderr();
         for event in events {
             if self.use_stderr {
                 let mut to = &mut err.lock();
-                try!(self.formatter.format(&event, to));
+                try!(self.formatter.write_event(&event, to));
                 try!(writeln!(to, ""));
             } else {
                 let mut to = &mut out.lock();
-                try!(self.formatter.format(&event, to));
+                try!(self.formatter.write_event(&event, to));
                 try!(writeln!(to, ""));
             }
         }

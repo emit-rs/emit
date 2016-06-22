@@ -4,7 +4,7 @@ use std::sync::mpsc::{Sender, Receiver};
 use std::thread;
 use std::mem;
 use std::sync::Mutex;
-use pipeline::chain::ChainedElement;
+use pipeline::chain::Emit;
 
 pub enum Item {
     Done,
@@ -27,14 +27,14 @@ impl Drop for AsyncCollector{
 }
 
 impl AsyncCollector{
-    pub fn new<T: collectors::Collector + Send + 'static>(collector: T, tx: Sender<Item>, rx: Receiver<Item>) -> AsyncCollector{
+    pub fn new<T: collectors::AcceptEvents + Send + 'static>(collector: T, tx: Sender<Item>, rx: Receiver<Item>) -> AsyncCollector{
         let coll = collector;
         let child = thread::spawn(move|| {
             loop {
                 let done = match rx.recv().unwrap() {
                     Item::Done => true,
                     Item::Emit(payload) => {
-                        if let Err(e) = coll.dispatch(&vec![payload]) {
+                        if let Err(e) = coll.accept_events(&vec![payload]) {
                             error!("Could not dispatch events: {}", e);
                         }
                         false
@@ -64,7 +64,7 @@ impl SenderElement {
     }
 }
 
-impl ChainedElement for SenderElement {
+impl Emit for SenderElement {
     fn emit(&self, event: Event<'static>) {
         self.chan.lock().unwrap().send(Item::Emit(event)).expect("The event could not be emitted to the pipeline");
     }

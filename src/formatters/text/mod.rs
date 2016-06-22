@@ -11,8 +11,8 @@ impl PlainTextFormatter {
     }
 }
 
-impl super::TextFormatter for PlainTextFormatter {
-    fn format(&self, event: &Event<'static>, to: &mut Write) -> Result<(), Box<Error>> {
+impl super::WriteEvent for PlainTextFormatter {
+    fn write_event(&self, event: &Event<'static>, to: &mut Write) -> Result<(), Box<Error>> {
         let repl = templates::repl::MessageTemplateRepl::new(event.message_template().text());
         let content = repl.replace(event.properties());
         try!(writeln!(to, "{} {:5} {}", event.timestamp().format("%FT%TZ"), event.level(), content));

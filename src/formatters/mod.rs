@@ -6,6 +6,7 @@ use std::error::Error;
 use events::Event;
 use std::io::Write;
 
-pub trait TextFormatter {
-    fn format(&self, event: &Event<'static>, to: &mut Write) -> Result<(), Box<Error>>;
+/// Implementers can write a representation of an event to a binary stream.
+pub trait WriteEvent {
+    fn write_event(&self, event: &Event<'static>, to: &mut Write) -> Result<(), Box<Error>>;
 }

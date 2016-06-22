@@ -1,36 +1,36 @@
 use events::Event;
 
 /// A link to the next element in a processing chain.
-pub trait ChainedElement : Sync {
+pub trait Emit {
     fn emit(&self, event: Event<'static>);
 }
 
 /// An element within the processing chain that controls
 /// how an `Event` is passed through.
-pub trait PipelineElement : Sync {
-    fn emit(&self, event: Event<'static>, next: &ChainedElement);
+pub trait Propagate {
+    fn propagate(&self, event: Event<'static>, next: &Emit);
 }
 
 struct ChainedPipelineElement {
-    current: Box<PipelineElement>,
-    next: Box<ChainedElement>
+    current: Box<Propagate + Sync>,
+    next: Box<Emit + Sync>
 }
 
-impl ChainedElement for ChainedPipelineElement {
+impl Emit for ChainedPipelineElement {
     fn emit(&self, event: Event<'static>) {
-        self.current.emit(event, &*self.next);
+        self.current.propagate(event, &*self.next);
     }
 }
 
 struct TerminatingElement {}
 
-impl ChainedElement for TerminatingElement {
+impl Emit for TerminatingElement {
     #[allow(unused_variables)]
     fn emit(&self, event: Event<'static>) {
     }
 }
 
-pub fn to_chain(elements: Vec<Box<PipelineElement>>, terminator: Option<Box<ChainedElement>>) -> Box<ChainedElement> {
+pub fn to_chain(elements: Vec<Box<Propagate + Sync>>, terminator: Option<Box<Emit + Sync>>) -> Box<Emit + Sync> {
     let mut els = elements;
     els.reverse();
     

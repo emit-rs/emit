@@ -1,6 +1,6 @@
 use events;
 use events::Event;
-use pipeline::chain::{ChainedElement,PipelineElement};
+use pipeline::chain::{Emit,Propagate};
 use serde;
 
 pub struct FixedPropertyEnricher<'a> {
@@ -14,8 +14,8 @@ impl<'a> FixedPropertyEnricher<'a> {
     }
 }
 
-impl PipelineElement for FixedPropertyEnricher<'static> {
-    fn emit(&self, event: Event<'static>, next: &ChainedElement) {
+impl Propagate for FixedPropertyEnricher<'static> {
+    fn propagate(&self, event: Event<'static>, next: &Emit) {
         let mut e = event;
         e.add_or_update_property(self.name, self.value.clone());
         next.emit(e);

@@ -1,14 +1,14 @@
 use std::sync::mpsc::channel;
 use log;
-use collectors::{Collector,CollectorElement};
+use collectors::{AcceptEvents,CollectorElement};
 use pipeline::chain;
-use pipeline::chain::{ChainedElement, PipelineElement};
+use pipeline::chain::{Emit,Propagate};
 use pipeline::ambient;
 use pipeline::async::{Item, AsyncCollector, SenderElement};
 use pipeline::reference::PipelineRef;
 
 /// A handle to the background asynchronously-operating collector. When
-// `drop()`ped, the background collector (if any) will be flushed and shut down.
+/// `drop()`ped, the background collector (if any) will be flushed and shut down.
 pub struct AsyncFlushHandle {
     #[allow(dead_code)]
     async_collector: Option<AsyncCollector>
@@ -19,8 +19,8 @@ pub struct AsyncFlushHandle {
 /// can be used in isolation.
 pub struct PipelineBuilder {
     level: log::LogLevel,
-    elements: Vec<Box<PipelineElement>>,
-    terminator: Option<Box<ChainedElement>>,
+    elements: Vec<Box<Propagate + Sync>>,
+    terminator: Option<Box<Emit + Sync>>,
     async_collector: Option<AsyncCollector>
 }
 
@@ -42,18 +42,18 @@ impl PipelineBuilder {
     
     /// Add a processing element to the pipeline. Elements run in the order in which they
     /// are added, so the output of one `pipe()`d element is fed into the next.
-    pub fn pipe(mut self, element: Box<PipelineElement>) -> PipelineBuilder {
+    pub fn pipe(mut self, element: Box<Propagate + Sync>) -> PipelineBuilder {
         self.elements.push(element);
         self
     }
     
     /// Write to a collector, synchronously.
-    pub fn write_to<T: Collector + Sync + 'static>(self, collector: T) -> PipelineBuilder {
+    pub fn write_to<T: AcceptEvents + Sync + 'static>(self, collector: T) -> PipelineBuilder {
         self.pipe(Box::new(CollectorElement::<T>::new(collector)))
     }
 
     /// Send events to a collector, asynchronously. At present only one collector may receive events this way.
-    pub fn send_to<T: Collector + Send + 'static>(mut self, collector: T) -> PipelineBuilder {
+    pub fn send_to<T: AcceptEvents + Send + 'static>(mut self, collector: T) -> PipelineBuilder {
         let (tx, rx) = channel::<Item>();
         self.terminator = Some(Box::new(SenderElement::new(tx.clone())));
         self.async_collector = Some(AsyncCollector::new(collector, tx, rx));

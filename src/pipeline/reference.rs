@@ -1,17 +1,17 @@
 use events::Event;
-use pipeline::chain::ChainedElement;
+use pipeline::chain::Emit;
 use log;
 
 /// `PipelineRef` is "mouth" of the pipeline, into which events are fed.
 pub struct PipelineRef {
-    head: Box<ChainedElement>,
+    head: Box<Emit + Sync>,
     filter: log::LogLevelFilter
 }
 
-unsafe impl Sync for PipelineRef { }
+//unsafe impl Sync for PipelineRef { }
 
 impl PipelineRef {
-    pub fn new(head: Box<ChainedElement>, level: log::LogLevel) -> PipelineRef {
+    pub fn new(head: Box<Emit + Sync>, level: log::LogLevel) -> PipelineRef {
         PipelineRef {
             head: head,
             filter: level.to_log_level_filter()
