@@ -2,29 +2,44 @@ use std::io;
 use std::io::Write;
 use std::error::Error;
 use events;
+use formatters;
 
-pub struct StdioCollector {
-    _use_stderr: bool
+pub struct StdioCollector<F> {
+    use_stderr: bool,
+    formatter: F
 }
 
-unsafe impl Sync for StdioCollector {}
+unsafe impl<F: Sync> Sync for StdioCollector<F> {}
 
-impl StdioCollector {
-    pub fn new() -> StdioCollector {
+impl<F> StdioCollector<F> {
+    pub fn new(formatter: F) -> StdioCollector<F> {
         StdioCollector {
-            _use_stderr: false
+            use_stderr: false,
+            formatter: formatter
+        }
+    }
+
+    pub fn new_stderr(formatter: F) -> StdioCollector<F> {
+        StdioCollector {
+            use_stderr: true,
+            formatter: formatter
         }
     }
 }
 
-impl super::Collector for StdioCollector {
-    fn dispatch(&self, events: &[events::Event<'static>]) -> Result<(), Box<Error>> {
+impl<F: formatters::WriteEvent + Sync> super::AcceptEvents for StdioCollector<F> {
+    fn accept_events(&self, events: &[events::Event<'static>]) -> Result<(), Box<Error>> {
         let out = io::stdout();
-        let mut handle = out.lock();
+        let err = io::stderr();
         for event in events {
-            try!(writeln!(handle, "emit {} {:5} {}", event.timestamp().format("%FT%TZ"), event.level(), event.message_template().text()));
-            for (n,v) in event.properties() {                
-                try!(writeln!(handle, "  {}: {}", n, v));            
+            if self.use_stderr {
+                let mut to = &mut err.lock();
+                try!(self.formatter.write_event(&event, to));
+                try!(writeln!(to, ""));
+            } else {
+                let mut to = &mut out.lock();
+                try!(self.formatter.write_event(&event, to));
+                try!(writeln!(to, ""));
             }
         }
         

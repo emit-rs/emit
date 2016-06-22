@@ -54,10 +54,11 @@
 //! use std::env;
 //! use emit::PipelineBuilder;
 //! use emit::collectors::stdio::StdioCollector;
+//! use emit::formatters::raw::RawFormatter;
 //!
 //! fn main() {
 //!     let _flush = PipelineBuilder::new()
-//!         .write_to(StdioCollector::new())
+//!         .write_to(StdioCollector::new(RawFormatter::new()))
 //!         .init();
 //!
 //!     eminfo!("Hello, {}!", name: env::var("USERNAME").unwrap_or("User".to_string()));
@@ -88,6 +89,10 @@ pub mod events;
 pub mod pipeline;
 pub mod collectors;
 pub mod enrichers;
+pub mod formatters;
+
+#[cfg(test)]
+mod test_support;
 
 /// Re-exports `log::LogLevel` so that users can initialize the emit
 /// crate without extra imports.
@@ -277,12 +282,14 @@ macro_rules! emtrace {
 
 #[cfg(test)]
 mod tests {
-    use collectors::stdio;
-    //use collectors::seq;
     use enrichers::fixed_property::FixedPropertyEnricher;
     use pipeline::builder::PipelineBuilder;
     use std::env;
     use log;
+    use collectors::stdio::StdioCollector;
+    use formatters::json::JsonFormatter;
+    use formatters::text::PlainTextFormatter;
+    use formatters::raw::RawFormatter;
 
     #[test]
     fn unparameterized_templates_are_captured() {
@@ -304,11 +311,13 @@ mod tests {
     }
 
     #[test]
-    fn emitted_events_are_flushed() {
+    fn pipeline_example() {
         let _flush = PipelineBuilder::new()
             .at_level(log::LogLevel::Info)
             .pipe(Box::new(FixedPropertyEnricher::new("app", &"Test")))
-            .write_to(stdio::StdioCollector::new())
+            .write_to(StdioCollector::new(PlainTextFormatter::new()))
+            .write_to(StdioCollector::new(JsonFormatter::new()))
+            .write_to(StdioCollector::new(RawFormatter::new()))
             .init();
 
         eminfo!("Hello, {} at {} in {}!", name: env::var("USERNAME").unwrap_or("User".to_string()), time: 2139, room: "office");

@@ -26,13 +26,10 @@ The named arguments are captured as key/value properties that can be rendered in
 
 ```json
 {
-  "Timestamp": "2016-03-17T00:17:01Z",
-  "Level": "Information",
-  "MessageTemplate": "Hello, {name}!",
-  "Properties": {
-    "name": "nblumhardt",
-    "target": "web_we_are"
-  }
+  "@t": "2016-03-17T00:17:01Z",
+  "@mt": "Hello, {name}!",
+  "name": "nblumhardt",
+  "target": "web_we_are"
 }
 ```
 
@@ -40,23 +37,21 @@ This makes log searches in an appropriate back-end collector much simpler:
 
 ![Event in Seq](https://raw.githubusercontent.com/nblumhardt/emit/master/asset/event_in_seq.png)
 
-[Seq](https://getseq.net) and its JSON format are implemented for the work-in-progress here, but support for other log collectors and formats is on its way.
-
-If you don't have Seq running, events can be written to `io::stdout` instead:
+Events can be written to `io::stdout` in a number of formats:
 
 ```rust
 use emit::collectors::stdio::StdioCollector;
+use formatters::text::PlainTextFormatter;
+
 let _flush = PipelineBuilder::new()
-    .write_to(StdioCollector::new())
+    .write_to(StdioCollector::new(PlainTextFormatter::new()))
     .init();
 ```
 
 Produces:
 
 ```
-emit 2016-03-24T05:03:36Z INFO  Hello, {name}!
-  name: "nblumhardt"
-  target: "web_we_are"
+2016-03-24T05:03:36Z INFO  Hello, "nblumhardt"!
 ```
 
 **What about the `log` crate?**

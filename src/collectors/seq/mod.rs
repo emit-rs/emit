@@ -61,8 +61,8 @@ const HEADER_LEN: usize = 11;
 const FOOTER: &'static str = "]}";
 const FOOTER_LEN: usize = 2;
 
-impl super::Collector for SeqCollector {
-    fn dispatch(&self, events: &[events::Event<'static>]) -> Result<(), Box<Error>> {
+impl super::AcceptEvents for SeqCollector {
+    fn accept_events(&self, events: &[events::Event<'static>]) -> Result<(), Box<Error>> {
         let mut next = HEADER.to_owned();
         let mut count = HEADER_LEN + FOOTER_LEN;
         let mut delim = "";
