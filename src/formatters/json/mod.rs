@@ -15,7 +15,7 @@ impl JsonFormatter {
 impl super::WriteEvent for JsonFormatter {
     fn write_event(&self, event: &Event<'static>, to: &mut Write) -> Result<(), Box<Error>> {
         let template = try!(serde_json::to_string(event.message_template().text()));
-        let isots = event.timestamp().format("%FT%TZ");
+        let isots = event.timestamp().format("%FT%T%.3fZ");
 
         try!(write!(to, "{{\"@t\":\"{}\",\"@mt\":{}", isots, template));
 
