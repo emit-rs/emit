@@ -79,9 +79,6 @@ extern crate serde_json;
 extern crate chrono;
 
 #[macro_use]
-extern crate hyper;
-
-#[macro_use]
 extern crate log;
 
 pub mod templates;
