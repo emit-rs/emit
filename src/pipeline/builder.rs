@@ -35,25 +35,25 @@ impl PipelineBuilder {
     }
 
     /// Set the logging level used by the pipeline. The default is `log::LogLevel::Info`.
-    pub fn at_level(mut self, level: log::LogLevel) -> PipelineBuilder {
+    pub fn at_level(mut self, level: log::LogLevel) -> Self {
         self.level = level;
         self
     }
     
     /// Add a processing element to the pipeline. Elements run in the order in which they
     /// are added, so the output of one `pipe()`d element is fed into the next.
-    pub fn pipe(mut self, element: Box<Propagate + Sync>) -> PipelineBuilder {
+    pub fn pipe(mut self, element: Box<Propagate + Sync>) -> Self {
         self.elements.push(element);
         self
     }
     
     /// Write to a collector, synchronously.
-    pub fn write_to<T: AcceptEvents + Sync + 'static>(self, collector: T) -> PipelineBuilder {
+    pub fn write_to<T: AcceptEvents + Sync + 'static>(self, collector: T) -> Self {
         self.pipe(Box::new(CollectorElement::<T>::new(collector)))
     }
 
     /// Send events to a collector, asynchronously. At present only one collector may receive events this way.
-    pub fn send_to<T: AcceptEvents + Send + 'static>(mut self, collector: T) -> PipelineBuilder {
+    pub fn send_to<T: AcceptEvents + Send + 'static>(mut self, collector: T) -> Self {
         let (tx, rx) = channel::<Item>();
         self.terminator = Some(Box::new(SenderElement::new(tx.clone())));
         self.async_collector = Some(AsyncCollector::new(collector, tx, rx));
@@ -77,4 +77,3 @@ impl PipelineBuilder {
         flush
     }
 }
-

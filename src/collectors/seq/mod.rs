@@ -114,7 +114,7 @@ fn format_payload(event: &events::Event) -> String {
             first = false;
         }
         
-        write!(&mut body, "\"{}\":{}", n, v).is_ok();            
+        write!(&mut body, "\"{}\":{}", n, v.to_json()).is_ok();            
     }
              
     body.push_str("}}");
@@ -151,8 +151,8 @@ mod tests {
     #[test]
     fn events_are_formatted() {
         let timestamp = UTC.ymd(2014, 7, 8).and_hms(9, 10, 11);  
-        let mut properties: collections::BTreeMap<&'static str, String> = collections::BTreeMap::new();
-        properties.insert("number", "42".to_owned());
+        let mut properties = collections::BTreeMap::new();
+        properties.insert("number", "42".into());
         let evt = events::Event::new(timestamp, log::LogLevel::Warn, templates::MessageTemplate::new("The number is {number}"), properties);
         let payload = format_payload(&evt);
         assert_eq!(payload, "{\"Timestamp\":\"2014-07-08T09:10:11Z\",\"Level\":\"Warning\",\"MessageTemplate\":\"The number is {number}\",\"Properties\":{\"number\":42}}".to_owned());

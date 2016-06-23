@@ -1,11 +1,11 @@
 use events;
-use events::Event;
+use events::{Event,Value};
 use pipeline::chain::{Emit,Propagate};
 use serde;
 
 pub struct FixedPropertyEnricher<'a> {
     name: &'a str,
-    value: String
+    value: Value
 }
 
 impl<'a> FixedPropertyEnricher<'a> {
