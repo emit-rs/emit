@@ -6,6 +6,8 @@
 
 use std::collections::BTreeMap;
 use std::str;
+use events::Value;
+use std::fmt::Write;
 
 pub struct MessageTemplateRepl<'a> {
     text: &'a str,
@@ -27,21 +29,18 @@ impl <'a> MessageTemplateRepl<'a> {
     }
 
     //TODO: DRY
-    pub fn replace(&self, values: &BTreeMap<&str, String>) -> String {
-        let mut parts: Vec<&str> = Vec::new();
+    pub fn replace(&self, values: &BTreeMap<&str, Value>) -> String {
+        let mut result = String::with_capacity(self.text.len());
         let mut slice_iter = self.param_slices.iter();
         let mut last_index = 0;
-        let mut len = 0;
 
         //The first slice
         if let Some(slice) = slice_iter.next() {
             let lit = &self.text[last_index..slice.start];
-            parts.push(lit);
-            len += lit.len();
+            write!(result, "{}", lit).is_ok();
 
-            if let Some(val) = values.get(slice.label.as_str()) {
-                parts.push(val);
-                len += val.len();
+            if let Some(ref val) = values.get(slice.label.as_str()) {
+                write!(result, "{}", val).is_ok();
             }
 
             last_index = slice.end;
@@ -50,12 +49,10 @@ impl <'a> MessageTemplateRepl<'a> {
         //The middle slices
         for slice in slice_iter {
             let lit = &self.text[last_index..slice.start];
-            parts.push(lit);
-            len += lit.len();
+            write!(result, "{}", lit).is_ok();
 
-            if let Some(val) = values.get(slice.label.as_str()) {
-                parts.push(val);
-                len += val.len();
+            if let Some(ref val) = values.get(slice.label.as_str()) {
+                write!(result, "{}", val).is_ok();
             }
 
             last_index = slice.end;
@@ -64,14 +61,7 @@ impl <'a> MessageTemplateRepl<'a> {
         //The last slice
         if last_index < self.text.len() {
             let lit = &self.text[last_index..];
-            parts.push(lit);
-            len += lit.len();
-        }
-
-        //Build the result string
-        let mut result = String::with_capacity(len);
-        for part in parts {
-            result.push_str(part);
+            write!(result, "{}", lit).is_ok();
         }
 
         result
@@ -193,8 +183,8 @@ mod tests {
         let template_repl = MessageTemplateRepl::new("C {A} D {Bert} E");
 
         let mut map = BTreeMap::new();
-        map.insert("A", "value1".to_string());
-        map.insert("Bert", "value2".to_string());
+        map.insert("A", "value1".into());
+        map.insert("Bert", "value2".into());
 
         let replaced = template_repl.replace(&map);
 
@@ -206,7 +196,7 @@ mod tests {
         let template_repl = MessageTemplateRepl::new("C {A} D {Bert} E");
 
         let mut map = BTreeMap::new();
-        map.insert("Bert", "value2".to_string());
+        map.insert("Bert", "value2".into());
 
         let replaced = template_repl.replace(&map);
 
@@ -218,8 +208,8 @@ mod tests {
         let template_repl = MessageTemplateRepl::new("C {A}{B} D {A} {B} E");
 
         let mut map = BTreeMap::new();
-        map.insert("A", "value1".to_string());
-        map.insert("B", "value2".to_string());
+        map.insert("A", "value1".into());
+        map.insert("B", "value2".into());
 
         let replaced = template_repl.replace(&map);
 
@@ -231,8 +221,8 @@ mod tests {
         let template_repl = MessageTemplateRepl::new("{A} DE {B} F");
 
         let mut map = BTreeMap::new();
-        map.insert("A", "value1".to_string());
-        map.insert("B", "value2".to_string());
+        map.insert("A", "value1".into());
+        map.insert("B", "value2".into());
 
         let replaced = template_repl.replace(&map);
 
@@ -244,8 +234,8 @@ mod tests {
         let template_repl = MessageTemplateRepl::new("C {A} D {B}");
 
         let mut map = BTreeMap::new();
-        map.insert("A", "value1".to_string());
-        map.insert("B", "value2".to_string());
+        map.insert("A", "value1".into());
+        map.insert("B", "value2".into());
 
         let replaced = template_repl.replace(&map);
 
@@ -258,8 +248,8 @@ mod tests {
         let template_repl = MessageTemplateRepl::new("C {A} D {{B}} {A");
 
         let mut map = BTreeMap::new();
-        map.insert("A", "value1".to_string());
-        map.insert("B", "value2".to_string());
+        map.insert("A", "value1".into());
+        map.insert("B", "value2".into());
 
         let replaced = template_repl.replace(&map);
 

@@ -6,6 +6,6 @@ use log::LogLevel;
 pub fn some_event() -> Event<'static> {
     let mt = MessageTemplate::new("Hello, {name}");
     let mut props = BTreeMap::new();
-    props.insert("name", "Alice".to_string());
+    props.insert("name", "Alice".into());
     Event::new_now(LogLevel::Info, mt, props)
 }

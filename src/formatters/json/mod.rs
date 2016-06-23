@@ -26,9 +26,9 @@ impl super::WriteEvent for JsonFormatter {
         for (n,v) in event.properties() {
             let bytes = n.as_bytes();
             if bytes.len() > 0 && bytes[0] == b'@' {
-                try!(write!(to, ",\"@{}\":{}", n, v));            
+                try!(write!(to, ",\"@{}\":{}", n, v.to_json()));            
             } else {
-                try!(write!(to, ",\"{}\":{}", n, v));            
+                try!(write!(to, ",\"{}\":{}", n, v.to_json()));            
             }
         }
                     

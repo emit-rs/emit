@@ -112,7 +112,7 @@ macro_rules! __emit_get_event_data {
 
         // Underscores avoid the unused_mut warning
         let mut _names: Vec<&str> = vec![];
-        let mut properties: collections::BTreeMap<&'static str, String> = collections::BTreeMap::new();
+        let mut properties: collections::BTreeMap<&'static str, $crate::events::Value> = collections::BTreeMap::new();
 
         $(
             _names.push(stringify!($n));
@@ -305,8 +305,8 @@ mod tests {
 
         let (template, properties) = __emit_get_event_data!("t", "User {} exceeded quota of {}!", user: u, quota: q);
         assert_eq!(template.text(), "User {user} exceeded quota of {quota}!");
-        assert_eq!(properties.get("user"), Some(&"\"nblumhardt\"".to_owned()));
-        assert_eq!(properties.get("quota"), Some(&"42".to_owned()));
+        assert_eq!(properties.get("user"), Some(&"\"nblumhardt\"".into()));
+        assert_eq!(properties.get("quota"), Some(&"42".into()));
         assert_eq!(properties.len(), 3);
     }
 
