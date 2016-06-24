@@ -1,5 +1,7 @@
 # emit  [![Join the chat at https://gitter.im/serilog/serilog](https://img.shields.io/gitter/room/emit/emit-rs.svg)](https://gitter.im/emit-rs/emit) [![Crates.io](https://img.shields.io/crates/v/emit.svg)](https://crates.io/crates/emit) [![Build status](https://travis-ci.org/emit-rs/emit.svg?branch=master)](https://travis-ci.org/emit-rs/emit)
 
+[Documentation](http://emit-rs.github.io/emit/emit/index.html)
+
 This crate implements a structured logging API similar to the one in [Serilog](http://serilog.net). In systems programming, this style of logging is most often found in Windows' [ETW](https://msdn.microsoft.com/en-us/library/windows/desktop/aa363668(v=vs.85).aspx). Web and distributed applications use similar techniques to improve machine-readabililty when dealing with large event volumes.
 
 "Emitted" log events consist of a _format_ and list of _named properties_, as in the `eminfo!()` call below.
