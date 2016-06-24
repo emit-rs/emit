@@ -27,6 +27,7 @@ impl Drop for AsyncCollector{
 }
 
 impl AsyncCollector{
+    #[allow(unused_must_use)]
     pub fn new<T: collectors::AcceptEvents + Send + 'static>(collector: T, tx: Sender<Item>, rx: Receiver<Item>) -> AsyncCollector{
         let coll = collector;
         let child = thread::spawn(move|| {
@@ -34,9 +35,8 @@ impl AsyncCollector{
                 let done = match rx.recv().unwrap() {
                     Item::Done => true,
                     Item::Emit(payload) => {
-                        if let Err(e) = coll.accept_events(&vec![payload]) {
-                            error!("Could not dispatch events: {}", e);
-                        }
+                        // TODO - self-log
+                        coll.accept_events(&vec![payload]);
                         false
                     }
                 };

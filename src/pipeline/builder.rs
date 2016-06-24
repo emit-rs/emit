@@ -1,5 +1,5 @@
 use std::sync::mpsc::channel;
-use log;
+use LogLevelFilter;
 use collectors::{AcceptEvents,CollectorElement};
 use pipeline::chain;
 use pipeline::chain::{Emit,Propagate};
@@ -18,7 +18,7 @@ pub struct AsyncFlushHandle {
 /// for use by the `emit!()` family of macros. Calling `detach()` will return an independent pipeline that
 /// can be used in isolation.
 pub struct PipelineBuilder {
-    level: log::LogLevel,
+    level: LogLevelFilter,
     elements: Vec<Box<Propagate + Sync>>,
     terminator: Option<Box<Emit + Sync>>,
     async_collector: Option<AsyncCollector>
@@ -27,15 +27,15 @@ pub struct PipelineBuilder {
 impl PipelineBuilder {
     pub fn new() -> PipelineBuilder {
         PipelineBuilder { 
-            level: log::LogLevel::Info,
+            level: LogLevelFilter::Info,
             elements: vec![],
             terminator: None,
             async_collector: None
         }
     }
 
-    /// Set the logging level used by the pipeline. The default is `log::LogLevel::Info`.
-    pub fn at_level(mut self, level: log::LogLevel) -> Self {
+    /// Set the logging level used by the pipeline. The default is `LogLevelFilter::Info`.
+    pub fn at_level(mut self, level: LogLevelFilter) -> Self {
         self.level = level;
         self
     }

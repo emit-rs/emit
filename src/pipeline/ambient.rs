@@ -1,6 +1,6 @@
 use events::Event;
 use std::sync::atomic;
-use log;
+use LogLevel;
 use std::mem;
 use pipeline::reference::PipelineRef;
 
@@ -15,7 +15,7 @@ pub fn set_ambient_ref(pref: PipelineRef) {
     PIPELINE_REF.store(unsafe { mem::transmute::<Box<PipelineRef>, *const PipelineRef>(bpref) } as usize, atomic::Ordering::SeqCst);
 }
 
-pub fn is_enabled(level: log::LogLevel) -> bool {
+pub fn is_enabled(level: LogLevel) -> bool {
     let p = get_ambient_ref();    
     if p != 0 as *const PipelineRef {
         unsafe {

@@ -11,4 +11,3 @@ keywords = ["log", "logging"]
 serde = "0.7"
 serde_json = "0.7"
 chrono = "0.2"
-log = "0.3"
