@@ -18,7 +18,7 @@
 //! The arguments passed to `emit` are named:
 //!
 //! ```ignore
-//! eminfo!("Hello, {}!", user: env::var("USERNAME").unwrap());
+//! info!("Hello, {}!", user: env::var("USERNAME").unwrap());
 //! ```
 //!
 //! This event can be rendered into text identically to the `log` example, but structured data collectors also capture the
@@ -26,12 +26,10 @@
 //!
 //! ```js
 //! {
-//!   "timestamp": "2016-03-17T00:17:01Z",
-//!   "messageTemplate": "Hello, {user}!",
-//!   "properties": {
-//!     "user": "nblumhardt",
-//!     "target": "example_app"
-//!   }
+//!   "@t": "2016-03-17T00:17:01.333Z",
+//!   "@mt": "Hello, {user}!",
+//!   "user": "nblumhardt",
+//!   "target": "example_app"
 //! }
 //! ```
 //!
@@ -49,7 +47,6 @@
 //! ```
 //! #[macro_use]
 //! extern crate emit;
-//! # extern crate log;
 //!
 //! use std::env;
 //! use emit::PipelineBuilder;
@@ -61,7 +58,7 @@
 //!         .write_to(StdioCollector::new(RawFormatter::new()))
 //!         .init();
 //!
-//!     eminfo!("Hello, {}!", name: env::var("USERNAME").unwrap_or("User".to_string()));
+//!     info!("Hello, {}!", name: env::var("USERNAME").unwrap_or("User".to_string()));
 //! }
 //! ```
 //!
@@ -78,12 +75,6 @@ extern crate serde;
 extern crate serde_json;
 extern crate chrono;
 
-#[macro_use]
-extern crate hyper;
-
-#[macro_use]
-extern crate log;
-
 pub mod templates;
 pub mod events;
 pub mod pipeline;
@@ -94,9 +85,42 @@ pub mod formatters;
 #[cfg(test)]
 mod test_support;
 
-/// Re-exports `log::LogLevel` so that users can initialize the emit
-/// crate without extra imports.
-pub use log::LogLevel;
+use std::fmt;
+
+#[repr(usize)]
+#[derive(Copy, Eq, Debug, PartialEq, Clone, Ord, PartialOrd)]
+pub enum LogLevel {
+    Error = 1, 
+    Warn, 
+    Info, 
+    Debug, 
+    Trace
+}
+
+#[repr(usize)]
+#[derive(Copy, Eq, Debug, PartialEq, Clone, Ord, PartialOrd)]
+pub enum LogLevelFilter {
+    Off,
+    Error, 
+    Warn, 
+    Info, 
+    Debug, 
+    Trace
+}
+
+static LOG_LEVEL_NAMES: [&'static str; 6] = ["OFF", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"];
+
+impl fmt::Display for LogLevel {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write!(fmt, "{}", LOG_LEVEL_NAMES[*self as usize])
+    }
+}
+
+impl LogLevelFilter {
+    pub fn is_enabled(self, level: LogLevel) -> bool {
+        self as usize >= level as usize
+    }
+}
 
 /// Re-export `pipeline::builder::PipelineBuilder` so that clients don't need to
 /// fully-qualify the hierarchy.
@@ -116,10 +140,10 @@ macro_rules! __emit_get_event_data {
 
         $(
             _names.push(stringify!($n));
-            properties.insert(stringify!($n), $crate::events::capture_property_value(&$v));
+            properties.insert(stringify!($n), $crate::events::Value::capture(&$v));
         )*
 
-        properties.insert("target", $crate::events::capture_property_value(&$target));
+        properties.insert("target", $crate::events::Value::capture(&$target));
 
         let template = $crate::templates::MessageTemplate::from_format($s, &_names);
 
@@ -167,20 +191,16 @@ macro_rules! emit {
 /// The example below will be emitted at the `emit::LogLevel::Error` level.
 ///
 /// ```ignore
-/// emerror!("Could not start {} on {}", cmd: "emitd", machine: "s123456");
+/// error!("Could not start {} on {}", cmd: "emitd", machine: "s123456");
 /// ```
 #[macro_export]
-macro_rules! emerror {
+macro_rules! error {
     (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
-        #[allow(unused_imports)]
-        use log;
-        emit!(target: $target, log::LogLevel::Error, $s, $($n: $v),*);
+        emit!(target: $target, $crate::LogLevel::Error, $s, $($n: $v),*);
     }};
 
     ($s:expr, $($n:ident: $v:expr),*) => {{
-        #[allow(unused_imports)]
-        use log;
-        emit!(log::LogLevel::Error, $s, $($n: $v),*);
+        emit!($crate::LogLevel::Error, $s, $($n: $v),*);
     }};
 }
 
@@ -191,20 +211,16 @@ macro_rules! emerror {
 /// The example below will be emitted at the `emit::LogLevel::Warn` level.
 ///
 /// ```ignore
-/// emwarn!("SQL query took {} ms", elapsed: 7890);
+/// warn!("SQL query took {} ms", elapsed: 7890);
 /// ```
 #[macro_export]
-macro_rules! emwarn {
+macro_rules! warn {
     (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
-        #[allow(unused_imports)]
-        use log;
-        emit!(target: $target, log::LogLevel::Warn, $s, $($n: $v),*);
+        emit!(target: $target, $crate::LogLevel::Warn, $s, $($n: $v),*);
     }};
 
     ($s:expr, $($n:ident: $v:expr),*) => {{
-        #[allow(unused_imports)]
-        use log;
-        emit!(log::LogLevel::Warn, $s, $($n: $v),*);
+        emit!($crate::LogLevel::Warn, $s, $($n: $v),*);
     }};
 }
 
@@ -215,20 +231,16 @@ macro_rules! emwarn {
 /// The example below will be emitted at the `emit::LogLevel::Info` level.
 ///
 /// ```ignore
-/// eminfo!("Hello, {}!", user: env::var("USERNAME").unwrap());
+/// info!("Hello, {}!", user: env::var("USERNAME").unwrap());
 /// ```
 #[macro_export]
-macro_rules! eminfo {
+macro_rules! info {
     (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
-        #[allow(unused_imports)]
-        use log;
-        emit!(target: $target, log::LogLevel::Info, $s, $($n: $v),*);
+        emit!(target: $target, $crate::LogLevel::Info, $s, $($n: $v),*);
     }};
 
     ($s:expr, $($n:ident: $v:expr),*) => {{
-        #[allow(unused_imports)]
-        use log;
-        emit!(log::LogLevel::Info, $s, $($n: $v),*);
+        emit!($crate::LogLevel::Info, $s, $($n: $v),*);
     }};
 }
 
@@ -239,20 +251,16 @@ macro_rules! eminfo {
 /// The example below will be emitted at the `emit::LogLevel::Debug` level.
 ///
 /// ```ignore
-/// emdebug!("Opening config file {}", filename: "dir/config.json");
+/// debug!("Opening config file {}", filename: "dir/config.json");
 /// ```
 #[macro_export]
-macro_rules! emdebug {
+macro_rules! debug {
     (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
-        #[allow(unused_imports)]
-        use log;
-        emit!(target: $target, log::LogLevel::Debug, $s, $($n: $v),*);
+        emit!(target: $target, $crate::LogLevel::Debug, $s, $($n: $v),*);
     }};
 
     ($s:expr, $($n:ident: $v:expr),*) => {{
-        #[allow(unused_imports)]
-        use log;
-        emit!(log::LogLevel::Debug, $s, $($n: $v),*);
+        emit!($crate::LogLevel::Debug, $s, $($n: $v),*);
     }};
 }
 
@@ -266,17 +274,13 @@ macro_rules! emdebug {
 /// emdtrace!("{} called with arg {}", method: "start_frobbles()", count: 123);
 /// ```
 #[macro_export]
-macro_rules! emtrace {
+macro_rules! trace {
     (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
-        #[allow(unused_imports)]
-        use log;
-        emit!(target: $target, log::LogLevel::Trace, $s, $($n: $v),*);
+        emit!(target: $target, $crate::LogLevel::Trace, $s, $($n: $v),*);
     }};
 
     ($s:expr, $($n:ident: $v:expr),*) => {{
-        #[allow(unused_imports)]
-        use log;
-        emit!(log::LogLevel::Trace, $s, $($n: $v),*);
+        emit!($crate::LogLevel::Trace, $s, $($n: $v),*);
     }};
 }
 
@@ -285,7 +289,7 @@ mod tests {
     use enrichers::fixed_property::FixedPropertyEnricher;
     use pipeline::builder::PipelineBuilder;
     use std::env;
-    use log;
+    use LogLevelFilter;
     use collectors::stdio::StdioCollector;
     use formatters::json::JsonFormatter;
     use formatters::text::PlainTextFormatter;
@@ -313,13 +317,13 @@ mod tests {
     #[test]
     fn pipeline_example() {
         let _flush = PipelineBuilder::new()
-            .at_level(log::LogLevel::Info)
+            .at_level(LogLevelFilter::Info)
             .pipe(Box::new(FixedPropertyEnricher::new("app", &"Test")))
             .write_to(StdioCollector::new(PlainTextFormatter::new()))
             .write_to(StdioCollector::new(JsonFormatter::new()))
             .write_to(StdioCollector::new(RawFormatter::new()))
             .init();
 
-        eminfo!("Hello, {} at {} in {}!", name: env::var("USERNAME").unwrap_or("User".to_string()), time: 2139, room: "office");
+        info!("Hello, {} at {} in {}!", name: env::var("USERNAME").unwrap_or("User".to_string()), time: 2139, room: "office");
     }
 }
