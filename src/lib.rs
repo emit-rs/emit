@@ -18,7 +18,7 @@
 //! The arguments passed to `emit` are named:
 //!
 //! ```ignore
-//! eminfo!("Hello, {}!", user: env::var("USERNAME").unwrap());
+//! info!("Hello, {}!", user: env::var("USERNAME").unwrap());
 //! ```
 //!
 //! This event can be rendered into text identically to the `log` example, but structured data collectors also capture the
@@ -58,7 +58,7 @@
 //!         .write_to(StdioCollector::new(RawFormatter::new()))
 //!         .init();
 //!
-//!     eminfo!("Hello, {}!", name: env::var("USERNAME").unwrap_or("User".to_string()));
+//!     info!("Hello, {}!", name: env::var("USERNAME").unwrap_or("User".to_string()));
 //! }
 //! ```
 //!
@@ -191,10 +191,10 @@ macro_rules! emit {
 /// The example below will be emitted at the `emit::LogLevel::Error` level.
 ///
 /// ```ignore
-/// emerror!("Could not start {} on {}", cmd: "emitd", machine: "s123456");
+/// error!("Could not start {} on {}", cmd: "emitd", machine: "s123456");
 /// ```
 #[macro_export]
-macro_rules! emerror {
+macro_rules! error {
     (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
         #[allow(unused_imports)]
         emit!(target: $target, $crate::LogLevel::Error, $s, $($n: $v),*);
@@ -213,10 +213,10 @@ macro_rules! emerror {
 /// The example below will be emitted at the `emit::LogLevel::Warn` level.
 ///
 /// ```ignore
-/// emwarn!("SQL query took {} ms", elapsed: 7890);
+/// warn!("SQL query took {} ms", elapsed: 7890);
 /// ```
 #[macro_export]
-macro_rules! emwarn {
+macro_rules! warn {
     (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
         #[allow(unused_imports)]
         emit!(target: $target, $crate::LogLevel::Warn, $s, $($n: $v),*);
@@ -235,10 +235,10 @@ macro_rules! emwarn {
 /// The example below will be emitted at the `emit::LogLevel::Info` level.
 ///
 /// ```ignore
-/// eminfo!("Hello, {}!", user: env::var("USERNAME").unwrap());
+/// info!("Hello, {}!", user: env::var("USERNAME").unwrap());
 /// ```
 #[macro_export]
-macro_rules! eminfo {
+macro_rules! info {
     (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
         #[allow(unused_imports)]
         emit!(target: $target, $crate::LogLevel::Info, $s, $($n: $v),*);
@@ -257,10 +257,10 @@ macro_rules! eminfo {
 /// The example below will be emitted at the `emit::LogLevel::Debug` level.
 ///
 /// ```ignore
-/// emdebug!("Opening config file {}", filename: "dir/config.json");
+/// debug!("Opening config file {}", filename: "dir/config.json");
 /// ```
 #[macro_export]
-macro_rules! emdebug {
+macro_rules! debug {
     (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
         #[allow(unused_imports)]
         emit!(target: $target, $crate::LogLevel::Debug, $s, $($n: $v),*);
@@ -282,7 +282,7 @@ macro_rules! emdebug {
 /// emdtrace!("{} called with arg {}", method: "start_frobbles()", count: 123);
 /// ```
 #[macro_export]
-macro_rules! emtrace {
+macro_rules! trace {
     (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
         #[allow(unused_imports)]
         emit!(target: $target, $crate::LogLevel::Trace, $s, $($n: $v),*);
@@ -334,6 +334,6 @@ mod tests {
             .write_to(StdioCollector::new(RawFormatter::new()))
             .init();
 
-        eminfo!("Hello, {} at {} in {}!", name: env::var("USERNAME").unwrap_or("User".to_string()), time: 2139, room: "office");
+        info!("Hello, {} at {} in {}!", name: env::var("USERNAME").unwrap_or("User".to_string()), time: 2139, room: "office");
     }
 }
