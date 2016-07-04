@@ -196,12 +196,10 @@ macro_rules! emit {
 #[macro_export]
 macro_rules! error {
     (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
-        #[allow(unused_imports)]
         emit!(target: $target, $crate::LogLevel::Error, $s, $($n: $v),*);
     }};
 
     ($s:expr, $($n:ident: $v:expr),*) => {{
-        #[allow(unused_imports)]
         emit!($crate::LogLevel::Error, $s, $($n: $v),*);
     }};
 }
@@ -218,12 +216,10 @@ macro_rules! error {
 #[macro_export]
 macro_rules! warn {
     (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
-        #[allow(unused_imports)]
         emit!(target: $target, $crate::LogLevel::Warn, $s, $($n: $v),*);
     }};
 
     ($s:expr, $($n:ident: $v:expr),*) => {{
-        #[allow(unused_imports)]
         emit!($crate::LogLevel::Warn, $s, $($n: $v),*);
     }};
 }
@@ -240,12 +236,10 @@ macro_rules! warn {
 #[macro_export]
 macro_rules! info {
     (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
-        #[allow(unused_imports)]
         emit!(target: $target, $crate::LogLevel::Info, $s, $($n: $v),*);
     }};
 
     ($s:expr, $($n:ident: $v:expr),*) => {{
-        #[allow(unused_imports)]
         emit!($crate::LogLevel::Info, $s, $($n: $v),*);
     }};
 }
@@ -262,12 +256,10 @@ macro_rules! info {
 #[macro_export]
 macro_rules! debug {
     (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
-        #[allow(unused_imports)]
         emit!(target: $target, $crate::LogLevel::Debug, $s, $($n: $v),*);
     }};
 
     ($s:expr, $($n:ident: $v:expr),*) => {{
-        #[allow(unused_imports)]
         emit!($crate::LogLevel::Debug, $s, $($n: $v),*);
     }};
 }
@@ -284,12 +276,10 @@ macro_rules! debug {
 #[macro_export]
 macro_rules! trace {
     (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
-        #[allow(unused_imports)]
         emit!(target: $target, $crate::LogLevel::Trace, $s, $($n: $v),*);
     }};
 
     ($s:expr, $($n:ident: $v:expr),*) => {{
-        #[allow(unused_imports)]
         emit!($crate::LogLevel::Trace, $s, $($n: $v),*);
     }};
 }
