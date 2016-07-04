@@ -1,6 +1,6 @@
 [package]
 name = "emit"
-version = "0.9.3"
+version = "0.10.0"
 authors = ["Nicholas Blumhardt <nblumhardt@nblumhardt.com>", "Ashley Mannix <ashleymannix@live.com.au>"]
 description = "A structured logger in the style of Serilog."
 license = "Apache-2.0"
