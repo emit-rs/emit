@@ -1,6 +1,7 @@
-# emit  [![Join the chat at https://gitter.im/serilog/serilog](https://img.shields.io/gitter/room/emit/emit-rs.svg)](https://gitter.im/emit-rs/emit) [![Crates.io](https://img.shields.io/crates/v/emit.svg)](https://crates.io/crates/emit) [![Build status](https://travis-ci.org/emit-rs/emit.svg?branch=master)](https://travis-ci.org/emit-rs/emit)
+# emit  [![Join the chat at https://gitter.im/serilog/serilog](https://img.shields.io/gitter/room/emit/emit-rs.svg)](https://gitter.im/emit-rs/emit) [![Crates.io](https://img.shields.io/crates/v/emit.svg)](https://crates.io/crates/emit) [![Build status](https://travis-ci.org/emit-rs/emit.svg?branch=master)](https://travis-ci.org/emit-rs/emit) [![Documentation](https://img.shields.io/badge/docs-rustdoc-orange.svg)](http://emit-rs.github.io/emit/emit/index.html)
 
 This crate implements a structured logging API similar to the one in [Serilog](http://serilog.net). Web and distributed applications use structured logging to improve machine-readabililty when dealing with large event volumes. Unlike many structured logging APIs, `emit`'s does this without sacrificing human-friendliness.
+
 
 "Emitted" log events consist of a _format_ and list of _named properties_, as in the `info!()` call below.
 
