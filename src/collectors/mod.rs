@@ -19,11 +19,11 @@ impl<T: AcceptEvents + Sync> CollectorElement<T> {
 }
 
 impl<T: AcceptEvents + Sync> Propagate for CollectorElement<T> {
+    #[allow(unused_must_use)]
     fn propagate(&self, event: Event<'static>, next: &Emit) {
         let mut batch = vec![event];
-        if let Err(e) = self.collector.accept_events(&batch) {
-            error!("Could not dispatch events: {}", e);
-        }
+        // TODO - self-log
+        self.collector.accept_events(&batch);
         next.emit(batch.pop().unwrap());
     }
 }

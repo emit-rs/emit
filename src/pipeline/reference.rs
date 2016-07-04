@@ -1,26 +1,26 @@
 use events::Event;
 use pipeline::chain::Emit;
-use log;
+use super::super::{LogLevel,LogLevelFilter};
 
 /// `PipelineRef` is "mouth" of the pipeline, into which events are fed.
 pub struct PipelineRef {
     head: Box<Emit + Sync>,
-    filter: log::LogLevelFilter
+    filter: LogLevelFilter
 }
 
 //unsafe impl Sync for PipelineRef { }
 
 impl PipelineRef {
-    pub fn new(head: Box<Emit + Sync>, level: log::LogLevel) -> PipelineRef {
+    pub fn new(head: Box<Emit + Sync>, level: LogLevelFilter) -> PipelineRef {
         PipelineRef {
             head: head,
-            filter: level.to_log_level_filter()
+            filter: level
         }
     }
     
     /// Check if the specified log level is enabled for the pipeline.
-    pub fn is_enabled(&self, level: log::LogLevel) -> bool {
-        self.filter >= level
+    pub fn is_enabled(&self, level: LogLevel) -> bool {
+        self.filter.is_enabled(level)
     }
     
     /// Emit an event through the pipeline. Code wishing to _conditionally_
@@ -33,24 +33,24 @@ impl PipelineRef {
 #[cfg(test)]
 mod tests {
     use pipeline::builder::PipelineBuilder;
-    use log;
+    use LogLevel;
     
     #[test]
     fn info_is_enabled_at_info() {
         let (p, _flush) = PipelineBuilder::new().detach();
-        assert!(p.is_enabled(log::LogLevel::Info));
+        assert!(p.is_enabled(LogLevel::Info));
     }
     
     #[test]
     fn warn_is_enabled_at_info() {
         let (p, _flush) = PipelineBuilder::new().detach();
-        assert!(p.is_enabled(log::LogLevel::Warn));
+        assert!(p.is_enabled(LogLevel::Warn));
     }  
       
     #[test]
     fn debug_is_disabled_at_info() {
         let (p, _flush) = PipelineBuilder::new().detach();
-        assert!(!p.is_enabled(log::LogLevel::Debug));
+        assert!(!p.is_enabled(LogLevel::Debug));
     }
 }
 

@@ -1,8 +1,8 @@
 use std::io::Write;
 use events::Event;
 use std::error::Error;
-use log;
 use serde_json;
+use LogLevel;
 
 pub struct JsonFormatter {}
 
@@ -19,7 +19,7 @@ impl super::WriteEvent for JsonFormatter {
 
         try!(write!(to, "{{\"@t\":\"{}\",\"@mt\":{}", isots, template));
 
-        if event.level() != log::LogLevel::Info {
+        if event.level() != LogLevel::Info {
             try!(write!(to, ",\"@l\":\"{}\"", event.level()));
         }
 

@@ -10,7 +10,7 @@ pub struct FixedPropertyEnricher<'a> {
 
 impl<'a> FixedPropertyEnricher<'a> {
     pub fn new<T: serde::ser::Serialize>(name: &'a str, value: &T) -> FixedPropertyEnricher<'a> {
-        FixedPropertyEnricher { name: name, value: events::capture_property_value(value) }
+        FixedPropertyEnricher { name: name, value: events::Value::capture(value) }
     }
 }
 

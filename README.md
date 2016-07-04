@@ -1,10 +1,9 @@
-# emit  [![Join the chat at https://gitter.im/serilog/serilog](https://img.shields.io/gitter/room/emit/emit-rs.svg)](https://gitter.im/emit-rs/emit) [![Crates.io](https://img.shields.io/crates/v/emit.svg)](https://crates.io/crates/emit) [![Build status](https://travis-ci.org/emit-rs/emit.svg?branch=master)](https://travis-ci.org/emit-rs/emit)
+# emit  [![Join the chat at https://gitter.im/serilog/serilog](https://img.shields.io/gitter/room/emit/emit-rs.svg)](https://gitter.im/emit-rs/emit) [![Crates.io](https://img.shields.io/crates/v/emit.svg)](https://crates.io/crates/emit) [![Build status](https://travis-ci.org/emit-rs/emit.svg?branch=master)](https://travis-ci.org/emit-rs/emit) [![Documentation](https://img.shields.io/badge/docs-rustdoc-orange.svg)](http://emit-rs.github.io/emit/emit/index.html)
 
-[Documentation](http://emit-rs.github.io/emit/emit/index.html)
+This crate implements a structured logging API similar to the one in [Serilog](http://serilog.net). Web and distributed applications use structured logging to improve machine-readabililty when dealing with large event volumes. Unlike many structured logging APIs, `emit`'s does this without sacrificing human-friendliness.
 
-This crate implements a structured logging API similar to the one in [Serilog](http://serilog.net). In systems programming, this style of logging is most often found in Windows' [ETW](https://msdn.microsoft.com/en-us/library/windows/desktop/aa363668(v=vs.85).aspx). Web and distributed applications use similar techniques to improve machine-readabililty when dealing with large event volumes.
 
-"Emitted" log events consist of a _format_ and list of _named properties_, as in the `eminfo!()` call below.
+"Emitted" log events consist of a _format_ and list of _named properties_, as in the `info!()` call below.
 
 ```rust
 #[macro_use]
@@ -20,11 +19,11 @@ fn main() {
         .send_to(seq::SeqCollector::new_local())
         .init();
             
-    eminfo!("Hello, {}!", name: env::var("USERNAME").unwrap());
+    info!("Hello, {}!", name: env::var("USERNAME").unwrap());
 }
 ```
 
-The named arguments are captured as key/value properties that can be rendered in a structured format such as JSON:
+The event can be rendered into human-friendly text, while the named arguments are also captured as key/value properties when rendered in a structured format like JSON:
 
 ```json
 {
@@ -41,7 +40,7 @@ This makes log searches in an appropriate back-end collector much simpler:
 
 ### Collectors
 
-Collectors render or store events to a wide range of targets. A `StdioCollector` is currently included in the `emit` crate and supports plain text or JSON formatting:
+Collectors render or store events to a wide range of targets. A `StdioCollector` is included in the `emit` crate and supports plain text or JSON formatting:
 
 ```rust
 use emit::collectors::stdio::StdioCollector;
@@ -91,4 +90,4 @@ There's no way for a log processing system to later pull the username value from
 
 The idea of `emit` is that rendering _can_ happen at any point - but the original values are preserved for easy machine processing as well.
 
-To keep these two worlds in harmony, `emit` will be able to mirror events to `log` in future ( #7).
+To keep these two worlds in harmony, `emit` may eventually be able to mirror events to `log` in future ( #7).
