@@ -37,6 +37,10 @@ impl MessageTemplate {
     pub fn text(&self) -> &String {
         &self.text
     }
+
+    pub fn parse<'a>(&'a self) -> repl::MessageTemplateRepl<'a> {
+        repl::MessageTemplateRepl::new(&self.text)
+    }
 }
 
 #[cfg(test)]

@@ -98,6 +98,11 @@ impl<'a> Event<'a> {
     pub fn message_template(&self) -> &templates::MessageTemplate {
         &self.message_template
     }
+
+    pub fn message(&self) -> String {
+        let repl = self.message_template.parse();
+        repl.replace(self.properties())
+    }
     
     pub fn properties(&self) -> &collections::BTreeMap<&'a str, Value> {
         &self.properties
