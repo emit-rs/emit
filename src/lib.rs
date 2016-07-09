@@ -291,7 +291,7 @@ mod tests {
     use std::env;
     use LogLevelFilter;
     use collectors::stdio::StdioCollector;
-    use formatters::json::JsonFormatter;
+    use formatters::json::{JsonFormatter,RenderedJsonFormatter};
     use formatters::text::PlainTextFormatter;
     use formatters::raw::RawFormatter;
 
@@ -321,6 +321,7 @@ mod tests {
             .pipe(Box::new(FixedPropertyEnricher::new("app", &"Test")))
             .write_to(StdioCollector::new(PlainTextFormatter::new()))
             .write_to(StdioCollector::new(JsonFormatter::new()))
+            .write_to(StdioCollector::new(RenderedJsonFormatter::new()))
             .write_to(StdioCollector::new(RawFormatter::new()))
             .init();
 
