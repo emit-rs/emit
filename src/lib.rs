@@ -138,10 +138,10 @@ macro_rules! __emit_get_event_data {
 
         $(
             _names.push(stringify!($n));
-            properties.insert(stringify!($n), $crate::events::Value::capture(&$v));
+            properties.insert(stringify!($n), $v.into());
         )*
 
-        properties.insert("target", $crate::events::Value::capture(&$target));
+        properties.insert("target", $target.into());
 
         let template = $crate::templates::MessageTemplate::from_format($s, &_names);
 
@@ -308,7 +308,7 @@ mod tests {
         let (template, properties) = __emit_get_event_data!("t", "User {} exceeded quota of {}!", user: u, quota: q);
         assert_eq!(template.text(), "User {user} exceeded quota of {quota}!");
         assert_eq!(properties.get("user"), Some(&"\"nblumhardt\"".into()));
-        assert_eq!(properties.get("quota"), Some(&"42".into()));
+        assert_eq!(properties.get("quota"), Some(&42.into()));
         assert_eq!(properties.len(), 3);
     }
 
@@ -316,7 +316,7 @@ mod tests {
     fn pipeline_example() {
         let _flush = PipelineBuilder::new()
             .at_level(LogLevelFilter::Info)
-            .pipe(Box::new(FixedPropertyEnricher::new("app", &"Test")))
+            .pipe(Box::new(FixedPropertyEnricher::new("app", "Test")))
             .write_to(StdioCollector::new(PlainTextFormatter::new()))
             .write_to(StdioCollector::new(JsonFormatter::new()))
             .write_to(StdioCollector::new(RenderedJsonFormatter::new()))
