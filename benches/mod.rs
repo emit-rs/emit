@@ -95,6 +95,28 @@ pub fn format_json_rendered(b: &mut Bencher) {
 }
 
 #[bench]
+pub fn format_raw(b: &mut Bencher) {
+	let evt = some_event();
+	let fmtr = emit::formatters::raw::RawFormatter::new();
+	b.iter(|| {
+		let mut json = Cursor::new(Vec::new());
+		fmtr.write_event(&evt, &mut json).unwrap();
+		test::black_box(json);
+	});
+}
+
+#[bench]
+pub fn format_text(b: &mut Bencher) {
+	let evt = some_event();
+	let fmtr = emit::formatters::text::PlainTextFormatter::new();
+	b.iter(|| {
+		let mut json = Cursor::new(Vec::new());
+		fmtr.write_event(&evt, &mut json).unwrap();
+		test::black_box(json);
+	});
+}
+
+#[bench]
 pub fn str_to_value(b: &mut Bencher) {
 	let value = "teststring";
 	b.iter(|| {
