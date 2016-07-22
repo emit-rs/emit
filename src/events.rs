@@ -2,8 +2,6 @@ use chrono::{DateTime,UTC};
 use std::collections;
 use std::collections::btree_map::Entry;
 use LogLevel;
-use serde;
-use serde_json;
 use templates;
 use std::fmt;
 use std::convert::Into;
@@ -22,12 +20,6 @@ impl Value {
         match self {
             &Value::Json(ref s) => &s
         }
-    }
-    
-    /// Converts an arbitrary serializable object into the internal property format
-    /// carried on events (currently JSON values...)
-    pub fn capture<T: serde::ser::Serialize>(v: &T) -> Value {
-        Value::Json(serde_json::to_string(v).unwrap())
     }
 }
 

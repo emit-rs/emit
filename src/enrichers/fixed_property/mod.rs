@@ -1,7 +1,6 @@
 use events;
 use events::{Event,Value};
 use pipeline::chain::{Emit,Propagate};
-use serde;
 
 pub struct FixedPropertyEnricher<'a> {
     name: &'a str,
@@ -9,8 +8,8 @@ pub struct FixedPropertyEnricher<'a> {
 }
 
 impl<'a> FixedPropertyEnricher<'a> {
-    pub fn new<T: serde::ser::Serialize>(name: &'a str, value: &T) -> FixedPropertyEnricher<'a> {
-        FixedPropertyEnricher { name: name, value: events::Value::capture(value) }
+    pub fn new<T: Into<events::Value>>(name: &'a str, value: T) -> FixedPropertyEnricher<'a> {
+        FixedPropertyEnricher { name: name, value: value.into() }
     }
 }
 

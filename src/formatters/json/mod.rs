@@ -2,7 +2,6 @@ use std::io::Write;
 use std::num::Wrapping;
 use events::Event;
 use std::error::Error;
-use serde_json;
 use LogLevel;
 
 /// Translate events into a compact JSON format. A message template and
@@ -18,10 +17,9 @@ impl JsonFormatter {
 
 impl super::WriteEvent for JsonFormatter {
     fn write_event(&self, event: &Event<'static>, to: &mut Write) -> Result<(), Box<Error>> {
-        let template = try!(serde_json::to_string(event.message_template().text()));
         let isots = event.timestamp().format("%FT%T%.3fZ");
 
-        try!(write!(to, "{{\"@t\":\"{}\",\"@mt\":{}", isots, template));
+        try!(write!(to, "{{\"@t\":\"{}\",\"@mt\":{}", isots, event.message_template().text()));
 
         if event.level() != LogLevel::Info {
             try!(write!(to, ",\"@l\":\"{}\"", event.level()));
@@ -68,11 +66,10 @@ fn jenkins_hash(text: &str) -> u32 {
 
 impl super::WriteEvent for RenderedJsonFormatter {
     fn write_event(&self, event: &Event<'static>, to: &mut Write) -> Result<(), Box<Error>> {
-        let message = try!(serde_json::to_string(&event.message()));
         let id = jenkins_hash(&event.message_template().text());
         let isots = event.timestamp().format("%FT%T%.3fZ");
 
-        try!(write!(to, "{{\"@t\":\"{}\",\"@m\":{},\"@i\":\"{:08x}\"", isots, message, id));
+        try!(write!(to, "{{\"@t\":\"{}\",\"@m\":{},\"@i\":\"{:08x}\"", isots, &event.message(), id));
 
         if event.level() != LogLevel::Info {
             try!(write!(to, ",\"@l\":\"{}\"", event.level()));
