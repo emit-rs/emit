@@ -2,10 +2,22 @@
 
 extern crate test;
 extern crate emit;
+extern crate chrono;
 
+use std::io::Cursor;
 use std::collections::BTreeMap;
 use test::Bencher;
-use emit::templates;
+use chrono::{ UTC, TimeZone };
+use emit::{ LogLevel, templates, events };
+use emit::formatters::WriteEvent;
+
+fn some_event() -> events::Event<'static> {
+	let ts = UTC.ymd(2014, 7, 8).and_hms(9, 10, 11);
+    let mt = templates::MessageTemplate::new("Hello, {name}");
+    let mut props = BTreeMap::new();
+    props.insert("name", "Alice".into());
+    events::Event::new(ts, LogLevel::Info, mt, props)
+}
 
 #[bench]
 pub fn template_repl(b: &mut Bencher) {
@@ -16,27 +28,167 @@ pub fn template_repl(b: &mut Bencher) {
     map.insert("Bert", "value2".into());
 
 	b.iter(|| {
-		template.replace(&map)
+		test::black_box(template.replace(&map));
 	});
 }
 
 #[bench]
 pub fn template_repl_new(b: &mut Bencher) {
 	b.iter(|| {
-		templates::repl::MessageTemplateRepl::new("Some value A: {A} And some other value: {Bert} There are no more values to parse")
+		test::black_box(templates::repl::MessageTemplateRepl::new("Some value A: {A} And some other value: {Bert} There are no more values to parse"));
 	});
 }
 
 #[bench]
 pub fn template_from_format(b: &mut Bencher) {
 	b.iter(|| {
-		templates::MessageTemplate::from_format("Some value A: {} And some other value: {} There are no more values to parse", &vec!["A", "Bert"])
+		test::black_box(templates::MessageTemplate::from_format("Some value A: {} And some other value: {} There are no more values to parse", &vec!["A", "Bert"]));
 	});
 }
 
 #[bench]
 pub fn template_new(b: &mut Bencher) {
 	b.iter(|| {
-		templates::MessageTemplate::new("Some value A: {A} And some other value: {Bert} There are no more values to parse")
+		test::black_box(templates::MessageTemplate::new("Some value A: {A} And some other value: {Bert} There are no more values to parse"));
+	});
+}
+
+#[bench]
+pub fn format_json(b: &mut Bencher) {
+	let evt = some_event();
+	let fmtr = emit::formatters::json::JsonFormatter::new();
+	b.iter(|| {
+		let mut json = Cursor::new(Vec::new());
+		fmtr.write_event(&evt, &mut json).unwrap();
+		test::black_box(json);
+	});
+}
+
+#[bench]
+pub fn format_json_sized(b: &mut Bencher) {
+	let evt = some_event();
+	let fmtr = emit::formatters::json::JsonFormatter::new();
+
+	let len = {
+		let mut json = Cursor::new(Vec::new());
+		fmtr.write_event(&evt, &mut json).unwrap();
+
+		json.into_inner().len()
+	};
+
+	b.iter(|| {
+		let mut json = Cursor::new(Vec::with_capacity(len));
+		fmtr.write_event(&evt, &mut json).unwrap();
+		test::black_box(json);
+	});
+}
+
+#[bench]
+pub fn format_json_rendered(b: &mut Bencher) {
+	let evt = some_event();
+	let fmtr = emit::formatters::json::RenderedJsonFormatter::new();
+	b.iter(|| {
+		let mut json = Cursor::new(Vec::new());
+		fmtr.write_event(&evt, &mut json).unwrap();
+		test::black_box(json);
+	});
+}
+
+#[bench]
+pub fn str_to_value(b: &mut Bencher) {
+	let value = "teststring";
+	b.iter(|| {
+		let v: events::Value = value.into();
+		test::black_box(v);
+	});
+}
+
+#[bench]
+pub fn i64_to_value(b: &mut Bencher) {
+	let value = 4i64;
+	b.iter(|| {
+		let v: events::Value = value.into();
+		test::black_box(v);
+	});
+}
+
+#[bench]
+pub fn i8_to_value(b: &mut Bencher) {
+	let value = 4i8;
+	b.iter(|| {
+		let v: events::Value = value.into();
+		test::black_box(v);
+	});
+}
+
+#[bench]
+pub fn i16_to_value(b: &mut Bencher) {
+	let value = 4i16;
+	b.iter(|| {
+		let v: events::Value = value.into();
+		test::black_box(v);
+	});
+}
+
+#[bench]
+pub fn i32_to_value(b: &mut Bencher) {
+	let value = 4i32;
+	b.iter(|| {
+		let v: events::Value = value.into();
+		test::black_box(v);
+	});
+}
+
+#[bench]
+pub fn u64_to_value(b: &mut Bencher) {
+	let value = 4u64;
+	b.iter(|| {
+		let v: events::Value = value.into();
+		test::black_box(v);
+	});
+}
+
+#[bench]
+pub fn u8_to_value(b: &mut Bencher) {
+	let value = 4u8;
+	b.iter(|| {
+		let v: events::Value = value.into();
+		test::black_box(v);
+	});
+}
+
+#[bench]
+pub fn u16_to_value(b: &mut Bencher) {
+	let value = 4u16;
+	b.iter(|| {
+		let v: events::Value = value.into();
+		test::black_box(v);
+	});
+}
+
+#[bench]
+pub fn u32_to_value(b: &mut Bencher) {
+	let value = 4u32;
+	b.iter(|| {
+		let v: events::Value = value.into();
+		test::black_box(v);
+	});
+}
+
+#[bench]
+pub fn f64_to_value(b: &mut Bencher) {
+	let value = 4f64;
+	b.iter(|| {
+		let v: events::Value = value.into();
+		test::black_box(v);
+	});
+}
+
+#[bench]
+pub fn f32_to_value(b: &mut Bencher) {
+	let value = 4f32;
+	b.iter(|| {
+		let v: events::Value = value.into();
+		test::black_box(v);
 	});
 }

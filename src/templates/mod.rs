@@ -2,6 +2,7 @@ use std::fmt::Write;
 
 pub mod repl;
 
+#[derive(Debug, Clone)]
 pub struct MessageTemplate {
     text: String
 }

@@ -35,7 +35,14 @@ impl Value {
             Value::I64(ref n) => n.to_string(),
             Value::U64(ref n) => n.to_string(),
             Value::F64(ref n) => n.to_string(),
-            Value::String(ref s) => s.clone()
+            Value::String(ref s) => {
+                let mut quoted = String::with_capacity(s.len() + 2);
+                quoted.push('"');
+                quoted.push_str(s);
+                quoted.push('"');
+
+                quoted
+            }
         }
     }
 }
@@ -47,7 +54,7 @@ impl fmt::Debug for Value {
             Value::I64(ref n) => write!(f, "I64({})", n),
             Value::U64(ref n) => write!(f, "U64({})", n),
             Value::F64(ref n) => write!(f, "F64({})", n),
-            Value::String(ref s) => write!(f, "String({})", s)
+            Value::String(ref s) => write!(f, "String(\"{}\")", s)
         }
     }
 }
@@ -59,15 +66,7 @@ impl fmt::Display for Value {
             Value::I64(ref n) => write!(f, "{}", n),
             Value::U64(ref n) => write!(f, "{}", n),
             Value::F64(ref n) => write!(f, "{}", n),
-            //TODO: Determine if this is needed
-            Value::String(ref s) => {
-                let bytes = s.as_bytes();
-                if bytes.len() > 1 && bytes[0] == b'"' {
-                    write!(f, "{}", &s[1..s.len() - 1])
-                } else {
-                    write!(f, "{}", s)
-                }
-            }
+            Value::String(ref s) => write!(f, "{}", s)
         }
     }
 }
@@ -141,26 +140,17 @@ impl Into<Value> for f32 {
 
 impl Into<Value> for String {
     fn into(self) -> Value {
-        string_to_value(&self)
+        Value::String(self)
     }
 }
 
 impl<'a> Into<Value> for &'a str {
     fn into(self) -> Value {
-       string_to_value(self)
+        Value::String(self.into())
     }
 }
 
-//TODO: Determine if this is needed
-fn string_to_value(string: &str) -> Value {
-    let bytes = string.as_bytes();
-    if bytes.len() > 1 && bytes[0] == b'"' {
-        Value::String((&string[1..string.len() - 1]).into())
-    } else {
-        Value::String(string.into())
-    }
-}
-
+#[derive(Debug, Clone)]
 pub struct Event<'a> {
     timestamp: DateTime<UTC>,
     level: LogLevel,

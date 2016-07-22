@@ -19,7 +19,7 @@ impl super::WriteEvent for JsonFormatter {
     fn write_event(&self, event: &Event<'static>, to: &mut Write) -> Result<(), Box<Error>> {
         let isots = event.timestamp().format("%FT%T%.3fZ");
 
-        try!(write!(to, "{{\"@t\":\"{}\",\"@mt\":{}", isots, event.message_template().text()));
+        try!(write!(to, "{{\"@t\":\"{}\",\"@mt\":\"{}\"", isots, event.message_template().text()));
 
         if event.level() != LogLevel::Info {
             try!(write!(to, ",\"@l\":\"{}\"", event.level()));
@@ -69,7 +69,7 @@ impl super::WriteEvent for RenderedJsonFormatter {
         let id = jenkins_hash(&event.message_template().text());
         let isots = event.timestamp().format("%FT%T%.3fZ");
 
-        try!(write!(to, "{{\"@t\":\"{}\",\"@m\":{},\"@i\":\"{:08x}\"", isots, &event.message(), id));
+        try!(write!(to, "{{\"@t\":\"{}\",\"@m\":\"{}\",\"@i\":\"{:08x}\"", isots, &event.message(), id));
 
         if event.level() != LogLevel::Info {
             try!(write!(to, ",\"@l\":\"{}\"", event.level()));
@@ -92,6 +92,7 @@ impl super::WriteEvent for RenderedJsonFormatter {
 
 #[cfg(test)]
 mod tests {
+    use std::str;
     use formatters::WriteEvent;
     use super::{JsonFormatter,RenderedJsonFormatter};
     use test_support;
@@ -102,6 +103,8 @@ mod tests {
         let evt = test_support::some_event();
         let mut content = vec![];
         fmt.write_event(&evt, &mut content).is_ok();
+
+        assert_eq!(str::from_utf8(&content).unwrap(), "{\"@t\":\"2014-07-08T09:10:11.000Z\",\"@mt\":\"Hello, {name}\",\"name\":\"Alice\"}");
     }
 
     #[test]
@@ -110,5 +113,7 @@ mod tests {
         let evt = test_support::some_event();
         let mut content = vec![];
         fmt.write_event(&evt, &mut content).is_ok();
+
+        assert_eq!(str::from_utf8(&content).unwrap(), "{\"@t\":\"2014-07-08T09:10:11.000Z\",\"@m\":\"Hello, Alice\",\"@i\":\"235dd991\",\"name\":\"Alice\"}");
     }
 }

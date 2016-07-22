@@ -307,7 +307,7 @@ mod tests {
 
         let (template, properties) = __emit_get_event_data!("t", "User {} exceeded quota of {}!", user: u, quota: q);
         assert_eq!(template.text(), "User {user} exceeded quota of {quota}!");
-        assert_eq!(properties.get("user"), Some(&"\"nblumhardt\"".into()));
+        assert_eq!(properties.get("user"), Some(&"nblumhardt".into()));
         assert_eq!(properties.get("quota"), Some(&42.into()));
         assert_eq!(properties.len(), 3);
     }
