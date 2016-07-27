@@ -104,7 +104,7 @@ mod tests {
         let mut content = vec![];
         fmt.write_event(&evt, &mut content).is_ok();
 
-        assert_eq!(str::from_utf8(&content).unwrap(), "{\"@t\":\"2014-07-08T09:10:11.000Z\",\"@mt\":\"Hello, {name}\",\"name\":\"Alice\"}");
+        assert_eq!(str::from_utf8(&content).unwrap(), "{\"@t\":\"2014-07-08T09:10:11.000Z\",\"@mt\":\"Hello, {name}. Your data is: {data}\",\"data\":[\"a\",\"b\",\"c\"],\"name\":\"Alice\"}");
     }
 
     #[test]
@@ -114,6 +114,6 @@ mod tests {
         let mut content = vec![];
         fmt.write_event(&evt, &mut content).is_ok();
 
-        assert_eq!(str::from_utf8(&content).unwrap(), "{\"@t\":\"2014-07-08T09:10:11.000Z\",\"@m\":\"Hello, Alice\",\"@i\":\"235dd991\",\"name\":\"Alice\"}");
+        assert_eq!(str::from_utf8(&content).unwrap(), "{\"@t\":\"2014-07-08T09:10:11.000Z\",\"@m\":\"Hello, Alice. Your data is: [a, b, c]\",\"@i\":\"90e7bed3\",\"data\":[\"a\",\"b\",\"c\"],\"name\":\"Alice\"}");
     }
 }

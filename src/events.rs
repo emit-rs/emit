@@ -36,45 +36,8 @@ impl Value {
             Value::I64(ref n) => n.to_string(),
             Value::U64(ref n) => n.to_string(),
             Value::F64(ref n) => n.to_string(),
-            Value::String(ref s) => {
-                let mut quoted = String::with_capacity(s.len() + 2);
-                quoted.push('"');
-                quoted.push_str(s);
-                quoted.push('"');
-
-                quoted
-            },
-            Value::Vec(ref v) => {
-                let mut len = 0;
-                let mut results = Vec::with_capacity(v.len());
-
-                for val in v {
-                    let res = val.to_json();
-                    len += res.len();
-                    results.push(res);
-                }
-
-                let mut json = String::with_capacity(
-                    len + //item data
-                    2 + //brackets
-                    results.len() - 1 //commas
-                );
-
-                let mut first = true;
-                json.push('[');
-                for res in results {
-                    if !first {
-                        json.push(',');
-                    }
-                    else {
-                        first = false;
-                    }
-                    json.push_str(res.as_ref());
-                }
-                json.push(']');
-
-                json
-            }
+            Value::String(ref s) => sanitise_str(s),
+            Value::Vec(ref v) => sanitise_vec(v, false, |val| val.to_json())
         }
     }
 }
@@ -100,12 +63,65 @@ impl fmt::Display for Value {
             Value::U64(ref n) => write!(f, "{}", n),
             Value::F64(ref n) => write!(f, "{}", n),
             Value::String(ref s) => write!(f, "{}", s),
-            Value::Vec(_) => write!(f, "vec[]")
+            Value::Vec(ref v) => {
+                let disp = sanitise_vec(v, true, |val| format!("{}", val));
+                write!(f, "{}", disp)
+            }
         }
     }
 }
 
-trait IntoValue {
+pub fn sanitise_str(s: &str) -> String {
+    let mut quoted = String::with_capacity(s.len() + 2);
+    quoted.push('"');
+    quoted.push_str(s);
+    quoted.push('"');
+
+    quoted
+}
+
+pub fn sanitise_vec<F>(v: &Vec<Value>, whitespace: bool, f: F) -> String where F: Fn(&Value) -> String {
+    let mut len = 0;
+    let mut results = Vec::with_capacity(v.len());
+
+    for val in v {
+        let res = f(val);
+        len += res.len();
+        results.push(res);
+    }
+
+    let (open, close, comma) = {
+        if whitespace {
+            ("[", "]", ", ")
+        }
+        else {
+            ("[", "]", ",")
+        }
+    };
+
+    let mut json = String::with_capacity(
+        len + //item data
+        (2 * open.len()) + //brackets
+        (results.len() - 1) * comma.len() //commas
+    );
+
+    let mut first = true;
+    json.push_str(open);
+    for res in results {
+        if !first {
+            json.push_str(comma);
+        }
+        else {
+            first = false;
+        }
+        json.push_str(res.as_ref());
+    }
+    json.push_str(close);
+
+    json
+}
+
+pub trait IntoValue {
     fn into_value(self) -> Value;
 }
 

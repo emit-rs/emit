@@ -131,6 +131,7 @@ macro_rules! __emit_get_event_data {
         #[allow(unused_imports)]
         use std::fmt::Write;
         use std::collections;
+        use $crate::events::IntoValue;
 
         // Underscores avoid the unused_mut warning
         let mut _names: Vec<&str> = vec![];
@@ -138,10 +139,10 @@ macro_rules! __emit_get_event_data {
 
         $(
             _names.push(stringify!($n));
-            properties.insert(stringify!($n), $v.into());
+            properties.insert(stringify!($n), $v.into_value());
         )*
 
-        properties.insert("target", $target.into());
+        properties.insert("target", $target.into_value());
 
         let template = $crate::templates::MessageTemplate::from_format($s, &_names);
 
@@ -288,6 +289,7 @@ mod tests {
     use pipeline::builder::PipelineBuilder;
     use std::env;
     use LogLevelFilter;
+    use events::IntoValue;
     use collectors::stdio::StdioCollector;
     use formatters::json::{JsonFormatter,RenderedJsonFormatter};
     use formatters::text::PlainTextFormatter;
@@ -307,8 +309,8 @@ mod tests {
 
         let (template, properties) = __emit_get_event_data!("t", "User {} exceeded quota of {}!", user: u, quota: q);
         assert_eq!(template.text(), "User {user} exceeded quota of {quota}!");
-        assert_eq!(properties.get("user"), Some(&"nblumhardt".into()));
-        assert_eq!(properties.get("quota"), Some(&42.into()));
+        assert_eq!(properties.get("user"), Some(&"nblumhardt".into_value()));
+        assert_eq!(properties.get("quota"), Some(&42.into_value()));
         assert_eq!(properties.len(), 3);
     }
 
@@ -316,7 +318,7 @@ mod tests {
     fn pipeline_example() {
         let _flush = PipelineBuilder::new()
             .at_level(LogLevelFilter::Info)
-            .pipe(Box::new(FixedPropertyEnricher::new("app", "Test")))
+            .pipe(Box::new(FixedPropertyEnricher::new("app", "Test".into_value())))
             .write_to(StdioCollector::new(PlainTextFormatter::new()))
             .write_to(StdioCollector::new(JsonFormatter::new()))
             .write_to(StdioCollector::new(RenderedJsonFormatter::new()))
