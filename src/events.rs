@@ -1,4 +1,6 @@
 use chrono::{DateTime,UTC};
+use std::marker::PhantomData;
+use std::borrow::Cow;
 use std::collections;
 use std::collections::btree_map::Entry;
 use LogLevel;
@@ -27,65 +29,126 @@ pub enum Value {
     Vec(Vec<Value>)
 }
 
-impl Value {
-    // JSON serialization belongs elsewhere, but keeps
-    // the distinction between regular string and JSON data clear.
-    pub fn to_json<'a>(&'a self) -> String {
-        match *self {
-            Value::Bool(ref b) => b.to_string(),
-            Value::I64(ref n) => n.to_string(),
-            Value::U64(ref n) => n.to_string(),
-            Value::F64(ref n) => n.to_string(),
-            Value::String(ref s) => sanitise_str(s),
-            Value::Vec(ref v) => sanitise_vec(v, false, |val| val.to_json())
-        }
-    }
-}
-
 impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Value::Bool(ref b) => write!(f, "Bool({})", b),
-            Value::I64(ref n) => write!(f, "I64({})", n),
-            Value::U64(ref n) => write!(f, "U64({})", n),
-            Value::F64(ref n) => write!(f, "F64({})", n),
-            Value::String(ref s) => write!(f, "String(\"{}\")", s),
-            Value::Vec(_) => write!(f, "Vec()")
-        }
+        let sanitiser = DebugSanitiser::sanitiser();
+        write!(f, "{}", sanitiser.sanitise(&self))
     }
 }
 
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            match *self {
-            Value::Bool(ref b) => write!(f, "{}", b),
-            Value::I64(ref n) => write!(f, "{}", n),
-            Value::U64(ref n) => write!(f, "{}", n),
-            Value::F64(ref n) => write!(f, "{}", n),
-            Value::String(ref s) => write!(f, "{}", s),
-            Value::Vec(ref v) => {
-                let disp = sanitise_vec(v, true, |val| format!("{}", val));
-                write!(f, "{}", disp)
-            }
+        let sanitiser = TextSanitiser::sanitiser();
+        write!(f, "{}", sanitiser.sanitise(&self))
+    }
+}
+
+pub trait SanitiserVisitor<'a> where Self: Sized {
+    fn visit_bool(sanitiser: &Sanitiser<'a, Self>, v: &'a bool) -> Cow<'a, str>;
+    fn visit_i64(sanitiser: &Sanitiser<'a, Self>, v: &'a i64) -> Cow<'a, str>;
+    fn visit_u64(sanitiser: &Sanitiser<'a, Self>, v: &'a u64) -> Cow<'a, str>;
+    fn visit_f64(sanitiser: &Sanitiser<'a, Self>, v: &'a f64) -> Cow<'a, str>;
+    fn visit_str(sanitiser: &Sanitiser<'a, Self>, v: &'a str) -> Cow<'a, str>;
+    fn visit_vec(sanitiser: &Sanitiser<'a, Self>, v: &'a Vec<Value>) -> Cow<'a, str>;
+}
+
+#[derive(Default)]
+pub struct Sanitiser<'a, S: SanitiserVisitor<'a>> {
+    _marker1: PhantomData<&'a ()>,
+    _marker2: PhantomData<S>
+}
+
+impl <'a, S: SanitiserVisitor<'a>> Sanitiser<'a, S> {
+    pub fn sanitise(&self, v: &'a Value) -> Cow<'a, str> {
+        match *v {
+            Value::Bool(ref v) => S::visit_bool(&self, v),
+            Value::I64(ref v) => S::visit_i64(&self, v),
+            Value::U64(ref v) => S::visit_u64(&self, v),
+            Value::F64(ref v) => S::visit_f64(&self, v),
+            Value::String(ref v) => S::visit_str(&self, v),
+            Value::Vec(ref v) => S::visit_vec(&self, v)
         }
     }
 }
 
-pub fn sanitise_str(s: &str) -> String {
-    let mut quoted = String::with_capacity(s.len() + 2);
-    quoted.push('"');
-    quoted.push_str(s);
-    quoted.push('"');
-
-    quoted
+#[derive(Default)]
+struct DebugSanitiser<'a> {
+    _marker: PhantomData<&'a ()>
+}
+impl <'a> DebugSanitiser<'a> {
+    fn sanitiser() -> Sanitiser<'a, Self> {
+        Sanitiser::default()
+    }
 }
 
-pub fn sanitise_vec<F>(v: &Vec<Value>, whitespace: bool, f: F) -> String where F: Fn(&Value) -> String {
+impl <'a> SanitiserVisitor<'a> for DebugSanitiser<'a> {
+    fn visit_bool(_: &Sanitiser<'a, Self>, v: &'a bool) -> Cow<'a, str> {
+        Cow::Owned(format!("Bool({})", v.to_string()))
+    }
+
+    fn visit_i64(_: &Sanitiser<'a, Self>, v: &'a i64) -> Cow<'a, str> {
+        Cow::Owned(format!("I64({})",v.to_string()))
+    }
+
+    fn visit_u64(_: &Sanitiser<'a, Self>, v: &'a u64) -> Cow<'a, str> {
+        Cow::Owned(format!("U64({})",v.to_string()))
+    }
+
+    fn visit_f64(_: &Sanitiser<'a, Self>, v: &'a f64) -> Cow<'a, str> {
+        Cow::Owned(format!("F64({})",v.to_string()))
+    }
+
+    fn visit_str(_: &Sanitiser<'a, Self>, v: &'a str) -> Cow<'a, str> {
+        Cow::Owned(format!("Str({})",v))
+    }
+
+    fn visit_vec(sanitiser: &Sanitiser<'a, Self>, v: &'a Vec<Value>) -> Cow<'a, str> {
+        Cow::Owned(format!("Vec({})", sanitise_vec(sanitiser, v, true)))
+    }
+}
+
+#[derive(Default)]
+pub struct TextSanitiser<'a> {
+    _marker: PhantomData<&'a ()>
+}
+impl <'a> TextSanitiser<'a> {
+    pub fn sanitiser() -> Sanitiser<'a, Self> {
+        Sanitiser::default()
+    }
+}
+
+impl <'a> SanitiserVisitor<'a> for TextSanitiser<'a> {
+    fn visit_bool(_: &Sanitiser<'a, Self>, v: &'a bool) -> Cow<'a, str> {
+        Cow::Owned(v.to_string())
+    }
+
+    fn visit_i64(_: &Sanitiser<'a, Self>, v: &'a i64) -> Cow<'a, str> {
+        Cow::Owned(v.to_string())
+    }
+
+    fn visit_u64(_: &Sanitiser<'a, Self>, v: &'a u64) -> Cow<'a, str> {
+        Cow::Owned(v.to_string())
+    }
+
+    fn visit_f64(_: &Sanitiser<'a, Self>, v: &'a f64) -> Cow<'a, str> {
+        Cow::Owned(v.to_string())
+    }
+
+    fn visit_str(_: &Sanitiser<'a, Self>, v: &'a str) -> Cow<'a, str> {
+        Cow::Borrowed(v)
+    }
+
+    fn visit_vec(sanitiser: &Sanitiser<'a, Self>, v: &'a Vec<Value>) -> Cow<'a, str> {
+        Cow::Owned(sanitise_vec(sanitiser, v, true))
+    }
+}
+
+pub fn sanitise_vec<'a, S: SanitiserVisitor<'a>>(sanitiser: &Sanitiser<'a, S>, v: &'a Vec<Value>, whitespace: bool) -> String {
     let mut len = 0;
     let mut results = Vec::with_capacity(v.len());
 
     for val in v {
-        let res = f(val);
+        let res = sanitiser.sanitise(val);
         len += res.len();
         results.push(res);
     }

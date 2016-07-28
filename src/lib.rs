@@ -95,6 +95,12 @@ pub enum LogLevel {
     Trace
 }
 
+impl AsRef<str> for LogLevel {
+    fn as_ref(&self) -> &str {
+        LOG_LEVEL_NAMES[*self as usize]
+    }
+}
+
 #[repr(usize)]
 #[derive(Copy, Eq, Debug, PartialEq, Clone, Ord, PartialOrd)]
 pub enum LogLevelFilter {

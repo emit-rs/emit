@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use test::Bencher;
 use chrono::{ UTC, TimeZone };
 use emit::{ LogLevel, templates, events };
-use emit::events::IntoValue;
+use emit::events::{ IntoValue, SanitiserVisitor, JsonSanitiser };
 use emit::formatters::WriteEvent;
 
 fn some_event() -> events::Event<'static> {
@@ -222,5 +222,59 @@ pub fn f32_to_value(b: &mut Bencher) {
 	b.iter(|| {
 		let v: events::Value = value.into_value();
 		test::black_box(v);
+	});
+}
+
+#[bench]
+pub fn str_value_to_json(b: &mut Bencher) {
+	let sanitiser = JsonSanitiser::sanitiser();
+	b.iter(|| {
+		let j = JsonSanitiser::visit_str(&sanitiser, "teststring");
+		test::black_box(j);
+	});
+}
+
+#[bench]
+pub fn vec_value_to_json(b: &mut Bencher) {
+	let sanitiser = JsonSanitiser::sanitiser();
+	let v = vec![
+		"a".into_value(),
+		"b".into_value(),
+		"c".into_value()
+	];
+
+	b.iter(|| {
+		let j = JsonSanitiser::visit_vec(&sanitiser, &v);
+		test::black_box(j);
+	});
+}
+
+#[bench]
+pub fn i64_value_to_json(b: &mut Bencher) {
+	let v = 4i64;
+	let sanitiser = JsonSanitiser::sanitiser();
+	b.iter(|| {
+		let j = JsonSanitiser::visit_i64(&sanitiser, &v);
+		test::black_box(j);
+	});
+}
+
+#[bench]
+pub fn u64_value_to_json(b: &mut Bencher) {
+	let v = 4u64;
+	let sanitiser = JsonSanitiser::sanitiser();
+	b.iter(|| {
+		let j = JsonSanitiser::visit_u64(&sanitiser, &v);
+		test::black_box(j);
+	});
+}
+
+#[bench]
+pub fn f64_value_to_json(b: &mut Bencher) {
+	let v = 4f64;
+	let sanitiser = JsonSanitiser::sanitiser();
+	b.iter(|| {
+		let j = JsonSanitiser::visit_f64(&sanitiser, &v);
+		test::black_box(j);
 	});
 }
