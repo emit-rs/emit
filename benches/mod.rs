@@ -9,8 +9,9 @@ use std::collections::BTreeMap;
 use test::Bencher;
 use chrono::{ UTC, TimeZone };
 use emit::{ LogLevel, templates, events };
-use emit::events::{ IntoValue, SanitiserVisitor, JsonSanitiser };
+use emit::events::{ IntoValue, SanitiserVisitor };
 use emit::formatters::WriteEvent;
+use emit::formatters::json::JsonSanitiser;
 
 fn some_event() -> events::Event<'static> {
 	let ts = UTC.ymd(2014, 7, 8).and_hms(9, 10, 11);
