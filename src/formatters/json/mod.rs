@@ -2,7 +2,8 @@ use std::borrow::Cow;
 use std::marker::PhantomData;
 use std::io::Write;
 use std::num::Wrapping;
-use events::{ Event, Value, ValueFormatter, ValueFormatterVisitor, format_vec };
+use events::{Event, Value};
+use super::{ValueFormatter, ValueFormatterVisitor, format_vec};
 use std::error::Error;
 use LogLevel;
 

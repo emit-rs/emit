@@ -1,5 +1,6 @@
 use std::io::Write;
-use events::{ Event, TextValueFormatter };
+use events::Event;
+use super::TextValueFormatter;
 use std::error::Error;
 
 pub struct RawFormatter {}
