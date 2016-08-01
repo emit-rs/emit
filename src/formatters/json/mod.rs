@@ -7,6 +7,7 @@ use std::error::Error;
 use LogLevel;
 
 #[derive(Default)]
+#[doc(hidden)]
 pub struct JsonValueFormatter<'a> {
     _marker: PhantomData<&'a ()>
 }

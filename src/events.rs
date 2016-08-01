@@ -46,6 +46,7 @@ impl fmt::Display for Value {
     }
 }
 
+#[doc(hidden)]
 pub trait ValueFormatterVisitor<'a> where Self: Sized {
     fn visit_null(formatter: &ValueFormatter<'a, Self>) -> Cow<'a, str>;
     fn visit_bool(formatter: &ValueFormatter<'a, Self>, v: &'a bool) -> Cow<'a, str>;
@@ -57,6 +58,7 @@ pub trait ValueFormatterVisitor<'a> where Self: Sized {
 }
 
 #[derive(Default)]
+#[doc(hidden)]
 pub struct ValueFormatter<'a, S: ValueFormatterVisitor<'a>> {
     _marker1: PhantomData<&'a ()>,
     _marker2: PhantomData<S>
@@ -117,6 +119,7 @@ impl <'a> ValueFormatterVisitor<'a> for DebugValueFormatter<'a> {
 }
 
 #[derive(Default)]
+#[doc(hidden)]
 pub struct TextValueFormatter<'a> {
     _marker: PhantomData<&'a ()>
 }
@@ -156,6 +159,7 @@ impl <'a> ValueFormatterVisitor<'a> for TextValueFormatter<'a> {
     }
 }
 
+#[doc(hidden)]
 pub fn format_vec<'a, S: ValueFormatterVisitor<'a>>(formatter: &ValueFormatter<'a, S>, v: &'a Vec<Value>, whitespace: bool) -> Cow<'a, str> {
     if v.len() == 0 {
         return Cow::Borrowed("[]");
@@ -201,6 +205,7 @@ pub fn format_vec<'a, S: ValueFormatterVisitor<'a>>(formatter: &ValueFormatter<'
     Cow::Owned(json)
 }
 
+/// Represents a type that can be converted into a `Value`.
 pub trait IntoValue {
     fn into_value(self) -> Value;
 }
