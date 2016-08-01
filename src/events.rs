@@ -10,6 +10,9 @@ use std::convert::Into;
 
 #[derive(Clone, PartialEq)]
 pub enum Value {
+    /// Represents null
+    Null,
+
     /// Represents a Boolean
     Bool(bool),
 
@@ -31,36 +34,38 @@ pub enum Value {
 
 impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let sanitiser = DebugSanitiser::sanitiser();
-        write!(f, "{}", sanitiser.sanitise(&self))
+        let formatter = DebugValueFormatter::value_formatter();
+        write!(f, "{}", formatter.format(&self))
     }
 }
 
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let sanitiser = TextSanitiser::sanitiser();
-        write!(f, "{}", sanitiser.sanitise(&self))
+        let formatter = TextValueFormatter::value_formatter();
+        write!(f, "{}", formatter.format(&self))
     }
 }
 
-pub trait SanitiserVisitor<'a> where Self: Sized {
-    fn visit_bool(sanitiser: &Sanitiser<'a, Self>, v: &'a bool) -> Cow<'a, str>;
-    fn visit_i64(sanitiser: &Sanitiser<'a, Self>, v: &'a i64) -> Cow<'a, str>;
-    fn visit_u64(sanitiser: &Sanitiser<'a, Self>, v: &'a u64) -> Cow<'a, str>;
-    fn visit_f64(sanitiser: &Sanitiser<'a, Self>, v: &'a f64) -> Cow<'a, str>;
-    fn visit_str(sanitiser: &Sanitiser<'a, Self>, v: &'a str) -> Cow<'a, str>;
-    fn visit_vec(sanitiser: &Sanitiser<'a, Self>, v: &'a Vec<Value>) -> Cow<'a, str>;
+pub trait ValueFormatterVisitor<'a> where Self: Sized {
+    fn visit_null(formatter: &ValueFormatter<'a, Self>) -> Cow<'a, str>;
+    fn visit_bool(formatter: &ValueFormatter<'a, Self>, v: &'a bool) -> Cow<'a, str>;
+    fn visit_i64(formatter: &ValueFormatter<'a, Self>, v: &'a i64) -> Cow<'a, str>;
+    fn visit_u64(formatter: &ValueFormatter<'a, Self>, v: &'a u64) -> Cow<'a, str>;
+    fn visit_f64(formatter: &ValueFormatter<'a, Self>, v: &'a f64) -> Cow<'a, str>;
+    fn visit_str(formatter: &ValueFormatter<'a, Self>, v: &'a str) -> Cow<'a, str>;
+    fn visit_vec(formatter: &ValueFormatter<'a, Self>, v: &'a Vec<Value>) -> Cow<'a, str>;
 }
 
 #[derive(Default)]
-pub struct Sanitiser<'a, S: SanitiserVisitor<'a>> {
+pub struct ValueFormatter<'a, S: ValueFormatterVisitor<'a>> {
     _marker1: PhantomData<&'a ()>,
     _marker2: PhantomData<S>
 }
 
-impl <'a, S: SanitiserVisitor<'a>> Sanitiser<'a, S> {
-    pub fn sanitise(&self, v: &'a Value) -> Cow<'a, str> {
+impl <'a, S: ValueFormatterVisitor<'a>> ValueFormatter<'a, S> {
+    pub fn format(&self, v: &'a Value) -> Cow<'a, str> {
         match *v {
+            Value::Null => S::visit_null(&self),
             Value::Bool(ref v) => S::visit_bool(&self, v),
             Value::I64(ref v) => S::visit_i64(&self, v),
             Value::U64(ref v) => S::visit_u64(&self, v),
@@ -72,83 +77,95 @@ impl <'a, S: SanitiserVisitor<'a>> Sanitiser<'a, S> {
 }
 
 #[derive(Default)]
-struct DebugSanitiser<'a> {
+struct DebugValueFormatter<'a> {
     _marker: PhantomData<&'a ()>
 }
-impl <'a> DebugSanitiser<'a> {
-    fn sanitiser() -> Sanitiser<'a, Self> {
-        Sanitiser::default()
+impl <'a> DebugValueFormatter<'a> {
+    fn value_formatter() -> ValueFormatter<'a, Self> {
+        ValueFormatter::default()
     }
 }
 
-impl <'a> SanitiserVisitor<'a> for DebugSanitiser<'a> {
-    fn visit_bool(_: &Sanitiser<'a, Self>, v: &'a bool) -> Cow<'a, str> {
+impl <'a> ValueFormatterVisitor<'a> for DebugValueFormatter<'a> {
+    fn visit_null(_: &ValueFormatter<'a, Self>) -> Cow<'a, str> {
+        Cow::Borrowed("Null")
+    }
+
+    fn visit_bool(_: &ValueFormatter<'a, Self>, v: &'a bool) -> Cow<'a, str> {
         Cow::Owned(format!("Bool({})", v.to_string()))
     }
 
-    fn visit_i64(_: &Sanitiser<'a, Self>, v: &'a i64) -> Cow<'a, str> {
+    fn visit_i64(_: &ValueFormatter<'a, Self>, v: &'a i64) -> Cow<'a, str> {
         Cow::Owned(format!("I64({})",v.to_string()))
     }
 
-    fn visit_u64(_: &Sanitiser<'a, Self>, v: &'a u64) -> Cow<'a, str> {
+    fn visit_u64(_: &ValueFormatter<'a, Self>, v: &'a u64) -> Cow<'a, str> {
         Cow::Owned(format!("U64({})",v.to_string()))
     }
 
-    fn visit_f64(_: &Sanitiser<'a, Self>, v: &'a f64) -> Cow<'a, str> {
+    fn visit_f64(_: &ValueFormatter<'a, Self>, v: &'a f64) -> Cow<'a, str> {
         Cow::Owned(format!("F64({})",v.to_string()))
     }
 
-    fn visit_str(_: &Sanitiser<'a, Self>, v: &'a str) -> Cow<'a, str> {
+    fn visit_str(_: &ValueFormatter<'a, Self>, v: &'a str) -> Cow<'a, str> {
         Cow::Owned(format!("Str({})",v))
     }
 
-    fn visit_vec(sanitiser: &Sanitiser<'a, Self>, v: &'a Vec<Value>) -> Cow<'a, str> {
-        Cow::Owned(format!("Vec({})", sanitise_vec(sanitiser, v, true)))
+    fn visit_vec(formatter: &ValueFormatter<'a, Self>, v: &'a Vec<Value>) -> Cow<'a, str> {
+        Cow::Owned(format!("Vec({})", format_vec(formatter, v, true)))
     }
 }
 
 #[derive(Default)]
-pub struct TextSanitiser<'a> {
+pub struct TextValueFormatter<'a> {
     _marker: PhantomData<&'a ()>
 }
-impl <'a> TextSanitiser<'a> {
-    pub fn sanitiser() -> Sanitiser<'a, Self> {
-        Sanitiser::default()
+impl <'a> TextValueFormatter<'a> {
+    pub fn value_formatter() -> ValueFormatter<'a, Self> {
+        ValueFormatter::default()
     }
 }
 
-impl <'a> SanitiserVisitor<'a> for TextSanitiser<'a> {
-    fn visit_bool(_: &Sanitiser<'a, Self>, v: &'a bool) -> Cow<'a, str> {
+impl <'a> ValueFormatterVisitor<'a> for TextValueFormatter<'a> {
+    fn visit_null(_: &ValueFormatter<'a, Self>) -> Cow<'a, str> {
+        Cow::Borrowed("null")
+    }
+
+    fn visit_bool(_: &ValueFormatter<'a, Self>, v: &'a bool) -> Cow<'a, str> {
         Cow::Owned(v.to_string())
     }
 
-    fn visit_i64(_: &Sanitiser<'a, Self>, v: &'a i64) -> Cow<'a, str> {
+    fn visit_i64(_: &ValueFormatter<'a, Self>, v: &'a i64) -> Cow<'a, str> {
         Cow::Owned(v.to_string())
     }
 
-    fn visit_u64(_: &Sanitiser<'a, Self>, v: &'a u64) -> Cow<'a, str> {
+    fn visit_u64(_: &ValueFormatter<'a, Self>, v: &'a u64) -> Cow<'a, str> {
         Cow::Owned(v.to_string())
     }
 
-    fn visit_f64(_: &Sanitiser<'a, Self>, v: &'a f64) -> Cow<'a, str> {
+    fn visit_f64(_: &ValueFormatter<'a, Self>, v: &'a f64) -> Cow<'a, str> {
         Cow::Owned(v.to_string())
     }
 
-    fn visit_str(_: &Sanitiser<'a, Self>, v: &'a str) -> Cow<'a, str> {
+    fn visit_str(_: &ValueFormatter<'a, Self>, v: &'a str) -> Cow<'a, str> {
         Cow::Borrowed(v)
     }
 
-    fn visit_vec(sanitiser: &Sanitiser<'a, Self>, v: &'a Vec<Value>) -> Cow<'a, str> {
-        Cow::Owned(sanitise_vec(sanitiser, v, true))
+    fn visit_vec(formatter: &ValueFormatter<'a, Self>, v: &'a Vec<Value>) -> Cow<'a, str> {
+        format_vec(formatter, v, true)
     }
 }
 
-pub fn sanitise_vec<'a, S: SanitiserVisitor<'a>>(sanitiser: &Sanitiser<'a, S>, v: &'a Vec<Value>, whitespace: bool) -> String {
+pub fn format_vec<'a, S: ValueFormatterVisitor<'a>>(formatter: &ValueFormatter<'a, S>, v: &'a Vec<Value>, whitespace: bool) -> Cow<'a, str> {
+    if v.len() == 0 {
+        return Cow::Borrowed("[]");
+    }
+
     let mut len = 0;
     let mut results = Vec::with_capacity(v.len());
 
     for val in v {
-        let res = sanitiser.sanitise(val);
+        let res = formatter.format(val);
         len += res.len();
         results.push(res);
     }
@@ -181,7 +198,7 @@ pub fn sanitise_vec<'a, S: SanitiserVisitor<'a>>(sanitiser: &Sanitiser<'a, S>, v
     }
     json.push_str(close);
 
-    json
+    Cow::Owned(json)
 }
 
 pub trait IntoValue {
@@ -273,6 +290,21 @@ impl <V: IntoValue> IntoValue for Vec<V> {
     }
 }
 
+impl <V: IntoValue> IntoValue for Option<V> {
+    fn into_value(self) -> Value {
+        match self {
+            Some(v) => v.into_value(),
+            None => Value::Null
+        }
+    }
+}
+
+impl IntoValue for Value {
+    fn into_value(self) -> Value {
+        self
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Event<'a> {
     timestamp: DateTime<UTC>,
@@ -316,16 +348,58 @@ impl<'a> Event<'a> {
         &self.properties
     }
     
-    pub fn add_or_update_property(&mut self, name: &'a str, value: Value) {
+    pub fn add_or_update_property<I: IntoValue>(&mut self, name: &'a str, value: I) {
         match self.properties.entry(name) {
-            Entry::Vacant(v) => {v.insert(value);},
-            Entry::Occupied(mut o) => {o.insert(value);}
+            Entry::Vacant(v) => {v.insert(value.into_value());},
+            Entry::Occupied(mut o) => {o.insert(value.into_value());}
         }
     }
     
-    pub fn add_property_if_absent(&mut self, name: &'a str, value: Value) {
+    pub fn add_property_if_absent<I: IntoValue>(&mut self, name: &'a str, value: I) {
         if !self.properties.contains_key(name) {
-            self.properties.insert(name, value);
+            self.properties.insert(name, value.into_value());
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str;
+    use super::{ TextValueFormatter, Value, IntoValue, format_vec};
+
+    #[test]
+    fn format_vec_empty() {
+        let formatter = TextValueFormatter::value_formatter();
+        let v = Vec::<Value>::new();
+
+        let fmtd = format_vec(&formatter, &v, true);
+
+        assert_eq!("[]", fmtd);
+    }
+
+    #[test]
+    fn format_vec_single() {
+        let formatter = TextValueFormatter::value_formatter();
+        let v = vec![
+            "a".into_value()
+        ];
+
+        let fmtd = format_vec(&formatter, &v, true);
+
+        assert_eq!("[a]", fmtd);
+    }
+
+    #[test]
+    fn format_vec_many() {
+        let formatter = TextValueFormatter::value_formatter();
+        let v = vec![
+            "a".into_value(),
+            "b".into_value(),
+            "c".into_value()
+        ];
+
+        let fmtd = format_vec(&formatter, &v, true);
+
+        assert_eq!("[a, b, c]", fmtd);
     }
 }

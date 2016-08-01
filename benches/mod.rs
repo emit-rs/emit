@@ -9,9 +9,9 @@ use std::collections::BTreeMap;
 use test::Bencher;
 use chrono::{ UTC, TimeZone };
 use emit::{ LogLevel, templates, events };
-use emit::events::{ IntoValue, SanitiserVisitor };
+use emit::events::{ IntoValue, ValueFormatterVisitor };
 use emit::formatters::WriteEvent;
-use emit::formatters::json::JsonSanitiser;
+use emit::formatters::json::JsonValueFormatter;
 
 fn some_event() -> events::Event<'static> {
 	let ts = UTC.ymd(2014, 7, 8).and_hms(9, 10, 11);
@@ -228,16 +228,16 @@ pub fn f32_to_value(b: &mut Bencher) {
 
 #[bench]
 pub fn str_value_to_json(b: &mut Bencher) {
-	let sanitiser = JsonSanitiser::sanitiser();
+	let formatter = JsonValueFormatter::value_formatter();
 	b.iter(|| {
-		let j = JsonSanitiser::visit_str(&sanitiser, "teststring");
+		let j = JsonValueFormatter::visit_str(&formatter, "teststring");
 		test::black_box(j);
 	});
 }
 
 #[bench]
 pub fn vec_value_to_json(b: &mut Bencher) {
-	let sanitiser = JsonSanitiser::sanitiser();
+	let formatter = JsonValueFormatter::value_formatter();
 	let v = vec![
 		"a".into_value(),
 		"b".into_value(),
@@ -245,7 +245,7 @@ pub fn vec_value_to_json(b: &mut Bencher) {
 	];
 
 	b.iter(|| {
-		let j = JsonSanitiser::visit_vec(&sanitiser, &v);
+		let j = JsonValueFormatter::visit_vec(&formatter, &v);
 		test::black_box(j);
 	});
 }
@@ -253,9 +253,9 @@ pub fn vec_value_to_json(b: &mut Bencher) {
 #[bench]
 pub fn i64_value_to_json(b: &mut Bencher) {
 	let v = 4i64;
-	let sanitiser = JsonSanitiser::sanitiser();
+	let formatter = JsonValueFormatter::value_formatter();
 	b.iter(|| {
-		let j = JsonSanitiser::visit_i64(&sanitiser, &v);
+		let j = JsonValueFormatter::visit_i64(&formatter, &v);
 		test::black_box(j);
 	});
 }
@@ -263,9 +263,9 @@ pub fn i64_value_to_json(b: &mut Bencher) {
 #[bench]
 pub fn u64_value_to_json(b: &mut Bencher) {
 	let v = 4u64;
-	let sanitiser = JsonSanitiser::sanitiser();
+	let formatter = JsonValueFormatter::value_formatter();
 	b.iter(|| {
-		let j = JsonSanitiser::visit_u64(&sanitiser, &v);
+		let j = JsonValueFormatter::visit_u64(&formatter, &v);
 		test::black_box(j);
 	});
 }
@@ -273,9 +273,9 @@ pub fn u64_value_to_json(b: &mut Bencher) {
 #[bench]
 pub fn f64_value_to_json(b: &mut Bencher) {
 	let v = 4f64;
-	let sanitiser = JsonSanitiser::sanitiser();
+	let formatter = JsonValueFormatter::value_formatter();
 	b.iter(|| {
-		let j = JsonSanitiser::visit_f64(&sanitiser, &v);
+		let j = JsonValueFormatter::visit_f64(&formatter, &v);
 		test::black_box(j);
 	});
 }

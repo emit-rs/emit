@@ -2,38 +2,42 @@ use std::borrow::Cow;
 use std::marker::PhantomData;
 use std::io::Write;
 use std::num::Wrapping;
-use events::{ Event, Value, Sanitiser, SanitiserVisitor, sanitise_vec };
+use events::{ Event, Value, ValueFormatter, ValueFormatterVisitor, format_vec };
 use std::error::Error;
 use LogLevel;
 
 #[derive(Default)]
-pub struct JsonSanitiser<'a> {
+pub struct JsonValueFormatter<'a> {
     _marker: PhantomData<&'a ()>
 }
-impl <'a> JsonSanitiser<'a> {
-    pub fn sanitiser() -> Sanitiser<'a, Self> {
-        Sanitiser::default()
+impl <'a> JsonValueFormatter<'a> {
+    pub fn value_formatter() -> ValueFormatter<'a, Self> {
+        ValueFormatter::default()
     }
 }
 
-impl <'a> SanitiserVisitor<'a> for JsonSanitiser<'a> {
-    fn visit_bool(_: &Sanitiser<'a, Self>, v: &'a bool) -> Cow<'a, str> {
+impl <'a> ValueFormatterVisitor<'a> for JsonValueFormatter<'a> {
+    fn visit_null(_: &ValueFormatter<'a, Self>) -> Cow<'a, str> {
+        Cow::Borrowed("null")
+    }
+
+    fn visit_bool(_: &ValueFormatter<'a, Self>, v: &'a bool) -> Cow<'a, str> {
         Cow::Owned(v.to_string())
     }
 
-    fn visit_i64(_: &Sanitiser<'a, Self>, v: &'a i64) -> Cow<'a, str> {
+    fn visit_i64(_: &ValueFormatter<'a, Self>, v: &'a i64) -> Cow<'a, str> {
         Cow::Owned(v.to_string())
     }
 
-    fn visit_u64(_: &Sanitiser<'a, Self>, v: &'a u64) -> Cow<'a, str> {
+    fn visit_u64(_: &ValueFormatter<'a, Self>, v: &'a u64) -> Cow<'a, str> {
         Cow::Owned(v.to_string())
     }
 
-    fn visit_f64(_: &Sanitiser<'a, Self>, v: &'a f64) -> Cow<'a, str> {
+    fn visit_f64(_: &ValueFormatter<'a, Self>, v: &'a f64) -> Cow<'a, str> {
         Cow::Owned(v.to_string())
     }
 
-    fn visit_str(_: &Sanitiser<'a, Self>, v: &'a str) -> Cow<'a, str> {
+    fn visit_str(_: &ValueFormatter<'a, Self>, v: &'a str) -> Cow<'a, str> {
         let bytes = v.as_bytes();
         if v.len() > 0 && bytes[0] == b'"' {
             Cow::Borrowed(v)
@@ -48,8 +52,8 @@ impl <'a> SanitiserVisitor<'a> for JsonSanitiser<'a> {
         }
     }
 
-    fn visit_vec(sanitiser: &Sanitiser<'a, Self>, v: &'a Vec<Value>) -> Cow<'a, str> {
-        Cow::Owned(sanitise_vec(sanitiser, v, false))
+    fn visit_vec(formatter: &ValueFormatter<'a, Self>, v: &'a Vec<Value>) -> Cow<'a, str> {
+        format_vec(formatter, v, false)
     }
 }
 
@@ -66,27 +70,27 @@ impl JsonFormatter {
 
 impl super::WriteEvent for JsonFormatter {
     fn write_event(&self, event: &Event<'static>, to: &mut Write) -> Result<(), Box<Error>> {
-        let sanitiser = JsonSanitiser::sanitiser();
+        let formatter = JsonValueFormatter::value_formatter();
 
         let isots = event.timestamp().format("%FT%T%.3fZ");
 
         try!(write!(to, "{{\"@t\":{},\"@mt\":{}", 
-            JsonSanitiser::visit_str(&sanitiser, &isots.to_string()), 
-            JsonSanitiser::visit_str(&sanitiser, event.message_template().text())
+            JsonValueFormatter::visit_str(&formatter, &isots.to_string()), 
+            JsonValueFormatter::visit_str(&formatter, event.message_template().text())
         ));
 
         if event.level() != LogLevel::Info {
             try!(write!(to, ",\"@l\":{}", 
-                JsonSanitiser::visit_str(&sanitiser, event.level().as_ref()))
+                JsonValueFormatter::visit_str(&formatter, event.level().as_ref()))
             );
         }
 
         for (n,v) in event.properties() {
             let bytes = n.as_bytes();
             if bytes.len() > 0 && bytes[0] == b'@' {
-                try!(write!(to, ",\"@{}\":{}", n, sanitiser.sanitise(v)));
+                try!(write!(to, ",\"@{}\":{}", n, formatter.format(v)));
             } else {
-                try!(write!(to, ",\"{}\":{}", n, sanitiser.sanitise(v)));            
+                try!(write!(to, ",\"{}\":{}", n, formatter.format(v)));            
             }
         }
                     
@@ -122,29 +126,29 @@ fn jenkins_hash(text: &str) -> u32 {
 
 impl super::WriteEvent for RenderedJsonFormatter {
     fn write_event(&self, event: &Event<'static>, to: &mut Write) -> Result<(), Box<Error>> {
-        let sanitiser = JsonSanitiser::sanitiser();
+        let formatter = JsonValueFormatter::value_formatter();
 
         let id = jenkins_hash(&event.message_template().text()) as u64;
         let isots = event.timestamp().format("%FT%T%.3fZ");
 
         try!(write!(to, "{{\"@t\":{},\"@m\":{},\"@i\":\"{:08x}\"", 
-            JsonSanitiser::visit_str(&sanitiser, &isots.to_string()), 
-            JsonSanitiser::visit_str(&sanitiser, &event.message()), 
+            JsonValueFormatter::visit_str(&formatter, &isots.to_string()), 
+            JsonValueFormatter::visit_str(&formatter, &event.message()), 
             id
         ));
 
         if event.level() != LogLevel::Info {
             try!(write!(to, ",\"@l\":{}", 
-                JsonSanitiser::visit_str(&sanitiser, event.level().as_ref()))
+                JsonValueFormatter::visit_str(&formatter, event.level().as_ref()))
             );
         }
 
         for (n,v) in event.properties() {
             let bytes = n.as_bytes();
             if bytes.len() > 0 && bytes[0] == b'@' {
-                try!(write!(to, ",\"@{}\":{}", n, sanitiser.sanitise(v)));
+                try!(write!(to, ",\"@{}\":{}", n, formatter.format(v)));
             } else {
-                try!(write!(to, ",\"{}\":{}", n, sanitiser.sanitise(v)));            
+                try!(write!(to, ",\"{}\":{}", n, formatter.format(v)));            
             }
         }
                     

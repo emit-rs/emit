@@ -1,5 +1,4 @@
-use events;
-use events::{Event,Value};
+use events::{Event,IntoValue,Value};
 use pipeline::chain::{Emit,Propagate};
 
 pub struct FixedPropertyEnricher<'a> {
@@ -8,8 +7,8 @@ pub struct FixedPropertyEnricher<'a> {
 }
 
 impl<'a> FixedPropertyEnricher<'a> {
-    pub fn new<T: Into<events::Value>>(name: &'a str, value: T) -> FixedPropertyEnricher<'a> {
-        FixedPropertyEnricher { name: name, value: value.into() }
+    pub fn new<T: IntoValue>(name: &'a str, value: T) -> FixedPropertyEnricher<'a> {
+        FixedPropertyEnricher { name: name, value: value.into_value() }
     }
 }
 
