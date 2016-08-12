@@ -8,9 +8,9 @@ use std::io::Cursor;
 use std::collections::BTreeMap;
 use test::Bencher;
 use chrono::{ UTC, TimeZone };
-use emit::{ LogLevel, templates, events };
-use emit::events::{ IntoValue, ValueFormatterVisitor };
-use emit::formatters::WriteEvent;
+use emit::{LogLevel, templates, events};
+use emit::events::IntoValue;
+use emit::formatters::{WriteEvent, ValueFormatterVisitor};
 use emit::formatters::json::JsonValueFormatter;
 
 fn some_event() -> events::Event<'static> {
@@ -231,6 +231,16 @@ pub fn str_value_to_json(b: &mut Bencher) {
 	let formatter = JsonValueFormatter::value_formatter();
 	b.iter(|| {
 		let j = JsonValueFormatter::visit_str(&formatter, "teststring");
+		test::black_box(j);
+	});
+}
+
+#[bench]
+pub fn bool_value_to_json(b: &mut Bencher) {
+	let formatter = JsonValueFormatter::value_formatter();
+	let v = true;
+	b.iter(|| {
+		let j = JsonValueFormatter::visit_bool(&formatter, &v);
 		test::black_box(j);
 	});
 }

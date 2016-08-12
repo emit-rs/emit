@@ -14,6 +14,19 @@ pub struct MessageTemplateRepl<'a> {
     param_slices: Vec<ParamSlice>
 }
 
+macro_rules! repl_slice {
+    ($_self:ident, $last_index:ident, $slice:ident, $result:ident, $values:ident) => (
+        let lit = &$_self.text[$last_index..$slice.start];
+        write!($result, "{}", lit).is_ok();
+
+        if let Some(ref val) = $values.get($slice.label.as_str()) {
+            write!($result, "{}", val).is_ok();
+        }
+
+        $last_index = $slice.end;
+    )
+}
+
 impl <'a> MessageTemplateRepl<'a> {
     pub fn new(text: &'a str) -> MessageTemplateRepl {
         let slices = parse_slices(
@@ -28,34 +41,19 @@ impl <'a> MessageTemplateRepl<'a> {
         }
     }
 
-    //TODO: DRY
     pub fn replace(&self, values: &BTreeMap<&str, Value>) -> String {
-        let mut result = String::with_capacity(self.text.len());
+        let mut result = String::new();
         let mut slice_iter = self.param_slices.iter();
         let mut last_index = 0;
 
         //The first slice
         if let Some(slice) = slice_iter.next() {
-            let lit = &self.text[last_index..slice.start];
-            write!(result, "{}", lit).is_ok();
-
-            if let Some(ref val) = values.get(slice.label.as_str()) {
-                write!(result, "{}", val).is_ok();
-            }
-
-            last_index = slice.end;
+            repl_slice!(self, last_index, slice, result, values);
         }
 
         //The middle slices
         for slice in slice_iter {
-            let lit = &self.text[last_index..slice.start];
-            write!(result, "{}", lit).is_ok();
-
-            if let Some(ref val) = values.get(slice.label.as_str()) {
-                write!(result, "{}", val).is_ok();
-            }
-
-            last_index = slice.end;
+            repl_slice!(self, last_index, slice, result, values);
         }
 
         //The last slice
@@ -83,7 +81,8 @@ enum State {
     Label(usize)
 }
 
-//TODO: Return Result<Vec<ParamSlice>, ParseResult> so malformed templates are rejected
+//TODO: escape double curly braces
+//TODO: don't treat unclosed labels patterns as labels
 fn parse_slices<'a>(i: &'a [u8], state: State, mut slices: Vec<ParamSlice>) -> Vec<ParamSlice> {
     if i.len() == 0 {
         slices
@@ -119,6 +118,7 @@ fn parse_lit<'a>(i: &'a [u8]) -> (usize, &'a [u8]) {
     shift_while(i, |c| c != b'{')
 }
 
+//TODO: If label isn't valid (escaped or unclosed) return None
 //Parse the 'somevalue' in '{somevalue} other'
 fn parse_label<'a>(i: &'a [u8]) -> (usize, &'a [u8], Option<&'a str>) {
     //Shift over the '{'
@@ -243,7 +243,8 @@ mod tests {
         assert_eq!("C value1 D value2", &replaced);
     }
 
-    //TODO: This should just return Err
+    //The issue is that {{B}} is escaped, so should be treated as a literal
+    //Also that A isn't closed, so unclosed labels shouldn't be pushed
     #[test]
     fn malformed_labels_are_not_replaced() {
         let template_repl = MessageTemplateRepl::new("C {A} D {{B}} {A");

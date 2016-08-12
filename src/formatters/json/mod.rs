@@ -24,7 +24,12 @@ impl <'a> ValueFormatterVisitor<'a> for JsonValueFormatter<'a> {
     }
 
     fn visit_bool(_: &ValueFormatter<'a, Self>, v: &'a bool) -> Cow<'a, str> {
-        Cow::Owned(v.to_string())
+        if *v {
+            Cow::Borrowed("true")
+        }
+        else {
+            Cow::Borrowed("false")
+        }
     }
 
     fn visit_i64(_: &ValueFormatter<'a, Self>, v: &'a i64) -> Cow<'a, str> {
