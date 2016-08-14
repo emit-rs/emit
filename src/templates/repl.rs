@@ -17,10 +17,12 @@ pub struct MessageTemplateRepl<'a> {
 macro_rules! repl_slice {
     ($_self:ident, $last_index:ident, $slice:ident, $result:ident, $values:ident) => (
         let lit = &$_self.text[$last_index..$slice.start];
-        write!($result, "{}", lit).is_ok();
+        let r = write!($result, "{}", lit);
+        r.unwrap();
 
         if let Some(ref val) = $values.get($slice.label.as_str()) {
-            write!($result, "{}", val).is_ok();
+            let r = write!($result, "{}", val);
+            r.unwrap();
         }
 
         $last_index = $slice.end;
