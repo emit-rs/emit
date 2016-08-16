@@ -45,18 +45,13 @@ impl <'a> ValueFormatterVisitor<'a> for JsonValueFormatter<'a> {
     }
 
     fn visit_str(_: &ValueFormatter<'a, Self>, v: &'a str) -> Cow<'a, str> {
-        let bytes = v.as_bytes();
-        if v.len() > 0 && bytes[0] == b'"' {
-            Cow::Borrowed(v)
-        }
-        else {
-            let mut quoted = String::with_capacity(v.len() + 2);
-            quoted.push('"');
-            quoted.push_str(v);
-            quoted.push('"');
+        //TODO: Sanitise this string input
+        let mut quoted = String::with_capacity(v.len() + 2);
+        quoted.push('"');
+        quoted.push_str(v);
+        quoted.push('"');
 
-            Cow::Owned(quoted)
-        }
+        Cow::Owned(quoted)
     }
 
     fn visit_vec(formatter: &ValueFormatter<'a, Self>, v: &'a Vec<Value>) -> Cow<'a, str> {
