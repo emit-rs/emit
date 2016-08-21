@@ -2,70 +2,38 @@ use chrono::{DateTime,UTC};
 use std::collections;
 use std::collections::btree_map::Entry;
 use LogLevel;
-use serde;
-use serde_json;
 use templates;
-use std::fmt;
-use std::convert::Into;
 
-/// Currently just used as a marker; plan is to
-/// adopt the same scheme as serde_json's Value: https://github.com/serde-rs/json/blob/master/json/src/value.rs
 #[derive(Clone, PartialEq)]
 pub enum Value {
-    Json(String)
+    /// Represents null
+    Null,
+
+    /// Represents a Boolean
+    Bool(bool),
+
+    /// Represents a signed integer
+    I64(i64),
+
+    /// Represents an unsigned integer
+    U64(u64),
+
+    /// Represents a floating point number
+    F64(f64),
+
+    /// Represents a string
+    String(String),
+
+    /// Represents a collection
+    Vec(Vec<Value>)
 }
 
-impl Value {
-    // JSON serialization belongs elsewhere, but keeps
-    // the distinction between regular string and JSON data clear.
-    pub fn to_json<'a>(&'a self) -> &'a str {
-        match self {
-            &Value::Json(ref s) => &s
-        }
-    }
-    
-    /// Converts an arbitrary serializable object into the internal property format
-    /// carried on events (currently JSON values...)
-    pub fn capture<T: serde::ser::Serialize>(v: &T) -> Value {
-        Value::Json(serde_json::to_string(v).unwrap())
-    }
+/// Represents a type that can be converted into a `Value`.
+pub trait IntoValue {
+    fn into_value(self) -> Value;
 }
 
-impl fmt::Debug for Value {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &Value::Json(ref s) => write!(f, "Value({})", s)
-        }
-    }
-}
-
-impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &Value::Json(ref s) => {                    
-                let bytes = s.as_bytes();            
-                if bytes.len() > 1 && bytes[0] == b'"' {
-                    write!(f, "{}", &s[1..s.len() - 1])
-                } else {
-                    write!(f, "{}", s)
-                }
-            }
-        }
-    }
-}
-
-impl Into<Value> for String {
-    fn into(self) -> Value {
-        Value::Json(self)
-    }
-}
-
-impl<'a> Into<Value> for &'a str {
-    fn into(self) -> Value {
-        Value::Json(self.into())
-    }
-}
-
+#[derive(Debug, Clone)]
 pub struct Event<'a> {
     timestamp: DateTime<UTC>,
     level: LogLevel,
@@ -108,16 +76,16 @@ impl<'a> Event<'a> {
         &self.properties
     }
     
-    pub fn add_or_update_property(&mut self, name: &'a str, value: Value) {
+    pub fn add_or_update_property<I: IntoValue>(&mut self, name: &'a str, value: I) {
         match self.properties.entry(name) {
-            Entry::Vacant(v) => {v.insert(value);},
-            Entry::Occupied(mut o) => {o.insert(value);}
+            Entry::Vacant(v) => {v.insert(value.into_value());},
+            Entry::Occupied(mut o) => {o.insert(value.into_value());}
         }
     }
     
-    pub fn add_property_if_absent(&mut self, name: &'a str, value: Value) {
+    pub fn add_property_if_absent<I: IntoValue>(&mut self, name: &'a str, value: I) {
         if !self.properties.contains_key(name) {
-            self.properties.insert(name, value);
+            self.properties.insert(name, value.into_value());
         }
     }
 }
