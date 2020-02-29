@@ -1,0 +1,1 @@
+initSidebarItems({"fn":[["to_chain",""]],"trait":[["Emit","A link to the next element in a processing chain."],["Propagate","An element within the processing chain that controls how an `Event` is passed through."]]});

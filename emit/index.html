@@ -1,0 +1,68 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="API documentation for the Rust `emit` crate."><meta name="keywords" content="rust, rustlang, rust-lang, emit"><title>emit - Rust</title><link rel="stylesheet" type="text/css" href="../normalize.css"><link rel="stylesheet" type="text/css" href="../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../dark.css"><link rel="stylesheet" type="text/css" href="../light.css" id="themeStyle"><script src="../storage.js"></script><noscript><link rel="stylesheet" href="../noscript.css"></noscript><link rel="shortcut icon" href="../favicon.ico"><style type="text/css">#crate-search{background-image:url("../down-arrow.svg");}</style></head><body class="rustdoc mod"><!--[if lte IE 8]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu">&#9776;</div><a href='../emit/index.html'><div class='logo-container'><img src='../rust-logo.png' alt='logo'></div></a><p class='location'>Crate emit</p><div class="sidebar-elems"><a id='all-types' href='all.html'><p>See all emit's items</p></a><div class="block items"><ul><li><a href="#reexports">Re-exports</a></li><li><a href="#modules">Modules</a></li><li><a href="#macros">Macros</a></li><li><a href="#enums">Enums</a></li></ul></div><p class='location'></p><script>window.sidebarCurrent = {name: 'emit', ty: 'mod', relpath: '../'};</script></div></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!"><img src="../brush.svg" width="18" alt="Pick another theme!"></button><div id="theme-choices"></div></div><script src="../theme.js"></script><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><a id="settings-menu" href="../settings.html"><img src="../wheel.svg" width="18" alt="Change settings"></a></div></form></nav><section id="main" class="content"><h1 class='fqn'><span class='out-of-band'><span id='render-detail'><a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">[<span class='inner'>&#x2212;</span>]</a></span><a class='srclink' href='../src/emit/lib.rs.html#1-336' title='goto source code'>[src]</a></span><span class='in-band'>Crate <a class="mod" href=''>emit</a></span></h1><div class='docblock'><p>Structured application logging.</p>
+<p>This module provides:</p>
+<ul>
+<li>The <code>emit!()</code> family of macros, for recording application events in an easily machine-readable format</li>
+<li>Collectors for transmitting these events to back-end logging servers</li>
+</ul>
+<p>The emit macros are &quot;structured&quot; versions of the ones in the widely-used <code>log</code> crate. The <code>log</code> crate doesn't preserve the structure
+of the events that are written through it. For example:</p>
+
+<div class='information'><div class='tooltip ignore'>ⓘ<span class='tooltiptext'>This example is not tested</span></div></div><div class="example-wrap"><pre class="rust rust-example-rendered ignore">
+<span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Hello, {}!&quot;</span>, <span class="ident">env</span>::<span class="ident">var</span>(<span class="string">&quot;USERNAME&quot;</span>).<span class="ident">unwrap</span>());</pre></div>
+<p>This writes <code>&quot;Hello, nblumhardt!&quot;</code> to the log as an block of text, which can't later be broken apart to reveal the username except
+with regular expressions.</p>
+<p>The arguments passed to <code>emit</code> are named:</p>
+
+<div class='information'><div class='tooltip ignore'>ⓘ<span class='tooltiptext'>This example is not tested</span></div></div><div class="example-wrap"><pre class="rust rust-example-rendered ignore">
+<span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Hello, {}!&quot;</span>, <span class="ident">user</span>: <span class="ident">env</span>::<span class="ident">var</span>(<span class="string">&quot;USERNAME&quot;</span>).<span class="ident">unwrap</span>());</pre></div>
+<p>This event can be rendered into text identically to the <code>log</code> example, but structured data collectors also capture the
+aguments as a key/value property pairs.</p>
+<pre><code class="language-js">{
+  &quot;@t&quot;: &quot;2016-03-17T00:17:01.333Z&quot;,
+  &quot;@mt&quot;: &quot;Hello, {user}!&quot;,
+  &quot;user&quot;: &quot;nblumhardt&quot;,
+  &quot;target&quot;: &quot;example_app&quot;
+}
+</code></pre>
+<p>Back-ends like Elasticsearch, Seq, and Splunk use these in queries such as <code>user == &quot;nblumhardt&quot;</code> without up-front log parsing.</p>
+<p>Arguments are captured using <code>serde</code>, so there's the potential for complex values to be logged so long as they're <code>serde::ser::Serialize</code>.</p>
+<p>Further, because the template (format) itself is captured, it can be hashed to compute an &quot;event type&quot; for precisely finding
+all occurrences of the event regardless of the value of the <code>user</code> argument.</p>
+<h1 id="examples" class="section-header"><a href="#examples">Examples</a></h1>
+<p>The example below writes events to stdout.</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered">
+<span class="attribute">#[<span class="ident">macro_use</span>]</span>
+<span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">emit</span>;
+
+<span class="kw">use</span> <span class="ident">std</span>::<span class="ident">env</span>;
+<span class="kw">use</span> <span class="ident">emit</span>::<span class="ident">PipelineBuilder</span>;
+<span class="kw">use</span> <span class="ident">emit</span>::<span class="ident">collectors</span>::<span class="ident">stdio</span>::<span class="ident">StdioCollector</span>;
+<span class="kw">use</span> <span class="ident">emit</span>::<span class="ident">formatters</span>::<span class="ident">raw</span>::<span class="ident">RawFormatter</span>;
+
+<span class="kw">fn</span> <span class="ident">main</span>() {
+    <span class="kw">let</span> <span class="ident">_flush</span> <span class="op">=</span> <span class="ident">PipelineBuilder</span>::<span class="ident">new</span>()
+        .<span class="ident">write_to</span>(<span class="ident">StdioCollector</span>::<span class="ident">new</span>(<span class="ident">RawFormatter</span>::<span class="ident">new</span>()))
+        .<span class="ident">init</span>();
+
+    <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Hello, {}!&quot;</span>, <span class="ident">name</span>: <span class="ident">env</span>::<span class="ident">var</span>(<span class="string">&quot;USERNAME&quot;</span>).<span class="ident">unwrap_or</span>(<span class="string">&quot;User&quot;</span>.<span class="ident">to_string</span>()));
+}</pre></div>
+<p>Output:</p>
+<pre><code class="language-text">emit 2016-03-24T05:03:36Z Hello, {name}!
+  name: &quot;nblumhardt&quot;
+  target: &quot;example_app&quot;
+
+</code></pre>
+</div><h2 id='reexports' class='section-header'><a href="#reexports">Re-exports</a></h2>
+<table><tr><td><code>pub use pipeline::builder::<a class="struct" href="../emit/pipeline/builder/struct.PipelineBuilder.html" title="struct emit::pipeline::builder::PipelineBuilder">PipelineBuilder</a>;</code></td></tr></table><h2 id='modules' class='section-header'><a href="#modules">Modules</a></h2>
+<table><tr class='module-item'><td><a class="mod" href="collectors/index.html" title='emit::collectors mod'>collectors</a></td><td class='docblock-short'></td></tr><tr class='module-item'><td><a class="mod" href="enrichers/index.html" title='emit::enrichers mod'>enrichers</a></td><td class='docblock-short'></td></tr><tr class='module-item'><td><a class="mod" href="events/index.html" title='emit::events mod'>events</a></td><td class='docblock-short'></td></tr><tr class='module-item'><td><a class="mod" href="formatters/index.html" title='emit::formatters mod'>formatters</a></td><td class='docblock-short'></td></tr><tr class='module-item'><td><a class="mod" href="pipeline/index.html" title='emit::pipeline mod'>pipeline</a></td><td class='docblock-short'><p>An asynchronous/buffered log event pipeline from producers to a single dispatching consumer.
+Currently based on <code>std::sync::mpsc</code>, but highly likely this will change.</p>
+</td></tr><tr class='module-item'><td><a class="mod" href="templates/index.html" title='emit::templates mod'>templates</a></td><td class='docblock-short'></td></tr></table><h2 id='macros' class='section-header'><a href="#macros">Macros</a></h2>
+<table><tr class='module-item'><td><a class="macro" href="macro.debug.html" title='emit::debug macro'>debug</a></td><td class='docblock-short'><p>Emit a debugging event to the ambient pipeline.</p>
+</td></tr><tr class='module-item'><td><a class="macro" href="macro.emit.html" title='emit::emit macro'>emit</a></td><td class='docblock-short'><p>Emit an event to the ambient pipeline.</p>
+</td></tr><tr class='module-item'><td><a class="macro" href="macro.error.html" title='emit::error macro'>error</a></td><td class='docblock-short'><p>Emit an error event to the ambient pipeline.</p>
+</td></tr><tr class='module-item'><td><a class="macro" href="macro.info.html" title='emit::info macro'>info</a></td><td class='docblock-short'><p>Emit an informational event to the ambient pipeline.</p>
+</td></tr><tr class='module-item'><td><a class="macro" href="macro.trace.html" title='emit::trace macro'>trace</a></td><td class='docblock-short'><p>Emit a trace event to the ambient pipeline.</p>
+</td></tr><tr class='module-item'><td><a class="macro" href="macro.warn.html" title='emit::warn macro'>warn</a></td><td class='docblock-short'><p>Emit a warning event to the ambient pipeline.</p>
+</td></tr></table><h2 id='enums' class='section-header'><a href="#enums">Enums</a></h2>
+<table><tr class='module-item'><td><a class="enum" href="enum.LogLevel.html" title='emit::LogLevel enum'>LogLevel</a></td><td class='docblock-short'></td></tr><tr class='module-item'><td><a class="enum" href="enum.LogLevelFilter.html" title='emit::LogLevelFilter enum'>LogLevelFilter</a></td><td class='docblock-short'></td></tr></table></section><section id="search" class="content hidden"></section><section class="footer"></section><script>window.rootPath = "../";window.currentCrate = "emit";</script><script src="../aliases.js"></script><script src="../main.js"></script><script defer src="../search-index.js"></script></body></html>

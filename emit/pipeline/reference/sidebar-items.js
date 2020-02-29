@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["PipelineRef","`PipelineRef` is \"mouth\" of the pipeline, into which events are fed."]]});

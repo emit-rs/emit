@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["Value",""]],"struct":[["Event",""]],"trait":[["IntoValue","Represents a type that can be converted into a `Value`."]]});

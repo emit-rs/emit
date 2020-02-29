@@ -1,0 +1,1 @@
+initSidebarItems({"mod":[["repl","Helpers for replacing values in a message template."]],"struct":[["MessageTemplate",""]]});
