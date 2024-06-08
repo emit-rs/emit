@@ -4,7 +4,7 @@
 
 [![all](https://github.com/emit-rs/emit/actions/workflows/all.yml/badge.svg)](https://github.com/emit-rs/emit/actions/workflows/all.yml)
 
-[Current docs](https://docs.rs/emit/0.11.0-alpha.2/emit/index.html)
+[Current docs](https://docs.rs/emit/0.11.0-alpha.3/emit/index.html)
 
 ## Structured diagnostics for Rust applications
 
@@ -14,10 +14,10 @@
 
 ```toml
 [dependencies.emit]
-version = "0.11.0-alpha.2"
+version = "0.11.0-alpha.3"
 
 [dependencies.emit_term]
-version = "0.11.0-alpha.2"
+version = "0.11.0-alpha.3"
 ```
 
 ```rust
@@ -47,4 +47,4 @@ This is alpha-level software. It implements a complete framework but has almost 
 
 ## Getting started
 
-See the `examples` directory and [`emit` documentation](https://docs.rs/emit/0.11.0-alpha.2/emit/index.html) to get started with `emit`.
+See the `examples` directory and [`emit` documentation](https://docs.rs/emit/0.11.0-alpha.3/emit/index.html) to get started with `emit`.
