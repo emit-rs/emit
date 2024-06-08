@@ -9,7 +9,7 @@ To get started, add `emit` to your `Cargo.toml`:
 
 ```toml
 [dependencies.emit]
-version = "*"
+version = "0.11.0-alpha.2"
 ```
 
 ## Configuring an emitter

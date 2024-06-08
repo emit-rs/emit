@@ -47,4 +47,4 @@ This is alpha-level software. It implements a complete framework but has almost 
 
 ## Getting started
 
-See the `examples` directory and `emit` documentation for how to get started with `emit`.
+See the `examples` directory and [`emit` documentation](https://docs.rs/emit/0.11.0-alpha.2/emit/index.html) to get started with `emit`.
