@@ -1,0 +1,59 @@
+[package]
+name = "emit_example_common_patterns"
+version = "0.11.0-alpha.2"
+authors = ["emit contributors"]
+edition = "2021"
+publish = false
+
+[dependencies.emit]
+path = "../../"
+features = ["serde"]
+
+[dependencies.emit_term]
+path = "../../emitter/term"
+
+[dependencies.emit_file]
+path = "../../emitter/file"
+
+[dependencies.thiserror]
+version = "1"
+
+[dependencies.serde]
+version = "1"
+features = ["derive"]
+
+[[example]]
+name = "emit_errors"
+path = "emit_errors.rs"
+
+[[example]]
+name = "emit_multiple_emitters"
+path = "emit_multiple_emitters.rs"
+
+[[example]]
+name = "emit_non_identifier_keys"
+path = "emit_non_identifier_keys.rs"
+
+[[example]]
+name = "emit_optional_values"
+path = "emit_optional_values.rs"
+
+[[example]]
+name = "emit_serde_values"
+path = "emit_serde_values.rs"
+
+[[example]]
+name = "filter_by_level"
+path = "filter_by_level.rs"
+
+[[example]]
+name = "filter_per_emitter"
+path = "filter_per_emitter.rs"
+
+[[example]]
+name = "span_manual_completion"
+path = "span_manual_completion.rs"
+
+[[example]]
+name = "span_trace_propagation"
+path = "span_trace_propagation.rs"

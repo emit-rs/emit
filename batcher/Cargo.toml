@@ -1,0 +1,22 @@
+[package]
+name = "emit_batcher"
+version = "0.11.0-alpha.2"
+authors = ["emit contributors"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/emit-rs/emit"
+description = "Batch processing infrastructure for emit."
+edition = "2021"
+
+[package.metadata.docs.rs]
+features = ["tokio"]
+
+[dependencies.emit]
+version = "0.11.0-alpha.2"
+path = "../"
+default-features = false
+
+[dependencies.tokio]
+version = "1"
+features = ["rt-multi-thread", "sync", "time"]
+optional = true

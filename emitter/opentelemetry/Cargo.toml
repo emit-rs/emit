@@ -1,0 +1,33 @@
+[package]
+name = "emit_opentelemetry"
+version = "0.11.0-alpha.2"
+authors = ["emit contributors"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/emit-rs/emit"
+description = "Emit diagnostic events to the OpenTelemetry SDK."
+keywords = ["logging", "tracing", "metrics", "observability"]
+categories = ["development-tools::debugging"]
+edition = "2021"
+
+[dependencies.emit]
+version = "0.11.0-alpha.2"
+path = "../../"
+features = ["std", "serde", "implicit_internal_rt"]
+default-features = false
+
+[dependencies.opentelemetry_sdk]
+version = "0.22"
+features = ["logs", "trace"]
+
+[dependencies.opentelemetry]
+version = "0.22"
+features = ["logs", "trace"]
+
+[dependencies.serde]
+version = "1"
+
+[dev-dependencies.emit]
+version = "0.11.0-alpha.2"
+path = "../../"
+features = ["implicit_rt"]

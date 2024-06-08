@@ -1,0 +1,45 @@
+[package]
+name = "emit_core"
+version = "0.11.0-alpha.2"
+authors = ["emit contributors"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/emit-rs/emit"
+description = "Core APIs and runtime infrastructure for emit."
+edition = "2021"
+
+[package.metadata.docs.rs]
+features = ["std", "sval", "serde", "implicit_rt", "implicit_internal_rt"]
+
+[features]
+std = ["alloc", "value-bag/error", "sval_nested?/std", "sval?/std", "serde?/std"]
+alloc = ["value-bag/alloc", "value-bag/owned", "sval_nested?/alloc", "sval?/alloc", "serde?/alloc"]
+sval = ["value-bag/sval", "dep:sval", "dep:sval_ref", "dep:sval_nested"]
+serde = ["value-bag/serde", "dep:serde"]
+implicit_rt = ["implicit_internal_rt"]
+implicit_internal_rt = []
+
+[dependencies.value-bag]
+version = "1"
+features = ["inline-i128", "seq"]
+default-features = false
+
+[dependencies.sval]
+version = "2"
+optional = true
+default-features = false
+
+[dependencies.sval_ref]
+version = "2"
+optional = true
+default-features = false
+
+[dependencies.sval_nested]
+version = "2"
+optional = true
+default-features = false
+
+[dependencies.serde]
+version = "1"
+optional = true
+default-features = false

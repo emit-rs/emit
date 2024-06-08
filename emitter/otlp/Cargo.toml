@@ -1,0 +1,90 @@
+[package]
+name = "emit_otlp"
+version = "0.11.0-alpha.2"
+authors = ["emit contributors"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/emit-rs/emit"
+description = "Emit diagnostic events to an OpenTelemetry-compatible collector."
+keywords = ["logging", "tracing", "metrics", "observability"]
+categories = ["development-tools::debugging"]
+edition = "2021"
+
+[features]
+default = ["tls", "gzip"]
+gzip = ["flate2"]
+tls = ["tokio-rustls", "rustls-native-certs"]
+
+[dependencies.emit]
+version = "0.11.0-alpha.2"
+path = "../../"
+features = ["std", "sval", "implicit_internal_rt"]
+default-features = false
+
+[dependencies.emit_batcher]
+version = "0.11.0-alpha.2"
+path = "../../batcher"
+features = ["tokio"]
+
+[dependencies.sval]
+version = "2.10"
+features = ["std"]
+
+[dependencies.sval_ref]
+version = "2.10"
+
+[dependencies.sval_derive]
+version = "2.10"
+features = ["std", "flatten"]
+
+[dependencies.sval_protobuf]
+version = "0.1"
+features = ["bytes"]
+
+[dependencies.sval_json]
+version = "2"
+features = ["std"]
+
+[dependencies.sval_buffer]
+version = "2"
+features = ["std"]
+
+[dependencies.tokio]
+version = "1"
+features = ["rt-multi-thread", "sync", "net"]
+
+[dependencies.hyper]
+version = "1"
+features = ["client", "http1", "http2"]
+
+[dependencies.tokio-rustls]
+version = "0.26"
+optional = true
+default-features = false
+features = ["ring"]
+
+[dependencies.rustls-native-certs]
+version = "0.7"
+optional = true
+
+[dependencies.flate2]
+version = "1"
+optional = true
+
+[dependencies.bytes]
+version = "1"
+
+[dev-dependencies.prost]
+version = "0.12"
+
+[dev-dependencies.prost-types]
+version = "0.12"
+
+[dev-dependencies.tokio]
+version = "1"
+features = ["full"]
+
+[dev-dependencies.emit]
+version = "0.11.0-alpha.2"
+path = "../../"
+features = ["implicit_rt"]

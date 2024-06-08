@@ -1,11 +1,68 @@
+[workspace]
+members = [
+    "core",
+    "batcher",
+    "emitter/term",
+    "emitter/file",
+    "emitter/otlp",
+    "emitter/otlp/gen",
+    "emitter/opentelemetry",
+    "macros",
+    "examples/common_patterns",
+    "examples/opentelemetry/direct_otlp",
+    "examples/opentelemetry/via_sdk",
+]
+
 [package]
 name = "emit"
-version = "0.10.0"
-authors = ["Nicholas Blumhardt <nblumhardt@nblumhardt.com>", "Ashley Mannix <ashleymannix@live.com.au>"]
-description = "A structured logger in the style of Serilog."
-license = "Apache-2.0"
-homepage = "https://github.com/emit-rs/emit"
-keywords = ["log", "logging"]
+version = "0.11.0-alpha.2"
+authors = ["emit contributors"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/emit-rs/emit"
+description = "Structured diagnostics for Rust applications."
+keywords = ["logging", "tracing", "metrics", "observability"]
+categories = ["development-tools::debugging"]
+edition = "2021"
 
-[dependencies]
-chrono = "0.2"
+[package.metadata.docs.rs]
+features = ["std", "sval", "serde", "implicit_rt", "implicit_internal_rt"]
+
+[features]
+default = ["std", "implicit_rt", "implicit_internal_rt"]
+std = ["alloc", "emit_macros/std", "emit_core/std", "rand"]
+alloc = ["emit_core/alloc"]
+sval = ["emit_macros/sval", "emit_core/sval", "dep:sval"]
+serde = ["emit_macros/serde", "emit_core/serde", "dep:serde"]
+implicit_rt = ["emit_core/implicit_rt", "emit_macros/implicit_rt"]
+implicit_internal_rt = ["emit_core/implicit_internal_rt"]
+
+[dependencies.emit_macros]
+version = "0.11.0-alpha.2"
+path = "macros"
+
+[dependencies.emit_core]
+version = "0.11.0-alpha.2"
+path = "core"
+default-features = false
+
+[dependencies.value-bag]
+version = "1"
+
+[dependencies.sval]
+version = "2"
+optional = true
+default-features = false
+
+[dependencies.serde]
+version = "1"
+optional = true
+default-features = false
+
+[dependencies.rand]
+version = "0.8"
+optional = true
+
+[dev-dependencies.serde]
+version = "1"
+features = ["derive"]
