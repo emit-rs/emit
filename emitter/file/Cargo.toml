@@ -1,0 +1,44 @@
+[package]
+name = "emit_file"
+version = "0.11.0-alpha.2"
+authors = ["emit contributors"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/emit-rs/emit"
+description = "Emit diagnostic events to rolling files."
+keywords = ["logging", "tracing", "metrics", "observability"]
+categories = ["development-tools::debugging"]
+edition = "2021"
+
+[package.metadata.docs.rs]
+features = ["default_writer"]
+
+[features]
+default = ["default_writer"]
+default_writer = ["emit/sval", "sval_json"]
+
+[dependencies.emit]
+version = "0.11.0-alpha.2"
+path = "../../"
+default-features = false
+features = ["std", "implicit_internal_rt"]
+
+[dependencies.sval]
+version = "2"
+
+[dependencies.sval_json]
+version = "2"
+features = ["std"]
+optional = true
+
+[dependencies.emit_batcher]
+version = "0.11.0-alpha.2"
+path = "../../batcher"
+
+[dependencies.rand]
+version = "0.8"
+
+[dev-dependencies.emit]
+version = "0.11.0-alpha.2"
+path = "../../"
+features = ["implicit_rt"]

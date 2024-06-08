@@ -1,0 +1,64 @@
+name: emit
+
+on: [push, pull_request]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab
+
+      - name: Install Rust toolchain
+        run: rustup default nightly
+
+      - name: Install cargo-hack
+        run: cargo install cargo-hack
+
+      - name: All
+        run: cargo test --all-features
+
+      - name: Powerset
+        run: cargo hack test --feature-powerset --lib
+
+      - name: Minimal versions
+        run: cargo hack test --feature-powerset --lib -Z minimal-versions
+  
+  embedded:
+    name: Build (embedded)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab
+
+      - name: Install Rust toolchain
+        run: |
+          rustup default nightly
+          rustup target add thumbv6m-none-eabi
+
+      - name: Install cargo-hack
+        run: cargo install cargo-hack
+
+      - name: Powerset
+        run: cargo hack check --each-feature --exclude-features default,rand,std,alloc,implicit_rt,implicit_internal_rt -Z avoid-dev-deps --target thumbv6m-none-eabi
+
+  miri:
+    name: Test (Miri)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab
+
+      - name: Install Miri
+        run: |
+          rustup toolchain install nightly --component miri
+          cargo +nightly miri setup
+
+      - name: Default features
+        run: cargo +nightly miri test --lib
+
+      - name: No features
+        run: cargo +nightly miri test --lib --no-default-features

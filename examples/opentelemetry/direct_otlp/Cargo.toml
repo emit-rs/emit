@@ -1,0 +1,15 @@
+[package]
+name = "emit_exmaple_opentelemetry_direct_otlp"
+version = "0.11.0-alpha.2"
+authors = ["emit contributors"]
+edition = "2021"
+publish = false
+
+[dependencies.emit]
+path = "../../../"
+
+[dependencies.emit_otlp]
+path = "../../../emitter/otlp"
+
+[dependencies.emit_term]
+path = "../../../emitter/term"

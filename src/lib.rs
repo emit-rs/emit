@@ -1,336 +1,611 @@
-//! Structured application logging.
-//!
-//! This module provides:
-//!
-//!  * The `emit!()` family of macros, for recording application events in an easily machine-readable format
-//!  * Collectors for transmitting these events to back-end logging servers
-//!
-//! The emit macros are "structured" versions of the ones in the widely-used `log` crate. The `log` crate doesn't preserve the structure
-//! of the events that are written through it. For example:
-//!
-//! ```ignore
-//! info!("Hello, {}!", env::var("USERNAME").unwrap());
-//! ```
-//!
-//! This writes `"Hello, nblumhardt!"` to the log as an block of text, which can't later be broken apart to reveal the username except
-//! with regular expressions.
-//!
-//! The arguments passed to `emit` are named:
-//!
-//! ```ignore
-//! info!("Hello, {}!", user: env::var("USERNAME").unwrap());
-//! ```
-//!
-//! This event can be rendered into text identically to the `log` example, but structured data collectors also capture the
-//! aguments as a key/value property pairs.
-//!
-//! ```js
-//! {
-//!   "@t": "2016-03-17T00:17:01.333Z",
-//!   "@mt": "Hello, {user}!",
-//!   "user": "nblumhardt",
-//!   "target": "example_app"
-//! }
-//! ```
-//!
-//! Back-ends like Elasticsearch, Seq, and Splunk use these in queries such as `user == "nblumhardt"` without up-front log parsing.
-//!
-//! Arguments are captured using `serde`, so there's the potential for complex values to be logged so long as they're `serde::ser::Serialize`.
-//!
-//! Further, because the template (format) itself is captured, it can be hashed to compute an "event type" for precisely finding
-//! all occurrences of the event regardless of the value of the `user` argument.
-//!
-//! # Examples
-//!
-//! The example below writes events to stdout.
-//!
-//! ```
-//! #[macro_use]
-//! extern crate emit;
-//!
-//! use std::env;
-//! use emit::PipelineBuilder;
-//! use emit::collectors::stdio::StdioCollector;
-//! use emit::formatters::raw::RawFormatter;
-//!
-//! fn main() {
-//!     let _flush = PipelineBuilder::new()
-//!         .write_to(StdioCollector::new(RawFormatter::new()))
-//!         .init();
-//!
-//!     info!("Hello, {}!", name: env::var("USERNAME").unwrap_or("User".to_string()));
-//! }
-//! ```
-//!
-//! Output:
-//!
-//! ```text
-//! emit 2016-03-24T05:03:36Z Hello, {name}!
-//!   name: "nblumhardt"
-//!   target: "example_app"
-//!
-//! ```
+/*!
+Structured diagnostics for Rust applications.
 
-extern crate chrono;
+`emit` is a structured logging framework for manually instrumenting Rust applications with an expressive syntax inspired by [Message Templates](https://messagetemplates.org).
 
-pub mod templates;
-pub mod events;
-pub mod pipeline;
-pub mod collectors;
-pub mod enrichers;
-pub mod formatters;
+# A guided tour of `emit`
 
-#[cfg(test)]
-mod test_support;
+To get started, add `emit` to your `Cargo.toml`:
 
-use std::fmt;
+```toml
+[dependencies.emit]
+version = "*"
+```
 
-#[repr(usize)]
-#[derive(Copy, Eq, Debug, PartialEq, Clone, Ord, PartialOrd)]
-pub enum LogLevel {
-    Error = 1, 
-    Warn, 
-    Info, 
-    Debug, 
-    Trace
+## Configuring an emitter
+
+`emit` needs to be configured with at least an [`Emitter`] that receives events, otherwise your diagnostics will go nowhere. At the start of your `main` function, use [`setup()`] to initialize `emit`. At the end of your `main` function, use [`setup::Init::blocking_flush`] to ensure all emitted events are fully flushed before returning.
+
+Here's an example of a simple configuration with an emitter that prints events using [`std::fmt`]:
+
+```
+# #[cfg(not(feature = "std"))] fn main() {}
+# #[cfg(feature = "std")]
+fn main() {
+    let rt = emit::setup()
+        .emit_to(emit::emitter::from_fn(|evt| println!("{evt:#?}")))
+        .init();
+
+    // Your app code goes here
+
+    rt.blocking_flush(std::time::Duration::from_secs(5));
+}
+```
+
+In real applications, you'll want to use a more sophisticated emitter, such as:
+
+- [`emit_term`](https://docs.rs/emit_term/0.11.0-alpha.2/emit_term/index.html): Emit diagnostics to the console.
+- [`emit_file`](https://docs.rs/emit_file/0.11.0-alpha.2/emit_file/index.html): Emit diagnostics to a set of rolling files.
+- [`emit_otlp`](https://docs.rs/emit_otlp/0.11.0-alpha.2/emit_otlp/index.html): Emit diagnostics to a remote collector via OpenTelemetry Protocol.
+
+For more advanced setup options, see the [`mod@setup`] module.
+
+## Emitting events
+
+Producing useful diagnostics in your applications is a critical aspect of building robust and maintainable software. If you don't find your diagnostics useful in development, then you won't find them useful in production either when you really need them. `emit` is a tool for application developers, designed to be straightforward to configure and integrate into your projects with low conceptual overhead.
+
+`emit` uses macros with a special syntax to log events. Here's an example of an event:
+
+```
+# #[cfg(not(feature = "std"))] fn main() {}
+# #[cfg(feature = "std")] fn main() {
+emit::emit!("Hello, World");
+# }
+```
+
+Using the `std::fmt` emitter from earlier, it will output:
+
+```text
+Event {
+    module: "my_app",
+    tpl: "Hello, world!",
+    extent: Some(
+        "2024-04-23T10:04:37.632304000Z",
+    ),
+    props: {},
+}
+```
+
+This example is a perfect opportunity to introduce `emit`'s model of diagnostics: events. An event is a notable change in the state of a system that is broadcast to outside observers. Events are the combination of:
+
+- `module`: The component that raised the event.
+- `tpl`: A text template that can be rendered to describe the event.
+- `extent`: The point in time when the event occurred, or the timespan for which it was active.
+- `props`: A set of key-value pairs that define the event and capture the context surrounding it.
+
+`emit`'s events are general enough to represent many observability paradigms including logs, distributed traces, metric samples, and more.
+
+### Properties in templates
+
+The string literal argument to the [`emit!`] macro is its template. Properties can be attached to events by interpolating them into the template between braces:
+
+```
+# #[cfg(not(feature = "std"))] fn main() {}
+# #[cfg(feature = "std")] fn main() {
+let user = "World";
+
+emit::emit!("Hello, {user}!");
+# }
+```
+
+```text
+Event {
+    module: "my_app",
+    tpl: "Hello, `user`!",
+    extent: Some(
+        "2024-04-25T00:53:36.364794000Z",
+    ),
+    props: {
+        "user": "World",
+    },
+}
+```
+
+`emit` uses Rust's field value syntax between braces in its templates, where the identifier becomes the key of the property. This is the same syntax used for struct field initialization. The above example could be written equivalently in other ways:
+
+```
+# #[cfg(not(feature = "std"))] fn main() {}
+# #[cfg(feature = "std")] fn main() {
+let greet = "World";
+
+emit::emit!("Hello, {user: greet}!");
+# }
+```
+
+```
+# #[cfg(not(feature = "std"))] fn main() {}
+# #[cfg(feature = "std")] fn main() {
+emit::emit!("Hello, {user: \"World\"}!");
+# }
+```
+
+In these examples we've been using the string `"World"` as the property value. Other primitive types such as booleans, integers, floats, and most library-defined datastructures like UUIDs and URIs can be captured by default in templates.
+
+### Properties outside templates
+
+Additional properties can be added to an event by listing them as field values after the template:
+
+```
+# #[cfg(not(feature = "std"))] fn main() {}
+# #[cfg(feature = "std")] fn main() {
+let user = "World";
+let greeter = "emit";
+let lang = "en";
+
+emit::emit!("Hello, {user}!", lang, greeter);
+# }
+```
+
+```text
+Event {
+    module: "my_app",
+    tpl: "Hello, `user`!",
+    extent: Some(
+        "2024-04-25T22:32:23.013651640Z",
+    ),
+    props: {
+        "greeter": "emit",
+        "lang": "en",
+        "user": "World",
+    },
+}
+```
+
+Properties inside templates may be initialized outside of them:
+
+```
+# #[cfg(not(feature = "std"))] fn main() {}
+# #[cfg(feature = "std")] fn main() {
+emit::emit!("Hello, {user}", user: "World");
+# }
+```
+
+```text
+Event {
+    module: "my_app",
+    tpl: "Hello, `user`",
+    extent: Some(
+        "2024-04-25T22:34:25.536438193Z",
+    ),
+    props: {
+        "user": "World",
+    },
+}
+```
+
+### Controlling event construction and emission
+
+Control parameters appear before the template. They use the same field value syntax as properties, but aren't captured as properties on the event. They instead customize other aspects of the event.
+
+The `module` control parameter sets the module:
+
+```
+# #[cfg(not(feature = "std"))] fn main() {}
+# #[cfg(feature = "std")] fn main() {
+emit::emit!(module: "my_module", "Hello, World!");
+# }
+```
+
+```text
+Event {
+    module: "my_module",
+    tpl: "Hello, World!",
+    extent: Some(
+        "2024-04-25T22:42:52.180968127Z",
+    ),
+    props: {},
+}
+```
+
+The `extent` control parameter sets the extent:
+
+```
+# #[cfg(not(feature = "std"))] fn main() {}
+# #[cfg(feature = "std")] fn main() {
+# use std::time::Duration;
+emit::emit!(
+    extent: emit::Timestamp::from_unix(Duration::from_secs(1000000000)),
+    "Hello, World!",
+);
+# }
+```
+
+```text
+Event {
+    module: "my_app",
+    tpl: "Hello, World!",
+    extent: Some(
+        "2001-09-09T01:46:40.000000000Z",
+    ),
+    props: {},
+}
+```
+
+The `props` control parameter adds a base set of [`Props`] to an event in addition to any added through the template:
+
+```
+# #[cfg(not(feature = "std"))] fn main() {}
+# #[cfg(feature = "std")] fn main() {
+emit::emit!(
+    props: emit::props! {
+        lang: "en",
+    },
+    "Hello, {user}!",
+    user: "World",
+);
+# }
+```
+
+```text
+Event {
+    module: "my_app",
+    tpl: "Hello, `user`!",
+    extent: Some(
+        "2024-04-29T03:36:07.751177000Z",
+    ),
+    props: {
+        "lang": "en",
+        "user": "World",
+    },
+}
+```
+
+### Controlling property capturing
+
+Property capturing is controlled by regular Rust attributes. For example, the [`key`] attribute can be used to set the key of a property to an arbitrary string:
+
+```
+# #[cfg(not(feature = "std"))] fn main() {}
+# #[cfg(feature = "std")] fn main() {
+emit::emit!(
+    "Hello, {user}!",
+    #[emit::key("user.name")]
+    user: "World",
+);
+# }
+```
+
+```text
+Event {
+    module: "my_app",
+    tpl: "Hello, `user.name`!",
+    extent: Some(
+        "2024-04-26T06:33:59.159727258Z",
+    ),
+    props: {
+        "user.name": "World",
+    },
+}
+```
+
+By default, properties are captured based on their [`std::fmt::Display`] implementation. This can be changed by applying one of the `as` attributes to the property. For example, applying the [`as_debug`] attribute will capture the property using uts [`std::fmt::Debug`] implementation instead:
+
+```
+# #[cfg(not(feature = "std"))] fn main() {}
+# #[cfg(feature = "std")] fn main() {
+#[derive(Debug)]
+struct User {
+    name: &'static str,
 }
 
-impl AsRef<str> for LogLevel {
-    fn as_ref(&self) -> &str {
-        LOG_LEVEL_NAMES[*self as usize]
+emit::emit!(
+    "Hello, {user}!",
+    #[emit::as_debug]
+    user: User {
+        name: "World",
+    },
+);
+# }
+```
+
+```text
+Event {
+    module: "my_app",
+    tpl: "Hello, `user`!",
+    extent: Some(
+        "2024-04-26T06:29:55.778795150Z",
+    ),
+    props: {
+        "user": User {
+            name: "World",
+        },
+    },
+}
+```
+
+In the above example, the structure of the `user` property is lost. It can be formatted using the `std::fmt` machinery, but if serialized to JSON it would produce a string:
+
+```json
+{
+    "module": "my_app",
+    "tpl": "Hello, `user`!",
+    "extent": "2024-04-26T06:29:55.778795150Z",
+    "props": {
+        "user": "User { name: \"World\" }"
     }
 }
+```
 
-#[repr(usize)]
-#[derive(Copy, Eq, Debug, PartialEq, Clone, Ord, PartialOrd)]
-pub enum LogLevelFilter {
-    Off,
-    Error, 
-    Warn, 
-    Info, 
-    Debug, 
-    Trace
+To retain the structure of complex values, you can use the [`as_serde`] or [`as_sval`] attributes:
+
+```
+# #[cfg(not(all(feature = "std", feature = "serde")))] fn main() {}
+# #[cfg(all(feature = "std", feature = "serde"))]
+# fn main() {
+#[derive(serde::Serialize)]
+struct User {
+    name: &'static str,
 }
 
-static LOG_LEVEL_NAMES: [&'static str; 6] = ["OFF", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"];
+emit::emit!(
+    "Hello, {user}!",
+    #[emit::as_serde]
+    user: User {
+        name: "World",
+    },
+);
+# }
+```
 
-impl fmt::Display for LogLevel {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        write!(fmt, "{}", LOG_LEVEL_NAMES[*self as usize])
-    }
-}
+Represented as JSON, this event will instead produce:
 
-impl LogLevelFilter {
-    pub fn is_enabled(self, level: LogLevel) -> bool {
-        self as usize >= level as usize
-    }
-}
-
-/// Re-export `pipeline::builder::PipelineBuilder` so that clients don't need to
-/// fully-qualify the hierarchy.
-pub use pipeline::builder::PipelineBuilder;
-
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __emit_get_event_data {
-    ($target:expr, $s:expr, $( $n:ident: $v:expr ),* ) => {{
-        #[allow(unused_imports)]
-        use std::fmt::Write;
-        use std::collections;
-        use $crate::events::IntoValue;
-
-        // Underscores avoid the unused_mut warning
-        let mut _names: Vec<&str> = vec![];
-        let mut properties: collections::BTreeMap<&'static str, $crate::events::Value> = collections::BTreeMap::new();
-
-        $(
-            _names.push(stringify!($n));
-            properties.insert(stringify!($n), $v.into_value());
-        )*
-
-        properties.insert("target", $target.into_value());
-
-        let template = $crate::templates::MessageTemplate::from_format($s, &_names);
-
-        (template, properties)
-    }};
-}
-
-/// Emit an event to the ambient pipeline.
-///
-/// # Examples
-///
-/// The event below collects a `user` property and is emitted if the pipeline level includes
-/// `LogLevel::Info`.
-///
-/// ```ignore
-/// emit!(emit::LogLevel::Info, "Hello, {}!", user: env::var("USERNAME").unwrap());
-/// ```
-///
-/// A `target` expression may be specified if required. When omitted the `target` property
-/// will carry the current module name.
-///
-/// ```ignore
-/// emit!(target: "greetings", emit::LogLevel::Info, "Hello, {}!", user: env::var("USERNAME").unwrap());
-/// ```
-#[macro_export]
-macro_rules! emit {
-    (target: $target:expr, $lvl:expr, $s:expr, $($n:ident: $v:expr),*) => {{
-        let lvl = $lvl;
-        if $crate::pipeline::ambient::is_enabled(lvl) {
-            let (template, properties) = __emit_get_event_data!($target, $s, $($n: $v),*);
-            let event = $crate::events::Event::new_now(lvl, template, properties);
-            $crate::pipeline::ambient::emit(event);
+```json
+{
+    "module": "my_app",
+    "tpl": "Hello, `user`!",
+    "extent": "2024-04-26T06:29:55.778795150Z",
+    "props": {
+        "user": {
+            "name": "World"
         }
-    }};
-
-    ($lvl:expr, $s:expr, $($n:ident: $v:expr),*) => {{
-        emit!(target: module_path!(), $lvl, $s, $($n: $v),*);
-    }};
-}
-
-/// Emit an error event to the ambient pipeline.
-///
-/// # Examples
-///
-/// The example below will be emitted at the `emit::LogLevel::Error` level.
-///
-/// ```ignore
-/// error!("Could not start {} on {}", cmd: "emitd", machine: "s123456");
-/// ```
-#[macro_export]
-macro_rules! error {
-    (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
-        emit!(target: $target, $crate::LogLevel::Error, $s, $($n: $v),*);
-    }};
-
-    ($s:expr, $($n:ident: $v:expr),*) => {{
-        emit!($crate::LogLevel::Error, $s, $($n: $v),*);
-    }};
-}
-
-/// Emit a warning event to the ambient pipeline.
-///
-/// # Examples
-///
-/// The example below will be emitted at the `emit::LogLevel::Warn` level.
-///
-/// ```ignore
-/// warn!("SQL query took {} ms", elapsed: 7890);
-/// ```
-#[macro_export]
-macro_rules! warn {
-    (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
-        emit!(target: $target, $crate::LogLevel::Warn, $s, $($n: $v),*);
-    }};
-
-    ($s:expr, $($n:ident: $v:expr),*) => {{
-        emit!($crate::LogLevel::Warn, $s, $($n: $v),*);
-    }};
-}
-
-/// Emit an informational event to the ambient pipeline.
-///
-/// # Examples
-///
-/// The example below will be emitted at the `emit::LogLevel::Info` level.
-///
-/// ```ignore
-/// info!("Hello, {}!", user: env::var("USERNAME").unwrap());
-/// ```
-#[macro_export]
-macro_rules! info {
-    (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
-        emit!(target: $target, $crate::LogLevel::Info, $s, $($n: $v),*);
-    }};
-
-    ($s:expr, $($n:ident: $v:expr),*) => {{
-        emit!($crate::LogLevel::Info, $s, $($n: $v),*);
-    }};
-}
-
-/// Emit a debugging event to the ambient pipeline.
-///
-/// # Examples
-///
-/// The example below will be emitted at the `emit::LogLevel::Debug` level.
-///
-/// ```ignore
-/// debug!("Opening config file {}", filename: "dir/config.json");
-/// ```
-#[macro_export]
-macro_rules! debug {
-    (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
-        emit!(target: $target, $crate::LogLevel::Debug, $s, $($n: $v),*);
-    }};
-
-    ($s:expr, $($n:ident: $v:expr),*) => {{
-        emit!($crate::LogLevel::Debug, $s, $($n: $v),*);
-    }};
-}
-
-/// Emit a trace event to the ambient pipeline.
-///
-/// # Examples
-///
-/// The example below will be emitted at the `emit::LogLevel::Trace` level.
-///
-/// ```ignore
-/// emdtrace!("{} called with arg {}", method: "start_frobbles()", count: 123);
-/// ```
-#[macro_export]
-macro_rules! trace {
-    (target: $target:expr, $s:expr, $($n:ident: $v:expr),*) => {{
-        emit!(target: $target, $crate::LogLevel::Trace, $s, $($n: $v),*);
-    }};
-
-    ($s:expr, $($n:ident: $v:expr),*) => {{
-        emit!($crate::LogLevel::Trace, $s, $($n: $v),*);
-    }};
-}
-
-#[cfg(test)]
-mod tests {
-    use enrichers::fixed_property::FixedPropertyEnricher;
-    use pipeline::builder::PipelineBuilder;
-    use std::env;
-    use LogLevelFilter;
-    use events::IntoValue;
-    use collectors::stdio::StdioCollector;
-    use formatters::json::{JsonFormatter,RenderedJsonFormatter};
-    use formatters::text::PlainTextFormatter;
-    use formatters::raw::RawFormatter;
-
-    #[test]
-    fn unparameterized_templates_are_captured() {
-        let (template, properties) = __emit_get_event_data!("t", "Starting...",);
-        assert_eq!(template.text(), "Starting...");
-        assert_eq!(properties.len(), 1);
     }
+}
+```
 
-    #[test]
-    fn template_and_properties_are_captured() {
-        let u = "nblumhardt";
-        let q = 42;
+Primitive types like booleans and numbers are always structure-preserving, so `as` attributes don't need to be applied to them.
 
-        let (template, properties) = __emit_get_event_data!("t", "User {} exceeded quota of {}!", user: u, quota: q);
-        assert_eq!(template.text(), "User {user} exceeded quota of {quota}!");
-        assert_eq!(properties.get("user"), Some(&"nblumhardt".into_value()));
-        assert_eq!(properties.get("quota"), Some(&42.into_value()));
-        assert_eq!(properties.len(), 3);
+## Filtering events
+
+Managing the volume of diagnostic data is an important activity in application development to keep costs down and make debugging more efficient. Ideally, applications would only produce useful diagnostics, but reality demands tooling to limit volume at a high-level. `emit` lets you configure a [`Filter`] during [`setup()`] to reduce the volume of diagnostic data. A useful filter is [`level::min_by_path_filter`], which only emits events when they are produced for at least a given [`Level`] within a given module:
+
+```
+# #[cfg(not(feature = "std"))] fn main() {}
+# #[cfg(feature = "std")]
+fn main() {
+    let rt = emit::setup()
+        .emit_to(emit::emitter::from_fn(|evt| println!("{evt:#?}")))
+        .emit_when(emit::level::min_by_path_filter([
+            ("my_app::submodule", emit::Level::Info)
+        ]))
+        .init();
+
+    emit::debug!("Up and running");
+
+    submodule::greet("World");
+
+    rt.blocking_flush(std::time::Duration::from_secs(5));
+}
+
+# #[cfg(feature = "std")]
+mod submodule {
+    pub fn greet(user: &str) {
+        emit::debug!("Preparing to greet {user}");
+        emit::info!("Hello, {user}!");
     }
+}
+```
 
-    #[test]
-    fn pipeline_example() {
-        let _flush = PipelineBuilder::new()
-            .at_level(LogLevelFilter::Info)
-            .pipe(Box::new(FixedPropertyEnricher::new("app", "Test".into_value())))
-            .write_to(StdioCollector::new(PlainTextFormatter::new()))
-            .write_to(StdioCollector::new(JsonFormatter::new()))
-            .write_to(StdioCollector::new(RenderedJsonFormatter::new()))
-            .write_to(StdioCollector::new(RawFormatter::new()))
-            .init();
+```text
+Event {
+    module: "my_app",
+    tpl: "Up and running",
+    extent: Some(
+        "2024-04-29T04:31:24.085826100Z",
+    ),
+    props: {
+        "lvl": debug,
+    },
+}
+Event {
+    module: "my_app::submodule",
+    tpl: "Hello, `user`!",
+    extent: Some(
+        "2024-04-29T04:31:24.086327500Z",
+    ),
+    props: {
+        "lvl": info,
+        "user": "World",
+    },
+}
+```
 
-        info!("Hello, {} at {} in {}!", name: env::var("USERNAME").unwrap_or("User".to_string()), time: 2139, room: "office");
-    }
+Filters can apply to any feature of a candidate event. For example, this filter only matches events with a property `lang` that matches `"en"`:
+
+```
+# #[cfg(not(feature = "std"))] fn main() {}
+# #[cfg(feature = "std")] fn main() {
+# let e =
+emit::filter::from_fn(|evt| {
+    use emit::Props as _;
+
+    evt.props().pull::<emit::Str, _>("lang") == Some(emit::Str::new("en"))
+});
+# ;
+# }
+```
+
+The `when` control parameter of the emit macros can be used to override the globally configured filter for a specific event:
+
+```
+# #[cfg(not(feature = "std"))] fn main() {}
+# #[cfg(feature = "std")] fn main() {
+// This event matches the filter
+emit::emit!(
+    when: emit::filter::from_fn(|evt| evt.module() == "my_app"),
+    "Hello, World!",
+);
+# }
+```
+
+```text
+Event {
+    module: "my_app",
+    tpl: "Hello, World!",
+    extent: Some(
+        "2024-04-25T22:54:50.055493407Z",
+    ),
+    props: {},
+}
+```
+
+```
+# #[cfg(not(feature = "std"))] fn main() {}
+# #[cfg(feature = "std")] fn main() {
+// This event does not match the filter
+emit::emit!(
+    when: emit::filter::from_fn(|evt| evt.module() == "my_app"),
+    module: "not_my_app",
+    "Hello, World!",
+);
+# }
+```
+
+```text
+
+```
+
+This can be useful to guarantee an event will always be emitted, regardless of any filter configuration:
+
+```
+# #[cfg(not(feature = "std"))] fn main() {}
+# #[cfg(feature = "std")] fn main() {
+// This event is never filtered out
+emit::emit!(
+    when: emit::filter::always(),
+    "Hello, World!",
+);
+# }
+```
+
+## Tracing and metrics
+
+`emit` can represent spans in distributed traces and metric samples as events using well-known properties. See the [`mod@span`] and [`mod@metric`] modules for details on each.
+
+## Rendering templates
+
+Templates are parsed at compile-time, but are rendered at runtime by passing the properties they capture back. The [`Event::msg`] method is a convenient way to render the template of an event using its properties. Taking an earlier example:
+
+```
+# #[cfg(not(feature = "std"))] fn main() {}
+# #[cfg(feature = "std")] fn main() {
+let user = "World";
+
+emit::emit!("Hello, {user}!");
+# }
+```
+
+If we change our emitter to:
+
+```
+# #[cfg(not(feature = "std"))] fn main() {}
+# #[cfg(feature = "std")] fn main() {
+# let e =
+emit::emitter::from_fn(|evt| println!("{}", evt.msg()))
+# ;
+# }
+```
+
+then it will produce the output:
+
+```text
+Hello, World!
+```
+
+## Custom runtimes
+
+Everything in `emit` is based on a [`runtime::Runtime`]; a fully isolated set of components that provide capabilities like clocks and randomness, as well as your configured emitters and filters. When a runtime isn't specified, it's [`runtime::shared`]. You can define your own runtimes too. The [`mod@setup`] module has more details.
+
+## Troubleshooting
+
+Emitters write their own diagnostics to an alternative `emit` runtime, which you can configure to debug them:
+
+```
+# mod emit_term { pub fn stdout() -> impl emit::runtime::InternalEmitter { emit::runtime::AssertInternal(emit::emitter::from_fn(|_| {})) } }
+# #[cfg(not(feature = "std"))] fn main() {}
+# #[cfg(feature = "std")]
+fn main() {
+    // Configure the internal runtime before your regular setup
+    let internal_rt = emit::setup()
+        .emit_to(emit_term::stdout())
+        .init_internal();
+
+    let rt = emit::setup()
+        .emit_to(emit::emitter::from_fn(|evt| println!("{evt:#?}")))
+        .init();
+
+    // Your app code goes here
+
+    rt.blocking_flush(std::time::Duration::from_secs(5));
+
+    // Flush the internal runtime after your regular setup
+    internal_rt.blocking_flush(std::time::Duration::from_secs(5));
+}
+```
+*/
+
+#![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]
+
+#![deny(missing_docs)]
+#![cfg_attr(not(any(test, feature = "std")), no_std)]
+
+#[cfg(feature = "alloc")]
+extern crate alloc;
+extern crate core;
+
+/**
+Get a [`Path`] of the executing module for use in [`Event::module`].
+*/
+#[macro_export]
+macro_rules! module {
+    () => {
+        $crate::Path::new($crate::__private::core::module_path!())
+    };
+}
+
+#[doc(inline)]
+pub use emit_macros::*;
+
+#[doc(inline)]
+pub use emit_core::*;
+
+pub mod frame;
+pub mod kind;
+pub mod level;
+pub mod metric;
+pub mod platform;
+pub mod span;
+pub mod timer;
+
+pub use self::{
+    clock::Clock, ctxt::Ctxt, emitter::Emitter, empty::Empty, event::Event, extent::Extent,
+    filter::Filter, frame::Frame, kind::Kind, level::Level, metric::Metric, path::Path,
+    props::Props, rng::Rng, span::Span, str::Str, template::Template, timer::Timer,
+    timestamp::Timestamp, value::Value,
+};
+
+mod macro_hooks;
+
+#[cfg(feature = "std")]
+pub mod setup;
+#[cfg(feature = "std")]
+pub use setup::{setup, Setup};
+
+#[doc(hidden)]
+pub mod __private {
+    pub extern crate core;
+    pub use crate::macro_hooks::*;
+}
+
+mod internal {
+    pub struct Erased<T>(pub(crate) T);
 }
