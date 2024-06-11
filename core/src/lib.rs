@@ -11,7 +11,6 @@ If you're looking to use `emit` in an application you can use this library direc
 */
 
 #![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]
-
 #![deny(missing_docs)]
 #![cfg_attr(not(test), no_std)]
 

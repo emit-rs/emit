@@ -1162,7 +1162,6 @@ Diagnostics include when batches are emitted, and any failures observed along th
 */
 
 #![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]
-
 #![deny(missing_docs)]
 
 #[macro_use]

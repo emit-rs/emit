@@ -5,7 +5,6 @@ This crate is not intended to be consumed directly.
 */
 
 #![deny(missing_docs)]
-
 /*
 # Organization
 
@@ -15,7 +14,6 @@ This crate contains the proc-macros that are exported in the `emit` crate. It ex
 
 Code is transformed through _hooks_. A hook is a well-known method call, like `a.__private_emit_capture_as_default()`. The behavior of the hook is defined in `emit::macro_hooks`. Attribute macros look for these hooks and replace them to change behavior. For example, `#[emit::as_debug]` looks for any `__private_emit_capture_as_*` method and replaces it with `__private_emit_capture_as_debug`.
 */
-
 #![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]
 
 extern crate proc_macro;
@@ -45,7 +43,6 @@ mod optional;
 mod props;
 mod span;
 mod template;
-mod time;
 mod util;
 
 use util::ResultToTokens;
@@ -498,68 +495,6 @@ An `[emit::template::Part; N]` array.
 #[proc_macro]
 pub fn tpl_parts(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     build::expand_template_parts_tokens(build::ExpandTemplateTokens {
-        input: TokenStream::from(item),
-    })
-    .unwrap_or_compile_error()
-}
-
-/**
-Get the current timestamp.
-
-# Syntax
-
-```text
-(control_param),*
-```
-
-where
-
-- `control_param`: A Rust field-value with a pre-determined identifier (see below).
-
-# Control parameters
-
-This macro accepts the following optional control parameters:
-
-- `rt: impl emit::runtime::Runtime`: The runtime to use to read the timestamp from.
-
-# Returns
-
-An `emit::Timestamp`.
-*/
-#[proc_macro]
-pub fn now(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    time::expand_now_tokens(time::ExpandTokens {
-        input: TokenStream::from(item),
-    })
-    .unwrap_or_compile_error()
-}
-
-/**
-Start a timer.
-
-# Syntax
-
-```text
-(control_param),*
-```
-
-where
-
-- `control_param`: A Rust field-value with a pre-determined identifier (see below).
-
-# Control parameters
-
-This macro accepts the following optional control parameters:
-
-- `rt: impl emit::runtime::Runtime`: The runtime to use to read the timestamp from.
-
-# Returns
-
-An `emit::Timestamp`.
-*/
-#[proc_macro]
-pub fn start_timer(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    time::expand_start_timer_tokens(time::ExpandTokens {
         input: TokenStream::from(item),
     })
     .unwrap_or_compile_error()

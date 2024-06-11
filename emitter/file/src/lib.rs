@@ -86,7 +86,6 @@ If writing a batch fails while attempting to write to a file then the file being
 */
 
 #![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]
-
 #![deny(missing_docs)]
 
 mod internal_metrics;
@@ -626,7 +625,7 @@ impl Worker {
         }
     }
 
-    #[emit::span(rt: emit::runtime::internal(), arg: span, "write file batch")]
+    #[emit::span(rt: emit::runtime::internal(), guard: span, "write file batch")]
     fn on_batch(&mut self, mut batch: EventBatch) -> Result<(), BatchError<EventBatch>> {
         let now = std::time::UNIX_EPOCH.elapsed().unwrap();
         let ts = emit::Timestamp::from_unix(now).unwrap();

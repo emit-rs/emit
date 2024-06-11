@@ -22,7 +22,7 @@ struct Args {
     rt: TokenStream,
     module: TokenStream,
     when: TokenStream,
-    arg: Option<Ident>,
+    guard: Option<Ident>,
 }
 
 impl Parse for Args {
@@ -42,18 +42,18 @@ impl Parse for Args {
 
             Ok(quote_spanned!(expr.span()=> #expr))
         });
-        let mut arg = Arg::ident("arg");
+        let mut guard = Arg::ident("guard");
 
         args::set_from_field_values(
             input.parse_terminated(FieldValue::parse, Token![,])?.iter(),
-            [&mut module, &mut arg, &mut rt, &mut when],
+            [&mut module, &mut guard, &mut rt, &mut when],
         )?;
 
         Ok(Args {
             rt: rt.take_rt()?,
             module: module.take().unwrap_or_else(|| module_tokens()),
             when: when.take_when(),
-            arg: arg.take(),
+            guard: guard.take(),
         })
     }
 }
@@ -69,8 +69,8 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     let mut evt_props = Props::new();
     push_event_props(&mut evt_props, opts.level)?;
 
-    let span_arg = args
-        .arg
+    let span_guard = args
+        .guard
         .unwrap_or_else(|| Ident::new("__span", Span::call_site()));
 
     let module_tokens = args.module;
@@ -92,7 +92,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &template,
                 &ctxt_props,
                 &evt_props,
-                &span_arg,
+                &span_guard,
                 quote!(#block),
             ))?;
         }
@@ -105,7 +105,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &template,
                 &ctxt_props,
                 &evt_props,
-                &span_arg,
+                &span_guard,
                 quote!(#block),
             ))?;
         }
@@ -124,7 +124,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &template,
                 &ctxt_props,
                 &evt_props,
-                &span_arg,
+                &span_guard,
                 quote!(#block),
             ))?;
         }
@@ -137,7 +137,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &template,
                 &ctxt_props,
                 &evt_props,
-                &span_arg,
+                &span_guard,
                 quote!(#block),
             ))?;
         }
@@ -154,7 +154,7 @@ fn inject_sync(
     template: &Template,
     ctxt_props: &Props,
     evt_props: &Props,
-    span_arg: &Ident,
+    span_guard: &Ident,
     body: TokenStream,
 ) -> TokenStream {
     let ctxt_props_tokens = ctxt_props.props_tokens();
@@ -163,7 +163,7 @@ fn inject_sync(
     let template_literal_tokens = template.template_literal_tokens();
 
     quote!({
-        let (mut __ctxt, __span_arg) = emit::__private::__private_begin_span(
+        let (mut __ctxt, __span_guard) = emit::__private::__private_begin_span(
             #rt_tokens,
             #module_tokens,
             #when_tokens,
@@ -182,7 +182,7 @@ fn inject_sync(
         );
         let __ctxt_guard = __ctxt.enter();
 
-        let #span_arg = __span_arg;
+        let #span_guard = __span_guard;
 
         #body
     })
@@ -195,7 +195,7 @@ fn inject_async(
     template: &Template,
     ctxt_props: &Props,
     evt_props: &Props,
-    span_arg: &Ident,
+    span_guard: &Ident,
     body: TokenStream,
 ) -> TokenStream {
     let ctxt_props_tokens = ctxt_props.props_tokens();
@@ -204,7 +204,7 @@ fn inject_async(
     let template_literal_tokens = template.template_literal_tokens();
 
     quote!({
-        let (__ctxt, __span_arg) = emit::__private::__private_begin_span(
+        let (__ctxt, __span_guard) = emit::__private::__private_begin_span(
             #rt_tokens,
             #module_tokens,
             #when_tokens,
@@ -223,7 +223,7 @@ fn inject_async(
         );
 
         __ctxt.in_future(async move {
-            let #span_arg = __span_arg;
+            let #span_guard = __span_guard;
 
             async #body.await
         }).await

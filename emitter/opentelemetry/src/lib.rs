@@ -41,7 +41,6 @@ This library doesn't support `emit`'s metrics as OpenTelemetry metrics. Any metr
 */
 
 #![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]
-
 #![deny(missing_docs)]
 
 use std::{cell::RefCell, fmt, ops::ControlFlow, sync::Arc};

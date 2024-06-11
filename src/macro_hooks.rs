@@ -15,19 +15,18 @@ use emit_core::{
     runtime::Runtime,
     str::{Str, ToStr},
     template::{Formatter, Part, Template},
-    timestamp::Timestamp,
     value::{ToValue, Value},
 };
 
 use emit_core::{empty::Empty, event::Event};
 
-use crate::{frame::Frame, span::SpanEvent};
+use crate::{frame::Frame, span::Span};
 
 #[cfg(feature = "std")]
 use std::error::Error;
 
 use crate::{
-    span::{Span, SpanCtxt, SpanId, TraceId},
+    span::{SpanCtxt, SpanGuard, SpanId, TraceId},
     Level, Timer,
 };
 
@@ -498,20 +497,6 @@ impl<A: Filter, B: Filter> Filter for FirstDefined<A, B> {
 }
 
 #[track_caller]
-pub fn __private_now<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
-    rt: &'a Runtime<E, F, C, T, R>,
-) -> Option<Timestamp> {
-    rt.clock().now()
-}
-
-#[track_caller]
-pub fn __private_start_timer<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
-    rt: &'a Runtime<E, F, C, T, R>,
-) -> Timer<&'a T> {
-    Timer::start(rt.clock())
-}
-
-#[track_caller]
 pub fn __private_emit<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
     rt: &'a Runtime<E, F, C, T, R>,
     module: impl Into<Path<'b>>,
@@ -566,7 +551,7 @@ pub fn __private_begin_span<
     C: Ctxt,
     T: Clock,
     R: Rng,
-    S: FnOnce(SpanEvent<'static, Empty>),
+    S: FnOnce(Span<'static, Empty>),
 >(
     rt: &'a Runtime<E, F, C, T, R>,
     module: impl Into<Path<'static>>,
@@ -576,8 +561,8 @@ pub fn __private_begin_span<
     evt_props: impl Props,
     name: impl Into<Str<'static>>,
     default_complete: S,
-) -> (Frame<Option<&'a C>>, Span<'static, &'a T, Empty, S>) {
-    let mut span = Span::filtered_new(
+) -> (Frame<Option<&'a C>>, SpanGuard<'static, &'a T, Empty, S>) {
+    let mut span = SpanGuard::filtered_new(
         |span| {
             FirstDefined(when, rt.filter()).matches(
                 &span
@@ -602,7 +587,7 @@ pub fn __private_begin_span<
 #[track_caller]
 pub fn __private_complete_span<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
     rt: &'a Runtime<E, F, C, T, R>,
-    span: SpanEvent<'static, Empty>,
+    span: Span<'static, Empty>,
     tpl: Template<'b>,
     evt_props: impl Props,
 ) {
