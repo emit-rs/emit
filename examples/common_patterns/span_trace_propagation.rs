@@ -43,7 +43,7 @@ fn api_route_1() {
     });
 }
 
-#[emit::span(arg: span, "HTTP {method} {path}", method, path)]
+#[emit::span(guard: span, "HTTP {method} {path}", method, path)]
 fn routes(method: &str, path: &str) {
     match path {
         "/api/route-1" => api_route_1(),

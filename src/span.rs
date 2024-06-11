@@ -66,22 +66,13 @@ use emit::Filter;
 
 let sleep_ms = 1200;
 
-let rt = emit::runtime::shared();
+let timer = emit::Timer::start(emit::clock());
 
-// Create a span
-let mut span = emit::Span::filtered_new(
-    |span| rt.filter().matches(&span),
-    "my_app",
-    emit::Timer::start(rt.clock()),
-    "wait a bit",
-    emit::span::SpanCtxt::current(rt.ctxt()).new_child(rt.rng()),
-    emit::Empty,
-    |span| emit::emit!(event: span),
-);
+let ctxt = emit::SpanCtxt::current(emit::ctxt()).new_child(emit::rng());
 
 // Push the span onto the current context
-let frame = span.push_ctxt(
-    rt.ctxt(),
+let frame = ctxt.push(
+    emit::ctxt(),
     emit::props! {
         sleep_ms,
     },
@@ -95,58 +86,14 @@ frame.call(move || {
     // Make sure you complete the span in the frame.
     // This is especially important for futures, otherwise the span may
     // complete before the future does
-    span.complete();
-});
-# }
-```
-
-Spans can also be emitted directly as regular events:
-
-```
-# #[cfg(not(feature = "std"))] fn main() {}
-# #[cfg(feature = "std")] fn main() {
-# use std::{thread, time::Duration, panic};
-use emit::{well_known::EVENT_KIND_SPAN, Filter};
-
-let sleep_ms = 1200;
-
-let rt = emit::runtime::shared();
-
-let timer = emit::Timer::start(rt.clock());
-let props = emit::span::SpanCtxt::current(rt.ctxt()).new_child(rt.rng());
-
-// Check whether the span should be created or not
-let frame = if rt.filter().matches(&emit::event! {
-    extent: timer.start_timestamp(),
-    props,
-    "wait a bit",
-    event_kind: EVENT_KIND_SPAN,
-}) {
-    emit::Frame::push(Some(rt.ctxt()), props)
-} else {
-    emit::Frame::current(None)
-};
-
-// Execute some operation within the frame
-frame.call(|| {
-    let r = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-        // Your code goes here
-        thread::sleep(Duration::from_millis(sleep_ms));
-    }));
-
-    // Emit the span event at the end of the scope
-    // We do this regardless of panics
     emit::emit!(
-        extent: timer,
-        "wait a bit",
-        event_kind: EVENT_KIND_SPAN,
-        sleep_ms,
+        event: emit::Span::new(
+            emit::module!(),
+            timer,
+            "wait a bit",
+            emit::Empty,
+        ),
     );
-
-    match r {
-        Ok(r) => r,
-        Err(r) => panic::resume_unwind(r),
-    }
 });
 # }
 ```
@@ -368,13 +315,13 @@ if let (Some(trace_id), Some(span_id)) = (trace_id, span_id) {
 
 # Completing spans manually
 
-The `arg` control parameter can be applied to span macros to bind an identifier in the body of the annotated function for the [`Span`] that's created for it. This span can be completed manually, changing properties of the span along the way:
+The `guard` control parameter can be applied to span macros to bind an identifier in the body of the annotated function for the [`Span`] that's created for it. This span can be completed manually, changing properties of the span along the way:
 
 ```
 # #[cfg(not(feature = "std"))] fn main() {}
 # #[cfg(feature = "std")] fn main() {
 # use std::{thread, time::Duration};
-#[emit::span(arg: span, "wait a bit", sleep_ms)]
+#[emit::span(guard: span, "wait a bit", sleep_ms)]
 fn wait_a_bit(sleep_ms: u64) {
     thread::sleep(Duration::from_millis(sleep_ms));
 
@@ -868,18 +815,27 @@ impl<const N: usize> fmt::Write for Buffer<N> {
 /**
 An active span in a distributed trace.
 
-This type manages the lifecycle of a span, which includes:
+This type is created by the [`crate::span!`] macro with the `guard` control parameter. See the [`mod@crate::span`] module for details on creating spans.
 
-1. Call [`SpanCtxt::current`] and [`SpanCtxt::new_child`] to generate a set of identifiers for the new span.
-2. Call [`Timer::start`] to begin a timer for the new span.
-3. Call [`Span::filtered_new`] with the [`Timer`] and generated [`SpanCtxt`] to produce a [`Span`].
-4. Call [`Span::push_ctxt`] to add the trace id, span id, and span parent id to the ambient context.
-5. Run some code.
-6. Call [`Span::complete_with`], or just drop the [`Span`] to complete it, emitting a [`SpanEvent`] for its execution.
+Call [`SpanGuard::complete_with`], or just drop the guard to complete it, emitting a [`Span`] for its execution.
 */
-pub struct Span<'a, C: Clock, P: Props, F: FnOnce(SpanEvent<'a, P>)> {
-    value: Option<ActiveSpanEvent<'a, C, P>>,
+pub struct SpanGuard<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> {
+    state: Option<SpanGuardState<'a, C, P>>,
     on_drop: Option<F>,
+}
+
+struct SpanGuardState<'a, C: Clock, P: Props> {
+    module: Path<'a>,
+    timer: Timer<C>,
+    name: Str<'a>,
+    ctxt: SpanCtxt,
+    props: P,
+}
+
+impl<'a, C: Clock, P: Props> SpanGuardState<'a, C, P> {
+    fn complete(self) -> Span<'a, P> {
+        Span::new(self.module, self.timer, self.name, self.props)
+    }
 }
 
 /**
@@ -889,40 +845,14 @@ Spans are an extension of [`Event`]s that explicitly take the well-known propert
 
 A `SpanEvent` can be converted into an [`Event`] through its [`ToEvent`] implemenation, or passed directly to a [`crate::Emitter`] to emit it.
 */
-pub struct SpanEvent<'a, P: Props> {
+pub struct Span<'a, P> {
     module: Path<'a>,
     extent: Option<Extent>,
-    ctxt: SpanCtxt,
     name: Str<'a>,
     props: P,
 }
 
-struct ActiveSpanEvent<'a, C: Clock, P: Props> {
-    module: Path<'a>,
-    timer: Timer<C>,
-    ctxt: SpanCtxt,
-    name: Str<'a>,
-    props: P,
-    include_ctxt: bool,
-}
-
-impl<'a, C: Clock, P: Props> ActiveSpanEvent<'a, C, P> {
-    fn complete(self) -> SpanEvent<'a, P> {
-        if self.include_ctxt {
-            SpanEvent::new(self.module, self.timer, self.ctxt, self.name, self.props)
-        } else {
-            SpanEvent::new(
-                self.module,
-                self.timer,
-                SpanCtxt::empty(),
-                self.name,
-                self.props,
-            )
-        }
-    }
-}
-
-impl<'a, P: Props> SpanEvent<'a, P> {
+impl<'a, P: Props> Span<'a, P> {
     /**
     Create a new span event from its parts.
 
@@ -937,14 +867,12 @@ impl<'a, P: Props> SpanEvent<'a, P> {
     pub fn new(
         module: impl Into<Path<'a>>,
         extent: impl ToExtent,
-        ctxt: SpanCtxt,
         name: impl Into<Str<'a>>,
         props: P,
     ) -> Self {
-        SpanEvent {
+        Span {
             module: module.into(),
             extent: extent.to_extent(),
-            ctxt,
             name: name.into(),
             props,
         }
@@ -979,7 +907,7 @@ impl<'a, P: Props> SpanEvent<'a, P> {
     }
 }
 
-impl<'a, P: Props> ToEvent for SpanEvent<'a, P> {
+impl<'a, P: Props> ToEvent for Span<'a, P> {
     type Props<'b> = &'b Self where Self: 'b;
 
     fn to_event<'b>(&'b self) -> Event<Self::Props<'b>> {
@@ -998,7 +926,7 @@ impl<'a, P: Props> ToEvent for SpanEvent<'a, P> {
     }
 }
 
-impl<'a, P: Props> Props for SpanEvent<'a, P> {
+impl<'a, P: Props> Props for Span<'a, P> {
     fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
         &'kv self,
         mut for_each: F,
@@ -1006,19 +934,18 @@ impl<'a, P: Props> Props for SpanEvent<'a, P> {
         for_each(KEY_EVENT_KIND.to_str(), Kind::Span.to_value())?;
         for_each(KEY_SPAN_NAME.to_str(), self.name.to_value())?;
 
-        self.ctxt.for_each(&mut for_each)?;
         self.props.for_each(&mut for_each)
     }
 }
 
 /**
-The trace id, span id, and parent parent span id of a [`SpanEvent`].
+The trace id, span id, and parent parent span id of a span.
 
 These ids can be used to identify the distributed trace a span belongs to, and to identify the span itself within that trace.
 
 The `SpanCtxt` for the currently executing span can be pulled from the ambient context with [`SpanCtxt::current`]. Once a `SpanCtxt` is constructed, a new child context can be generated by [`SpanCtxt::new_child`].
 
-`SpanCtxt` implements [`Props`], so it can be pushed onto the ambient context through [`Frame::push`], or [`Span::push_ctxt`].
+`SpanCtxt` should be pushed onto the ambient context with [`SpanCtxt::push`] so any events emitted during its execution are correlated to it.
 */
 #[derive(Debug, Clone, Copy)]
 pub struct SpanCtxt {
@@ -1056,6 +983,17 @@ impl SpanCtxt {
             span_parent: None,
             span_id: None,
         }
+    }
+
+    /**
+    Generate a new context.
+    */
+    pub fn new_root(rng: impl Rng) -> Self {
+        let trace_id = TraceId::random(&rng);
+        let span_parent = None;
+        let span_id = SpanId::random(&rng);
+
+        SpanCtxt::new(trace_id, span_parent, span_id)
     }
 
     /**
@@ -1108,6 +1046,15 @@ impl SpanCtxt {
     pub fn span_id(&self) -> Option<&SpanId> {
         self.span_id.as_ref()
     }
+
+    /**
+    Push the [`SpanCtxt`] onto the ambient context.
+
+    The trace id, span id, and parent span id will be pushed to the context. This ensures diagnostics emitted during the execution of this span are properly linked to it.
+    */
+    pub fn push<T: Ctxt>(&self, ctxt: T, ctxt_props: impl Props) -> Frame<T> {
+        Frame::push(ctxt, self.and_props(ctxt_props))
+    }
 }
 
 impl Props for SpanCtxt {
@@ -1131,29 +1078,17 @@ impl Props for SpanCtxt {
     }
 }
 
-impl<'a, C: Clock, P: Props, F: FnOnce(SpanEvent<'a, P>)> Drop for Span<'a, C, P, F> {
+impl<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> Drop for SpanGuard<'a, C, P, F> {
     fn drop(&mut self) {
-        if let (Some(value), Some(on_drop)) = (self.value.take(), self.on_drop.take()) {
+        if let (Some(value), Some(on_drop)) = (self.state.take(), self.on_drop.take()) {
             on_drop(value.complete())
         }
     }
 }
 
-impl<'a, C: Clock, P: Props, F: FnOnce(SpanEvent<'a, P>)> Span<'a, C, P, F> {
-    /**
-    Create a span for the given `ctxt`.
-
-    The parameters to this method are:
-
-    - `filter`: A sampler to determine whether the span should actually be created or not. If the filter doesn't match then a [`Span::disabled`] will be returned.
-    - `module`: The name of the module executing the operation the span is tracking. This will become the [`SpanEvent::module`] on the resulting span event.
-    - `timer`: A timer to determine the runtime of the executing operation.
-    - `ctxt`: The trace id, span id, and span parent id for the span.
-    - `event_props`: An additional set of properties. This will become the [`SpanEvent::props`] on the resulting span event. These properties won't be included in [`Span::push_ctxt`].
-    - `default_complete`: A closure called on drop with a [`SpanEvent`] representing the operation the span was tracking.
-    */
-    pub fn filtered_new(
-        filter: impl FnOnce(SpanEvent<&P>) -> bool,
+impl<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> SpanGuard<'a, C, P, F> {
+    pub(crate) fn filtered_new(
+        filter: impl FnOnce(Span<&P>) -> bool,
         module: impl Into<Path<'a>>,
         timer: Timer<C>,
         name: impl Into<Str<'a>>,
@@ -1164,21 +1099,19 @@ impl<'a, C: Clock, P: Props, F: FnOnce(SpanEvent<'a, P>)> Span<'a, C, P, F> {
         let module = module.into();
         let name = name.into();
 
-        if filter(SpanEvent::new(
+        if filter(Span::new(
             module.by_ref(),
             timer.start_timestamp(),
-            ctxt,
             name.by_ref(),
             &event_props,
         )) {
-            Span {
-                value: Some(ActiveSpanEvent {
+            SpanGuard {
+                state: Some(SpanGuardState {
                     timer,
                     module,
                     ctxt,
                     name,
                     props: event_props,
-                    include_ctxt: true,
                 }),
                 on_drop: Some(default_complete),
             }
@@ -1187,107 +1120,40 @@ impl<'a, C: Clock, P: Props, F: FnOnce(SpanEvent<'a, P>)> Span<'a, C, P, F> {
         }
     }
 
-    /**
-    Create a new span, ignoring any sampling.
-
-    This method is like [`Span::filtered_new`] with a filter that always returns `true`.
-    */
-    pub fn new(
-        timer: Timer<C>,
-        module: impl Into<Path<'a>>,
-        name: impl Into<Str<'a>>,
-        ctxt: SpanCtxt,
-        event_props: P,
-        default_complete: F,
-    ) -> Self {
-        Self::filtered_new(
-            |_| true,
-            module,
-            timer,
-            name,
-            ctxt,
-            event_props,
-            default_complete,
-        )
-    }
-
-    /**
-    Create an empty span.
-
-    A disabled span can be used exactly like an enabled one, except [`Span::push_ctxt`] won't push any properties, and [`Span::complete_with`] won't invoke the given closure.
-    */
-    pub fn disabled() -> Self {
-        Span {
-            value: None,
+    pub(crate) fn disabled() -> Self {
+        SpanGuard {
+            state: None,
             on_drop: None,
         }
     }
 
-    /**
-    Whether the span will emit a [`SpanEvent`] or not.
-    */
-    pub fn is_enabled(&self) -> bool {
-        self.value.is_some()
-    }
-
-    /**
-    Get the module of the operation this span is tracking.
-    */
-    pub fn module(&self) -> Option<&Path<'a>> {
-        self.value.as_ref().map(|value| &value.module)
-    }
-
-    /**
-    Get the timer.
-    */
-    pub fn timer(&self) -> Option<&Timer<C>> {
-        self.value.as_ref().map(|value| &value.timer)
-    }
-
-    /**
-    Get the trace id, span id, and parent span id.
-    */
-    pub fn ctxt(&self) -> Option<&SpanCtxt> {
-        self.value.as_ref().map(|value| &value.ctxt)
-    }
-
-    /**
-    Get the name of the operation this span is tracking.
-    */
-    pub fn name(&self) -> Option<&Str<'a>> {
-        self.value.as_ref().map(|value| &value.name)
-    }
-
-    /**
-    Get the additional event properties associated with the span.
-
-    These properties will be attached to the resulting [`SpanEvent`] when the span is completed.
-    */
-    pub fn props(&self) -> Option<&P> {
-        self.value.as_ref().map(|value| &value.props)
-    }
-
-    /**
-    Push the [`SpanCtxt`] onto the ambient context.
-
-    If the span is enabled, then the trace id, span id, and parent span id will be pushed to the context. This ensures diagnostics emitted during the execution of this span are properly linked to it.
-
-    If the span is disabled then this method is a no-op.
-    */
-    pub fn push_ctxt<T: Ctxt>(&mut self, ctxt: T, ctxt_props: impl Props) -> Frame<Option<T>> {
-        if let Some(ref mut value) = self.value {
-            value.include_ctxt = false;
-        }
-
+    pub(crate) fn push_ctxt<T: Ctxt>(
+        &mut self,
+        ctxt: T,
+        ctxt_props: impl Props,
+    ) -> Frame<Option<T>> {
         if self.is_enabled() {
-            Frame::push(Some(ctxt), self.ctxt().and_props(ctxt_props))
+            Frame::push(
+                Some(ctxt),
+                self.state
+                    .as_ref()
+                    .map(|state| state.ctxt)
+                    .and_props(ctxt_props),
+            )
         } else {
             Frame::current(None)
         }
     }
 
     /**
-    Complete the span, invoking the default completion closure.
+    Whether the span will emit an event on completion.
+    */
+    pub fn is_enabled(&self) -> bool {
+        self.state.is_some()
+    }
+
+    /**
+    Complete the span.
 
     If the span is disabled then this method is a no-op.
     */
@@ -1296,23 +1162,17 @@ impl<'a, C: Clock, P: Props, F: FnOnce(SpanEvent<'a, P>)> Span<'a, C, P, F> {
     }
 
     /**
-    Complete the span, invoking the given closure instead of the default one.
+    Complete the span with the given closure.
 
     If the span is disabled then the `complete` closure won't be called.
     */
-    pub fn complete_with(mut self, complete: impl FnOnce(SpanEvent<'a, P>)) -> bool {
-        if let Some(value) = self.value.take() {
+    pub fn complete_with(mut self, complete: impl FnOnce(Span<'a, P>)) -> bool {
+        if let Some(value) = self.state.take() {
             complete(value.complete());
             true
         } else {
             false
         }
-    }
-}
-
-impl<'a, C: Clock, P: Props, F: FnOnce(SpanEvent<'a, P>)> ToExtent for Span<'a, C, P, F> {
-    fn to_extent(&self) -> Option<Extent> {
-        self.timer().to_extent()
     }
 }
 

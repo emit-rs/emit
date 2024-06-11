@@ -49,7 +49,6 @@ fn main() {
 */
 
 #![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]
-
 #![deny(missing_docs)]
 
 use core::{fmt, str, time::Duration};
@@ -188,7 +187,7 @@ fn print_event(
         write_plain(buf, " ");
     }
 
-    write_fg(buf, format_args!("{} ", evt.module()), MODULE);
+    write_fg(buf, format_args!("{} ", evt.module().root()), MODULE);
 
     let _ = evt.msg().write(Writer { buf });
     write_plain(buf, "\n");

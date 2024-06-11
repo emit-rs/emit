@@ -55,5 +55,9 @@ name = "span_manual_completion"
 path = "span_manual_completion.rs"
 
 [[example]]
+name = "span_manual"
+path = "span_manual.rs"
+
+[[example]]
 name = "span_trace_propagation"
 path = "span_trace_propagation.rs"

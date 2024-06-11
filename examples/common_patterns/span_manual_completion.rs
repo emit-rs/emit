@@ -1,11 +1,11 @@
 use std::time::Duration;
 
-// The `arg` control parameter binds an `emit::Span` that you can use
+// The `guard` control parameter binds an `emit::Span` that you can use
 // to manually complete your span, adding extra properties if needed.
 //
 // If you don't complete the span manually then it will complete on its
 // own when it falls out of scope.
-#[emit::span(arg: span, "Running an example", i)]
+#[emit::span(guard: span, "Running an example", i)]
 fn example(i: i32) {
     let r = i + 1;
 

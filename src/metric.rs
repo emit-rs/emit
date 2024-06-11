@@ -127,7 +127,7 @@ The following metric reports that the number of bytes written changed by 17 over
 # #[cfg(feature = "std")] fn main() {
 use emit::{Clock, well_known::METRIC_AGG_COUNT};
 
-let now = emit::now!();
+let now = emit::clock().now();
 let last_sample = now.map(|now| now - std::time::Duration::from_secs(30));
 
 emit::emit!(
@@ -170,7 +170,7 @@ The following metric is for a time-series with 15 buckets, where each bucket cov
 # #[cfg(feature = "std")] fn main() {
 use emit::{Clock, well_known::METRIC_AGG_COUNT};
 
-let now = emit::now!();
+let now = emit::clock().now();
 let last_sample = now.map(|now| now - std::time::Duration::from_secs(15));
 
 emit::emit!(

@@ -554,7 +554,6 @@ fn main() {
 */
 
 #![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]
-
 #![deny(missing_docs)]
 #![cfg_attr(not(any(test, feature = "std")), no_std)]
 
@@ -587,10 +586,26 @@ pub mod span;
 pub mod timer;
 
 pub use self::{
-    clock::Clock, ctxt::Ctxt, emitter::Emitter, empty::Empty, event::Event, extent::Extent,
-    filter::Filter, frame::Frame, kind::Kind, level::Level, metric::Metric, path::Path,
-    props::Props, rng::Rng, span::Span, str::Str, template::Template, timer::Timer,
-    timestamp::Timestamp, value::Value,
+    clock::Clock,
+    ctxt::Ctxt,
+    emitter::Emitter,
+    empty::Empty,
+    event::Event,
+    extent::Extent,
+    filter::Filter,
+    frame::Frame,
+    kind::Kind,
+    level::Level,
+    metric::Metric,
+    path::Path,
+    props::Props,
+    rng::Rng,
+    span::{Span, SpanCtxt},
+    str::Str,
+    template::Template,
+    timer::Timer,
+    timestamp::Timestamp,
+    value::Value,
 };
 
 mod macro_hooks;
@@ -599,6 +614,38 @@ mod macro_hooks;
 pub mod setup;
 #[cfg(feature = "std")]
 pub use setup::{setup, Setup};
+
+/**
+Get the shared clock.
+
+This method will use the [`Clock`] from [`runtime::shared()`].
+*/
+#[cfg(feature = "implicit_rt")]
+pub fn clock() -> runtime::AmbientClock<'static> {
+    *runtime::shared().clock()
+}
+
+/**
+Get the shared context.
+
+This method will use the [`Ctxt`] from [`runtime::shared()`].
+
+The returned context can be used with [`Frame`]s to manage the ambient state added to diagnostic events.
+*/
+#[cfg(feature = "implicit_rt")]
+pub fn ctxt() -> runtime::AmbientCtxt<'static> {
+    *runtime::shared().ctxt()
+}
+
+/**
+Get the shared random generator.
+
+This method will use the [`Rng`] from [`runtime::shared()`].
+*/
+#[cfg(feature = "implicit_rt")]
+pub fn rng() -> runtime::AmbientRng<'static> {
+    *runtime::shared().rng()
+}
 
 #[doc(hidden)]
 pub mod __private {

@@ -112,6 +112,24 @@ impl<'a> Path<'a> {
     }
 
     /**
+    The root of the path.
+
+    If the path consists of a single segment then this method will return it.
+    */
+    pub fn root(&self) -> Str {
+        self.segments().next().unwrap_or_else(|| self.0.by_ref())
+    }
+
+    /**
+    The last child segment of the path.
+
+    If the path consists of a single segment then this method will return it.
+    */
+    pub fn last_child(&self) -> Str {
+        self.segments().last().unwrap_or_else(|| self.0.by_ref())
+    }
+
+    /**
     Whether this path is a child of `other`.
 
     The path _a_ is a child of the path _b_ if _b_ is a prefix of _a_ up to a path segment. The path `a::b` is a child of `a`. The path `c::a::b` is not a child of `a`. The path `aa::b` is not a child of `a`.

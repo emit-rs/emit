@@ -678,7 +678,7 @@ http://localhost:4318/v1/logs
 If the [`emit::well_known::KEY_ERR`] property is set, then the resulting OTLP span will carry the semantic exception event:
 
 ```
-#[emit::span(arg: span, "Compute {a} + {b}")]
+#[emit::span(guard: span, "Compute {a} + {b}")]
 fn add(a: i32, b: i32) -> i32 {
    let r = a + b;
 
@@ -1162,7 +1162,6 @@ Diagnostics include when batches are emitted, and any failures observed along th
 */
 
 #![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]
-
 #![deny(missing_docs)]
 
 #[macro_use]
