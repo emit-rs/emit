@@ -8,7 +8,7 @@ fn example(i: i32) {
     let ctxt = emit::SpanCtxt::current(emit::ctxt()).new_child(emit::rng());
 
     // Push into the ambient context, so emitted events see the trace and span ids
-    ctxt.push(emit::ctxt(), emit::props! {}).call(|| {
+    ctxt.push(emit::ctxt()).call(|| {
         let r = i + 1;
 
         if r == 4 {

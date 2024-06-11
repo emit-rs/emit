@@ -174,10 +174,7 @@ fn print_event(
         write_plain(buf, " ");
     }
 
-    if let Some(kind) = evt.props().get(KEY_EVENT_KIND) {
-        write_fg(buf, kind, KIND);
-        write_plain(buf, " ");
-    }
+    write_fg(buf, format_args!("{} ", evt.module().root()), MODULE);
 
     let mut lvl = None;
     if let Some(level) = evt.props().pull::<emit::Level, _>(KEY_LVL) {
@@ -187,7 +184,10 @@ fn print_event(
         write_plain(buf, " ");
     }
 
-    write_fg(buf, format_args!("{} ", evt.module().root()), MODULE);
+    if let Some(kind) = evt.props().get(KEY_EVENT_KIND) {
+        write_fg(buf, kind, KIND);
+        write_plain(buf, " ");
+    }
 
     let _ = evt.msg().write(Writer { buf });
     write_plain(buf, "\n");

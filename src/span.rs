@@ -68,33 +68,28 @@ let sleep_ms = 1200;
 
 let timer = emit::Timer::start(emit::clock());
 
-let ctxt = emit::SpanCtxt::current(emit::ctxt()).new_child(emit::rng());
-
 // Push the span onto the current context
-let frame = ctxt.push(
-    emit::ctxt(),
-    emit::props! {
-        sleep_ms,
-    },
-);
+emit::SpanCtxt::current(emit::ctxt())
+    .new_child(emit::rng())
+    .push(emit::ctxt())
+    .call(move || {
+        // Your code goes here
+        thread::sleep(Duration::from_millis(sleep_ms));
 
-// Execute some operation within the frame
-frame.call(move || {
-    // Your code goes here
-    thread::sleep(Duration::from_millis(sleep_ms));
-
-    // Make sure you complete the span in the frame.
-    // This is especially important for futures, otherwise the span may
-    // complete before the future does
-    emit::emit!(
-        event: emit::Span::new(
-            emit::module!(),
-            timer,
-            "wait a bit",
-            emit::Empty,
-        ),
-    );
-});
+        // Make sure you complete the span in the frame.
+        // This is especially important for futures, otherwise the span may
+        // complete before the future does
+        emit::emit!(
+            event: emit::Span::new(
+                emit::module!(),
+                timer,
+                "wait a bit",
+                emit::props! {
+                    sleep_ms,
+                },
+            ),
+        );
+    });
 # }
 ```
 
@@ -1052,8 +1047,8 @@ impl SpanCtxt {
 
     The trace id, span id, and parent span id will be pushed to the context. This ensures diagnostics emitted during the execution of this span are properly linked to it.
     */
-    pub fn push<T: Ctxt>(&self, ctxt: T, ctxt_props: impl Props) -> Frame<T> {
-        Frame::push(ctxt, self.and_props(ctxt_props))
+    pub fn push<T: Ctxt>(&self, ctxt: T) -> Frame<T> {
+        Frame::push(ctxt, self)
     }
 }
 
