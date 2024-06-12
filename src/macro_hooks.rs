@@ -601,6 +601,52 @@ pub fn __private_complete_span<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock,
     );
 }
 
+#[track_caller]
+#[cfg(feature = "std")]
+pub fn __private_complete_span_ok<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
+    rt: &'a Runtime<E, F, C, T, R>,
+    span: Span<'static, Empty>,
+    tpl: Template<'b>,
+    evt_props: impl Props,
+    lvl: &impl ToValue,
+) {
+    __private_emit(
+        rt,
+        span.module(),
+        Some(crate::filter::always()),
+        span.extent(),
+        tpl,
+        (crate::well_known::KEY_LVL, lvl)
+            .and_props(evt_props)
+            .and_props(&span),
+    );
+}
+
+#[track_caller]
+#[cfg(feature = "std")]
+pub fn __private_complete_span_err<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
+    rt: &'a Runtime<E, F, C, T, R>,
+    span: Span<'static, Empty>,
+    tpl: Template<'b>,
+    evt_props: impl Props,
+    lvl: &impl ToValue,
+    err: &(impl std::error::Error + Send + Sync + 'static),
+) {
+    __private_emit(
+        rt,
+        span.module(),
+        Some(crate::filter::always()),
+        span.extent(),
+        tpl,
+        [
+            (crate::well_known::KEY_LVL, Value::from_any(lvl)),
+            (crate::well_known::KEY_ERR, Value::capture_error(err)),
+        ]
+        .and_props(evt_props)
+        .and_props(&span),
+    );
+}
+
 #[repr(transparent)]
 pub struct __PrivateMacroProps<'a>([(Str<'a>, Option<Value<'a>>)]);
 

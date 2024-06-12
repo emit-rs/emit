@@ -68,33 +68,28 @@ let sleep_ms = 1200;
 
 let timer = emit::Timer::start(emit::clock());
 
-let ctxt = emit::SpanCtxt::current(emit::ctxt()).new_child(emit::rng());
-
 // Push the span onto the current context
-let frame = ctxt.push(
-    emit::ctxt(),
-    emit::props! {
-        sleep_ms,
-    },
-);
+emit::SpanCtxt::current(emit::ctxt())
+    .new_child(emit::rng())
+    .push(emit::ctxt())
+    .call(move || {
+        // Your code goes here
+        thread::sleep(Duration::from_millis(sleep_ms));
 
-// Execute some operation within the frame
-frame.call(move || {
-    // Your code goes here
-    thread::sleep(Duration::from_millis(sleep_ms));
-
-    // Make sure you complete the span in the frame.
-    // This is especially important for futures, otherwise the span may
-    // complete before the future does
-    emit::emit!(
-        event: emit::Span::new(
-            emit::module!(),
-            timer,
-            "wait a bit",
-            emit::Empty,
-        ),
-    );
-});
+        // Make sure you complete the span in the frame.
+        // This is especially important for futures, otherwise the span may
+        // complete before the future does
+        emit::emit!(
+            event: emit::Span::new(
+                emit::module!(),
+                timer,
+                "wait a bit",
+                emit::props! {
+                    sleep_ms,
+                },
+            ),
+        );
+    });
 # }
 ```
 
@@ -311,6 +306,72 @@ if let (Some(trace_id), Some(span_id)) = (trace_id, span_id) {
     // Push the traceparent header onto the request
 }
 # }
+```
+
+# Completing spans for fallible functions
+
+The `ok_lvl` and `err_lvl` control parameters can be applied to span macros to assign a level based on whether the annotated function returned `Ok` or `Err`:
+
+```
+# #[cfg(not(feature = "std"))] fn main() {}
+# #[cfg(feature = "std")] fn main() {
+# use std::{io, thread, time::Duration};
+#[emit::span(
+    ok_lvl: emit::Level::Info,
+    err_lvl: emit::Level::Error,
+    "wait a bit",
+    sleep_ms,
+)]
+fn wait_a_bit(sleep_ms: u64) -> Result<(), io::Error> {
+    if sleep_ms > 500 {
+        return Err(io::Error::new(io::ErrorKind::Other, "the wait is too long"));
+    }
+
+    thread::sleep(Duration::from_millis(sleep_ms));
+
+    Ok(())
+}
+
+let _ = wait_a_bit(100);
+let _ = wait_a_bit(1200);
+# }
+```
+
+```text
+Event {
+    module: "my_app",
+    tpl: "wait a bit",
+    extent: Some(
+        "2024-06-12T21:43:03.556361000Z".."2024-06-12T21:43:03.661164000Z",
+    ),
+    props: {
+        "lvl": info,
+        "event_kind": span,
+        "span_name": "wait a bit",
+        "trace_id": 6a3fc0e46bfa1da71537e39e3bf1942c,
+        "span_id": f5bcc5821c6c3227,
+        "sleep_ms": 100,
+    },
+}
+Event {
+    module: "my_app",
+    tpl: "wait a bit",
+    extent: Some(
+        "2024-06-12T21:43:03.661850000Z".."2024-06-12T21:43:03.661986000Z",
+    ),
+    props: {
+        "lvl": error,
+        "err": Custom {
+            kind: Other,
+            error: "the wait is too long",
+        },
+        "event_kind": span,
+        "span_name": "wait a bit",
+        "trace_id": 3226b70b45ff90f92f4feccee4325d4d,
+        "span_id": 3702ba2429f9a7b7,
+        "sleep_ms": 1200,
+    },
+}
 ```
 
 # Completing spans manually
@@ -1052,8 +1113,8 @@ impl SpanCtxt {
 
     The trace id, span id, and parent span id will be pushed to the context. This ensures diagnostics emitted during the execution of this span are properly linked to it.
     */
-    pub fn push<T: Ctxt>(&self, ctxt: T, ctxt_props: impl Props) -> Frame<T> {
-        Frame::push(ctxt, self.and_props(ctxt_props))
+    pub fn push<T: Ctxt>(&self, ctxt: T) -> Frame<T> {
+        Frame::push(ctxt, self)
     }
 }
 

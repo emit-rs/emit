@@ -80,10 +80,13 @@ impl Arg<TokenStream> {
         Arg::new(key, to_tokens)
     }
 
-    pub fn take_when(self) -> TokenStream {
+    /**
+    Returns `Some(#tokens)` if the arg was present, or `None::<emit::Empty>` if it wasn't.
+    */
+    pub fn take_some_or_empty(self) -> TokenStream {
         self.take()
             .map(|tokens| quote!(Some(#tokens)))
-            .unwrap_or_else(|| quote!(None::<emit::empty::Empty>))
+            .unwrap_or_else(|| quote!(None::<emit::Empty>))
     }
 
     pub fn take_rt(self) -> Result<TokenStream, syn::Error> {
@@ -98,6 +101,29 @@ impl Arg<TokenStream> {
             use proc_macro2::Span;
 
             self.take().ok_or_else(|| syn::Error::new(Span::call_site(), "a runtime must be specified by the `rt` parameter unless the `implicit_rt` feature of `emit` is enabled"))
+        }
+    }
+
+    pub fn take_if_std(self) -> Result<Option<TokenStream>, syn::Error> {
+        #[cfg(feature = "std")]
+        {
+            Ok(self.take())
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            use syn::spanned::Spanned;
+
+            if let Some(value) = self.value {
+                Err(syn::Error::new(
+                    value.span(),
+                    format!(
+                        "capturing `{}` is only possible when the `std` Cargo feature is enabled",
+                        self.key
+                    ),
+                ))
+            } else {
+                Ok(None)
+            }
         }
     }
 }
