@@ -6,11 +6,9 @@ struct Error {
     n: i32,
 }
 
-// The `guard` control parameter binds an `emit::Span` that you can use
-// to manually complete your span, adding extra properties if needed.
-//
-// If you don't complete the span manually then it will complete on its
-// own when it falls out of scope.
+// The `ok_lvl` and `err_lvl` control parameters can be used on functions
+// returning a `Result` to change the level based on the result returned.
+// `err_lvl` also attaches the error as a property.
 #[emit::span(
     ok_lvl: emit::Level::Info,
     err_lvl: emit::Level::Error,
