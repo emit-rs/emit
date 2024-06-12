@@ -113,7 +113,7 @@ impl Arg<TokenStream> {
         {
             use syn::spanned::Spanned;
 
-            if let Some(value) = self.take() {
+            if let Some(value) = self.value {
                 Err(syn::Error::new(
                     value.span(),
                     format!(
