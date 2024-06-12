@@ -23,6 +23,8 @@ struct Args {
     module: TokenStream,
     when: TokenStream,
     guard: Option<Ident>,
+    ok_lvl: Option<TokenStream>,
+    err_lvl: Option<TokenStream>,
 }
 
 impl Parse for Args {
@@ -42,17 +44,36 @@ impl Parse for Args {
 
             Ok(quote_spanned!(expr.span()=> #expr))
         });
+        let mut ok_lvl = Arg::token_stream("ok_lvl", |fv| {
+            let expr = &fv.expr;
+
+            Ok(quote_spanned!(expr.span()=> #expr))
+        });
+        let mut err_lvl = Arg::token_stream("err_lvl", |fv| {
+            let expr = &fv.expr;
+
+            Ok(quote_spanned!(expr.span()=> #expr))
+        });
         let mut guard = Arg::ident("guard");
 
         args::set_from_field_values(
             input.parse_terminated(FieldValue::parse, Token![,])?.iter(),
-            [&mut module, &mut guard, &mut rt, &mut when],
+            [
+                &mut module,
+                &mut guard,
+                &mut rt,
+                &mut when,
+                &mut ok_lvl,
+                &mut err_lvl,
+            ],
         )?;
 
         Ok(Args {
             rt: rt.take_rt()?,
             module: module.take().unwrap_or_else(|| module_tokens()),
-            when: when.take_when(),
+            when: when.take_some_or_empty(),
+            ok_lvl: ok_lvl.take_if_std()?,
+            err_lvl: err_lvl.take_if_std()?,
             guard: guard.take(),
         })
     }
@@ -75,6 +96,9 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
 
     let module_tokens = args.module;
 
+    let ok_lvl = args.ok_lvl;
+    let err_lvl = args.err_lvl;
+
     let mut item = syn::parse2::<Stmt>(opts.item)?;
     match &mut item {
         // A synchronous function
@@ -94,6 +118,8 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &evt_props,
                 &span_guard,
                 quote!(#block),
+                ok_lvl,
+                err_lvl,
             ))?;
         }
         // A synchronous block
@@ -107,6 +133,8 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &evt_props,
                 &span_guard,
                 quote!(#block),
+                ok_lvl,
+                err_lvl,
             ))?;
         }
         // An asynchronous function
@@ -126,6 +154,8 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &evt_props,
                 &span_guard,
                 quote!(#block),
+                ok_lvl,
+                err_lvl,
             ))?;
         }
         // An asynchronous block
@@ -139,6 +169,8 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &evt_props,
                 &span_guard,
                 quote!(#block),
+                ok_lvl,
+                err_lvl,
             ))?;
         }
         _ => return Err(syn::Error::new(item.span(), "unrecognized item type")),
@@ -156,11 +188,23 @@ fn inject_sync(
     evt_props: &Props,
     span_guard: &Ident,
     body: TokenStream,
+    ok_lvl: Option<TokenStream>,
+    err_lvl: Option<TokenStream>,
 ) -> TokenStream {
     let ctxt_props_tokens = ctxt_props.props_tokens();
     let evt_props_tokens = evt_props.props_tokens();
     let template_tokens = template.template_tokens();
     let template_literal_tokens = template.template_literal_tokens();
+
+    let body = completion(
+        quote!((move || #body)()),
+        ok_lvl,
+        err_lvl,
+        span_guard,
+        rt_tokens,
+        &template_tokens,
+        &evt_props_tokens,
+    );
 
     quote!({
         let (mut __ctxt, __span_guard) = emit::__private::__private_begin_span(
@@ -197,11 +241,23 @@ fn inject_async(
     evt_props: &Props,
     span_guard: &Ident,
     body: TokenStream,
+    ok_lvl: Option<TokenStream>,
+    err_lvl: Option<TokenStream>,
 ) -> TokenStream {
     let ctxt_props_tokens = ctxt_props.props_tokens();
     let evt_props_tokens = evt_props.props_tokens();
     let template_tokens = template.template_tokens();
     let template_literal_tokens = template.template_literal_tokens();
+
+    let body = completion(
+        quote!(async #body.await),
+        ok_lvl,
+        err_lvl,
+        span_guard,
+        rt_tokens,
+        &template_tokens,
+        &evt_props_tokens,
+    );
 
     quote!({
         let (__ctxt, __span_guard) = emit::__private::__private_begin_span(
@@ -225,7 +281,77 @@ fn inject_async(
         __ctxt.in_future(async move {
             let #span_guard = __span_guard;
 
-            async #body.await
+            #body
         }).await
     })
+}
+
+fn completion(
+    body: TokenStream,
+    ok_lvl: Option<TokenStream>,
+    err_lvl: Option<TokenStream>,
+    span_guard: &Ident,
+    rt_tokens: &TokenStream,
+    template_tokens: &TokenStream,
+    evt_props_tokens: &TokenStream,
+) -> TokenStream {
+    if ok_lvl.is_some() || err_lvl.is_some() {
+        let ok_branch = ok_lvl
+            .map(|lvl| {
+                quote!(
+                    Ok(ok) => {
+                        #span_guard.complete_with(|span| {
+                            emit::__private::__private_complete_span_ok(
+                                #rt_tokens,
+                                span,
+                                #template_tokens,
+                                #evt_props_tokens,
+                                &#lvl,
+                            )
+                        });
+
+                        Ok(ok)
+                    }
+                )
+            })
+            .unwrap_or_else(|| {
+                quote!(
+                    Ok(ok) => Ok(ok)
+                )
+            });
+
+        let err_branch = err_lvl
+            .map(|lvl| {
+                quote!(
+                    Err(err) => {
+                        #span_guard.complete_with(|span| {
+                            emit::__private::__private_complete_span_err(
+                                #rt_tokens,
+                                span,
+                                #template_tokens,
+                                #evt_props_tokens,
+                                &#lvl,
+                                &err,
+                            )
+                        });
+
+                        Err(err)
+                    }
+                )
+            })
+            .unwrap_or_else(|| {
+                quote!(
+                    Err(err) => Err(err)
+                )
+            });
+
+        quote!(
+            match #body {
+                #ok_branch,
+                #err_branch,
+            }
+        )
+    } else {
+        body
+    }
 }

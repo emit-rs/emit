@@ -358,6 +358,8 @@ This macro accepts the following optional control parameters:
 - `module: impl Into<emit::Path>`: The module the event belongs to. If unspecified the current module path is used.
 - `when: impl emit::Filter`: A filter to use instead of the one configured on the runtime.
 - `arg`: An identifier to bind an `emit::Span` to in the body of the span for manual completion.
+- `ok_lvl`: Assume the instrumented block returns a `Result`. Assign the event the given level when the result is `Ok`.
+- `err_lvl`. Assume the instrumented block returns a `Result`. Assign the event the given level when the result is `Err` and attach the error as the `err` property.
 
 # Template
 

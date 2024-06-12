@@ -174,8 +174,6 @@ fn print_event(
         write_plain(buf, " ");
     }
 
-    write_fg(buf, format_args!("{} ", evt.module().root()), MODULE);
-
     let mut lvl = None;
     if let Some(level) = evt.props().pull::<emit::Level, _>(KEY_LVL) {
         lvl = level_color(&level).map(Color::Ansi256);
@@ -429,7 +427,6 @@ impl<'a> emit::template::Write for Writer<'a> {
     }
 }
 
-const MODULE: Color = Color::Ansi256(244);
 const KIND: Color = Color::Ansi256(174);
 
 const TEXT: Color = Color::Ansi256(69);

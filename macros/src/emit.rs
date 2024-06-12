@@ -79,7 +79,7 @@ impl Parse for Args {
             props: props.take().unwrap_or_else(|| quote!(emit::empty::Empty)),
             event: event.take(),
             rt: rt.take_rt()?,
-            when: when.take_when(),
+            when: when.take_some_or_empty(),
         })
     }
 }
