@@ -59,7 +59,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     let template =
         template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;
 
-    push_event_props(&mut props, opts.level)?;
+    push_evt_props(&mut props, opts.level)?;
 
     let extent_tokens = args.extent;
     let base_props_tokens = args.props;
@@ -72,7 +72,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     )
 }
 
-pub fn push_event_props(props: &mut Props, level: Option<TokenStream>) -> Result<(), syn::Error> {
+pub fn push_evt_props(props: &mut Props, level: Option<TokenStream>) -> Result<(), syn::Error> {
     // Add the level as a property
     if let Some(level_value) = level {
         let level_ident = Ident::new(emit_core::well_known::KEY_LVL, Span::call_site());

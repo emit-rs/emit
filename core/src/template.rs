@@ -333,7 +333,7 @@ pub trait Write: fmt::Write {
     This method is called for any [`Part::hole`] in the template where a matching property doesn't exist.
     */
     fn write_hole_label(&mut self, label: &str) -> fmt::Result {
-        self.write_fmt(format_args!("`{}`", label))
+        self.write_fmt(format_args!("{{{}}}", label))
     }
 }
 
@@ -399,68 +399,6 @@ impl<W: fmt::Write> fmt::Write for WriteEscaped<W> {
         }
 
         Ok(())
-    }
-}
-
-struct WriteBraced<W>(W);
-
-impl<W: fmt::Write> WriteBraced<W> {
-    pub fn write_fmt(&mut self, args: fmt::Arguments) -> fmt::Result {
-        self.0.write_fmt(args)
-    }
-}
-
-impl<W: fmt::Write> fmt::Write for WriteBraced<W> {
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        self.0.write_str(s)
-    }
-
-    fn write_char(&mut self, c: char) -> fmt::Result {
-        self.0.write_char(c)
-    }
-
-    fn write_fmt(&mut self, args: fmt::Arguments<'_>) -> fmt::Result {
-        self.write_fmt(args)
-    }
-}
-
-impl<W: Write> Write for WriteBraced<W> {
-    fn write_text(&mut self, text: &str) -> fmt::Result {
-        self.0.write_text(text)
-    }
-
-    fn write_hole_value(&mut self, label: &str, value: Value) -> fmt::Result {
-        self.0.write_hole_value(label, value)
-    }
-
-    fn write_hole_fmt(&mut self, label: &str, value: Value, formatter: Formatter) -> fmt::Result {
-        self.0.write_hole_fmt(label, value, formatter)
-    }
-
-    fn write_hole_label(&mut self, label: &str) -> fmt::Result {
-        self.0.write_fmt(format_args!("{{{}}}", label))
-    }
-}
-
-/**
-The result of [`Render::braced`].
-
-This type will render a template by wrapping hole labels in braces where a matching property doesn't exist.
-*/
-pub struct Braced<'a, P>(Render<'a, P>);
-
-impl<'a, P> Render<'a, P> {
-    /**
-    Render holes that have missing properties between braces, like `Hello, {user}`.
-    */
-    pub fn braced(self) -> Braced<'a, P> {
-        Braced(self)
-    }
-}
-
-impl<'a, P: Props> fmt::Display for Braced<'a, P> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.write(WriteBraced(f))
     }
 }
 

@@ -48,8 +48,8 @@ fn routes(method: &str, path: &str) {
     match path {
         "/api/route-1" => api_route_1(),
         _ => {
-            span.complete_with(|event| {
-                emit::error!(event, "HTTP {method} {path} matched no route");
+            span.complete_with(|evt| {
+                emit::error!(evt, "HTTP {method} {path} matched no route");
             });
         }
     }

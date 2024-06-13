@@ -6,7 +6,7 @@ use syn::{
 
 use crate::{
     args::{self, Arg},
-    event::push_event_props,
+    event::push_evt_props,
     module::module_tokens,
     props::Props,
     template::{self, Template},
@@ -88,7 +88,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;
 
     let mut evt_props = Props::new();
-    push_event_props(&mut evt_props, opts.level)?;
+    push_evt_props(&mut evt_props, opts.level)?;
 
     let span_guard = args
         .guard

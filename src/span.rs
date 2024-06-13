@@ -80,7 +80,7 @@ emit::SpanCtxt::current(emit::ctxt())
         // This is especially important for futures, otherwise the span may
         // complete before the future does
         emit::emit!(
-            event: emit::Span::new(
+            evt: emit::Span::new(
                 emit::module!(),
                 timer,
                 "wait a bit",
@@ -389,7 +389,7 @@ fn wait_a_bit(sleep_ms: u64) {
     if sleep_ms > 500 {
         span.complete_with(|span| {
             emit::warn!(
-                event: span,
+                evt: span,
                 when: emit::filter::always(),
                 "wait a bit took too long",
             );

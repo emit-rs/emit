@@ -14,7 +14,7 @@ fn example(i: i32) {
         if r == 4 {
             // Emit a span event on completion
             emit::error!(
-                event: emit::Span::new(
+                evt: emit::Span::new(
                     emit::module!(),
                     timer,
                     "example",
@@ -25,7 +25,7 @@ fn example(i: i32) {
         } else {
             // Emit a span event on completion
             emit::info!(
-                event: emit::Span::new(
+                evt: emit::Span::new(
                     emit::module!(),
                     timer,
                     "example",
