@@ -522,7 +522,7 @@ where
 This macro accepts the following optional control parameters:
 
 - `rt: impl emit::runtime::Runtime`: The runtime to emit the event through.
-- `event: impl emit::event::ToEvent`: A base event to emit. Any properties captured by the macro will be appended to the base event. If this control parameter is specified then `module`, `props`, and `extent` cannot also be set.
+- `evt: impl emit::event::ToEvent`: A base event to emit. Any properties captured by the macro will be appended to the base event. If this control parameter is specified then `module`, `props`, and `extent` cannot also be set.
 - `module: impl Into<emit::Path>`: The module the event belongs to. If unspecified the current module path is used.
 - `props: impl emit::Props`: A base set of properties to add to the event.
 - `extent: impl emit::ToExtent`: The extent to use on the event. If it resolves to `None` then the clock on the runtime will be used to assign a point extent.

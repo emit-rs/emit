@@ -14,7 +14,7 @@ use emit::{well_known::METRIC_AGG_COUNT, Clock};
 let sample = sample_bytes_written();
 
 emit::emit!(
-    event: emit::Metric::new(
+    evt: emit::Metric::new(
         emit::module!(),
         emit::Empty,
         "bytes_written",
@@ -88,7 +88,7 @@ The following metric reports the current number of bytes written as 591:
 use emit::{Clock, well_known::METRIC_AGG_COUNT};
 
 emit::emit!(
-    event: emit::Metric::new(
+    evt: emit::Metric::new(
         emit::module!(),
         emit::Empty,
         "bytes_written",
@@ -131,7 +131,7 @@ let now = emit::clock().now();
 let last_sample = now.map(|now| now - std::time::Duration::from_secs(30));
 
 emit::emit!(
-    event: emit::Metric::new(
+    evt: emit::Metric::new(
         emit::module!(),
         last_sample..now,
         "bytes_written",
@@ -174,7 +174,7 @@ let now = emit::clock().now();
 let last_sample = now.map(|now| now - std::time::Duration::from_secs(15));
 
 emit::emit!(
-    event: emit::Metric::new(
+    evt: emit::Metric::new(
         emit::module!(),
         last_sample..now,
         "bytes_written",

@@ -10,12 +10,12 @@ fn example(i: i32) {
     let r = i + 1;
 
     if r == 4 {
-        span.complete_with(|event| {
-            emit::error!(event, "Running an example failed with {r}");
+        span.complete_with(|evt| {
+            emit::error!(evt, "Running an example failed with {r}");
         });
     } else {
-        span.complete_with(|event| {
-            emit::info!(event, "Running an example produced {r}");
+        span.complete_with(|evt| {
+            emit::info!(evt, "Running an example produced {r}");
         });
     }
 }

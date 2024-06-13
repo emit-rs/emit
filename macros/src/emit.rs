@@ -3,7 +3,7 @@ use syn::{parse::Parse, spanned::Spanned, FieldValue};
 
 use crate::{
     args::{self, Arg},
-    event::push_event_props,
+    event::push_evt_props,
     module::module_tokens,
     template,
 };
@@ -15,7 +15,7 @@ pub struct ExpandTokens {
 
 struct Args {
     rt: TokenStream,
-    event: Option<TokenStream>,
+    evt: Option<TokenStream>,
     module: TokenStream,
     props: TokenStream,
     extent: TokenStream,
@@ -49,7 +49,7 @@ impl Parse for Args {
 
             Ok(quote_spanned!(expr.span()=> #expr))
         });
-        let mut event = Arg::token_stream("event", |fv| {
+        let mut evt = Arg::token_stream("evt", |fv| {
             let expr = &fv.expr;
 
             Ok(quote_spanned!(expr.span()=> #expr))
@@ -63,13 +63,13 @@ impl Parse for Args {
                 &mut props,
                 &mut rt,
                 &mut when,
-                &mut event,
+                &mut evt,
             ],
         )?;
 
-        if let Some(ref event) = event.peek() {
+        if let Some(ref evt) = evt.peek() {
             if module.peek().is_some() || extent.peek().is_some() || props.peek().is_some() {
-                return Err(syn::Error::new(event.span(), "the `event` argument cannot be set if any of `module`, `extent`, or `props` are also set"));
+                return Err(syn::Error::new(evt.span(), "the `evt` argument cannot be set if any of `module`, `extent`, or `props` are also set"));
             }
         }
 
@@ -77,7 +77,7 @@ impl Parse for Args {
             module: module.take().unwrap_or_else(|| module_tokens()),
             extent: extent.take().unwrap_or_else(|| quote!(emit::empty::Empty)),
             props: props.take().unwrap_or_else(|| quote!(emit::empty::Empty)),
-            event: event.take(),
+            evt: evt.take(),
             rt: rt.take_rt()?,
             when: when.take_some_or_empty(),
         })
@@ -89,7 +89,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
 
     let (args, template, mut props) = template::parse2::<Args>(opts.input, true)?;
 
-    push_event_props(&mut props, opts.level)?;
+    push_evt_props(&mut props, opts.level)?;
 
     let props_match_input_tokens = props.match_input_tokens();
     let props_match_binding_tokens = props.match_binding_tokens();
@@ -98,7 +98,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     let rt_tokens = args.rt;
     let when_tokens = args.when;
 
-    let emit_tokens = if let Some(event_tokens) = args.event {
+    let emit_tokens = if let Some(event_tokens) = args.evt {
         // If the `event` parameter is present, then we can emit it without a template
         let template_tokens = template
             .map(|template| {
