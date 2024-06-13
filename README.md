@@ -43,7 +43,7 @@ fn greet(user: &str) {
 
 ## Current status
 
-This is alpha-level software. It implements a complete framework but has almost no tests and needs a lot more documentation. We're 
+This is alpha-level software. It implements a complete framework but has almost no tests and needs a lot more documentation. 
 
 ## Getting started
 
