@@ -1,3 +1,4 @@
+use crate::data::EncodedScopeItems;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
@@ -133,16 +134,43 @@ This type doesn't collect any OTLP metrics you emit, it includes metrics about t
 You can enumerate the metrics using the [`emit::metric::Source`] implementation. See [`emit::metric`] for details.
 */
 pub struct OtlpMetrics {
-    pub(crate) channel_metrics: emit_batcher::ChannelMetrics<crate::client::Channel>,
+    pub(crate) logs_channel_metrics: Option<emit_batcher::ChannelMetrics<EncodedScopeItems>>,
+    pub(crate) traces_channel_metrics: Option<emit_batcher::ChannelMetrics<EncodedScopeItems>>,
+    pub(crate) metrics_channel_metrics: Option<emit_batcher::ChannelMetrics<EncodedScopeItems>>,
     pub(crate) metrics: Arc<InternalMetrics>,
 }
 
 impl emit::metric::Source for OtlpMetrics {
     fn sample_metrics<S: emit::metric::sampler::Sampler>(&self, sampler: S) {
-        self.channel_metrics
-            .sample_metrics(emit::metric::sampler::from_fn(|metric| {
-                sampler.metric(metric.by_ref().with_module(env!("CARGO_PKG_NAME")));
+        if let Some(ref channel_metrics) = self.logs_channel_metrics {
+            channel_metrics.sample_metrics(emit::metric::sampler::from_fn(|metric| {
+                sampler.metric(metric.by_ref().with_module(&format!(
+                    "{}::{}",
+                    env!("CARGO_PKG_NAME"),
+                    "logs_channel"
+                )));
             }));
+        }
+
+        if let Some(ref channel_metrics) = self.traces_channel_metrics {
+            channel_metrics.sample_metrics(emit::metric::sampler::from_fn(|metric| {
+                sampler.metric(metric.by_ref().with_module(&format!(
+                    "{}::{}",
+                    env!("CARGO_PKG_NAME"),
+                    "traces_channel"
+                )));
+            }));
+        }
+
+        if let Some(ref channel_metrics) = self.metrics_channel_metrics {
+            channel_metrics.sample_metrics(emit::metric::sampler::from_fn(|metric| {
+                sampler.metric(metric.by_ref().with_module(&format!(
+                    "{}::{}",
+                    env!("CARGO_PKG_NAME"),
+                    "metrics_channel"
+                )));
+            }));
+        }
 
         for metric in self.metrics.sample() {
             sampler.metric(metric);

@@ -260,8 +260,7 @@ impl<'a> serde::Serialize for Path<'a> {
 
 #[cfg(feature = "alloc")]
 mod alloc_support {
-    use alloc::{borrow::Cow, boxed::Box};
-
+    use alloc::{borrow::Cow, boxed::Box, string::String};
     use super::*;
 
     impl Path<'static> {
@@ -297,6 +296,24 @@ mod alloc_support {
         */
         pub fn to_cow(&self) -> Cow<'static, str> {
             self.0.to_cow()
+        }
+    }
+
+    impl From<String> for Path<'static> {
+        fn from(value: String) -> Self {
+            Path::new_owned(value)
+        }
+    }
+
+    impl From<Box<str>> for Path<'static> {
+        fn from(value: Box<str>) -> Self {
+            Path::new_owned(value)
+        }
+    }
+
+    impl<'k> From<&'k String> for Path<'k> {
+        fn from(value: &'k String) -> Self {
+            Path::new_ref(value)
         }
     }
 }

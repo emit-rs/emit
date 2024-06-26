@@ -1,16 +1,19 @@
-use emit_batcher::BatchError;
-use std::{collections::HashMap, mem, sync::Arc, time::Duration};
-
 use crate::{
     data::{
-        self,
-        logs::{LogsEventEncoder, LogsRequestEncoder},
-        metrics::{MetricsEventEncoder, MetricsRequestEncoder},
-        traces::{TracesEventEncoder, TracesRequestEncoder},
-        EncodedEvent, EncodedPayload, EncodedScopeItems, RawEncoder, RequestEncoder,
+        self, logs::LogsEventEncoder, metrics::MetricsEventEncoder, traces::TracesEventEncoder,
+        EncodedEvent, EncodedPayload, EncodedScopeItems, RawEncoder,
     },
     internal_metrics::InternalMetrics,
     Error, OtlpMetrics,
+};
+use emit_batcher::BatchError;
+use futures::{stream::FuturesUnordered, StreamExt};
+use std::{
+    collections::HashMap,
+    future::Future,
+    pin::Pin,
+    sync::Arc,
+    time::{Duration, Instant},
 };
 
 use self::http::HttpConnection;
@@ -30,11 +33,19 @@ Use [`crate::new`] to start an [`OtlpBuilder`] for configuring an [`Otlp`] insta
 See the crate root documentation for more details.
 */
 pub struct Otlp {
-    otlp_logs: Option<ClientEventEncoder<LogsEventEncoder>>,
-    otlp_traces: Option<ClientEventEncoder<TracesEventEncoder>>,
-    otlp_metrics: Option<ClientEventEncoder<MetricsEventEncoder>>,
+    otlp_logs: Option<(
+        ClientEventEncoder<LogsEventEncoder>,
+        emit_batcher::Sender<EncodedScopeItems>,
+    )>,
+    otlp_traces: Option<(
+        ClientEventEncoder<TracesEventEncoder>,
+        emit_batcher::Sender<EncodedScopeItems>,
+    )>,
+    otlp_metrics: Option<(
+        ClientEventEncoder<MetricsEventEncoder>,
+        emit_batcher::Sender<EncodedScopeItems>,
+    )>,
     metrics: Arc<InternalMetrics>,
-    sender: emit_batcher::Sender<Channel>,
 }
 
 impl Otlp {
@@ -54,7 +65,18 @@ impl Otlp {
     */
     pub fn metric_source(&self) -> OtlpMetrics {
         OtlpMetrics {
-            channel_metrics: self.sender.metric_source(),
+            logs_channel_metrics: self
+                .otlp_logs
+                .as_ref()
+                .map(|(_, sender)| sender.metric_source()),
+            traces_channel_metrics: self
+                .otlp_traces
+                .as_ref()
+                .map(|(_, sender)| sender.metric_source()),
+            metrics_channel_metrics: self
+                .otlp_metrics
+                .as_ref()
+                .map(|(_, sender)| sender.metric_source()),
             metrics: self.metrics.clone(),
         }
     }
@@ -151,139 +173,121 @@ impl OtlpBuilder {
     pub fn spawn(self) -> Result<Otlp, Error> {
         let metrics = Arc::new(InternalMetrics::default());
 
-        let (sender, receiver) = emit_batcher::bounded(10_000);
+        let (otlp_logs, process_otlp_logs) = match self.otlp_logs {
+            Some(builder) => {
+                let (encoder, transport) =
+                    builder.build(metrics.clone(), self.resource.as_ref())?;
 
-        // Encoders are used by the caller to convert emit's events
-        // into the right OTLP item
-        let mut logs_event_encoder = None;
-        let mut traces_event_encoder = None;
-        let mut metrics_event_encoder = None;
+                let (sender, receiver) = emit_batcher::bounded(1024);
 
-        // Build the client
-        // This type is used by the background worker to send requests
-        // It owns the actual HTTP connections used by each configured signal
-        let client = OtlpClient {
-            logs: match self.otlp_logs {
-                Some(otlp_logs) => {
-                    let (encoder, transport) =
-                        otlp_logs.build(metrics.clone(), self.resource.as_ref())?;
-
-                    logs_event_encoder = Some(encoder);
-                    Some(Arc::new(transport))
-                }
-                None => None,
-            },
-            traces: match self.otlp_traces {
-                Some(otlp_traces) => {
-                    let (encoder, transport) =
-                        otlp_traces.build(metrics.clone(), self.resource.as_ref())?;
-
-                    traces_event_encoder = Some(encoder);
-                    Some(Arc::new(transport))
-                }
-                None => None,
-            },
-            metrics: match self.otlp_metrics {
-                Some(otlp_metrics) => {
-                    let (encoder, transport) =
-                        otlp_metrics.build(metrics.clone(), self.resource.as_ref())?;
-
-                    metrics_event_encoder = Some(encoder);
-                    Some(Arc::new(transport))
-                }
-                None => None,
-            },
+                (Some((encoder, sender)), Some((transport, receiver)))
+            }
+            None => (None, None),
         };
 
-        // Spawn the background worker to receive and forward batches of OTLP items
-        emit_batcher::tokio::spawn(receiver, move |batch: Channel| {
-            async fn send_channel_batch<R: RequestEncoder>(
-                r: &mut Result<(), BatchError<Channel>>,
-                client: &OtlpTransport<R>,
-                batch: EncodedScopeItems,
-                set: impl Fn(&mut Channel, EncodedScopeItems),
-            ) {
-                // Attempt to send the batch, restoring it on the channel if it fails
-                if let Err(e) = client.send(batch).await {
-                    *r = if let Err(re) = mem::replace(r, Ok(())) {
-                        Err(re.map_retryable(|channel| {
-                            let mut channel = channel.unwrap_or_default();
-                            set(&mut channel, e.into_retryable().unwrap_or_default());
+        let (otlp_traces, process_otlp_traces) = match self.otlp_traces {
+            Some(builder) => {
+                let (encoder, transport) =
+                    builder.build(metrics.clone(), self.resource.as_ref())?;
 
-                            Some(channel)
-                        }))
-                    } else {
-                        Err(e.map_retryable(|batch| {
-                            let mut channel = Channel::default();
-                            set(&mut channel, batch.unwrap_or_default());
+                let (sender, receiver) = emit_batcher::bounded(1024);
 
-                            Some(channel)
-                        }))
-                    };
-                }
+                (Some((encoder, sender)), Some((transport, receiver)))
+            }
+            None => (None, None),
+        };
+
+        let (otlp_metrics, process_otlp_metrics) = match self.otlp_metrics {
+            Some(builder) => {
+                let (encoder, transport) =
+                    builder.build(metrics.clone(), self.resource.as_ref())?;
+
+                let (sender, receiver) = emit_batcher::bounded(1024);
+
+                (Some((encoder, sender)), Some((transport, receiver)))
+            }
+            None => (None, None),
+        };
+
+        let receive = async move {
+            let processors = FuturesUnordered::<
+                Pin<
+                    Box<
+                        dyn Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>>
+                            + Send
+                            + 'static,
+                    >,
+                >,
+            >::new();
+
+            if let Some((transport, receiver)) = process_otlp_logs {
+                let transport = Arc::new(transport);
+
+                processors.push(Box::pin(receiver.exec(
+                    |wait| tokio::time::sleep(wait),
+                    move |batch| {
+                        let transport = transport.clone();
+
+                        async move { transport.send(batch).await }
+                    },
+                )));
             }
 
-            let client = client.clone();
+            if let Some((transport, receiver)) = process_otlp_traces {
+                let transport = Arc::new(transport);
 
-            /*
-            NOTE: Possible degenerate behavior here where one signal blocks others;
-            the logs endpoint is flaky and fails a lot, so it means traces also get
-            backed up waiting for retries of logs to succeed.
-            */
-            async move {
-                let Channel {
-                    otlp_logs,
-                    otlp_traces,
-                    otlp_metrics,
-                } = batch;
+                processors.push(Box::pin(receiver.exec(
+                    |wait| tokio::time::sleep(wait),
+                    move |batch| {
+                        let transport = transport.clone();
 
-                let mut r = Ok::<(), BatchError<Channel>>(());
-
-                // Send a batch of OTLP log records
-                if otlp_logs.total_items() > 0 {
-                    if let Some(client) = client.logs {
-                        send_channel_batch(&mut r, &client, otlp_logs, |channel, otlp_logs| {
-                            channel.otlp_logs = otlp_logs;
-                        })
-                        .await;
-                    }
-                }
-
-                // Send a batch of OTLP spans
-                if otlp_traces.total_items() > 0 {
-                    if let Some(client) = client.traces {
-                        send_channel_batch(&mut r, &client, otlp_traces, |channel, otlp_traces| {
-                            channel.otlp_traces = otlp_traces;
-                        })
-                        .await;
-                    }
-                }
-
-                // Send a batch of OTLP metrics
-                if otlp_metrics.total_items() > 0 {
-                    if let Some(client) = client.metrics {
-                        send_channel_batch(
-                            &mut r,
-                            &client,
-                            otlp_metrics,
-                            |channel, otlp_metrics| {
-                                channel.otlp_metrics = otlp_metrics;
-                            },
-                        )
-                        .await;
-                    }
-                }
-
-                r
+                        async move { transport.send(batch).await }
+                    },
+                )));
             }
-        });
+
+            if let Some((transport, receiver)) = process_otlp_metrics {
+                let transport = Arc::new(transport);
+
+                processors.push(Box::pin(receiver.exec(
+                    |wait| tokio::time::sleep(wait),
+                    move |batch| {
+                        let transport = transport.clone();
+
+                        async move { transport.send(batch).await }
+                    },
+                )));
+            }
+
+            // Process batches from each signal independently
+            // This ensures one signal becoming unavailable doesn't
+            // block the others
+            let _ = processors.into_future().await;
+        };
+
+        match tokio::runtime::Handle::try_current() {
+            // If we're on a `tokio` thread then spawn on it
+            Ok(handle) => {
+                handle.spawn(receive);
+            }
+            // If we're not on a `tokio` thread then spawn a
+            // background thread and run the work there
+            Err(_) => {
+                std::thread::spawn(move || {
+                    tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .unwrap()
+                        .block_on(receive);
+                });
+            }
+        }
 
         Ok(Otlp {
-            otlp_logs: logs_event_encoder,
-            otlp_traces: traces_event_encoder,
-            otlp_metrics: metrics_event_encoder,
+            otlp_logs,
+            otlp_traces,
+            otlp_metrics,
             metrics,
-            sender,
         })
     }
 }
@@ -511,13 +515,6 @@ impl OtlpTransportBuilder {
     }
 }
 
-#[derive(Clone)]
-struct OtlpClient {
-    logs: Option<Arc<OtlpTransport<LogsRequestEncoder>>>,
-    traces: Option<Arc<OtlpTransport<TracesRequestEncoder>>>,
-    metrics: Option<Arc<OtlpTransport<MetricsRequestEncoder>>>,
-}
-
 enum OtlpTransport<R> {
     Http {
         http: HttpConnection,
@@ -582,21 +579,21 @@ impl emit::emitter::Emitter for Otlp {
     fn emit<E: emit::event::ToEvent>(&self, evt: E) {
         let evt = evt.to_event();
 
-        if let Some(ref encoder) = self.otlp_metrics {
+        if let Some((ref encoder, ref sender)) = self.otlp_metrics {
             if let Some(encoded) = encoder.encode_event(&evt) {
-                return self.sender.send(ChannelItem::Metric(encoded));
+                return sender.send(encoded);
             }
         }
 
-        if let Some(ref encoder) = self.otlp_traces {
+        if let Some((ref encoder, ref sender)) = self.otlp_traces {
             if let Some(encoded) = encoder.encode_event(&evt) {
-                return self.sender.send(ChannelItem::Span(encoded));
+                return sender.send(encoded);
             }
         }
 
-        if let Some(ref encoder) = self.otlp_logs {
+        if let Some((ref encoder, ref sender)) = self.otlp_logs {
             if let Some(encoded) = encoder.encode_event(&evt) {
-                return self.sender.send(ChannelItem::LogRecord(encoded));
+                return sender.send(encoded);
             }
         }
 
@@ -604,62 +601,50 @@ impl emit::emitter::Emitter for Otlp {
     }
 
     fn blocking_flush(&self, timeout: Duration) -> bool {
-        emit_batcher::tokio::blocking_flush(&self.sender, timeout)
+        let start = Instant::now();
+
+        if let Some((_, ref sender)) = self.otlp_logs {
+            if !emit_batcher::tokio::blocking_flush(sender, timeout.saturating_sub(start.elapsed()))
+            {
+                return false;
+            }
+        }
+
+        if let Some((_, ref sender)) = self.otlp_traces {
+            if !emit_batcher::tokio::blocking_flush(sender, timeout.saturating_sub(start.elapsed()))
+            {
+                return false;
+            }
+        }
+
+        if let Some((_, ref sender)) = self.otlp_metrics {
+            if !emit_batcher::tokio::blocking_flush(sender, timeout.saturating_sub(start.elapsed()))
+            {
+                return false;
+            }
+        }
+
+        true
     }
 }
 
-#[derive(Default)]
-pub(crate) struct Channel {
-    otlp_logs: EncodedScopeItems,
-    otlp_traces: EncodedScopeItems,
-    otlp_metrics: EncodedScopeItems,
-}
-
-pub(crate) enum ChannelItem {
-    LogRecord(EncodedEvent),
-    Span(EncodedEvent),
-    Metric(EncodedEvent),
-}
-
-impl emit_batcher::Channel for Channel {
-    type Item = ChannelItem;
+impl emit_batcher::Channel for EncodedScopeItems {
+    type Item = EncodedEvent;
 
     fn new() -> Self {
-        Channel {
-            otlp_logs: EncodedScopeItems::new(),
-            otlp_traces: EncodedScopeItems::new(),
-            otlp_metrics: EncodedScopeItems::new(),
-        }
+        EncodedScopeItems::new()
     }
 
     fn push(&mut self, item: Self::Item) {
-        match item {
-            ChannelItem::LogRecord(item) => self.otlp_logs.push(item),
-            ChannelItem::Span(item) => self.otlp_traces.push(item),
-            ChannelItem::Metric(item) => self.otlp_metrics.push(item),
-        }
+        self.push(item)
     }
 
     fn len(&self) -> usize {
-        let Channel {
-            otlp_logs: logs,
-            otlp_traces: traces,
-            otlp_metrics: metrics,
-        } = self;
-
-        logs.total_items() + traces.total_items() + metrics.total_items()
+        self.total_items()
     }
 
     fn clear(&mut self) {
-        let Channel {
-            otlp_logs: logs,
-            otlp_traces: traces,
-            otlp_metrics: metrics,
-        } = self;
-
-        logs.clear();
-        traces.clear();
-        metrics.clear();
+        self.clear()
     }
 }
 
