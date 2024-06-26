@@ -57,6 +57,9 @@ features = ["rt-multi-thread", "sync", "net"]
 version = "1"
 features = ["client", "http1", "http2"]
 
+[dependencies.futures]
+version = "0.3"
+
 [dependencies.tokio-rustls]
 version = "0.26"
 optional = true

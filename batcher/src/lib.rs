@@ -70,7 +70,7 @@ pub trait Channel {
     /**
     Push an item onto the end of the channel.
     */
-    fn push<'a>(&mut self, item: Self::Item);
+    fn push(&mut self, item: Self::Item);
 
     /**
     The number of items in the channel.
