@@ -15,7 +15,7 @@ version = "0.11.0-alpha.5"
 version = "0.11.0-alpha.5"
 ```
 
-Initialize `emit` to send diagnostics to the OpenTelemetry SDK using [`new`]:
+Initialize `emit` to send diagnostics to the OpenTelemetry SDK using [`setup`]:
 
 ```
 fn main() {
@@ -38,6 +38,49 @@ Diagnostic events produced by the [`macro@emit::span`] macro are sent to an [`op
 # Limitations
 
 This library doesn't support `emit`'s metrics as OpenTelemetry metrics. Any metric samples produced by `emit` will be emitted as log records.
+
+# Troubleshooting
+
+If you're not seeing `emit` diagnostics flow as expected through the OpenTelemetry SDK, you can try configuring `emit`'s internal logger, and collect metrics from the integration:
+
+```
+# mod emit_term {
+#     pub fn stdout() -> impl emit::runtime::InternalEmitter + Send + Sync + 'static {
+#        emit::runtime::AssertInternal(emit::emitter::from_fn(|_| {}))
+#     }
+# }
+use emit::metric::Source;
+
+fn main() {
+    // 1. Initialize the internal logger
+    //    Diagnostics produced by `emit_opentelemetry` itself will go here
+    let internal = emit::setup()
+        .emit_to(emit_term::stdout())
+        .init_internal();
+
+    let mut reporter = emit::metric::Reporter::new();
+
+    let rt = emit_opentelemetry::setup()
+        .map_emitter(|emitter| {
+            // 2. Add `emit_opentelemetry`'s metrics to a reporter so we can see what it's up to
+            //    You can do this independently of the internal emitter
+            reporter.add_source(emitter.metric_source());
+
+            emitter
+        })
+        .init();
+
+    // Your app code goes here
+
+    rt.blocking_flush(std::time::Duration::from_secs(30));
+
+    // 3. Report metrics after attempting to flush
+    //    You could also do this periodically as your application runs
+    reporter.emit_metrics(&internal.emitter());
+}
+```
+
+Also see the [`opentelemetry`] docs for any details on getting diagnostics out of it.
 */
 
 #![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]
@@ -71,8 +114,6 @@ pub use internal_metrics::*;
 /**
 Start a builder for the `emit` to OpenTelemetry SDK integration.
 
-The `name` argument is passed to the underlying [`opentelemetry::global::tracer`] and [`opentelemetry::global::logger`] used by the integration. Pass the result of [`OpenTelemetry::emitter`] to [`emit::Setup::emit_to`] and [`OpenTelemetry::ctxt`] to [`emit::Setup::map_ctxt`] to complete configuration:
-
 ```
 fn main() {
     // Configure the OpenTelemetry SDK
@@ -87,74 +128,46 @@ fn main() {
 }
 ```
 
-Both the `emitter` and `ctxt` values must be set in order for `emit` to integrate with the OpenTelemetry SDK properly.
+Use [`emit::Setup::map_emitter`] and [`emit::Setup::map_ctxt`] on the returned value to customize the integration:
+
+```
+fn main() {
+    // Configure the OpenTelemetry SDK
+
+    let rt = emit_opentelemetry::setup()
+        .map_emitter(|emitter| emitter
+            .with_log_body(|evt, f| write!(f, "{}", evt.tpl()))
+            .with_span_name(|evt, f| write!(f, "{}", evt.tpl()))
+        )
+        .init();
+
+    // Your app code goes here
+
+    rt.blocking_flush(std::time::Duration::from_secs(30));
+
+    // Shutdown the OpenTelemetry SDK
+}
+```
 */
 pub fn setup() -> emit::Setup<
     OpenTelemetryEmitter,
     emit::setup::DefaultFilter,
     OpenTelemetryCtxt<emit::setup::DefaultCtxt>,
 > {
-    let mut bridge = EmitOpenTelemetry::new("emit");
+    let name = "emit";
+    let metrics = Arc::new(InternalMetrics::default());
 
     emit::setup()
-        .emit_to(bridge.emitter())
-        .map_ctxt(|ctxt| bridge.ctxt(ctxt))
+        .emit_to(OpenTelemetryEmitter::new(metrics.clone(), name))
+        .map_ctxt(|ctxt| OpenTelemetryCtxt::wrap(metrics.clone(), name, ctxt))
 }
 
 /**
-A builder for the `emit` to OpenTelemetry SDK integration.
-
-Use [`new`] to start an [`EmitOpenTelemetry`] builder.
-*/
-pub struct EmitOpenTelemetry {
-    name: &'static str,
-    metrics: Arc<InternalMetrics>,
-}
-
-impl EmitOpenTelemetry {
-    fn new(name: &'static str) -> Self {
-        EmitOpenTelemetry {
-            name,
-            metrics: Default::default(),
-        }
-    }
-
-    /**
-    Get an emitter to pass to [`emit::Setup::emit_to`].
-
-    The returned [`OpenTelemetryEmitter`] has additional configuration methods on it.
-    */
-    pub fn emitter(&mut self) -> OpenTelemetryEmitter {
-        OpenTelemetryEmitter::new(self.metrics.clone(), self.name)
-    }
-
-    /**
-    Get a ctxt to pass to [`emit::Setup::map_ctxt`].
-
-    The returned [`OpenTelemetryCtxt`] has additional configuration methods on it.
-    */
-    pub fn ctxt<C>(&mut self, ctxt: C) -> OpenTelemetryCtxt<C> {
-        OpenTelemetryCtxt::wrap(self.metrics.clone(), self.name, ctxt)
-    }
-
-    /**
-    Get an [`emit::metric::Source`] for instrumentation produced by the `emit` to the OpenTelemetry SDK integration.
-
-    These metrics can be used to monitor the running health of your diagnostic pipeline.
-    */
-    pub fn metric_source(&self) -> EmitOpenTelemetryMetrics {
-        EmitOpenTelemetryMetrics {
-            metrics: self.metrics.clone(),
-        }
-    }
-}
-
-/**
-An [`emit::Ctxt`] returned by [`OpenTelemetry::ctxt`] for integrating `emit` with the OpenTelemetry SDK.
+An [`emit::Ctxt`] created during [`setup`] for integrating `emit` with the OpenTelemetry SDK.
 
 This type is responsible for intercepting calls that push span state to `emit`'s ambient context and forwarding them to the OpenTelemetry SDK's own context.
 
-When [`macro@emit::span`] is called, an [`opentelemetry::trace::Span`] is started using the given trace and span ids. The span doesn't carry any other ambient properties until it's completed either through [`emit::span::Span::complete`], or at the end of the scope the [`macro@emit::span`] macro covers.
+When [`macro@emit::span`] is called, an [`opentelemetry::trace::Span`] is started using the given trace and span ids. The span doesn't carry any other ambient properties until it's completed either through [`emit::span::SpanGuard::complete`], or at the end of the scope the [`macro@emit::span`] macro covers.
 */
 pub struct OpenTelemetryCtxt<C> {
     tracer: BoxedTracer,
@@ -198,6 +211,19 @@ impl<C> OpenTelemetryCtxt<C> {
             tracer: global::tracer(name),
             inner: ctxt,
             metrics,
+        }
+    }
+
+    /**
+    Get an [`emit::metric::Source`] for instrumentation produced by the `emit` to OpenTelemetry SDK integration.
+
+    These metrics are shared by [`OpenTelemetryEmitter::metric_source`].
+
+    These metrics can be used to monitor the running health of your diagnostic pipeline.
+    */
+    pub fn metric_source(&self) -> EmitOpenTelemetryMetrics {
+        EmitOpenTelemetryMetrics {
+            metrics: self.metrics.clone(),
         }
     }
 }
@@ -365,7 +391,7 @@ impl<C: emit::Ctxt> emit::Ctxt for OpenTelemetryCtxt<C> {
 }
 
 /**
-An [`emit::Emitter`] returned by [`OpenTelemetry::emitter`] for integrating `emit` with the OpenTelemetry SDK.
+An [`emit::Emitter`] creating during [`setup`] for integrating `emit` with the OpenTelemetry SDK.
 
 This type is responsible for emitting diagnostic events as log records through the OpenTelemetry SDK and completing spans created through the integration.
 */
@@ -451,6 +477,19 @@ impl OpenTelemetryEmitter {
     ) -> Self {
         self.log_body = Box::new(writer);
         self
+    }
+
+    /**
+    Get an [`emit::metric::Source`] for instrumentation produced by the `emit` to OpenTelemetry SDK integration.
+
+    These metrics are shared by [`OpenTelemetryCtxt::metric_source`].
+
+    These metrics can be used to monitor the running health of your diagnostic pipeline.
+    */
+    pub fn metric_source(&self) -> EmitOpenTelemetryMetrics {
+        EmitOpenTelemetryMetrics {
+            metrics: self.metrics.clone(),
+        }
     }
 }
 

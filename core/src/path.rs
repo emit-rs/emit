@@ -260,8 +260,8 @@ impl<'a> serde::Serialize for Path<'a> {
 
 #[cfg(feature = "alloc")]
 mod alloc_support {
-    use alloc::{borrow::Cow, boxed::Box, string::String};
     use super::*;
+    use alloc::{borrow::Cow, boxed::Box, string::String};
 
     impl Path<'static> {
         /**
