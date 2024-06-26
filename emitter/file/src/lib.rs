@@ -6,7 +6,7 @@ All file IO is performed on batches in a dedicated background thread.
 This library writes newline delimited JSON by default, like:
 
 ```text
-{"ts_start":"2024-05-29T03:35:13.922768000Z","ts":"2024-05-29T03:35:13.943506000Z","msg":"in_ctxt failed with `a` is odd","tpl":"in_ctxt failed with `err`","a":1,"err":"`a` is odd","lvl":"warn","span_id":"0a3686d1b788b277","span_parent":"1a50b58f2ef93f3b","trace_id":"8dd5d1f11af6ba1db4124072024933cb"}
+{"ts_start":"2024-05-29T03:35:13.922768000Z","ts":"2024-05-29T03:35:13.943506000Z","module":"my_app","msg":"in_ctxt failed with `a` is odd","tpl":"in_ctxt failed with `err`","a":1,"err":"`a` is odd","lvl":"warn","span_id":"0a3686d1b788b277","span_parent":"1a50b58f2ef93f3b","trace_id":"8dd5d1f11af6ba1db4124072024933cb"}
 ```
 
 # Getting started
@@ -83,6 +83,51 @@ Diagnostic events are written to files in asynchronous batches. Under normal ope
 # Handling IO failures
 
 If writing a batch fails while attempting to write to a file then the file being written to is considered poisoned and no future attempts will be made to write to it. The batch will instead be retried on a new file. Batches that fail attempting to sync are not retried. Since batches don't have explicit transactions, it's possible on failure for part or all of the failed batch to actually be present in the original file. That means diagnostic events may be duplicated in the case of an IO error while writing them.
+
+# Troubleshooting
+
+If you're not seeing diagnostics appear in files as expected, you can rule out configuration issues in `emit_file` by configuring `emit`'s internal logger, and collect metrics from it:
+
+```
+# mod emit_term {
+#     pub fn stdout() -> impl emit::runtime::InternalEmitter + Send + Sync + 'static {
+#        emit::runtime::AssertInternal(emit::emitter::from_fn(|_| {}))
+#     }
+# }
+use emit::metric::Source;
+
+fn main() {
+    // 1. Initialize the internal logger
+    //    Diagnostics produced by `emit_file` itself will go here
+    let internal = emit::setup()
+        .emit_to(emit_term::stdout())
+        .init_internal();
+
+    let mut reporter = emit::metric::Reporter::new();
+
+    let rt = emit::setup()
+        .emit_to({
+            let files = emit_file::set("./target/logs/my_app.txt").spawn().unwrap();
+
+            // 2. Add `emit_file`'s metrics to a reporter so we can see what it's up to
+            //    You can do this independently of the internal emitter
+            reporter.add_source(files.metric_source());
+
+            files
+        })
+        .init();
+
+    // Your app code goes here
+
+    rt.blocking_flush(std::time::Duration::from_secs(30));
+
+    // 3. Report metrics after attempting to flush
+    //    You could also do this periodically as your application runs
+    reporter.emit_metrics(&internal.emitter());
+}
+```
+
+Diagnostics include when batches are written, and any failures observed along the way.
 */
 
 #![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]
