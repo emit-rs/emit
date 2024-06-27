@@ -1,6 +1,6 @@
 [package]
 name = "emit_file"
-version = "0.11.0-alpha.5"
+version = "0.11.0-alpha.6"
 authors = ["emit contributors"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -18,7 +18,7 @@ default = ["default_writer"]
 default_writer = ["emit/sval", "sval_json"]
 
 [dependencies.emit]
-version = "0.11.0-alpha.5"
+version = "0.11.0-alpha.6"
 path = "../../"
 default-features = false
 features = ["std", "implicit_internal_rt"]
@@ -32,13 +32,13 @@ features = ["std"]
 optional = true
 
 [dependencies.emit_batcher]
-version = "0.11.0-alpha.5"
+version = "0.11.0-alpha.6"
 path = "../../batcher"
 
 [dependencies.rand]
 version = "0.8"
 
 [dev-dependencies.emit]
-version = "0.11.0-alpha.5"
+version = "0.11.0-alpha.6"
 path = "../../"
 features = ["implicit_rt"]
