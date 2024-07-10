@@ -33,7 +33,6 @@ use crate::{
 /**
 A hierarchical identifier, such as `a::b::c`.
 */
-// TODO: Handle cases of invalid paths like `a::`, `::`, `a::::b`
 #[derive(Clone)]
 pub struct Path<'a>(Str<'a>);
 
@@ -107,7 +106,11 @@ impl<'a> Path<'a> {
     */
     pub fn segments(&self) -> Segments {
         Segments {
-            inner: self.0.get().split("::"),
+            inner: match self.0.get_static() {
+                Some(inner) => SegmentsInner::Static(inner.split("::")),
+                None => SegmentsInner::Borrowed(self.0.get().split("::")),
+            },
+            first: true,
         }
     }
 
@@ -140,7 +143,7 @@ impl<'a> Path<'a> {
         let child = self.0.get();
         let parent = other.0.get();
 
-        if child.len() >= parent.len() && child.is_char_boundary(parent.len()) {
+        if child.is_char_boundary(parent.len()) {
             let (child_prefix, child_suffix) = child.split_at(parent.len());
 
             child_prefix == parent && (child_suffix.is_empty() || child_suffix.starts_with("::"))
@@ -156,14 +159,37 @@ The result of [`Path::segments`].
 This type is an iterator over the `::` separated fragments in a [`Path`].
 */
 pub struct Segments<'a> {
-    inner: str::Split<'a, &'static str>,
+    inner: SegmentsInner<'a>,
+    first: bool,
+}
+
+enum SegmentsInner<'a> {
+    Borrowed(str::Split<'a, &'static str>),
+    Static(str::Split<'static, &'static str>),
 }
 
 impl<'a> Iterator for Segments<'a> {
     type Item = Str<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(Str::new_ref)
+        loop {
+            let next = match self.inner {
+                SegmentsInner::Borrowed(ref mut inner) => inner.next().map(Str::new_ref),
+                SegmentsInner::Static(ref mut inner) => inner.next().map(Str::new),
+            }?;
+
+            // Yield an empty segment if it's the root
+            if self.first {
+                self.first = false;
+                
+                return Some(next);
+            }
+
+            // Don't yield any subsequent empty segments
+            if !next.get().is_empty() {
+                return Some(next);
+            }
+        }
     }
 }
 
@@ -323,11 +349,34 @@ mod tests {
     use super::*;
 
     #[test]
+    fn segments() {
+        for (case, segments, root, last_child) in [
+            ("a", vec!["a"], "a", "a"),
+            ("a::b", vec!["a", "b"], "a", "b"),
+            ("", vec![""], "", ""),
+            ("::", vec![""], "", ""),
+            ("a::", vec!["a"], "a", "a"),
+            ("::a", vec!["", "a"], "", "a"),
+            ("::::", vec![""], "", ""),
+            ("a::::b", vec!["a", "b"], "a", "b"),
+        ] {
+            let path = Path::new(case);
+
+            assert_eq!(segments, path.segments().map(|segment| segment.get_static().unwrap()).collect::<Vec<_>>());
+            assert_eq!(root, path.root().get_static().unwrap());
+            assert_eq!(last_child, path.last_child().get_static().unwrap());
+        }
+    }
+
+    #[test]
     fn is_child_of() {
         let a = Path::new("a");
         let aa = Path::new("aa");
         let b = Path::new("b");
         let a_b = Path::new("a::b");
+        
+        let r_a = Path::new("::a");
+        let r_a_b = Path::new("::a::b");
 
         assert!(!aa.is_child_of(&a));
         assert!(!b.is_child_of(&a));
@@ -335,5 +384,49 @@ mod tests {
 
         assert!(a.is_child_of(&a));
         assert!(a_b.is_child_of(&a));
+
+        assert!(r_a.is_child_of(&r_a));
+        assert!(r_a_b.is_child_of(&r_a_b));
+        assert!(r_a_b.is_child_of(&r_a));
+
+        assert!(!a.is_child_of(&r_a));
+        assert!(!r_a.is_child_of(&a));
+    }
+
+    #[test]
+    fn is_child_of_rooted() {
+        let a = Path::new("a");
+        let r_a = Path::new("::a");
+        let r_a_b = Path::new("::a::b");
+        let r = Path::new("::");
+
+        assert!(r_a.is_child_of(&r_a));
+        assert!(r_a_b.is_child_of(&r_a_b));
+        assert!(r_a_b.is_child_of(&r_a));
+        assert!(r_a.is_child_of(&r));
+
+        assert!(!a.is_child_of(&r_a));
+        assert!(!r_a.is_child_of(&a));
+    }
+
+    #[test]
+    fn is_child_of_empty() {
+        let empty = Path::new("");
+
+        let a = Path::new("a");
+        let r = Path::new("::");
+        let r_a = Path::new("::a");
+        let a_r = Path::new("a::");
+
+        assert!(empty.is_child_of(&empty));
+        assert!(r.is_child_of(&empty));
+
+        assert!(!empty.is_child_of(&r));
+        assert!(!empty.is_child_of(&a));
+        assert!(!empty.is_child_of(&r_a));
+        assert!(!empty.is_child_of(&a_r));
+
+        assert!(!a.is_child_of(&empty));
+        assert!(!r_a.is_child_of(&empty));
     }
 }

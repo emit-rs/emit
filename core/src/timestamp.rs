@@ -246,8 +246,7 @@ impl Timestamp {
         let secs = dur.as_secs();
         let nanos = dur.subsec_nanos();
 
-        // Note(dcb): this bit is rearranged slightly to avoid integer overflow.
-        let mut days = ((secs / 86_400) - (LEAPOCH_SECS / 86_400)) as i64;
+        let mut days = ((secs as i64 / 86_400) - (LEAPOCH_SECS as i64 / 86_400)) as i64;
         let mut remsecs = (secs % 86_400) as i32;
         if remsecs < 0i32 {
             remsecs += 86_400;
