@@ -5,10 +5,10 @@ A path is a hierarchical identifier with fragments separated by `::`. The follow
 
 - `a`.
 - `a::b`.
-- `::c`.
 
-The path syntax is a subset of Rust's paths. The following are not valid paths:
+The path syntax is a subset of Rust's paths. The following are not considered valid paths:
 
+- `::a`.
 - `::`.
 - `a::`.
 - `a::::b`.
@@ -25,6 +25,8 @@ use core::{
     str,
 };
 
+use unicode_ident::{is_xid_continue, is_xid_start};
+
 use crate::{
     str::Str,
     value::{FromValue, ToValue, Value},
@@ -32,6 +34,8 @@ use crate::{
 
 /**
 A hierarchical identifier, such as `a::b::c`.
+
+Paths have some logic for determining whether one path is a child of another but don't handle relative/absolute paths or globs.
 */
 #[derive(Clone)]
 pub struct Path<'a>(Str<'a>);
@@ -68,7 +72,9 @@ impl<'a> FromValue<'a> for Path<'a> {
 
 impl Path<'static> {
     /**
-    Create a path from a raw value.
+    Create a path from a raw value without checking its validity.
+
+    This method is not unsafe. There are no memory safety properties tied to the validity of paths.
     */
     pub const fn new(path: &'static str) -> Self {
         Path::new_str(Str::new(path))
@@ -100,6 +106,68 @@ impl<'a> Path<'a> {
     }
 
     /**
+    Whether the given path is valid.
+
+    A path is valid if all of the following conditions hold:
+
+    1. The path is non-empty.
+    2. The path starts with an identifier.
+    3. The path ends with an identifier.
+    4. Identifiers are separated by `::`.
+
+    Paths constructed from Rust's [`module_path!`] macro are guaranteed to be valid.
+
+    The behavior of invalid paths in [`Path::segments`] and [`Path::is_child_of`]
+    is undefined.
+    */
+    pub fn is_valid(&self) -> bool {
+        let path = self.0.get();
+
+        // Empty paths are not valid
+        if path.len() == 0 {
+            return false;
+        }
+
+        // Paths that start with `:` are not valid
+        // We don't need to check whether the path
+        // ends with `:` because that's checked below
+        if path.starts_with(':') {
+            return false;
+        }
+
+        let mut separators = 0;
+
+        for c in path.chars() {
+            match c {
+                // The start of a `::` separator
+                ':' if separators == 0 => {
+                    separators = 1;
+                }
+                // The end of a `::` separator
+                ':' if separators == 1 => {
+                    separators = 2;
+                }
+                // The start of an identifier
+                c if separators % 2 == 0 && is_xid_start(c) => {
+                    separators = 0;
+                }
+                // The middle of an identifier
+                c if is_xid_continue(c) => (),
+                // An invalid character
+                _ => return false,
+            }
+        }
+
+        // If we ended on a separator (complete or incomplete)
+        // then the path is not valid
+        if separators != 0 {
+            return false;
+        }
+
+        true
+    }
+
+    /**
     Iterate over the segments of the path.
 
     Each segment is the identifier between `::` in the path value.
@@ -110,7 +178,6 @@ impl<'a> Path<'a> {
                 Some(inner) => SegmentsInner::Static(inner.split("::")),
                 None => SegmentsInner::Borrowed(self.0.get().split("::")),
             },
-            first: true,
         }
     }
 
@@ -160,7 +227,6 @@ This type is an iterator over the `::` separated fragments in a [`Path`].
 */
 pub struct Segments<'a> {
     inner: SegmentsInner<'a>,
-    first: bool,
 }
 
 enum SegmentsInner<'a> {
@@ -172,23 +238,9 @@ impl<'a> Iterator for Segments<'a> {
     type Item = Str<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            let next = match self.inner {
-                SegmentsInner::Borrowed(ref mut inner) => inner.next().map(Str::new_ref),
-                SegmentsInner::Static(ref mut inner) => inner.next().map(Str::new),
-            }?;
-
-            // Yield an empty segment if it's the root
-            if self.first {
-                self.first = false;
-                
-                return Some(next);
-            }
-
-            // Don't yield any subsequent empty segments
-            if !next.get().is_empty() {
-                return Some(next);
-            }
+        match self.inner {
+            SegmentsInner::Borrowed(ref mut inner) => inner.next().map(Str::new_ref),
+            SegmentsInner::Static(ref mut inner) => inner.next().map(Str::new),
         }
     }
 }
@@ -353,16 +405,15 @@ mod tests {
         for (case, segments, root, last_child) in [
             ("a", vec!["a"], "a", "a"),
             ("a::b", vec!["a", "b"], "a", "b"),
-            ("", vec![""], "", ""),
-            ("::", vec![""], "", ""),
-            ("a::", vec!["a"], "a", "a"),
-            ("::a", vec!["", "a"], "", "a"),
-            ("::::", vec![""], "", ""),
-            ("a::::b", vec!["a", "b"], "a", "b"),
         ] {
             let path = Path::new(case);
 
-            assert_eq!(segments, path.segments().map(|segment| segment.get_static().unwrap()).collect::<Vec<_>>());
+            assert_eq!(
+                segments,
+                path.segments()
+                    .map(|segment| segment.get_static().unwrap())
+                    .collect::<Vec<_>>()
+            );
             assert_eq!(root, path.root().get_static().unwrap());
             assert_eq!(last_child, path.last_child().get_static().unwrap());
         }
@@ -374,9 +425,6 @@ mod tests {
         let aa = Path::new("aa");
         let b = Path::new("b");
         let a_b = Path::new("a::b");
-        
-        let r_a = Path::new("::a");
-        let r_a_b = Path::new("::a::b");
 
         assert!(!aa.is_child_of(&a));
         assert!(!b.is_child_of(&a));
@@ -384,49 +432,23 @@ mod tests {
 
         assert!(a.is_child_of(&a));
         assert!(a_b.is_child_of(&a));
-
-        assert!(r_a.is_child_of(&r_a));
-        assert!(r_a_b.is_child_of(&r_a_b));
-        assert!(r_a_b.is_child_of(&r_a));
-
-        assert!(!a.is_child_of(&r_a));
-        assert!(!r_a.is_child_of(&a));
     }
 
     #[test]
-    fn is_child_of_rooted() {
-        let a = Path::new("a");
-        let r_a = Path::new("::a");
-        let r_a_b = Path::new("::a::b");
-        let r = Path::new("::");
-
-        assert!(r_a.is_child_of(&r_a));
-        assert!(r_a_b.is_child_of(&r_a_b));
-        assert!(r_a_b.is_child_of(&r_a));
-        assert!(r_a.is_child_of(&r));
-
-        assert!(!a.is_child_of(&r_a));
-        assert!(!r_a.is_child_of(&a));
-    }
-
-    #[test]
-    fn is_child_of_empty() {
-        let empty = Path::new("");
-
-        let a = Path::new("a");
-        let r = Path::new("::");
-        let r_a = Path::new("::a");
-        let a_r = Path::new("a::");
-
-        assert!(empty.is_child_of(&empty));
-        assert!(r.is_child_of(&empty));
-
-        assert!(!empty.is_child_of(&r));
-        assert!(!empty.is_child_of(&a));
-        assert!(!empty.is_child_of(&r_a));
-        assert!(!empty.is_child_of(&a_r));
-
-        assert!(!a.is_child_of(&empty));
-        assert!(!r_a.is_child_of(&empty));
+    fn is_valid() {
+        for (case, is_valid) in [
+            ("a", true),
+            ("a::b", true),
+            ("", false),
+            ("::", false),
+            ("::a", false),
+            ("a::", false),
+            ("a:b", false),
+            ("a::::b", false),
+            ("a::{b, c}", false),
+            ("a::*", false),
+        ] {
+            assert_eq!(Path::new(case).is_valid(), is_valid);
+        }
     }
 }

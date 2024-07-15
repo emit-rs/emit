@@ -23,6 +23,14 @@ use crate::{
 A collection of [`Str`] and [`Value`] pairs.
 
 The [`Props::for_each`] method can be used to enumerate properties.
+
+# Uniqueness
+
+Properties may be duplicated in a set of `Props`. When a property is duplicated, the _first_ for a given key is the one to use.
+
+# Typed and untyped properties
+
+The [`Props::get`] method will return a property as an untyped [`Value`] that can be formatted or serialized. IF you're looking for a specific type, you can use [`Props::pull`] instead.
 */
 pub trait Props {
     /**
@@ -32,8 +40,6 @@ pub trait Props {
 
     Properties may be repeated, but can be de-duplicated by taking the first seen for a given key.
     */
-    // TODO: Could we do `for_each_entry(E, Str, Value)`, where we pass as input
-    // a type that can be used to resume from?
     fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
         &'kv self,
         for_each: F,
@@ -45,6 +51,8 @@ pub trait Props {
     If the key is present then this method will return `Some`. Otherwise this method will return `None`.
 
     If the key appears multiple times, the first value seen should be returned.
+
+    Implementors are encouraged to override this method with a more efficient implementation.
     */
     fn get<'v, K: ToStr>(&'v self, key: K) -> Option<Value<'v>> {
         let key = key.to_str();
@@ -307,6 +315,7 @@ mod alloc_support {
             &'kv self,
             mut for_each: F,
         ) -> ControlFlow<()> {
+            // Optimization for props that are already unique
             if self.0.is_unique() {
                 return self.0.for_each(for_each);
             }
@@ -332,6 +341,44 @@ mod alloc_support {
 
         fn is_unique(&self) -> bool {
             true
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn dedup() {
+            let props = [
+                ("a", Value::from(1)),
+                ("a", Value::from(2)),
+                ("b", Value::from(1)),
+            ];
+
+            let deduped = props.dedup();
+
+            let mut ac = 0;
+            let mut bc = 0;
+
+            deduped.for_each(|k, v| {
+                match k.get() {
+                    "a" => {
+                        assert_eq!(1, v.cast::<i32>().unwrap());
+                        ac += 1;
+                    }
+                    "b" => {
+                        assert_eq!(1, v.cast::<i32>().unwrap());
+                        bc += 1;
+                    }
+                    _ => unreachable!(),
+                }
+
+                ControlFlow::Continue(())
+            });
+
+            assert_eq!(1, ac);
+            assert_eq!(1, bc);
         }
     }
 }

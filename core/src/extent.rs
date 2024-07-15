@@ -208,8 +208,14 @@ mod tests {
 
         assert_eq!(&(Timestamp::MIN + Duration::from_secs(1)), ts.as_point());
 
-        assert_eq!(&(Timestamp::MIN..Timestamp::MIN + Duration::from_secs(1)), ts.as_range());
-        assert_eq!(Some(&(Timestamp::MIN..Timestamp::MIN + Duration::from_secs(1))), ts.as_span());
+        assert_eq!(
+            &(Timestamp::MIN..Timestamp::MIN + Duration::from_secs(1)),
+            ts.as_range()
+        );
+        assert_eq!(
+            Some(&(Timestamp::MIN..Timestamp::MIN + Duration::from_secs(1))),
+            ts.as_span()
+        );
         assert_eq!(Some(Duration::from_secs(1)), ts.len());
     }
 
