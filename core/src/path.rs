@@ -1,19 +1,7 @@
 /*!
 The [`Path`] type.
 
-A path is a hierarchical identifier with fragments separated by `::`. The following are all valid paths:
-
-- `a`.
-- `a::b`.
-
-The path syntax is a subset of Rust's paths. The following are not considered valid paths:
-
-- `::a`.
-- `::`.
-- `a::`.
-- `a::::b`.
-- `a::*`.
-- `a::{b, c}`.
+A path is a hierarchical identifier with fragments separated by `::`. Simple Rust paths like `a`, and `a::b::c` are valid [`Path`]s. Complex Rust paths like `a::{b, c}`, and `a::*` are not valid [`Path`]s.
 
 Paths are used to represent the module on [`crate::event::Event`]s.
 */
@@ -36,19 +24,21 @@ use crate::{
 A hierarchical identifier, such as `a::b::c`.
 
 Paths have some logic for determining whether one path is a child of another but don't handle relative/absolute paths or globs.
+
+Paths are validated when they're used rather than when they're constructed. This is to keep conversions between paths and primitive types simple so data is less likely to disappear, even when it's not valid. The [`Path::validate`] method can be used to enforce the validity of a path upfront, so it isn't checked again when calling [`Path::segments`] or [`Path::is_child_of`].
 */
 #[derive(Clone)]
-pub struct Path<'a>(Str<'a>);
+pub struct Path<'a>(Str<'a>, bool);
 
 impl<'a> From<&'a str> for Path<'a> {
     fn from(value: &'a str) -> Self {
-        Path(Str::from(value))
+        Path::new_ref(value)
     }
 }
 
 impl<'a> From<Str<'a>> for Path<'a> {
     fn from(value: Str<'a>) -> Self {
-        Path(value)
+        Path::new_str(value)
     }
 }
 
@@ -72,12 +62,19 @@ impl<'a> FromValue<'a> for Path<'a> {
 
 impl Path<'static> {
     /**
+    Create a path from a raw value.
+    */
+    pub const fn new(path: &'static str) -> Self {
+        Path::new_str(Str::new(path))
+    }
+
+    /**
     Create a path from a raw value without checking its validity.
 
     This method is not unsafe. There are no memory safety properties tied to the validity of paths.
     */
-    pub const fn new(path: &'static str) -> Self {
-        Path::new_str(Str::new(path))
+    pub const fn new_unchecked(path: &'static str) -> Self {
+        Path::new_str_unchecked(Str::new(path))
     }
 }
 
@@ -92,17 +89,51 @@ impl<'a> Path<'a> {
     }
 
     /**
+    Create a path from a raw borrowed value without checking its validity.
+
+    The [`Path::new_unchecked`] method should be preferred where possible.
+
+    This method is not unsafe. There are no memory safety properties tied to the validity of paths.
+    */
+    pub const fn new_ref_unchecked(path: &'a str) -> Self {
+        Self::new_str_unchecked(Str::new_ref(path))
+    }
+
+    /**
     Create a path from a raw [`Str`] value.
     */
     pub const fn new_str(path: Str<'a>) -> Self {
-        Path(path)
+        Path(path, false)
+    }
+
+    /**
+    Create a path from a raw [`Str`] value without checking its validity.
+
+    This method is not unsafe. There are no memory safety properties tied to the validity of paths.
+    */
+    pub const fn new_str_unchecked(path: Str<'a>) -> Self {
+        Path(path, true)
     }
 
     /**
     Get a path, borrowing data from this one.
     */
     pub fn by_ref<'b>(&'b self) -> Path<'b> {
-        Path(self.0.by_ref())
+        Path(self.0.by_ref(), self.1)
+    }
+
+    /**
+    Check whether a path is valid.
+
+    After this check is performed, [`Path::segments`] and [`Path::is_child_of`]
+    won't need to re-validate this path.
+    */
+    pub fn validate(self) -> Result<Self, InvalidPathError> {
+        if self.is_valid() {
+            Ok(Path(self.0, true))
+        } else {
+            Err(InvalidPathError {})
+        }
     }
 
     /**
@@ -116,11 +147,13 @@ impl<'a> Path<'a> {
     4. Identifiers are separated by `::`.
 
     Paths constructed from Rust's [`module_path!`] macro are guaranteed to be valid.
-
-    The behavior of invalid paths in [`Path::segments`] and [`Path::is_child_of`]
-    is undefined.
     */
     pub fn is_valid(&self) -> bool {
+        // The path is pre-validated
+        if self.1 {
+            return true;
+        }
+
         let path = self.0.get();
 
         // Empty paths are not valid
@@ -170,33 +203,19 @@ impl<'a> Path<'a> {
     /**
     Iterate over the segments of the path.
 
-    Each segment is the identifier between `::` in the path value.
+    The behavior of invalid paths is undefined.
     */
-    pub fn segments(&self) -> Segments {
-        Segments {
+    pub fn segments(&self) -> Result<Segments, InvalidPathError> {
+        if !self.is_valid() {
+            return Err(InvalidPathError {});
+        }
+
+        Ok(Segments {
             inner: match self.0.get_static() {
                 Some(inner) => SegmentsInner::Static(inner.split("::")),
                 None => SegmentsInner::Borrowed(self.0.get().split("::")),
             },
-        }
-    }
-
-    /**
-    The root of the path.
-
-    If the path consists of a single segment then this method will return it.
-    */
-    pub fn root(&self) -> Str {
-        self.segments().next().unwrap_or_else(|| self.0.by_ref())
-    }
-
-    /**
-    The last child segment of the path.
-
-    If the path consists of a single segment then this method will return it.
-    */
-    pub fn last_child(&self) -> Str {
-        self.segments().last().unwrap_or_else(|| self.0.by_ref())
+        })
     }
 
     /**
@@ -205,20 +224,43 @@ impl<'a> Path<'a> {
     The path _a_ is a child of the path _b_ if _b_ is a prefix of _a_ up to a path segment. The path `a::b` is a child of `a`. The path `c::a::b` is not a child of `a`. The path `aa::b` is not a child of `a`.
 
     This method is reflexive. A path is considered a child of itself.
+
+    The behavior of invalid paths is undefined.
     */
-    pub fn is_child_of<'b>(&self, other: &Path<'b>) -> bool {
+    pub fn is_child_of<'b>(&self, other: &Path<'b>) -> Result<bool, InvalidPathError> {
+        if !self.is_valid() || !other.is_valid() {
+            return Err(InvalidPathError {});
+        }
+
         let child = self.0.get();
         let parent = other.0.get();
 
-        if child.is_char_boundary(parent.len()) {
+        let is_child = if child.is_char_boundary(parent.len()) {
             let (child_prefix, child_suffix) = child.split_at(parent.len());
 
             child_prefix == parent && (child_suffix.is_empty() || child_suffix.starts_with("::"))
         } else {
             false
-        }
+        };
+
+        Ok(is_child)
     }
 }
+
+/**
+An error attempting to use an invalid [`Path`].
+*/
+#[derive(Debug)]
+pub struct InvalidPathError {}
+
+impl fmt::Display for InvalidPathError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "the path is not valid")
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for InvalidPathError {}
 
 /**
 The result of [`Path::segments`].
@@ -346,7 +388,16 @@ mod alloc_support {
         Create a path from an owned raw value.
         */
         pub fn new_owned(path: impl Into<Box<str>>) -> Self {
-            Path(Str::new_owned(path))
+            Path(Str::new_owned(path), false)
+        }
+
+        /**
+        Create a path from an owned raw value without checking its validity.
+
+        This method is not unsafe. There are no memory safety properties tied to the validity of paths.
+        */
+        pub fn new_owned_unchecked(path: impl Into<Box<str>>) -> Self {
+            Path(Str::new_owned(path), true)
         }
     }
 
@@ -357,14 +408,25 @@ mod alloc_support {
         If the value is `Cow::Borrowed` then this method will defer to [`Path::new_ref`]. If the value is `Cow::Owned` then this method will defer to [`Path::new_owned`].
         */
         pub fn new_cow_ref(path: Cow<'a, str>) -> Self {
-            Path(Str::new_cow_ref(path))
+            Path(Str::new_cow_ref(path), false)
+        }
+
+        /**
+        Create a path from a potentially owned raw value without checking its validity.
+
+        If the value is `Cow::Borrowed` then this method will defer to [`Path::new_ref_unchecked`]. If the value is `Cow::Owned` then this method will defer to [`Path::new_owned_unchecked`].
+
+        This method is not unsafe. There are no memory safety properties tied to the validity of paths.
+        */
+        pub fn new_cow_ref_unchecked(path: Cow<'a, str>) -> Self {
+            Path(Str::new_cow_ref(path), true)
         }
 
         /**
         Get a new path, taking an owned copy of the data in this one.
         */
         pub fn to_owned(&self) -> Path<'static> {
-            Path(self.0.to_owned())
+            Path(self.0.to_owned(), self.1)
         }
 
         /**
@@ -411,11 +473,28 @@ mod tests {
             assert_eq!(
                 segments,
                 path.segments()
+                    .unwrap()
                     .map(|segment| segment.get_static().unwrap())
                     .collect::<Vec<_>>()
             );
-            assert_eq!(root, path.root().get_static().unwrap());
-            assert_eq!(last_child, path.last_child().get_static().unwrap());
+            assert_eq!(
+                root,
+                path.segments()
+                    .unwrap()
+                    .next()
+                    .unwrap()
+                    .get_static()
+                    .unwrap()
+            );
+            assert_eq!(
+                last_child,
+                path.segments()
+                    .unwrap()
+                    .last()
+                    .unwrap()
+                    .get_static()
+                    .unwrap()
+            );
         }
     }
 
@@ -426,12 +505,12 @@ mod tests {
         let b = Path::new("b");
         let a_b = Path::new("a::b");
 
-        assert!(!aa.is_child_of(&a));
-        assert!(!b.is_child_of(&a));
-        assert!(!a.is_child_of(&a_b));
+        assert!(!aa.is_child_of(&a).unwrap());
+        assert!(!b.is_child_of(&a).unwrap());
+        assert!(!a.is_child_of(&a_b).unwrap());
 
-        assert!(a.is_child_of(&a));
-        assert!(a_b.is_child_of(&a));
+        assert!(a.is_child_of(&a).unwrap());
+        assert!(a_b.is_child_of(&a).unwrap());
     }
 
     #[test]
