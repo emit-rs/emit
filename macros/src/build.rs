@@ -1,5 +1,5 @@
 use proc_macro2::TokenStream;
-use syn::{parse::Parse, spanned::Spanned, FieldValue};
+use syn::{parse::Parse, spanned::Spanned, FieldValue, LitStr};
 
 use crate::{args, props::Props, template};
 
@@ -81,4 +81,20 @@ fn validate_props(props: &Props) -> Result<(), syn::Error> {
     }
 
     Ok(())
+}
+
+pub struct ExpandPathTokens {
+    pub input: TokenStream,
+}
+
+pub fn expand_path_tokens(opts: ExpandPathTokens) -> Result<TokenStream, syn::Error> {
+    let path = syn::parse2::<LitStr>(opts.input)?;
+    let span = path.span();
+    let path = path.value();
+
+    if emit_core::path::is_valid_path(&path) {
+        Ok(quote!(emit::Path::new_unchecked(#path)))
+    } else {
+        Err(syn::Error::new(span, "the value is not a valid path"))
+    }
 }

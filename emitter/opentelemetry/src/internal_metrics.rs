@@ -28,7 +28,7 @@ macro_rules! metrics {
 
                 [$(
                     emit::metric::Metric::new(
-                        env!("CARGO_PKG_NAME"),
+                        emit::Path::new_unchecked(env!("CARGO_PKG_NAME")),
                         emit::empty::Empty,
                         stringify!($metric),
                         <$ty>::AGG,

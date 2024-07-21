@@ -580,7 +580,7 @@ impl<T: Channel> emit::metric::Source for ChannelMetrics<T> {
             .metrics
             .sample()
             .chain(Some(emit::metric::Metric::new(
-                env!("CARGO_PKG_NAME"),
+                emit::Path::new_unchecked(env!("CARGO_PKG_NAME")),
                 emit::empty::Empty,
                 "queue_length",
                 emit::well_known::METRIC_AGG_LAST,

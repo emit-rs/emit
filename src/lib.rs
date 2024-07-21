@@ -567,7 +567,7 @@ Get a [`Path`] of the executing module for use in [`Event::module`].
 #[macro_export]
 macro_rules! module {
     () => {
-        $crate::Path::new($crate::__private::core::module_path!())
+        $crate::Path::new_unchecked($crate::__private::core::module_path!())
     };
 }
 

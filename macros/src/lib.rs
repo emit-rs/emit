@@ -590,6 +590,27 @@ pub fn error(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 }
 
 /**
+Construct a path.
+
+# Syntax
+
+```text
+path
+```
+
+where
+
+- `path`: A string literal containing a valid `emit` path.
+*/
+#[proc_macro]
+pub fn path(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    build::expand_path_tokens(build::ExpandPathTokens {
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
+}
+
+/**
 Construct a set of properties.
 
 # Syntax
