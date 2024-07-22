@@ -98,3 +98,33 @@ impl<'a> Clock for dyn ErasedClock + Send + Sync + 'a {
         (self as &(dyn ErasedClock + 'a)).now()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use core::{cell::Cell, time::Duration};
+
+    use super::*;
+
+    #[test]
+    fn erased_clock() {
+        struct SomeClock {
+            now: Cell<usize>,
+        }
+
+        impl Clock for SomeClock {
+            fn now(&self) -> Option<Timestamp> {
+                self.now.set(self.now.get() + 1);
+
+                Some(Timestamp::from_unix(Duration::from_secs(97)).unwrap())
+            }
+        }
+
+        let clock = SomeClock {
+            now: Cell::new(0),
+        };
+
+        let _ = (&clock as &dyn ErasedClock).now();
+
+        assert_eq!(1, clock.now.get());
+    }
+}

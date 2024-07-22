@@ -253,3 +253,13 @@ impl<'a, P: Props> ToEvent for Event<'a, P> {
         self.by_ref()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn event_new() {
+        todo!()
+    }
+}

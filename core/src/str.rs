@@ -532,6 +532,88 @@ mod alloc_support {
             Str::new_ref(value)
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn to_owned() {
+            todo!()
+        }
+
+        #[test]
+        fn to_cow() {
+            todo!()
+        }
+
+        #[test]
+        fn to_shared() {
+            todo!()
+        }
+
+        #[test]
+        fn into_string() {
+            todo!()
+        }
+
+        #[test]
+        fn shared_str_clone() {
+            // Ensure cloning a shared str is cheap (same Arc)
+            todo!()
+        }
+    }
 }
 
 use crate::value::{FromValue, ToValue, Value};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get() {
+        for (case, as_ref, as_static) in [
+            (Str::new_ref("string"), "string", None::<&'static str>),
+            (Str::new("string"), "string", Some("string")),
+        ] {
+            assert_eq!(as_ref, case.get());
+            assert_eq!(as_static, case.get_static());
+        }
+    }
+
+    #[test]
+    fn clone() {
+        for case in [
+            Str::new("string"),
+            Str::new_ref("string"),
+        ] {
+            assert_eq!(case.get(), case.clone().get());
+        }
+    }
+
+    #[test]
+    fn cmp() {
+        todo!()
+    }
+
+    #[test]
+    fn eq() {
+        todo!()
+    }
+
+    #[test]
+    fn by_ref() {
+        todo!()
+    }
+
+    #[test]
+    fn hash() {
+        todo!()
+    }
+
+    #[test]
+    fn to_from_value() {
+        todo!()
+    }
+}

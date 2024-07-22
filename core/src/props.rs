@@ -206,58 +206,6 @@ where
     }
 }
 
-#[cfg(feature = "alloc")]
-impl<K, V> Props for alloc::collections::BTreeMap<K, V>
-where
-    K: Ord + ToStr + Borrow<str>,
-    V: ToValue,
-{
-    fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
-        &'kv self,
-        mut for_each: F,
-    ) -> ControlFlow<()> {
-        for (k, v) in self {
-            for_each(k.to_str(), v.to_value())?;
-        }
-
-        ControlFlow::Continue(())
-    }
-
-    fn get<'v, Q: ToStr>(&'v self, key: Q) -> Option<Value<'v>> {
-        self.get(key.to_str().as_ref()).map(|v| v.to_value())
-    }
-
-    fn is_unique(&self) -> bool {
-        true
-    }
-}
-
-#[cfg(feature = "std")]
-impl<K, V> Props for std::collections::HashMap<K, V>
-where
-    K: Eq + std::hash::Hash + ToStr + Borrow<str>,
-    V: ToValue,
-{
-    fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
-        &'kv self,
-        mut for_each: F,
-    ) -> ControlFlow<()> {
-        for (k, v) in self {
-            for_each(k.to_str(), v.to_value())?;
-        }
-
-        ControlFlow::Continue(())
-    }
-
-    fn get<'v, Q: ToStr>(&'v self, key: Q) -> Option<Value<'v>> {
-        self.get(key.to_str().as_ref()).map(|v| v.to_value())
-    }
-
-    fn is_unique(&self) -> bool {
-        true
-    }
-}
-
 impl Props for Empty {
     fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
         &'kv self,
@@ -294,6 +242,8 @@ impl<A: Props, B: Props> Props for And<A, B> {
 #[cfg(feature = "alloc")]
 mod alloc_support {
     use super::*;
+
+    use alloc::collections::BTreeMap;
 
     /**
     The result of calling [`Props::dedup`].
@@ -344,9 +294,39 @@ mod alloc_support {
         }
     }
 
+    impl<K, V> Props for BTreeMap<K, V>
+    where
+        K: Ord + ToStr + Borrow<str>,
+        V: ToValue,
+    {
+        fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
+            &'kv self,
+            mut for_each: F,
+        ) -> ControlFlow<()> {
+            for (k, v) in self {
+                for_each(k.to_str(), v.to_value())?;
+            }
+
+            ControlFlow::Continue(())
+        }
+
+        fn get<'v, Q: ToStr>(&'v self, key: Q) -> Option<Value<'v>> {
+            self.get(key.to_str().as_ref()).map(|v| v.to_value())
+        }
+
+        fn is_unique(&self) -> bool {
+            true
+        }
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        #[test]
+        fn btreemap_props() {
+            todo!()
+        }
 
         #[test]
         fn dedup() {
@@ -385,6 +365,48 @@ mod alloc_support {
 
 #[cfg(feature = "alloc")]
 pub use alloc_support::*;
+
+#[cfg(feature = "std")]
+mod std_support {
+    use super::*;
+
+    use std::{collections::HashMap, hash::Hash};
+
+    impl<K, V> Props for HashMap<K, V>
+    where
+        K: Eq + Hash + ToStr + Borrow<str>,
+        V: ToValue,
+    {
+        fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
+            &'kv self,
+            mut for_each: F,
+        ) -> ControlFlow<()> {
+            for (k, v) in self {
+                for_each(k.to_str(), v.to_value())?;
+            }
+
+            ControlFlow::Continue(())
+        }
+
+        fn get<'v, Q: ToStr>(&'v self, key: Q) -> Option<Value<'v>> {
+            self.get(key.to_str().as_ref()).map(|v| v.to_value())
+        }
+
+        fn is_unique(&self) -> bool {
+            true
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn hashmap_props() {
+            todo!()
+        }
+    }
+}
 
 mod internal {
     use core::ops::ControlFlow;
@@ -453,5 +475,25 @@ impl<'a> Props for dyn ErasedProps + 'a {
 
     fn is_unique(&self) -> bool {
         self.erase_props().0.dispatch_is_unique()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn array_props() {
+        todo!()
+    }
+
+    #[test]
+    fn option_props() {
+        todo!()
+    }
+
+    #[test]
+    fn erased_props() {
+        todo!()
     }
 }

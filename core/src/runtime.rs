@@ -779,6 +779,17 @@ mod std_support {
             self.0.get()
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn ambient_slot_init() {
+            // Ensure `init` is idempotent
+            todo!()
+        }
+    }
 }
 
 #[cfg(feature = "std")]

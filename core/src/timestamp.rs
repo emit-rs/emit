@@ -148,6 +148,8 @@ impl Timestamp {
         let year = (parts.years as i64) - 1900;
 
         // Fast path for years 1900 - 2038.
+        // The `as u64` conversion here turns negative values
+        // into very large positive ones, failing the `<=`
         if year as u64 <= 138 {
             let mut leaps: i64 = (year - 68) >> 2;
             if (year - 68).trailing_zeros() >= 2 {
@@ -493,7 +495,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn timestamp_roundtrip() {
+    fn roundtrip() {
         let ts = Timestamp::from_unix(Duration::new(1691961703, 17532)).unwrap();
 
         let fmt = ts.to_string();
@@ -504,7 +506,7 @@ mod tests {
     }
 
     #[test]
-    fn timestamp_parts_max() {
+    fn parts_max() {
         let ts = Timestamp::from_parts(Parts {
             years: 9999,
             months: 12,
@@ -520,7 +522,7 @@ mod tests {
     }
 
     #[test]
-    fn timestamp_parts_min() {
+    fn parts_min() {
         let ts = Timestamp::from_parts(Parts {
             years: 1970,
             months: 1,
@@ -533,5 +535,25 @@ mod tests {
         .unwrap();
 
         assert_eq!(ts.to_unix(), MIN);
+    }
+
+    #[test]
+    fn parts_overflow() {
+        todo!()
+    }
+
+    #[test]
+    fn add() {
+        todo!()
+    }
+
+    #[test]
+    fn sub() {
+        todo!()
+    }
+
+    #[test]
+    fn to_from_value() {
+        todo!()
     }
 }

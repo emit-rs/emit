@@ -414,6 +414,16 @@ mod alloc_support {
         use super::*;
 
         #[test]
+        fn to_owned() {
+            todo!()
+        }
+
+        #[test]
+        fn to_cow() {
+            todo!()
+        }
+
+        #[test]
         fn append() {
             for (a, b, expected) in [
                 ("a", "b", "a::b"),
@@ -435,6 +445,21 @@ mod alloc_support {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn by_ref() {
+        todo!()
+    }
+
+    #[test]
+    fn eq() {
+        todo!()
+    }
+
+    #[test]
+    fn hash() {
+        todo!()
+    }
 
     #[test]
     fn segments() {

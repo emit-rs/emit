@@ -168,3 +168,24 @@ impl<'a> Rng for dyn ErasedRng + Send + Sync + 'a {
         (self as &(dyn ErasedRng + 'a)).gen_u128()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gen() {
+        // Test `gen_u64` and `gen_u128`
+        todo!()
+    }
+
+    #[test]
+    fn option_rng() {
+        todo!()
+    }
+
+    #[test]
+    fn erased_rng() {
+        todo!()
+    }
+}

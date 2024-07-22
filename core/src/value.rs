@@ -517,7 +517,32 @@ mod alloc_support {
             self.0.serialize(serializer)
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn as_f64_sequence() {
+            todo!()
+        }
+    }
 }
 
 #[cfg(feature = "alloc")]
 pub use self::alloc_support::*;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse() {
+        todo!()
+    }
+
+    #[test]
+    fn as_f64() {
+        todo!()
+    }
+}

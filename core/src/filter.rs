@@ -242,3 +242,33 @@ impl<'a> Filter for dyn ErasedFilter + Send + Sync + 'a {
         (self as &(dyn ErasedFilter + 'a)).matches(evt)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn option_filter() {
+        todo!()
+    }
+
+    #[test]
+    fn and_filter() {
+        todo!()
+    }
+
+    #[test]
+    fn or_filter() {
+        todo!()
+    }
+
+    #[test]
+    fn from_fn_filter() {
+        todo!()
+    }
+
+    #[test]
+    fn erased_filter() {
+        todo!()
+    }
+}

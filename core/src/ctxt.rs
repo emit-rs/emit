@@ -306,7 +306,7 @@ mod alloc_support {
             }
 
             pub(super) fn get<'a>(&'a self) -> &'a (dyn ErasedProps + 'a) {
-                // SAFETY: `ErasedCurrent` must not outlive `&v`, as per `ErasedCurrent::new`
+                // SAFETY: `ErasedCurrent` does not outlive `&v`, as per `ErasedCurrent::new`
                 unsafe { &*self.0 }
             }
         }
@@ -447,7 +447,27 @@ mod alloc_support {
             (self as &(dyn ErasedCtxt + 'a)).close(span)
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn erased_ctxt() {
+            todo!()
+        }
+    }
 }
 
 #[cfg(feature = "alloc")]
 pub use alloc_support::*;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn option_ctxt() {
+        todo!()
+    }
+}

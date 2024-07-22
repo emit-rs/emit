@@ -678,7 +678,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn template_eq() {
+    fn literal() {
+        todo!()
+    }
+
+    #[test]
+    fn eq() {
         let a = [
             Part::text("a"),
             Part::text("b"),
@@ -698,5 +703,10 @@ mod tests {
         let b = Template::new_ref(&b);
 
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn render() {
+        todo!()
     }
 }

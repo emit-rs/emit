@@ -227,3 +227,28 @@ impl<'a> Emitter for dyn ErasedEmitter + Send + Sync + 'a {
         (self as &(dyn ErasedEmitter + 'a)).blocking_flush(timeout)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn erased_emitter() {
+        todo!()
+    }
+
+    #[test]
+    fn option_emitter() {
+        todo!()
+    }
+
+    #[test]
+    fn from_fn_emitter() {
+        todo!()
+    }
+
+    #[test]
+    fn and_emitter() {
+        todo!()
+    }
+}
