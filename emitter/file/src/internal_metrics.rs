@@ -28,7 +28,7 @@ macro_rules! metrics {
 
                 [$(
                     emit::metric::Metric::new(
-                        emit::Path::new_unchecked(env!("CARGO_PKG_NAME")),
+                        emit::pkg!(),
                         emit::empty::Empty,
                         stringify!($metric),
                         <$ty>::AGG,
@@ -125,11 +125,7 @@ impl emit::metric::Source for FileSetMetrics {
     fn sample_metrics<S: emit::metric::sampler::Sampler>(&self, sampler: S) {
         self.channel_metrics
             .sample_metrics(emit::metric::sampler::from_fn(|metric| {
-                sampler.metric(
-                    metric
-                        .by_ref()
-                        .with_module(emit::Path::new_unchecked(env!("CARGO_PKG_NAME"))),
-                );
+                sampler.metric(metric.by_ref().with_module(emit::pkg!()));
             }));
 
         for metric in self.metrics.sample() {

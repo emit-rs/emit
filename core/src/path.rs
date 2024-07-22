@@ -396,6 +396,39 @@ mod alloc_support {
         pub fn to_cow(&self) -> Cow<'static, str> {
             self.0.to_cow()
         }
+
+        /**
+        Append `other` to `self` with a separator in-between.
+        */
+        pub fn append<'b>(self, other: impl Into<Path<'b>>) -> Self {
+            let mut base = self.0.into_string();
+
+            base.push_str("::");
+            base.push_str(other.into().0.get());
+            Path::new_owned_unchecked(base)
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn append() {
+            for (a, b, expected) in [
+                ("a", "b", "a::b"),
+                ("a::b", "c", "a::b::c"),
+                ("a", "b::c", "a::b::c"),
+            ] {
+                assert_eq!(
+                    expected,
+                    Path::new_unchecked(a)
+                        .append(Path::new_unchecked(&b))
+                        .0
+                        .get(),
+                );
+            }
+        }
     }
 }
 

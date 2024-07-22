@@ -246,7 +246,7 @@ use emit::metric::{Source as _, Sampler as _};
 // Create some metric sources
 let source_1 = emit::metric::source::from_fn(|sampler| {
     sampler.metric(emit::Metric::new(
-        "source_1",
+        emit::path!("source_1"),
         emit::Empty,
         "bytes_written",
         emit::well_known::METRIC_AGG_COUNT,
@@ -257,7 +257,7 @@ let source_1 = emit::metric::source::from_fn(|sampler| {
 
 let source_2 = emit::metric::source::from_fn(|sampler| {
     sampler.metric(emit::Metric::new(
-        "source_2",
+        emit::path!("source_2"),
         emit::Empty,
         "bytes_written",
         emit::well_known::METRIC_AGG_COUNT,

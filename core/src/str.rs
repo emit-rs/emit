@@ -441,6 +441,24 @@ mod alloc_support {
         }
 
         /**
+        Convert this string into an owned `String`.
+
+        If the underlying value is already an owned string then this method will return it without allocating.
+        */
+        pub fn into_string(self) -> String {
+            match self {
+                Str {
+                    value: _,
+                    value_static: _,
+                    value_owned: Some(value_owned),
+                    value_shared: _,
+                    _marker,
+                } => value_owned.into(),
+                str => str.get().to_owned(),
+            }
+        }
+
+        /**
         Get a new string, taking an owned copy of the data in this one.
 
         If the string contains a `'static` or `Arc` value then this method is cheap and doesn't involve cloning. In other cases the underlying value will be passed through [`Str::new_shared`].

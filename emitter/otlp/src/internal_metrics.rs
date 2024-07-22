@@ -29,7 +29,7 @@ macro_rules! metrics {
 
                 [$(
                     emit::metric::Metric::new(
-                        emit::Path::new_unchecked(env!("CARGO_PKG_NAME")),
+                        emit::pkg!(),
                         emit::empty::Empty,
                         stringify!($metric),
                         <$ty>::AGG,
@@ -144,25 +144,31 @@ impl emit::metric::Source for OtlpMetrics {
     fn sample_metrics<S: emit::metric::sampler::Sampler>(&self, sampler: S) {
         if let Some(ref channel_metrics) = self.logs_channel_metrics {
             channel_metrics.sample_metrics(emit::metric::sampler::from_fn(|metric| {
-                sampler.metric(metric.by_ref().with_module(emit::Path::new_ref_unchecked(
-                    &format!("{}::{}", env!("CARGO_PKG_NAME"), "logs_channel"),
-                )));
+                sampler.metric(
+                    metric
+                        .by_ref()
+                        .with_module(emit::pkg!().append(emit::path!("logs_channel"))),
+                );
             }));
         }
 
         if let Some(ref channel_metrics) = self.traces_channel_metrics {
             channel_metrics.sample_metrics(emit::metric::sampler::from_fn(|metric| {
-                sampler.metric(metric.by_ref().with_module(emit::Path::new_ref_unchecked(
-                    &format!("{}::{}", env!("CARGO_PKG_NAME"), "traces_channel"),
-                )));
+                sampler.metric(
+                    metric
+                        .by_ref()
+                        .with_module(emit::pkg!().append(emit::path!("traces_channel"))),
+                );
             }));
         }
 
         if let Some(ref channel_metrics) = self.metrics_channel_metrics {
             channel_metrics.sample_metrics(emit::metric::sampler::from_fn(|metric| {
-                sampler.metric(metric.by_ref().with_module(emit::Path::new_ref_unchecked(
-                    &format!("{}::{}", env!("CARGO_PKG_NAME"), "metrics_channel"),
-                )));
+                sampler.metric(
+                    metric
+                        .by_ref()
+                        .with_module(emit::pkg!().append(emit::path!("metrics_channel"))),
+                );
             }));
         }
 

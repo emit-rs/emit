@@ -182,7 +182,7 @@ The `module` control parameter sets the module:
 ```
 # #[cfg(not(feature = "std"))] fn main() {}
 # #[cfg(feature = "std")] fn main() {
-emit::emit!(module: "my_module", "Hello, World!");
+emit::emit!(module: emit::path!("my_module"), "Hello, World!");
 # }
 ```
 
@@ -375,7 +375,7 @@ fn main() {
     let rt = emit::setup()
         .emit_to(emit::emitter::from_fn(|evt| println!("{evt:#?}")))
         .emit_when(emit::level::min_by_path_filter([
-            ("my_app::submodule", emit::Level::Info)
+            (emit::path!("my_app::submodule"), emit::Level::Info)
         ]))
         .init();
 
@@ -464,7 +464,7 @@ Event {
 // This event does not match the filter
 emit::emit!(
     when: emit::filter::from_fn(|evt| evt.module() == "my_app"),
-    module: "not_my_app",
+    module: emit::path!("not_my_app"),
     "Hello, World!",
 );
 # }
@@ -563,11 +563,25 @@ extern crate core;
 
 /**
 Get a [`Path`] of the executing module for use in [`Event::module`].
+
+This defers uses the standard `module_path` macro.
 */
 #[macro_export]
 macro_rules! module {
     () => {
         $crate::Path::new_unchecked($crate::__private::core::module_path!())
+    };
+}
+
+/**
+Get a [`Path`] of the package name for use in [`Event::module`].
+
+This macro uses the build-time `CARGO_PKG_NAME` environment variable.
+*/
+#[macro_export]
+macro_rules! pkg {
+    () => {
+        $crate::Path::new_unchecked($crate::__private::core::env!("CARGO_PKG_NAME"))
     };
 }
 
