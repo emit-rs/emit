@@ -584,10 +584,7 @@ mod tests {
 
     #[test]
     fn clone() {
-        for case in [
-            Str::new("string"),
-            Str::new_ref("string"),
-        ] {
+        for case in [Str::new("string"), Str::new_ref("string")] {
             assert_eq!(case.get(), case.clone().get());
         }
     }

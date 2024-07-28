@@ -119,9 +119,7 @@ mod tests {
             }
         }
 
-        let clock = SomeClock {
-            now: Cell::new(0),
-        };
+        let clock = SomeClock { now: Cell::new(0) };
 
         let _ = (&clock as &dyn ErasedClock).now();
 
