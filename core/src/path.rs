@@ -254,6 +254,18 @@ impl<'a, 'b> PartialEq<Path<'b>> for Path<'a> {
     }
 }
 
+impl<'a, 'b, 'c> PartialEq<&'c Path<'b>> for Path<'a> {
+    fn eq(&self, other: &&'c Path<'b>) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<'a, 'b, 'c> PartialEq<Path<'c>> for &'b Path<'a> {
+    fn eq(&self, other: &Path<'c>) -> bool {
+        self.0 == other.0
+    }
+}
+
 impl<'a> Hash for Path<'a> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.hash(state)

@@ -230,25 +230,118 @@ impl<'a> Emitter for dyn ErasedEmitter + Send + Sync + 'a {
 
 #[cfg(test)]
 mod tests {
+    use crate::{path::Path, template::Template};
+
     use super::*;
+
+    use std::{cell::Cell, sync::Mutex};
+
+    struct MyEmitter {
+        pending: Mutex<Vec<String>>,
+        emitted: Mutex<Vec<String>>,
+    }
+
+    impl MyEmitter {
+        fn new() -> Self {
+            MyEmitter {
+                pending: Mutex::new(Vec::new()),
+                emitted: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn emitted(&self) -> Vec<String> {
+            (*self.emitted.lock().unwrap()).clone()
+        }
+    }
+
+    impl Emitter for MyEmitter {
+        fn emit<E: ToEvent>(&self, evt: E) {
+            let rendered = evt.to_event().msg().to_string();
+            self.pending.lock().unwrap().push(rendered);
+        }
+
+        fn blocking_flush(&self, _: Duration) -> bool {
+            let mut pending = self.pending.lock().unwrap();
+            let mut emitted = self.emitted.lock().unwrap();
+
+            emitted.extend(pending.drain(..));
+
+            true
+        }
+    }
 
     #[test]
     fn erased_emitter() {
-        todo!()
+        let emitter = MyEmitter::new();
+
+        {
+            let emitter = &emitter as &dyn ErasedEmitter;
+
+            emitter.emit(Event::new(
+                Path::new_unchecked("a"),
+                Empty,
+                Template::literal("event 1"),
+                Empty,
+            ));
+            emitter.blocking_flush(Duration::from_secs(0));
+        }
+
+        assert_eq!(vec![String::from("event 1")], emitter.emitted());
     }
 
     #[test]
     fn option_emitter() {
-        todo!()
+        for (emitter, expected) in [
+            (Some(MyEmitter::new()), vec![String::from("event 1")]),
+            (None, vec![]),
+        ] {
+            emitter.emit(Event::new(
+                Path::new_unchecked("a"),
+                Empty,
+                Template::literal("event 1"),
+                Empty,
+            ));
+            emitter.blocking_flush(Duration::from_secs(0));
+
+            let emitted = emitter.map(|emitter| emitter.emitted()).unwrap_or_default();
+
+            assert_eq!(expected, emitted);
+        }
     }
 
     #[test]
     fn from_fn_emitter() {
-        todo!()
+        let count = Cell::new(0);
+
+        let emitter = from_fn(|evt| {
+            assert_eq!(Path::new_unchecked("a"), evt.module());
+
+            count.set(count.get() + 1);
+        });
+
+        emitter.emit(Event::new(
+            Path::new_unchecked("a"),
+            Empty,
+            Template::literal("event 1"),
+            Empty,
+        ));
+
+        assert_eq!(1, count.get());
     }
 
     #[test]
     fn and_emitter() {
-        todo!()
+        let emitter = MyEmitter::new().and_to(MyEmitter::new());
+
+        emitter.emit(Event::new(
+            Path::new_unchecked("a"),
+            Empty,
+            Template::literal("event 1"),
+            Empty,
+        ));
+        emitter.blocking_flush(Duration::from_secs(0));
+
+        assert_eq!(vec![String::from("event 1")], emitter.left().emitted());
+        assert_eq!(vec![String::from("event 1")], emitter.right().emitted());
     }
 }
