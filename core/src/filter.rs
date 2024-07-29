@@ -245,30 +245,114 @@ impl<'a> Filter for dyn ErasedFilter + Send + Sync + 'a {
 
 #[cfg(test)]
 mod tests {
+    use crate::{path::Path, template::Template};
+
     use super::*;
+
+    struct MyFilter {
+        matches: bool,
+    }
+
+    impl Filter for MyFilter {
+        fn matches<E: ToEvent>(&self, _: E) -> bool {
+            self.matches
+        }
+    }
 
     #[test]
     fn option_filter() {
-        todo!()
+        for (case, matches) in [(Some(MyFilter { matches: false }), false), (None, true)] {
+            assert_eq!(
+                matches,
+                case.matches(Event::new(
+                    Path::new_unchecked("module"),
+                    Empty,
+                    Template::literal("Event"),
+                    Empty,
+                ))
+            );
+        }
     }
 
     #[test]
     fn and_filter() {
-        todo!()
+        for a in [true, false] {
+            for b in [true, false] {
+                let fa = MyFilter { matches: a };
+                let fb = MyFilter { matches: b };
+
+                assert_eq!(
+                    a && b,
+                    fa.and_when(fb).matches(Event::new(
+                        Path::new_unchecked("module"),
+                        Empty,
+                        Template::literal("Event"),
+                        Empty,
+                    ))
+                );
+            }
+        }
     }
 
     #[test]
     fn or_filter() {
-        todo!()
+        for a in [true, false] {
+            for b in [true, false] {
+                let fa = MyFilter { matches: a };
+                let fb = MyFilter { matches: b };
+
+                assert_eq!(
+                    a || b,
+                    fa.or_when(fb).matches(Event::new(
+                        Path::new_unchecked("module"),
+                        Empty,
+                        Template::literal("Event"),
+                        Empty,
+                    ))
+                );
+            }
+        }
     }
 
     #[test]
     fn from_fn_filter() {
-        todo!()
+        let f = from_fn(|evt| evt.module() == Path::new_unchecked("module"));
+
+        assert!(f.matches(Event::new(
+            Path::new_unchecked("module"),
+            Empty,
+            Template::literal("Event"),
+            Empty,
+        )));
+
+        assert!(!f.matches(Event::new(
+            Path::new_unchecked("not_module"),
+            Empty,
+            Template::literal("Event"),
+            Empty,
+        )));
     }
 
     #[test]
     fn erased_filter() {
-        todo!()
+        let f = MyFilter { matches: true };
+        let f = &f as &dyn ErasedFilter;
+
+        assert!(f.matches(Event::new(
+            Path::new_unchecked("module"),
+            Empty,
+            Template::literal("Event"),
+            Empty,
+        )));
+
+        let f = MyFilter { matches: false };
+        let f = &f as &dyn ErasedFilter;
+
+        assert!(!f.matches(Event::new(
+            Path::new_unchecked("module"),
+            Empty,
+            Template::literal("Event"),
+            Empty,
+        )));
     }
 }
