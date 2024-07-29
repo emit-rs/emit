@@ -496,4 +496,19 @@ mod tests {
     fn erased_props() {
         todo!()
     }
+
+    #[test]
+    fn get() {
+        todo!()
+    }
+
+    #[test]
+    fn pull() {
+        todo!()
+    }
+
+    #[test]
+    fn and_props() {
+        todo!()
+    }
 }

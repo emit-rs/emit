@@ -584,7 +584,14 @@ mod tests {
 
     #[test]
     fn clone() {
-        for case in [Str::new("string"), Str::new_ref("string")] {
+        for case in [
+            Str::new("string"),
+            Str::new_ref("string"),
+            #[cfg(feature = "alloc")]
+            Str::new_owned("string"),
+            #[cfg(feature = "alloc")]
+            Str::new_shared("string"),
+        ] {
             assert_eq!(case.get(), case.clone().get());
         }
     }

@@ -542,6 +542,11 @@ mod tests {
     }
 
     #[test]
+    fn cast() {
+        todo!()
+    }
+
+    #[test]
     fn as_f64() {
         todo!()
     }
