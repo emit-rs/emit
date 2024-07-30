@@ -325,7 +325,17 @@ mod alloc_support {
 
         #[test]
         fn btreemap_props() {
-            todo!()
+            let props = BTreeMap::from_iter([("a", 1), ("b", 2), ("c", 3)]);
+
+            assert_eq!(1, Props::get(&props, "a").unwrap().cast::<i32>().unwrap());
+            assert_eq!(2, Props::get(&props, "b").unwrap().cast::<i32>().unwrap());
+            assert_eq!(3, Props::get(&props, "c").unwrap().cast::<i32>().unwrap());
+
+            assert_eq!(1, Props::pull::<i32, _>(&props, "a").unwrap());
+            assert_eq!(2, Props::pull::<i32, _>(&props, "b").unwrap());
+            assert_eq!(3, Props::pull::<i32, _>(&props, "c").unwrap());
+
+            assert!(props.is_unique());
         }
 
         #[test]
@@ -403,7 +413,17 @@ mod std_support {
 
         #[test]
         fn hashmap_props() {
-            todo!()
+            let props = HashMap::from_iter([("a", 1), ("b", 2), ("c", 3)]);
+
+            assert_eq!(1, Props::get(&props, "a").unwrap().cast::<i32>().unwrap());
+            assert_eq!(2, Props::get(&props, "b").unwrap().cast::<i32>().unwrap());
+            assert_eq!(3, Props::get(&props, "c").unwrap().cast::<i32>().unwrap());
+
+            assert_eq!(1, Props::pull::<i32, _>(&props, "a").unwrap());
+            assert_eq!(2, Props::pull::<i32, _>(&props, "b").unwrap());
+            assert_eq!(3, Props::pull::<i32, _>(&props, "c").unwrap());
+
+            assert!(props.is_unique());
         }
     }
 }
@@ -483,32 +503,80 @@ mod tests {
     use super::*;
 
     #[test]
+    fn tuple_props() {
+        let props = ("a", 1);
+
+        assert_eq!(1, props.get("a").unwrap().cast::<i32>().unwrap());
+
+        assert_eq!(1, props.pull::<i32, _>("a").unwrap());
+
+        assert!(props.is_unique());
+    }
+
+    #[test]
     fn array_props() {
-        todo!()
+        let props = [("a", 1), ("b", 2), ("c", 3)];
+
+        assert_eq!(1, props.get("a").unwrap().cast::<i32>().unwrap());
+        assert_eq!(2, props.get("b").unwrap().cast::<i32>().unwrap());
+        assert_eq!(3, props.get("c").unwrap().cast::<i32>().unwrap());
+
+        assert_eq!(1, props.pull::<i32, _>("a").unwrap());
+        assert_eq!(2, props.pull::<i32, _>("b").unwrap());
+        assert_eq!(3, props.pull::<i32, _>("c").unwrap());
+
+        assert!(!props.is_unique());
     }
 
     #[test]
     fn option_props() {
-        todo!()
+        for (props, expected) in [(Some(("a", 1)), Some(1)), (None, None)] {
+            assert_eq!(expected, props.pull::<i32, _>("a"));
+        }
     }
 
     #[test]
     fn erased_props() {
-        todo!()
+        let props = ("a", 1);
+
+        let props = &props as &dyn ErasedProps;
+
+        assert_eq!(1, props.get("a").unwrap().cast::<i32>().unwrap());
+
+        assert_eq!(1, props.pull::<i32, _>("a").unwrap());
+
+        assert!(props.is_unique());
     }
 
     #[test]
     fn get() {
-        todo!()
+        let props = [("a", 1), ("a", 2)];
+
+        assert_eq!(1, props.get("a").unwrap().cast::<i32>().unwrap());
     }
 
     #[test]
     fn pull() {
-        todo!()
+        let props = [("a", 1), ("a", 2)];
+
+        assert_eq!(1, props.pull::<i32, _>("a").unwrap());
     }
 
     #[test]
     fn and_props() {
-        todo!()
+        let a = ("a", 1);
+        let b = [("b", 2), ("c", 3)];
+
+        let props = a.and_props(b);
+
+        assert_eq!(1, props.get("a").unwrap().cast::<i32>().unwrap());
+        assert_eq!(2, props.get("b").unwrap().cast::<i32>().unwrap());
+        assert_eq!(3, props.get("c").unwrap().cast::<i32>().unwrap());
+
+        assert_eq!(1, props.pull::<i32, _>("a").unwrap());
+        assert_eq!(2, props.pull::<i32, _>("b").unwrap());
+        assert_eq!(3, props.pull::<i32, _>("c").unwrap());
+
+        assert!(!props.is_unique());
     }
 }

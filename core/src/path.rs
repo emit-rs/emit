@@ -530,6 +530,10 @@ mod tests {
 
     #[test]
     fn to_from_value() {
-        todo!()
+        let path = Path::new_unchecked("module");
+
+        for value in [Value::from_any(&path), Value::from("module")] {
+            assert_eq!(path, value.cast::<Path>().unwrap());
+        }
     }
 }
