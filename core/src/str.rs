@@ -539,28 +539,71 @@ mod alloc_support {
 
         #[test]
         fn to_owned() {
-            todo!()
+            for case in [
+                Str::new("string"),
+                Str::new_ref("string"),
+                Str::new_owned("string"),
+                Str::new_shared("string"),
+            ] {
+                assert_eq!(case, case.to_owned());
+            }
         }
 
         #[test]
         fn to_cow() {
-            todo!()
+            for (case, expected) in [
+                (Str::new("string"), Cow::Borrowed("string")),
+                (Str::new_ref("string"), Cow::Owned("string".to_owned())),
+                (Str::new_owned("string"), Cow::Owned("string".to_owned())),
+                (Str::new_shared("string"), Cow::Owned("string".to_owned())),
+            ] {
+                assert_eq!(expected, case.to_cow());
+            }
         }
 
         #[test]
         fn to_shared() {
-            todo!()
+            for case in [
+                Str::new("string"),
+                Str::new_ref("string"),
+                Str::new_owned("string"),
+                Str::new_shared("string"),
+            ] {
+                assert_eq!(case, case.to_shared());
+            }
         }
 
         #[test]
         fn into_string() {
-            todo!()
+            for case in [
+                Str::new("string"),
+                Str::new_ref("string"),
+                Str::new_owned("string"),
+                Str::new_shared("string"),
+            ] {
+                assert_eq!(case.get().to_owned(), case.into_string());
+            }
+        }
+
+        #[test]
+        fn owned_into_string() {
+            let s = Str::new_owned("string");
+            let ptr = s.value_owned.as_ref().unwrap().as_ptr();
+
+            let owned = s.into_string();
+
+            assert_eq!(ptr, owned.as_ptr());
         }
 
         #[test]
         fn shared_str_clone() {
-            // Ensure cloning a shared str is cheap (same Arc)
-            todo!()
+            let s = Str::new_shared("string");
+            let a = s.value_shared.as_ref().unwrap().clone();
+
+            let s = s.clone();
+            let b = s.value_shared.as_ref().unwrap().clone();
+
+            assert!(Arc::ptr_eq(&a, &b));
         }
     }
 }
@@ -597,27 +640,36 @@ mod tests {
     }
 
     #[test]
-    fn cmp() {
-        todo!()
-    }
-
-    #[test]
-    fn eq() {
-        todo!()
-    }
-
-    #[test]
     fn by_ref() {
-        todo!()
-    }
-
-    #[test]
-    fn hash() {
-        todo!()
+        for case in [
+            Str::new("string"),
+            Str::new_ref("string"),
+            #[cfg(feature = "alloc")]
+            Str::new_owned("string"),
+            #[cfg(feature = "alloc")]
+            Str::new_shared("string"),
+        ] {
+            assert_eq!(case, case.by_ref());
+        }
     }
 
     #[test]
     fn to_from_value() {
-        todo!()
+        for case in [
+            Str::new("string"),
+            Str::new_ref("string"),
+            #[cfg(feature = "alloc")]
+            Str::new_owned("string"),
+            #[cfg(feature = "alloc")]
+            Str::new_shared("string"),
+        ] {
+            let value = case.to_value();
+
+            assert_eq!(case, value.cast::<Str>().unwrap());
+        }
+
+        let value = Value::from("string");
+
+        assert_eq!(Str::new("string"), value.cast::<Str>().unwrap());
     }
 }

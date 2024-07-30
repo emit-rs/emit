@@ -427,12 +427,22 @@ mod alloc_support {
 
         #[test]
         fn to_owned() {
-            todo!()
+            let path = Path::new_ref_unchecked("module");
+
+            assert_eq!(path, path.to_owned());
         }
 
         #[test]
         fn to_cow() {
-            todo!()
+            for (path, expected) in [
+                (Path::new_unchecked("module"), Cow::Borrowed("module")),
+                (
+                    Path::new_ref_unchecked("module"),
+                    Cow::Owned("module".to_owned()),
+                ),
+            ] {
+                assert_eq!(expected, path.to_cow());
+            }
         }
 
         #[test]
@@ -460,17 +470,9 @@ mod tests {
 
     #[test]
     fn by_ref() {
-        todo!()
-    }
+        let path = Path::new_unchecked("module");
 
-    #[test]
-    fn eq() {
-        todo!()
-    }
-
-    #[test]
-    fn hash() {
-        todo!()
+        assert_eq!(path, path.by_ref());
     }
 
     #[test]
