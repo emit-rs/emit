@@ -786,8 +786,10 @@ mod std_support {
 
         #[test]
         fn ambient_slot_init() {
-            // Ensure `init` is idempotent
-            todo!()
+            let slot = AmbientSlot::new();
+
+            assert!(slot.init(Runtime::new()).is_some());
+            assert!(slot.init(Runtime::new()).is_none());
         }
     }
 }

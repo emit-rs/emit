@@ -679,7 +679,9 @@ mod tests {
 
     #[test]
     fn literal() {
-        todo!()
+        let tpl = Template::literal("text");
+
+        assert_eq!("text", tpl.as_literal().unwrap().get_static().unwrap());
     }
 
     #[test]
@@ -707,11 +709,65 @@ mod tests {
 
     #[test]
     fn render() {
-        todo!()
+        for (case, raw, interpolated) in [
+            (Template::literal("text"), "text", "text"),
+            (
+                Template::new({
+                    const PARTS: &'static [Part<'static>] = &[Part::hole("greet")];
+
+                    PARTS
+                }),
+                "{greet}",
+                "user",
+            ),
+            (
+                Template::new({
+                    const PARTS: &'static [Part<'static>] =
+                        &[Part::text("Hello, "), Part::hole("greet"), Part::text("!")];
+
+                    PARTS
+                }),
+                "Hello, {greet}!",
+                "Hello, user!",
+            ),
+            (
+                Template::new({
+                    const PARTS: &'static [Part<'static>] =
+                        &[Part::text("Hello"), Part::hole(""), Part::text("!")];
+
+                    PARTS
+                }),
+                "Hello{}!",
+                "Hello{}!",
+            ),
+        ] {
+            assert_eq!(raw, case.render(Empty).to_string());
+            assert_eq!(interpolated, case.render([("greet", "user")]).to_string());
+        }
     }
 
     #[test]
     fn to_value() {
-        todo!()
+        let tpl = Template::literal("text");
+
+        let value = Value::from_any(&tpl);
+
+        assert_eq!("text", value.to_string());
+
+        let s = value.cast::<Str>().unwrap();
+
+        assert_eq!("text", s);
+
+        let tpl = Template::new({
+            const PARTS: &'static [Part<'static>] =
+                &[Part::text("Hello, "), Part::hole("greet"), Part::text("!")];
+
+            PARTS
+        });
+
+        let value = Value::from_any(&tpl);
+
+        assert_eq!("Hello, {greet}!", value.to_string());
+        assert!(value.cast::<Str>().is_none());
     }
 }
