@@ -29,14 +29,18 @@ pub struct Str<'k> {
     // This type is an optimized `Cow<str>`
     // It avoids the cost of matching the variant to get the inner value
     value: *const str,
-    // Only one of `value_static`, `value_owned`, or `value_shared` will be set
-    // NOTE: We could probably save space here by putting these in an enum
-    value_static: Option<&'static str>,
-    #[cfg(feature = "alloc")]
-    value_owned: Option<Box<str>>,
-    #[cfg(feature = "alloc")]
-    value_shared: Option<Arc<str>>,
+    owner: StrOwner,
     _marker: PhantomData<&'k str>,
+}
+
+#[cfg_attr(not(feature = "alloc"), derive(Clone, Copy))]
+enum StrOwner {
+    None,
+    Static(&'static str),
+    #[cfg(feature = "alloc")]
+    Box(*mut str),
+    #[cfg(feature = "alloc")]
+    Shared(Arc<str>),
 }
 
 impl<'k> fmt::Debug for Str<'k> {
@@ -58,62 +62,46 @@ impl<'k> Clone for Str<'k> {
     fn clone(&self) -> Self {
         #[cfg(feature = "alloc")]
         {
-            match self {
-                Str {
-                    value: _,
-                    value_static: _,
-                    value_owned: Some(value_owned),
-                    value_shared: _,
-                    _marker,
-                } => {
-                    let value_owned = value_owned.clone();
-
-                    Str {
-                        value: &*value_owned as *const str,
-                        value_owned: Some(value_owned),
-                        value_shared: None,
-                        value_static: None,
-                        _marker: PhantomData,
-                    }
+            match self.owner {
+                StrOwner::Box(_) => {
+                    Str::new_owned(unsafe { &*self.value })
                 }
-                Str {
-                    value: _,
-                    value_static: _,
-                    value_owned: _,
-                    value_shared: Some(value_shared),
-                    _marker,
-                } => {
-                    let value_shared = value_shared.clone();
-
-                    Str {
-                        value: &*value_shared as *const str,
-                        value_shared: Some(value_shared),
-                        value_owned: None,
-                        value_static: None,
-                        _marker: PhantomData,
-                    }
+                StrOwner::Shared(ref value) => {
+                    Str::new_shared(value.clone())
                 }
-                Str {
-                    value,
-                    value_static,
-                    value_owned: _,
-                    value_shared: _,
-                    _marker,
-                } => Str {
-                    value: *value,
-                    value_static: *value_static,
-                    value_owned: None,
-                    value_shared: None,
+                StrOwner::Static(owner) => Str {
+                    value: self.value,
+                    owner: StrOwner::Static(owner),
                     _marker: PhantomData,
                 },
+                StrOwner::None => Str {
+                    value: self.value,
+                    owner: StrOwner::None,
+                    _marker: PhantomData,
+                }
             }
         }
         #[cfg(not(feature = "alloc"))]
         {
             Str {
                 value: self.value,
-                value_static: self.value_static,
+                owner: self.owner,
                 _marker: PhantomData,
+            }
+        }
+    }
+}
+
+impl<'k> Drop for Str<'k> {
+    fn drop(&mut self) {
+        #[cfg(feature = "alloc")]
+        {
+            match self.owner {
+                StrOwner::Box(boxed) => {
+                    drop(unsafe { Box::from_raw(boxed) });
+                }
+                // Other cases handled normally
+                _ => (),
             }
         }
     }
@@ -126,11 +114,7 @@ impl Str<'static> {
     pub const fn new(k: &'static str) -> Self {
         Str {
             value: k as *const str,
-            value_static: Some(k),
-            #[cfg(feature = "alloc")]
-            value_owned: None,
-            #[cfg(feature = "alloc")]
-            value_shared: None,
+            owner: StrOwner::Static(k),
             _marker: PhantomData,
         }
     }
@@ -145,11 +129,7 @@ impl<'k> Str<'k> {
     pub const fn new_ref(k: &'k str) -> Str<'k> {
         Str {
             value: k as *const str,
-            value_static: None,
-            #[cfg(feature = "alloc")]
-            value_owned: None,
-            #[cfg(feature = "alloc")]
-            value_shared: None,
+            owner: StrOwner::None,
             _marker: PhantomData,
         }
     }
@@ -160,11 +140,10 @@ impl<'k> Str<'k> {
     pub const fn by_ref<'b>(&'b self) -> Str<'b> {
         Str {
             value: self.value,
-            value_static: self.value_static,
-            #[cfg(feature = "alloc")]
-            value_owned: None,
-            #[cfg(feature = "alloc")]
-            value_shared: None,
+            owner: match self.owner {
+                StrOwner::Static(owner) => StrOwner::Static(owner),
+                _ => StrOwner::None,
+            },
             _marker: PhantomData,
         }
     }
@@ -186,7 +165,11 @@ impl<'k> Str<'k> {
     If the string was created from [`Str::new`] and contains a `'static` value then this method will return `Some`. Otherwise this method will return `None`.
     */
     pub const fn get_static(&self) -> Option<&'static str> {
-        self.value_static
+        if let StrOwner::Static(owner) = self.owner {
+            Some(owner)
+        } else {
+            None
+        }
     }
 }
 
@@ -340,11 +323,11 @@ impl<'k> serde::Serialize for Str<'k> {
 
 #[cfg(feature = "alloc")]
 mod alloc_support {
+    use core::mem;
     use alloc::{
         borrow::{Cow, ToOwned},
         string::String,
     };
-
     use super::*;
 
     impl Str<'static> {
@@ -356,11 +339,11 @@ mod alloc_support {
         pub fn new_owned(key: impl Into<Box<str>>) -> Self {
             let value = key.into();
 
+            let raw = Box::into_raw(value);
+
             Str {
-                value: &*value as *const str,
-                value_owned: Some(value),
-                value_shared: None,
-                value_static: None,
+                value: raw as *const str,
+                owner: StrOwner::Box(raw),
                 _marker: PhantomData,
             }
         }
@@ -375,9 +358,7 @@ mod alloc_support {
 
             Str {
                 value: &*value as *const str,
-                value_shared: Some(value),
-                value_owned: None,
-                value_static: None,
+                owner: StrOwner::Shared(value),
                 _marker: PhantomData,
             }
         }
@@ -402,9 +383,9 @@ mod alloc_support {
         If the string contains a `'static` value then this method will return `Cow::Borrowed`. Otherwise it will return `Cow::Owned`.
         */
         pub fn to_cow(&self) -> Cow<'static, str> {
-            match self.value_static {
-                Some(key) => Cow::Borrowed(key),
-                None => Cow::Owned(self.get().to_owned()),
+            match self.owner {
+                StrOwner::Static(key) => Cow::Borrowed(key),
+                _ => Cow::Owned(self.get().to_owned()),
             }
         }
 
@@ -414,29 +395,28 @@ mod alloc_support {
         If the string contains a `'static` or `Arc` value then this method is cheap and doesn't involve cloning. In other cases the underlying value will be passed through [`Str::new_owned`].
         */
         pub fn to_owned(&self) -> Str<'static> {
-            match self {
-                Str {
-                    value: _,
-                    value_static: Some(value_static),
-                    value_owned: _,
-                    value_shared: _,
-                    _marker,
-                } => Str::new(value_static),
-                Str {
-                    value: _,
-                    value_static: _,
-                    value_owned: Some(value_owned),
-                    value_shared: _,
-                    _marker,
-                } => Str::new_owned(value_owned.clone()),
-                Str {
-                    value: _,
-                    value_static: _,
-                    value_owned: _,
-                    value_shared: Some(value_shared),
-                    _marker,
-                } => Str::new_shared(value_shared.clone()),
-                str => Str::new_owned(str.get()),
+            match self.owner {
+                StrOwner::Static(owner) => Str::new(owner),
+                StrOwner::Shared(ref owner) => Str::new_shared(owner.clone()),
+                _ => Str::new_owned(self.get()),
+            }
+        }
+
+        /**
+        Convert this string into an owned `String`.
+
+        If the underlying value is already an owned string then this method will return it without allocating.
+        */
+        pub fn into_string(self) -> String {
+            match self.owner {
+                StrOwner::Box(boxed) => {
+                    // Ensure `Drop` doesn't run over this value
+                    // and clean up the box we've just moved out of
+                    mem::forget(self);
+
+                    unsafe { Box::from_raw(boxed) }.into()
+                },
+                _ => self.get().to_owned(),
             }
         }
 
@@ -446,29 +426,10 @@ mod alloc_support {
         If the string contains a `'static` or `Arc` value then this method is cheap and doesn't involve cloning. In other cases the underlying value will be passed through [`Str::new_shared`].
         */
         pub fn to_shared(&self) -> Str<'static> {
-            match self {
-                Str {
-                    value: _,
-                    value_static: Some(value_static),
-                    value_owned: _,
-                    value_shared: _,
-                    _marker,
-                } => Str::new(value_static),
-                Str {
-                    value: _,
-                    value_static: _,
-                    value_owned: Some(value_owned),
-                    value_shared: _,
-                    _marker,
-                } => Str::new_shared(value_owned.clone()),
-                Str {
-                    value: _,
-                    value_static: _,
-                    value_owned: _,
-                    value_shared: Some(value_shared),
-                    _marker,
-                } => Str::new_shared(value_shared.clone()),
-                str => Str::new_shared(str.get()),
+            match self.owner {
+                StrOwner::Static(owner) => Str::new(owner),
+                StrOwner::Shared(ref owner) => Str::new_shared(owner.clone()),
+                _ => Str::new_shared(self.get()),
             }
         }
     }
@@ -514,6 +475,163 @@ mod alloc_support {
             Str::new_ref(value)
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn str_size() {
+            assert_eq!(40, mem::size_of::<Str>());
+        }
+
+        #[test]
+        fn to_owned() {
+            for case in [
+                Str::new("string"),
+                Str::new_ref("string"),
+                Str::new_owned("string"),
+                Str::new_shared("string"),
+            ] {
+                assert_eq!(case, case.to_owned());
+            }
+        }
+
+        #[test]
+        fn to_cow() {
+            for (case, expected) in [
+                (Str::new("string"), Cow::Borrowed("string")),
+                (Str::new_ref("string"), Cow::Owned("string".to_owned())),
+                (Str::new_owned("string"), Cow::Owned("string".to_owned())),
+                (Str::new_shared("string"), Cow::Owned("string".to_owned())),
+            ] {
+                assert_eq!(expected, case.to_cow());
+            }
+        }
+
+        #[test]
+        fn to_shared() {
+            for case in [
+                Str::new("string"),
+                Str::new_ref("string"),
+                Str::new_owned("string"),
+                Str::new_shared("string"),
+            ] {
+                assert_eq!(case, case.to_shared());
+            }
+        }
+
+        #[test]
+        fn into_string() {
+            for case in [
+                Str::new("string"),
+                Str::new_ref("string"),
+                Str::new_owned("string"),
+                Str::new_shared("string"),
+            ] {
+                assert_eq!(case.get().to_owned(), case.into_string());
+            }
+        }
+
+        #[test]
+        fn owned_into_string() {
+            let s = Str::new_owned("string");
+            let ptr = match s.owner {
+                StrOwner::Box(boxed) => boxed as *const u8,
+                _ => panic!("expected an owned string"),
+            };
+
+            let owned = s.into_string();
+
+            assert_eq!(ptr, owned.as_ptr());
+        }
+
+        #[test]
+        fn shared_str_clone() {
+            let sa = Str::new_shared("string");
+            let a = match sa.owner {
+                StrOwner::Shared(ref owner) => owner.clone(),
+                _ => panic!("expected a shared string"),
+            };
+
+            let sb = sa.clone();
+            let b = match sb.owner {
+                StrOwner::Shared(ref owner) => owner.clone(),
+                _ => panic!("expected a shared string"),
+            };
+
+            assert!(Arc::ptr_eq(&a, &b));
+
+            drop(sa);
+            drop(a);
+
+            assert_eq!("string", sb);
+        }
+    }
 }
 
 use crate::value::{FromValue, ToValue, Value};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get() {
+        for (case, as_ref, as_static) in [
+            (Str::new_ref("string"), "string", None::<&'static str>),
+            (Str::new("string"), "string", Some("string")),
+        ] {
+            assert_eq!(as_ref, case.get());
+            assert_eq!(as_static, case.get_static());
+        }
+    }
+
+    #[test]
+    fn clone() {
+        for case in [
+            Str::new("string"),
+            Str::new_ref("string"),
+            #[cfg(feature = "alloc")]
+            Str::new_owned("string"),
+            #[cfg(feature = "alloc")]
+            Str::new_shared("string"),
+        ] {
+            assert_eq!(case.get(), case.clone().get());
+        }
+    }
+
+    #[test]
+    fn by_ref() {
+        for case in [
+            Str::new("string"),
+            Str::new_ref("string"),
+            #[cfg(feature = "alloc")]
+            Str::new_owned("string"),
+            #[cfg(feature = "alloc")]
+            Str::new_shared("string"),
+        ] {
+            assert_eq!(case, case.by_ref());
+        }
+    }
+
+    #[test]
+    fn to_from_value() {
+        for case in [
+            Str::new("string"),
+            Str::new_ref("string"),
+            #[cfg(feature = "alloc")]
+            Str::new_owned("string"),
+            #[cfg(feature = "alloc")]
+            Str::new_shared("string"),
+        ] {
+            let value = case.to_value();
+
+            assert_eq!(case, value.cast::<Str>().unwrap());
+        }
+
+        let value = Value::from("string");
+
+        assert_eq!(Str::new("string"), value.cast::<Str>().unwrap());
+    }
+}

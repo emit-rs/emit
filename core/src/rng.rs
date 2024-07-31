@@ -168,3 +168,49 @@ impl<'a> Rng for dyn ErasedRng + Send + Sync + 'a {
         (self as &(dyn ErasedRng + 'a)).gen_u128()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct MyRng {
+        fill: u8,
+    }
+
+    impl Rng for MyRng {
+        fn fill<A: AsMut<[u8]>>(&self, mut arr: A) -> Option<A> {
+            for b in arr.as_mut() {
+                *b = self.fill;
+            }
+
+            Some(arr)
+        }
+    }
+
+    #[test]
+    fn gen() {
+        for (rng, expected_u64, expected_u128) in [
+            (MyRng { fill: 0 }, 0u64, 0u128),
+            (MyRng { fill: u8::MAX }, u64::MAX, u128::MAX),
+        ] {
+            assert_eq!(expected_u64, rng.gen_u64().unwrap());
+            assert_eq!(expected_u128, rng.gen_u128().unwrap());
+        }
+    }
+
+    #[test]
+    fn option_rng() {
+        for (rng, expected) in [(Some(MyRng { fill: 42 }), Some([42u8, 42])), (None, None)] {
+            assert_eq!(expected, rng.fill([0, 0]));
+        }
+    }
+
+    #[test]
+    fn erased_rng() {
+        let rng = MyRng { fill: 42 };
+
+        let rng = &rng as &dyn ErasedRng;
+
+        assert_eq!([42, 42], rng.fill([0, 0]).unwrap());
+    }
+}

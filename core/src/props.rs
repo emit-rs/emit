@@ -23,6 +23,14 @@ use crate::{
 A collection of [`Str`] and [`Value`] pairs.
 
 The [`Props::for_each`] method can be used to enumerate properties.
+
+# Uniqueness
+
+Properties may be duplicated in a set of `Props`. When a property is duplicated, the _first_ for a given key is the one to use.
+
+# Typed and untyped properties
+
+The [`Props::get`] method will return a property as an untyped [`Value`] that can be formatted or serialized. IF you're looking for a specific type, you can use [`Props::pull`] instead.
 */
 pub trait Props {
     /**
@@ -32,8 +40,6 @@ pub trait Props {
 
     Properties may be repeated, but can be de-duplicated by taking the first seen for a given key.
     */
-    // TODO: Could we do `for_each_entry(E, Str, Value)`, where we pass as input
-    // a type that can be used to resume from?
     fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
         &'kv self,
         for_each: F,
@@ -45,6 +51,8 @@ pub trait Props {
     If the key is present then this method will return `Some`. Otherwise this method will return `None`.
 
     If the key appears multiple times, the first value seen should be returned.
+
+    Implementors are encouraged to override this method with a more efficient implementation.
     */
     fn get<'v, K: ToStr>(&'v self, key: K) -> Option<Value<'v>> {
         let key = key.to_str();
@@ -198,58 +206,6 @@ where
     }
 }
 
-#[cfg(feature = "alloc")]
-impl<K, V> Props for alloc::collections::BTreeMap<K, V>
-where
-    K: Ord + ToStr + Borrow<str>,
-    V: ToValue,
-{
-    fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
-        &'kv self,
-        mut for_each: F,
-    ) -> ControlFlow<()> {
-        for (k, v) in self {
-            for_each(k.to_str(), v.to_value())?;
-        }
-
-        ControlFlow::Continue(())
-    }
-
-    fn get<'v, Q: ToStr>(&'v self, key: Q) -> Option<Value<'v>> {
-        self.get(key.to_str().as_ref()).map(|v| v.to_value())
-    }
-
-    fn is_unique(&self) -> bool {
-        true
-    }
-}
-
-#[cfg(feature = "std")]
-impl<K, V> Props for std::collections::HashMap<K, V>
-where
-    K: Eq + std::hash::Hash + ToStr + Borrow<str>,
-    V: ToValue,
-{
-    fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
-        &'kv self,
-        mut for_each: F,
-    ) -> ControlFlow<()> {
-        for (k, v) in self {
-            for_each(k.to_str(), v.to_value())?;
-        }
-
-        ControlFlow::Continue(())
-    }
-
-    fn get<'v, Q: ToStr>(&'v self, key: Q) -> Option<Value<'v>> {
-        self.get(key.to_str().as_ref()).map(|v| v.to_value())
-    }
-
-    fn is_unique(&self) -> bool {
-        true
-    }
-}
-
 impl Props for Empty {
     fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
         &'kv self,
@@ -287,6 +243,8 @@ impl<A: Props, B: Props> Props for And<A, B> {
 mod alloc_support {
     use super::*;
 
+    use alloc::collections::BTreeMap;
+
     /**
     The result of calling [`Props::dedup`].
 
@@ -307,6 +265,7 @@ mod alloc_support {
             &'kv self,
             mut for_each: F,
         ) -> ControlFlow<()> {
+            // Optimization for props that are already unique
             if self.0.is_unique() {
                 return self.0.for_each(for_each);
             }
@@ -334,10 +293,140 @@ mod alloc_support {
             true
         }
     }
+
+    impl<K, V> Props for BTreeMap<K, V>
+    where
+        K: Ord + ToStr + Borrow<str>,
+        V: ToValue,
+    {
+        fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
+            &'kv self,
+            mut for_each: F,
+        ) -> ControlFlow<()> {
+            for (k, v) in self {
+                for_each(k.to_str(), v.to_value())?;
+            }
+
+            ControlFlow::Continue(())
+        }
+
+        fn get<'v, Q: ToStr>(&'v self, key: Q) -> Option<Value<'v>> {
+            self.get(key.to_str().as_ref()).map(|v| v.to_value())
+        }
+
+        fn is_unique(&self) -> bool {
+            true
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn btreemap_props() {
+            let props = BTreeMap::from_iter([("a", 1), ("b", 2), ("c", 3)]);
+
+            assert_eq!(1, Props::get(&props, "a").unwrap().cast::<i32>().unwrap());
+            assert_eq!(2, Props::get(&props, "b").unwrap().cast::<i32>().unwrap());
+            assert_eq!(3, Props::get(&props, "c").unwrap().cast::<i32>().unwrap());
+
+            assert_eq!(1, Props::pull::<i32, _>(&props, "a").unwrap());
+            assert_eq!(2, Props::pull::<i32, _>(&props, "b").unwrap());
+            assert_eq!(3, Props::pull::<i32, _>(&props, "c").unwrap());
+
+            assert!(props.is_unique());
+        }
+
+        #[test]
+        fn dedup() {
+            let props = [
+                ("a", Value::from(1)),
+                ("a", Value::from(2)),
+                ("b", Value::from(1)),
+            ];
+
+            let deduped = props.dedup();
+
+            let mut ac = 0;
+            let mut bc = 0;
+
+            deduped.for_each(|k, v| {
+                match k.get() {
+                    "a" => {
+                        assert_eq!(1, v.cast::<i32>().unwrap());
+                        ac += 1;
+                    }
+                    "b" => {
+                        assert_eq!(1, v.cast::<i32>().unwrap());
+                        bc += 1;
+                    }
+                    _ => unreachable!(),
+                }
+
+                ControlFlow::Continue(())
+            });
+
+            assert_eq!(1, ac);
+            assert_eq!(1, bc);
+        }
+    }
 }
 
 #[cfg(feature = "alloc")]
 pub use alloc_support::*;
+
+#[cfg(feature = "std")]
+mod std_support {
+    use super::*;
+
+    use std::{collections::HashMap, hash::Hash};
+
+    impl<K, V> Props for HashMap<K, V>
+    where
+        K: Eq + Hash + ToStr + Borrow<str>,
+        V: ToValue,
+    {
+        fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
+            &'kv self,
+            mut for_each: F,
+        ) -> ControlFlow<()> {
+            for (k, v) in self {
+                for_each(k.to_str(), v.to_value())?;
+            }
+
+            ControlFlow::Continue(())
+        }
+
+        fn get<'v, Q: ToStr>(&'v self, key: Q) -> Option<Value<'v>> {
+            self.get(key.to_str().as_ref()).map(|v| v.to_value())
+        }
+
+        fn is_unique(&self) -> bool {
+            true
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn hashmap_props() {
+            let props = HashMap::from_iter([("a", 1), ("b", 2), ("c", 3)]);
+
+            assert_eq!(1, Props::get(&props, "a").unwrap().cast::<i32>().unwrap());
+            assert_eq!(2, Props::get(&props, "b").unwrap().cast::<i32>().unwrap());
+            assert_eq!(3, Props::get(&props, "c").unwrap().cast::<i32>().unwrap());
+
+            assert_eq!(1, Props::pull::<i32, _>(&props, "a").unwrap());
+            assert_eq!(2, Props::pull::<i32, _>(&props, "b").unwrap());
+            assert_eq!(3, Props::pull::<i32, _>(&props, "c").unwrap());
+
+            assert!(props.is_unique());
+        }
+    }
+}
 
 mod internal {
     use core::ops::ControlFlow;
@@ -406,5 +495,88 @@ impl<'a> Props for dyn ErasedProps + 'a {
 
     fn is_unique(&self) -> bool {
         self.erase_props().0.dispatch_is_unique()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tuple_props() {
+        let props = ("a", 1);
+
+        assert_eq!(1, props.get("a").unwrap().cast::<i32>().unwrap());
+
+        assert_eq!(1, props.pull::<i32, _>("a").unwrap());
+
+        assert!(props.is_unique());
+    }
+
+    #[test]
+    fn array_props() {
+        let props = [("a", 1), ("b", 2), ("c", 3)];
+
+        assert_eq!(1, props.get("a").unwrap().cast::<i32>().unwrap());
+        assert_eq!(2, props.get("b").unwrap().cast::<i32>().unwrap());
+        assert_eq!(3, props.get("c").unwrap().cast::<i32>().unwrap());
+
+        assert_eq!(1, props.pull::<i32, _>("a").unwrap());
+        assert_eq!(2, props.pull::<i32, _>("b").unwrap());
+        assert_eq!(3, props.pull::<i32, _>("c").unwrap());
+
+        assert!(!props.is_unique());
+    }
+
+    #[test]
+    fn option_props() {
+        for (props, expected) in [(Some(("a", 1)), Some(1)), (None, None)] {
+            assert_eq!(expected, props.pull::<i32, _>("a"));
+        }
+    }
+
+    #[test]
+    fn erased_props() {
+        let props = ("a", 1);
+
+        let props = &props as &dyn ErasedProps;
+
+        assert_eq!(1, props.get("a").unwrap().cast::<i32>().unwrap());
+
+        assert_eq!(1, props.pull::<i32, _>("a").unwrap());
+
+        assert!(props.is_unique());
+    }
+
+    #[test]
+    fn get() {
+        let props = [("a", 1), ("a", 2)];
+
+        assert_eq!(1, props.get("a").unwrap().cast::<i32>().unwrap());
+    }
+
+    #[test]
+    fn pull() {
+        let props = [("a", 1), ("a", 2)];
+
+        assert_eq!(1, props.pull::<i32, _>("a").unwrap());
+    }
+
+    #[test]
+    fn and_props() {
+        let a = ("a", 1);
+        let b = [("b", 2), ("c", 3)];
+
+        let props = a.and_props(b);
+
+        assert_eq!(1, props.get("a").unwrap().cast::<i32>().unwrap());
+        assert_eq!(2, props.get("b").unwrap().cast::<i32>().unwrap());
+        assert_eq!(3, props.get("c").unwrap().cast::<i32>().unwrap());
+
+        assert_eq!(1, props.pull::<i32, _>("a").unwrap());
+        assert_eq!(2, props.pull::<i32, _>("b").unwrap());
+        assert_eq!(3, props.pull::<i32, _>("c").unwrap());
+
+        assert!(!props.is_unique());
     }
 }

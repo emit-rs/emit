@@ -180,3 +180,54 @@ impl ToExtent for Range<Option<Timestamp>> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn point() {
+        let ts = Extent::point(Timestamp::MIN);
+
+        assert!(ts.is_point());
+        assert!(!ts.is_span());
+
+        assert_eq!(&Timestamp::MIN, ts.as_point());
+
+        assert_eq!(&(Timestamp::MIN..Timestamp::MIN), ts.as_range());
+        assert_eq!(None, ts.as_span());
+        assert_eq!(None, ts.len());
+    }
+
+    #[test]
+    fn span() {
+        let ts = Extent::span(Timestamp::MIN..Timestamp::MIN + Duration::from_secs(1));
+
+        assert!(!ts.is_point());
+        assert!(ts.is_span());
+
+        assert_eq!(&(Timestamp::MIN + Duration::from_secs(1)), ts.as_point());
+
+        assert_eq!(
+            &(Timestamp::MIN..Timestamp::MIN + Duration::from_secs(1)),
+            ts.as_range()
+        );
+        assert_eq!(
+            Some(&(Timestamp::MIN..Timestamp::MIN + Duration::from_secs(1))),
+            ts.as_span()
+        );
+        assert_eq!(Some(Duration::from_secs(1)), ts.len());
+    }
+
+    #[test]
+    fn span_empty() {
+        let ts = Extent::span(Timestamp::MIN..Timestamp::MIN);
+
+        assert!(!ts.is_point());
+        assert!(ts.is_span());
+
+        assert_eq!(&Timestamp::MIN, ts.as_point());
+
+        assert_eq!(Some(Duration::from_secs(0)), ts.len());
+    }
+}

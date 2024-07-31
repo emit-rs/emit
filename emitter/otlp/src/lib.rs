@@ -51,7 +51,7 @@ fn main() {
             // Add required resource properties for OTLP
             .resource(emit::props! {
                 #[emit::key("service.name")]
-                service_name: env!("CARGO_PKG_NAME"),
+                service_name: emit::pkg!(),
             })
             // Configure endpoints for logs/traces/metrics using gRPC + protobuf
             .logs(emit_otlp::logs_grpc_proto("http://localhost:4319"))
@@ -88,7 +88,7 @@ async fn main() {
         .emit_to(emit_otlp::new()
             .resource(emit::props! {
                 #[emit::key("service.name")]
-                service_name: env!("CARGO_PKG_NAME"),
+                service_name: emit::pkg!(),
             })
             .logs(emit_otlp::logs_grpc_proto("http://localhost:4319"))
             .spawn()
@@ -109,7 +109,7 @@ fn main() {
         .emit_to(emit_otlp::new()
             .resource(emit::props! {
                 #[emit::key("service.name")]
-                service_name: env!("CARGO_PKG_NAME"),
+                service_name: emit::pkg!(),
             })
             .logs(emit_otlp::logs_grpc_proto("http://localhost:4319"))
             .spawn()
@@ -129,7 +129,7 @@ The [`logs_grpc_proto`], [`traces_grpc_proto`], and [`metrics_grpc_proto`] funct
 emit_otlp::new()
     .resource(emit::props! {
         #[emit::key("service.name")]
-        service_name: env!("CARGO_PKG_NAME"),
+        service_name: emit::pkg!(),
     })
     .logs(emit_otlp::logs_grpc_proto("http://localhost:4319"))
     .traces(emit_otlp::traces_grpc_proto("http://localhost:4319"))
@@ -150,7 +150,7 @@ The [`logs_http_json`], [`traces_http_json`], and [`metrics_http_json`] function
 emit_otlp::new()
     .resource(emit::props! {
         #[emit::key("service.name")]
-        service_name: env!("CARGO_PKG_NAME"),
+        service_name: emit::pkg!(),
     })
     .logs(emit_otlp::logs_http_json("http://localhost:4318/v1/logs"))
     .traces(emit_otlp::traces_http_json("http://localhost:4318/v1/traces"))
@@ -169,7 +169,7 @@ The [`logs_http_proto`], [`traces_http_proto`], and [`metrics_http_proto`] funct
 emit_otlp::new()
     .resource(emit::props! {
         #[emit::key("service.name")]
-        service_name: env!("CARGO_PKG_NAME"),
+        service_name: emit::pkg!(),
     })
     .logs(emit_otlp::logs_http_proto("http://localhost:4318/v1/logs"))
     .traces(emit_otlp::traces_http_proto("http://localhost:4318/v1/traces"))
@@ -224,7 +224,7 @@ At a minimum, you should add the `service.name` property:
 emit_otlp::new()
     .resource(emit::props! {
         #[emit::key("service.name")]
-        service_name: env!("CARGO_PKG_NAME"),
+        service_name: emit::pkg!(),
     })
 # }
 ```
@@ -236,7 +236,7 @@ You should also consider setting other well-known resource properties:
 emit_otlp::new()
     .resource(emit::props! {
         #[emit::key("service.name")]
-        service_name: env!("CARGO_PKG_NAME"),
+        service_name: emit::pkg!(),
         #[emit::key("telemetry.sdk.language")]
         language: emit_otlp::telemetry_sdk_language(),
         #[emit::key("telemetry.sdk.name")]
@@ -256,7 +256,7 @@ All [`emit::Event`]s can be represented as OTLP log records. You should at least
 emit_otlp::new()
     .resource(emit::props! {
         #[emit::key("service.name")]
-        service_name: env!("CARGO_PKG_NAME"),
+        service_name: emit::pkg!(),
     })
     .logs(emit_otlp::logs_grpc_proto("http://localhost:4318"))
     .spawn()
@@ -532,7 +532,7 @@ A minimal logging configuration for gRPC+Protobuf is:
 emit_otlp::new()
     .resource(emit::props! {
         #[emit::key("service.name")]
-        service_name: env!("CARGO_PKG_NAME"),
+        service_name: emit::pkg!(),
     })
     .traces(emit_otlp::traces_grpc_proto("http://localhost:4318"))
     .logs(emit_otlp::logs_grpc_proto("http://localhost:4318"))
@@ -796,7 +796,7 @@ A minimal logging configuration for gRPC+Protobuf is:
 emit_otlp::new()
     .resource(emit::props! {
         #[emit::key("service.name")]
-        service_name: env!("CARGO_PKG_NAME"),
+        service_name: emit::pkg!(),
     })
     .metrics(emit_otlp::metrics_grpc_proto("http://localhost:4318"))
     .logs(emit_otlp::logs_grpc_proto("http://localhost:4318"))
@@ -1132,7 +1132,7 @@ fn main() {
             let otlp = emit_otlp::new()
                 .resource(emit::props! {
                     #[emit::key("service.name")]
-                    service_name: env!("CARGO_PKG_NAME"),
+                    service_name: emit::pkg!(),
                 })
                 .logs(emit_otlp::logs_grpc_proto("http://localhost:4319"))
                 .traces(emit_otlp::traces_grpc_proto("http://localhost:4319"))

@@ -306,7 +306,7 @@ mod alloc_support {
             }
 
             pub(super) fn get<'a>(&'a self) -> &'a (dyn ErasedProps + 'a) {
-                // SAFETY: `ErasedCurrent` must not outlive `&v`, as per `ErasedCurrent::new`
+                // SAFETY: `ErasedCurrent` does not outlive `&v`, as per `ErasedCurrent::new`
                 unsafe { &*self.0 }
             }
         }
@@ -447,7 +447,138 @@ mod alloc_support {
             (self as &(dyn ErasedCtxt + 'a)).close(span)
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn erased_ctxt() {
+            struct MyCtxt<'a> {
+                a: &'a str,
+            }
+
+            struct MyFrame {
+                a: String,
+            }
+
+            impl<'a> Ctxt for MyCtxt<'a> {
+                type Current = (&'a str, &'a str);
+                type Frame = MyFrame;
+
+                fn open_root<P: Props>(&self, _: P) -> Self::Frame {
+                    MyFrame {
+                        a: self.a.to_owned(),
+                    }
+                }
+
+                fn enter(&self, frame: &mut Self::Frame) {
+                    assert_eq!(self.a, frame.a);
+                }
+
+                fn exit(&self, frame: &mut Self::Frame) {
+                    assert_eq!(self.a, frame.a);
+                }
+
+                fn close(&self, frame: Self::Frame) {
+                    assert_eq!(self.a, frame.a);
+                }
+
+                fn with_current<R, F: FnOnce(&Self::Current) -> R>(&self, with: F) -> R {
+                    with(&("a", self.a))
+                }
+            }
+
+            let borrowed = String::from("value");
+
+            let ctxt = MyCtxt { a: &borrowed };
+
+            let ctxt = &ctxt as &dyn ErasedCtxt;
+
+            let mut frame = ctxt.open_root(Empty);
+
+            ctxt.enter(&mut frame);
+
+            ctxt.with_current(|props| {
+                assert_eq!("value", props.pull::<crate::str::Str, _>("a").unwrap());
+            });
+
+            ctxt.exit(&mut frame);
+
+            ctxt.close(frame);
+        }
+    }
 }
 
 #[cfg(feature = "alloc")]
 pub use alloc_support::*;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use core::{cell::Cell, ops::ControlFlow};
+
+    #[test]
+    fn option_ctxt() {
+        struct MyCtxt {
+            count: Cell<usize>,
+        }
+
+        struct MyFrame {
+            count: usize,
+        }
+
+        impl Ctxt for MyCtxt {
+            type Current = (&'static str, usize);
+            type Frame = MyFrame;
+
+            fn open_root<P: Props>(&self, props: P) -> Self::Frame {
+                let mut count = 0;
+
+                props.for_each(|_, _| {
+                    count += 1;
+                    ControlFlow::Continue(())
+                });
+
+                MyFrame { count }
+            }
+
+            fn enter(&self, frame: &mut Self::Frame) {
+                self.count.set(self.count.get() + frame.count);
+            }
+
+            fn exit(&self, frame: &mut Self::Frame) {
+                self.count.set(self.count.get() - frame.count);
+            }
+
+            fn close(&self, _: Self::Frame) {}
+
+            fn with_current<R, F: FnOnce(&Self::Current) -> R>(&self, with: F) -> R {
+                with(&("count", self.count.get()))
+            }
+        }
+
+        for (ctxt, expected) in [
+            (
+                Some(MyCtxt {
+                    count: Cell::new(0),
+                }),
+                Some(5),
+            ),
+            (None, None),
+        ] {
+            let mut frame = ctxt.open_root([("a", 1), ("b", 2), ("c", 3), ("d", 4), ("e", 5)]);
+
+            ctxt.enter(&mut frame);
+
+            ctxt.with_current(|props| {
+                assert_eq!(expected, props.pull::<usize, _>("count"));
+            });
+
+            ctxt.exit(&mut frame);
+
+            ctxt.close(frame);
+        }
+    }
+}

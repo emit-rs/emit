@@ -148,6 +148,8 @@ impl Timestamp {
         let year = (parts.years as i64) - 1900;
 
         // Fast path for years 1900 - 2038.
+        // The `as u64` conversion here turns negative values
+        // into very large positive ones, failing the `<=`
         if year as u64 <= 138 {
             let mut leaps: i64 = (year - 68) >> 2;
             if (year - 68).trailing_zeros() >= 2 {
@@ -221,7 +223,7 @@ impl Timestamp {
             273 * 86400, // Oct
             304 * 86400, // Nov
             334 * 86400, // Dec
-        ][usize::from(parts.months - 1)]
+        ][usize::from(parts.months - 1) % 12]
             + seconds_within_month;
 
         if is_leap && parts.months > 2 {
@@ -246,8 +248,7 @@ impl Timestamp {
         let secs = dur.as_secs();
         let nanos = dur.subsec_nanos();
 
-        // Note(dcb): this bit is rearranged slightly to avoid integer overflow.
-        let mut days = ((secs / 86_400) - (LEAPOCH_SECS / 86_400)) as i64;
+        let mut days = ((secs as i64 / 86_400) - (LEAPOCH_SECS as i64 / 86_400)) as i64;
         let mut remsecs = (secs % 86_400) as i32;
         if remsecs < 0i32 {
             remsecs += 86_400;
@@ -312,16 +313,33 @@ impl Timestamp {
             nanos,
         }
     }
+
+    /**
+    Add a duration to this timestamp.
+
+    If the result would be greater than [`Timestamp::MAX`] then `None` is returned.
+    */
+    #[must_use = "the result of addition is returned without modifying the original"]
+    pub fn checked_add(&self, rhs: Duration) -> Option<Self> {
+        Timestamp::from_unix(self.to_unix().checked_add(rhs)?)
+    }
+
+    /**
+    Subtract a duration to this timestamp.
+
+    If the result would be less than [`Timestamp::MIN`] then `None` is returned.
+    */
+    #[must_use = "the result of subtraction is returned without modifying the original"]
+    pub fn checked_sub(&self, rhs: Duration) -> Option<Self> {
+        Timestamp::from_unix(self.to_unix().checked_sub(rhs)?)
+    }
 }
 
 impl Add<Duration> for Timestamp {
     type Output = Timestamp;
 
     fn add(self, rhs: Duration) -> Self::Output {
-        match Timestamp::from_unix(self.to_unix() + rhs) {
-            Some(ts) => ts,
-            None => panic!("overflow adding to timestamp"),
-        }
+        self.checked_add(rhs).expect("overflow adding to timestamp")
     }
 }
 
@@ -335,10 +353,8 @@ impl Sub<Duration> for Timestamp {
     type Output = Timestamp;
 
     fn sub(self, rhs: Duration) -> Self::Output {
-        match Timestamp::from_unix(self.to_unix() - rhs) {
-            Some(ts) => ts,
-            None => panic!("overflow subtracting from timestamp"),
-        }
+        self.checked_sub(rhs)
+            .expect("overflow subtracting from timestamp")
     }
 }
 
@@ -404,19 +420,21 @@ impl std::error::Error for ParseTimestampError {}
 
 fn parse_rfc3339(fmt: &str) -> Result<Timestamp, ParseTimestampError> {
     if fmt.len() > 30 || fmt.len() < 19 {
-        unimplemented!("invalid len {}", fmt.len());
+        // Invalid length
+        return Err(ParseTimestampError {});
     }
 
     if *fmt.as_bytes().last().unwrap() != b'Z' {
-        unimplemented!("non-UTC")
+        // Non-UTC
+        return Err(ParseTimestampError {});
     }
 
-    let years = u16::from_str_radix(&fmt[0..4], 10).unwrap();
-    let months = u8::from_str_radix(&fmt[5..7], 10).unwrap();
-    let days = u8::from_str_radix(&fmt[8..10], 10).unwrap();
-    let hours = u8::from_str_radix(&fmt[11..13], 10).unwrap();
-    let minutes = u8::from_str_radix(&fmt[14..16], 10).unwrap();
-    let seconds = u8::from_str_radix(&fmt[17..19], 10).unwrap();
+    let years = u16::from_str_radix(&fmt[0..4], 10).map_err(|_| ParseTimestampError {})?;
+    let months = u8::from_str_radix(&fmt[5..7], 10).map_err(|_| ParseTimestampError {})?;
+    let days = u8::from_str_radix(&fmt[8..10], 10).map_err(|_| ParseTimestampError {})?;
+    let hours = u8::from_str_radix(&fmt[11..13], 10).map_err(|_| ParseTimestampError {})?;
+    let minutes = u8::from_str_radix(&fmt[14..16], 10).map_err(|_| ParseTimestampError {})?;
+    let seconds = u8::from_str_radix(&fmt[17..19], 10).map_err(|_| ParseTimestampError {})?;
     let nanos = if fmt.len() > 19 {
         let subsecond = &fmt[20..fmt.len() - 1];
         u32::from_str_radix(subsecond, 10).unwrap() * 10u32.pow(9 - subsecond.len() as u32)
@@ -494,7 +512,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn timestamp_roundtrip() {
+    fn roundtrip() {
         let ts = Timestamp::from_unix(Duration::new(1691961703, 17532)).unwrap();
 
         let fmt = ts.to_string();
@@ -505,7 +523,7 @@ mod tests {
     }
 
     #[test]
-    fn timestamp_parts_max() {
+    fn parts_max() {
         let ts = Timestamp::from_parts(Parts {
             years: 9999,
             months: 12,
@@ -521,7 +539,7 @@ mod tests {
     }
 
     #[test]
-    fn timestamp_parts_min() {
+    fn parts_min() {
         let ts = Timestamp::from_parts(Parts {
             years: 1970,
             months: 1,
@@ -534,5 +552,98 @@ mod tests {
         .unwrap();
 
         assert_eq!(ts.to_unix(), MIN);
+    }
+
+    #[test]
+    fn parts_overflow() {
+        let ts = Timestamp::from_parts(Parts {
+            years: 2000,
+            months: 13,
+            days: 32,
+            hours: 25,
+            minutes: 61,
+            seconds: 61,
+            nanos: 1000000000,
+        })
+        .unwrap();
+
+        let expected = Timestamp::from_parts(Parts {
+            years: 2000,
+            months: 13,
+            days: 32,
+            hours: 25,
+            minutes: 61,
+            seconds: 62,
+            nanos: 0,
+        })
+        .unwrap();
+
+        assert_eq!(expected, ts);
+    }
+
+    #[test]
+    fn add() {
+        for (case, add, expected) in [
+            (
+                Timestamp::MIN,
+                Duration::from_nanos(1),
+                Some(Timestamp::from_unix(Duration::from_nanos(1)).unwrap()),
+            ),
+            (Timestamp::MAX, Duration::from_nanos(1), None),
+            (Timestamp::MAX, Duration::MAX, None),
+        ] {
+            assert_eq!(expected, case.checked_add(add));
+        }
+    }
+
+    #[test]
+    fn sub() {
+        for (case, sub, expected) in [
+            (
+                Timestamp::MAX,
+                Duration::from_nanos(1),
+                Some(Timestamp::from_unix(MAX - Duration::from_nanos(1)).unwrap()),
+            ),
+            (Timestamp::MIN, Duration::from_nanos(1), None),
+            (Timestamp::MIN, Duration::MAX, None),
+        ] {
+            assert_eq!(expected, case.checked_sub(sub));
+        }
+    }
+
+    #[test]
+    fn to_from_value() {
+        for case in [
+            Timestamp::MIN,
+            Timestamp::MAX,
+            Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
+        ] {
+            let value = case.to_value();
+
+            assert_eq!(case, value.cast::<Timestamp>().unwrap());
+        }
+
+        for (case, expected) in [
+            (
+                Value::from("2024-01-01T00:13:00.000Z"),
+                Some(
+                    Timestamp::from_parts(Parts {
+                        years: 2024,
+                        months: 01,
+                        days: 01,
+                        hours: 00,
+                        minutes: 13,
+                        seconds: 00,
+                        nanos: 000,
+                    })
+                    .unwrap(),
+                ),
+            ),
+            (Value::from(""), None),
+            (Value::from("12024-01-01T00:13:00.000Z"), None),
+            (Value::from("2024-01-01T00:13:00.000+10"), None),
+        ] {
+            assert_eq!(expected, case.cast::<Timestamp>());
+        }
     }
 }

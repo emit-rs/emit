@@ -253,3 +253,41 @@ impl<'a, P: Props> ToEvent for Event<'a, P> {
         self.by_ref()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{str::Str, value::Value};
+
+    use super::*;
+
+    #[test]
+    fn event_new() {
+        let evt = Event::new(
+            Path::new_unchecked("module"),
+            Extent::span(Timestamp::MIN..Timestamp::MAX),
+            Template::literal("An event"),
+            [
+                ("a", Value::from(true)),
+                ("b", Value::from(1)),
+                ("c", Value::from("string")),
+            ],
+        );
+
+        fn assert(evt: &Event<impl Props>) {
+            assert_eq!(Path::new_unchecked("module"), evt.module());
+            assert_eq!(
+                Timestamp::MIN..Timestamp::MAX,
+                evt.extent().unwrap().as_span().unwrap().clone()
+            );
+            assert_eq!("An event", evt.tpl().as_literal().unwrap());
+
+            assert_eq!(true, evt.props().pull::<bool, _>("a").unwrap());
+            assert_eq!(1, evt.props().pull::<i32, _>("b").unwrap());
+            assert_eq!("string", evt.props().pull::<Str, _>("c").unwrap());
+        }
+
+        assert(&evt);
+        assert(&evt.by_ref());
+        assert(&evt.erase());
+    }
+}

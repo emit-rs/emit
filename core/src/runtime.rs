@@ -779,6 +779,19 @@ mod std_support {
             self.0.get()
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn ambient_slot_init() {
+            let slot = AmbientSlot::new();
+
+            assert!(slot.init(Runtime::new()).is_some());
+            assert!(slot.init(Runtime::new()).is_none());
+        }
+    }
 }
 
 #[cfg(feature = "std")]

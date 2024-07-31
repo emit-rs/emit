@@ -24,6 +24,9 @@ version = "1"
 features = ["inline-i128", "seq"]
 default-features = false
 
+[dependencies.unicode-ident]
+version = "1"
+
 [dependencies.sval]
 version = "2"
 optional = true
