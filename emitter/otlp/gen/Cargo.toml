@@ -1,6 +1,6 @@
 [package]
 name = "emit-otlp-gen"
-version = "0.11.0-alpha.6"
+version = "0.11.0-alpha.7"
 publish = false
 edition = "2021"
 
