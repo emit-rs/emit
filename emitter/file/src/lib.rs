@@ -456,7 +456,7 @@ impl emit::Emitter for FileSet {
                     "failed to format file event payload: {err}",
                 )
             }
-        }
+        };
     }
 
     fn blocking_flush(&self, timeout: std::time::Duration) -> bool {
