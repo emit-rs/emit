@@ -33,7 +33,8 @@ pub struct Str<'k> {
     // NOTE: We could probably save space here by putting these in an enum
     value_static: Option<&'static str>,
     #[cfg(feature = "alloc")]
-    value_owned: Option<Box<str>>,
+    // NOTE: `value_owned` is a `Box<str>`, stored as a `*mut str` to appease miri
+    value_owned: Option<*mut str>,
     #[cfg(feature = "alloc")]
     value_shared: Option<Arc<str>>,
     _marker: PhantomData<&'k str>,
@@ -60,21 +61,13 @@ impl<'k> Clone for Str<'k> {
         {
             match self {
                 Str {
-                    value: _,
+                    value,
                     value_static: _,
-                    value_owned: Some(value_owned),
+                    value_owned: Some(_),
                     value_shared: _,
                     _marker,
                 } => {
-                    let value_owned = value_owned.clone();
-
-                    Str {
-                        value: &*value_owned as *const str,
-                        value_owned: Some(value_owned),
-                        value_shared: None,
-                        value_static: None,
-                        _marker: PhantomData,
-                    }
+                    Str::new_owned(unsafe { &**value })
                 }
                 Str {
                     value: _,
@@ -85,13 +78,7 @@ impl<'k> Clone for Str<'k> {
                 } => {
                     let value_shared = value_shared.clone();
 
-                    Str {
-                        value: &*value_shared as *const str,
-                        value_shared: Some(value_shared),
-                        value_owned: None,
-                        value_static: None,
-                        _marker: PhantomData,
-                    }
+                    Str::new_shared(value_shared)
                 }
                 Str {
                     value,
@@ -114,6 +101,26 @@ impl<'k> Clone for Str<'k> {
                 value: self.value,
                 value_static: self.value_static,
                 _marker: PhantomData,
+            }
+        }
+    }
+}
+
+impl<'k> Drop for Str<'k> {
+    fn drop(&mut self) {
+        #[cfg(feature = "alloc")]
+        {
+            match self {
+                Str {
+                    value: _,
+                    value_static: _,
+                    value_owned: Some(value_owned),
+                    value_shared: _,
+                    _marker,
+                } => {
+                    drop(unsafe { Box::from_raw(*value_owned) });
+                }
+                _ => (),
             }
         }
     }
@@ -340,11 +347,11 @@ impl<'k> serde::Serialize for Str<'k> {
 
 #[cfg(feature = "alloc")]
 mod alloc_support {
+    use core::mem;
     use alloc::{
         borrow::{Cow, ToOwned},
         string::String,
     };
-
     use super::*;
 
     impl Str<'static> {
@@ -356,9 +363,11 @@ mod alloc_support {
         pub fn new_owned(key: impl Into<Box<str>>) -> Self {
             let value = key.into();
 
+            let raw = Box::into_raw(value);
+
             Str {
-                value: &*value as *const str,
-                value_owned: Some(value),
+                value: raw as *const str,
+                value_owned: Some(raw),
                 value_shared: None,
                 value_static: None,
                 _marker: PhantomData,
@@ -425,13 +434,6 @@ mod alloc_support {
                 Str {
                     value: _,
                     value_static: _,
-                    value_owned: Some(value_owned),
-                    value_shared: _,
-                    _marker,
-                } => Str::new_owned(value_owned.clone()),
-                Str {
-                    value: _,
-                    value_static: _,
                     value_owned: _,
                     value_shared: Some(value_shared),
                     _marker,
@@ -453,7 +455,13 @@ mod alloc_support {
                     value_owned: Some(value_owned),
                     value_shared: _,
                     _marker,
-                } => value_owned.into(),
+                } => {
+                    // Ensure `Drop` doesn't run over this value
+                    // and clean up the box we've just moved out of
+                    mem::forget(self);
+
+                    unsafe { Box::from_raw(value_owned) }.into()
+                },
                 str => str.get().to_owned(),
             }
         }
@@ -472,13 +480,6 @@ mod alloc_support {
                     value_shared: _,
                     _marker,
                 } => Str::new(value_static),
-                Str {
-                    value: _,
-                    value_static: _,
-                    value_owned: Some(value_owned),
-                    value_shared: _,
-                    _marker,
-                } => Str::new_shared(value_owned.clone()),
                 Str {
                     value: _,
                     value_static: _,
@@ -588,7 +589,7 @@ mod alloc_support {
         #[test]
         fn owned_into_string() {
             let s = Str::new_owned("string");
-            let ptr = s.value_owned.as_ref().unwrap().as_ptr();
+            let ptr = s.value_owned.unwrap() as *const u8;
 
             let owned = s.into_string();
 
@@ -597,13 +598,18 @@ mod alloc_support {
 
         #[test]
         fn shared_str_clone() {
-            let s = Str::new_shared("string");
-            let a = s.value_shared.as_ref().unwrap().clone();
+            let sa = Str::new_shared("string");
+            let a = sa.value_shared.as_ref().unwrap().clone();
 
-            let s = s.clone();
-            let b = s.value_shared.as_ref().unwrap().clone();
+            let sb = sa.clone();
+            let b = sb.value_shared.as_ref().unwrap().clone();
 
             assert!(Arc::ptr_eq(&a, &b));
+
+            drop(sa);
+            drop(a);
+
+            assert_eq!("string", sb);
         }
     }
 }
