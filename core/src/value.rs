@@ -524,7 +524,25 @@ mod alloc_support {
 
         #[test]
         fn as_f64_sequence() {
-            todo!()
+            for (case, expected) in [
+                (Value::from(&[0.0, 1.0, 2.0]), vec![0.0, 1.0, 2.0]),
+                (Value::from(0.0), vec![]),
+                (Value::from(&[0, 1, 2]), vec![0.0, 1.0, 2.0]),
+                (Value::from(&[] as &[f64; 0]), vec![]),
+                (Value::from(&[true, false]), vec![f64::NAN, f64::NAN]),
+            ] {
+                let actual = case.as_f64_sequence();
+
+                assert_eq!(expected.len(), actual.len());
+
+                for (expected, actual) in expected.into_iter().zip(actual) {
+                    if expected.is_nan() {
+                        assert!(actual.is_nan());
+                    } else {
+                        assert_eq!(expected, actual);
+                    }
+                }
+            }
         }
     }
 }
@@ -538,16 +556,34 @@ mod tests {
 
     #[test]
     fn parse() {
-        todo!()
-    }
-
-    #[test]
-    fn cast() {
-        todo!()
+        for (case, expected) in [
+            (Value::from("1"), Some(1)),
+            (Value::from("x"), None),
+            #[cfg(feature = "alloc")]
+            (Value::from_display(&"1"), Some(1)),
+            #[cfg(feature = "alloc")]
+            (Value::from(1), Some(1)),
+            #[cfg(feature = "alloc")]
+            (Value::from(1.0), Some(1)),
+        ] {
+            assert_eq!(expected, case.parse::<i32>());
+        }
     }
 
     #[test]
     fn as_f64() {
-        todo!()
+        for (case, expected) in [
+            (Value::from(1.0), 1.0),
+            (Value::from(2), 2.0),
+            (Value::from(true), f64::NAN),
+            (Value::from("1.0"), 1.0),
+            (Value::from("x"), f64::NAN),
+        ] {
+            if expected.is_nan() {
+                assert!(case.as_f64().is_nan());
+            } else {
+                assert_eq!(expected, case.as_f64());
+            }
+        }
     }
 }
