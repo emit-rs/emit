@@ -898,3 +898,87 @@ mod no_std_support {
 
 #[cfg(not(feature = "std"))]
 pub use self::no_std_support::*;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::{cell::Cell, time::Duration};
+
+    struct MyClock(Option<Timestamp>);
+
+    impl Clock for MyClock {
+        fn now(&self) -> Option<Timestamp> {
+            self.0
+        }
+    }
+
+    struct MyCtxt(&'static str, usize);
+
+    impl Ctxt for MyCtxt {
+        type Current = (&'static str, usize);
+        type Frame = ();
+
+        fn open_root<P: Props>(&self, _: P) -> Self::Frame {}
+
+        fn enter(&self, _: &mut Self::Frame) {}
+
+        fn exit(&self, _: &mut Self::Frame) {}
+
+        fn close(&self, _: Self::Frame) {}
+
+        fn with_current<R, F: FnOnce(&Self::Current) -> R>(&self, with: F) -> R {
+            with(&(self.0, self.1))
+        }
+    }
+
+    #[test]
+    fn runtime_emit_uses_clock_ctxt() {
+        let called = Cell::new(false);
+
+        let runtime = Runtime::build(
+            crate::emitter::from_fn(|evt| {
+                assert_eq!(13, evt.props().pull::<usize, _>("ctxt_prop").unwrap());
+                assert_eq!(true, evt.props().pull::<bool, _>("evt_prop").unwrap());
+
+                assert_eq!(
+                    Timestamp::from_unix(Duration::from_secs(77)).unwrap(),
+                    evt.extent().unwrap().as_point()
+                );
+
+                called.set(true);
+            }),
+            crate::empty::Empty,
+            MyCtxt("ctxt_prop", 13),
+            MyClock(Timestamp::from_unix(Duration::from_secs(77))),
+            crate::empty::Empty,
+        );
+
+        runtime.emit(crate::event::Event::new(
+            crate::path::Path::new_unchecked("test"),
+            crate::empty::Empty,
+            crate::template::Template::literal("text"),
+            ("evt_prop", true),
+        ));
+
+        assert!(called.get());
+    }
+
+    #[test]
+    fn runtime_emit_uses_filter() {
+        let runtime = Runtime::build(
+            crate::emitter::from_fn(|_| panic!("filter should apply")),
+            crate::filter::from_fn(|_| false),
+            crate::empty::Empty,
+            crate::empty::Empty,
+            crate::empty::Empty,
+        );
+
+        runtime.emit(crate::event::Event::new(
+            crate::path::Path::new_unchecked("test"),
+            crate::empty::Empty,
+            crate::template::Template::literal("text"),
+            ("evt_prop", true),
+        ));
+    }
+}
