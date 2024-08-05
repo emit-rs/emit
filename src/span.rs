@@ -1241,6 +1241,8 @@ impl<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> SpanGuard<'a, C, P, F> {
 mod tests {
     use super::*;
 
+    use std::{cell::Cell, time::Duration};
+
     #[test]
     fn span_id_parse() {
         for (case, expected) in [
@@ -1443,5 +1445,126 @@ mod tests {
 
         ctxt.exit(&mut frame);
         ctxt.close(frame);
+    }
+
+    struct MyClock(Cell<u64>);
+
+    impl Clock for MyClock {
+        fn now(&self) -> Option<crate::Timestamp> {
+            let ts = crate::Timestamp::from_unix(Duration::from_secs(self.0.get()));
+            self.0.set(self.0.get() + 1);
+            ts
+        }
+    }
+
+    #[test]
+    #[cfg(all(feature = "std", feature = "rand"))]
+    fn span_guard_filtered_new() {
+        let clock = MyClock(Cell::new(0));
+        let rng = crate::platform::rand_rng::RandRng::new();
+        let ctxt = crate::platform::thread_local_ctxt::ThreadLocalCtxt::new();
+
+        let span_ctxt = SpanCtxt::new_root(&rng);
+
+        let complete_called = Cell::new(false);
+
+        let mut guard = SpanGuard::filtered_new(
+            |_| true,
+            crate::Path::new_unchecked("test"),
+            crate::Timer::start(&clock),
+            "span",
+            span_ctxt,
+            ("event_prop", 1),
+            |evt| {
+                assert_eq!(
+                    crate::Timestamp::from_unix(Duration::from_secs(0)).unwrap(),
+                    evt.extent().unwrap().as_span().unwrap().start
+                );
+                assert_eq!(
+                    crate::Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
+                    evt.extent().unwrap().as_span().unwrap().end
+                );
+
+                assert_eq!("test", evt.module());
+                assert_eq!("span", evt.name());
+
+                assert_eq!(1, evt.props().pull::<usize, _>("event_prop").unwrap());
+
+                let current_ctxt = SpanCtxt::current(&ctxt);
+
+                assert_eq!(span_ctxt, current_ctxt);
+
+                complete_called.set(true);
+            },
+        );
+
+        assert!(guard.is_enabled());
+
+        guard.push_ctxt(&ctxt, ("ctxt_prop", 2)).call(move || {
+            drop(guard);
+        });
+
+        assert!(complete_called.get());
+    }
+
+    #[test]
+    #[cfg(all(feature = "std", feature = "rand"))]
+    fn span_guard_filtered_new_disabled() {
+        let rng = crate::platform::rand_rng::RandRng::new();
+        let clock = crate::platform::system_clock::SystemClock::new();
+        let ctxt = crate::platform::thread_local_ctxt::ThreadLocalCtxt::new();
+
+        let complete_called = Cell::new(false);
+
+        let mut guard = SpanGuard::filtered_new(
+            |_| false,
+            crate::Path::new_unchecked("test"),
+            crate::Timer::start(&clock),
+            "span",
+            SpanCtxt::new_root(&rng),
+            crate::Empty,
+            |_| {
+                complete_called.set(true);
+            },
+        );
+
+        assert!(!guard.is_enabled());
+
+        guard.push_ctxt(&ctxt, crate::Empty).call(move || {
+            drop(guard);
+        });
+
+        assert!(!complete_called.get());
+    }
+
+    #[test]
+    #[cfg(all(feature = "std", feature = "rand"))]
+    fn span_guard_custom_complete() {
+        let clock = crate::platform::system_clock::SystemClock::new();
+        let rng = crate::platform::rand_rng::RandRng::new();
+
+        let custom_complete_called = Cell::new(false);
+        let default_complete_called = Cell::new(false);
+
+        let guard = SpanGuard::filtered_new(
+            |_| true,
+            crate::Path::new_unchecked("test"),
+            crate::Timer::start(&clock),
+            "span",
+            SpanCtxt::new_root(&rng),
+            crate::Empty,
+            |_| {
+                default_complete_called.set(true);
+            },
+        );
+
+        assert!(guard.is_enabled());
+
+        guard.complete_with(|_| {
+            custom_complete_called.set(true);
+        });
+
+        assert!(!default_complete_called.get());
+        assert!(custom_complete_called.get());
     }
 }
