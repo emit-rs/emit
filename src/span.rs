@@ -1242,6 +1242,94 @@ mod tests {
     use super::*;
 
     #[test]
+    fn span_id_parse() {
+        for (case, expected) in [
+            (
+                "0123456789abcdef",
+                Ok(SpanId::from_u64(0x0123456789abcdef).unwrap()),
+            ),
+            (
+                "0000000000000001",
+                Ok(SpanId::from_u64(0x0000000000000001).unwrap()),
+            ),
+            ("0000000000000000", Err(ParseIdError {})),
+            ("0x00000000000001", Err(ParseIdError {})),
+            ("0x0000000000000001", Err(ParseIdError {})),
+            ("1", Err(ParseIdError {})),
+            ("", Err::<SpanId, ParseIdError>(ParseIdError {})),
+        ] {
+            match expected {
+                Ok(expected) => {
+                    assert_eq!(expected, SpanId::try_from_hex(case).unwrap());
+                    assert_eq!(expected, SpanId::try_from_hex(case).unwrap());
+                }
+                Err(e) => assert_eq!(
+                    e.to_string(),
+                    SpanId::try_from_hex(case).unwrap_err().to_string()
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn trace_id_parse() {
+        for (case, expected) in [
+            (
+                "0123456789abcdef0123456789abcdef",
+                Ok(TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap()),
+            ),
+            (
+                "00000000000000000000000000000001",
+                Ok(TraceId::from_u128(0x00000000000000000000000000000001).unwrap()),
+            ),
+            ("00000000000000000000000000000000", Err(ParseIdError {})),
+            ("0x000000000000000000000000000001", Err(ParseIdError {})),
+            ("0x00000000000000000000000000000001", Err(ParseIdError {})),
+            ("1", Err(ParseIdError {})),
+            ("", Err::<TraceId, ParseIdError>(ParseIdError {})),
+        ] {
+            match expected {
+                Ok(expected) => assert_eq!(expected, TraceId::try_from_hex(case).unwrap()),
+                Err(e) => assert_eq!(
+                    e.to_string(),
+                    TraceId::try_from_hex(case).unwrap_err().to_string()
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn span_id_fmt() {
+        for (case, expected) in [
+            (SpanId::from_u64(1).unwrap(), "0000000000000001"),
+            (
+                SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                "0123456789abcdef",
+            ),
+        ] {
+            assert_eq!(expected, case.to_string());
+            assert_eq!(expected, str::from_utf8(&case.to_hex()).unwrap());
+        }
+    }
+
+    #[test]
+    fn trace_id_fmt() {
+        for (case, expected) in [
+            (
+                TraceId::from_u128(1).unwrap(),
+                "00000000000000000000000000000001",
+            ),
+            (
+                TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                "0123456789abcdef0123456789abcdef",
+            ),
+        ] {
+            assert_eq!(expected, case.to_string());
+            assert_eq!(expected, str::from_utf8(&case.to_hex()).unwrap());
+        }
+    }
+
+    #[test]
     fn span_id_roundtrip() {
         let id = SpanId::new(NonZeroU64::new(u64::MAX / 2).unwrap());
 
@@ -1261,5 +1349,59 @@ mod tests {
         let parsed: TraceId = fmt.parse().unwrap();
 
         assert_eq!(id, parsed, "{}", fmt);
+    }
+
+    #[test]
+    fn span_id_random_empty() {
+        assert!(SpanId::random(crate::Empty).is_none());
+    }
+
+    #[test]
+    #[cfg(feature = "rand")]
+    fn span_id_random_rand() {
+        assert!(SpanId::random(crate::platform::rand_rng::RandRng::new()).is_some());
+    }
+
+    #[test]
+    fn trace_id_random_empty() {
+        assert!(TraceId::random(crate::Empty).is_none());
+    }
+
+    #[test]
+    #[cfg(feature = "rand")]
+    fn trace_id_random_rand() {
+        assert!(TraceId::random(crate::platform::rand_rng::RandRng::new()).is_some());
+    }
+
+    #[test]
+    fn span_id_to_from_value() {
+        let id = SpanId::from_u64(u64::MAX / 2).unwrap();
+
+        assert_eq!(id, SpanId::from_value(id.to_value()).unwrap());
+    }
+
+    #[test]
+    fn span_id_from_value_string() {
+        assert_eq!(
+            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+            Value::from("0123456789abcdef").cast().unwrap()
+        );
+    }
+
+    #[test]
+    fn trace_id_to_from_value() {
+        let id = TraceId::from_u128(u128::MAX / 2).unwrap();
+
+        assert_eq!(id, TraceId::from_value(id.to_value()).unwrap());
+    }
+
+    #[test]
+    fn trace_id_from_value_string() {
+        assert_eq!(
+            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+            Value::from("0123456789abcdef0123456789abcdef")
+                .cast()
+                .unwrap()
+        );
     }
 }
