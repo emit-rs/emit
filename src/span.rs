@@ -987,6 +987,12 @@ impl<'a, P: Props> ToEvent for Span<'a, P> {
     }
 }
 
+impl<'a, P: Props> ToExtent for Span<'a, P> {
+    fn to_extent(&self) -> Option<Extent> {
+        self.extent().cloned()
+    }
+}
+
 impl<'a, P: Props> Props for Span<'a, P> {
     fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
         &'kv self,
@@ -1445,6 +1451,21 @@ mod tests {
 
         ctxt.exit(&mut frame);
         ctxt.close(frame);
+    }
+
+    #[test]
+    fn span_new() {
+        todo!()
+    }
+
+    #[test]
+    fn span_to_event() {
+        todo!()
+    }
+
+    #[test]
+    fn span_to_extent() {
+        todo!()
     }
 
     struct MyClock(Cell<u64>);

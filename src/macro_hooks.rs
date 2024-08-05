@@ -644,6 +644,7 @@ pub fn __private_emit<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
     tpl: Template<'b>,
     props: impl Props,
 ) {
+    // TODO: Replace with `rt.emit()`; needs a way to pass `filter`
     rt.ctxt().with_current(|ctxt| {
         let evt = Event::new(
             module,

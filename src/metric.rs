@@ -732,6 +732,26 @@ pub mod source {
             (self as &(dyn ErasedSource + 'a)).emit_metrics(emitter)
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn source_emit() {
+            todo!()
+        }
+
+        #[test]
+        fn from_fn_source() {
+            todo!()
+        }
+
+        #[test]
+        fn erased_source() {
+            todo!()
+        }
+    }
 }
 
 #[cfg(feature = "alloc")]
@@ -778,6 +798,16 @@ mod alloc_support {
             for source in &self.0 {
                 source.emit_metrics(&emitter);
             }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn reporter_sample() {
+            todo!()
         }
     }
 }
@@ -888,5 +918,45 @@ pub mod sampler {
         fn metric<P: Props>(&self, metric: Metric<P>) {
             (self as &(dyn ErasedSampler + 'a)).metric(metric)
         }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn sampler_emit() {
+            todo!()
+        }
+
+        #[test]
+        fn from_fn_sampler() {
+            todo!()
+        }
+
+        #[test]
+        fn erased_sampler() {
+            todo!()
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn metric_new() {
+        todo!()
+    }
+
+    #[test]
+    fn metric_to_event() {
+        todo!()
+    }
+
+    #[test]
+    fn metric_to_extent() {
+        todo!()
     }
 }
