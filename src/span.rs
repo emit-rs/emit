@@ -474,7 +474,7 @@ use core::{
 /**
 A [W3C Trace Id](https://www.w3.org/TR/trace-context/#trace-id).
 */
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TraceId(NonZeroU128);
 
 impl fmt::Debug for TraceId {
@@ -625,7 +625,7 @@ impl TraceId {
 /**
 A [W3C Span Id](https://www.w3.org/TR/trace-context/#parent-id).
 */
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SpanId(NonZeroU64);
 
 impl fmt::Debug for SpanId {
@@ -1008,7 +1008,7 @@ The `SpanCtxt` for the currently executing span can be pulled from the ambient c
 
 `SpanCtxt` should be pushed onto the ambient context with [`SpanCtxt::push`] so any events emitted during its execution are correlated to it.
 */
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SpanCtxt {
     trace_id: Option<TraceId>,
     span_parent: Option<SpanId>,
@@ -1403,5 +1403,45 @@ mod tests {
                 .cast()
                 .unwrap()
         );
+    }
+
+    #[test]
+    #[cfg(all(feature = "std", feature = "rand"))]
+    fn span_ctxt_new() {
+        let rng = crate::platform::rand_rng::RandRng::new();
+        let ctxt = crate::platform::thread_local_ctxt::ThreadLocalCtxt::new();
+
+        // Span context from an empty source is empty
+        let root = SpanCtxt::current(&ctxt);
+        assert_eq!(SpanCtxt::empty(), root);
+
+        // New root context has a new trace id and span id, but no parent
+        let root = SpanCtxt::new_root(&rng);
+
+        assert!(root.span_id.is_some());
+        assert!(root.trace_id.is_some());
+        assert!(root.span_parent.is_none());
+
+        // Push the span context onto the source
+        let mut frame = ctxt.open_push(root);
+
+        ctxt.enter(&mut frame);
+
+        // Span context from a non-empty source is the last pushed
+        let current = SpanCtxt::current(&ctxt);
+        assert_eq!(root, current);
+        let root = current;
+
+        // A child span shares the same trace id, but has a new span id
+        // The span id of the parent becomes the span parent
+        let child = SpanCtxt::new_child(&root, &rng);
+
+        assert_eq!(root.trace_id, child.trace_id);
+        assert_ne!(root.span_id, child.span_id);
+        assert!(child.span_id.is_some());
+        assert_eq!(root.span_id, child.span_parent);
+
+        ctxt.exit(&mut frame);
+        ctxt.close(frame);
     }
 }
