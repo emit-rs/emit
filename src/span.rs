@@ -1247,8 +1247,9 @@ impl<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> SpanGuard<'a, C, P, F> {
 mod tests {
     use super::*;
 
-    use emit_core::timestamp::Timestamp;
     use std::{cell::Cell, time::Duration};
+
+    use crate::Timestamp;
 
     #[test]
     fn span_id_parse() {
@@ -1489,7 +1490,15 @@ mod tests {
             evt.extent().unwrap().as_point()
         );
         assert_eq!("my span completed", evt.msg().to_string());
+        assert_eq!(
+            "my span",
+            evt.props().pull::<Str, _>(KEY_SPAN_NAME).unwrap()
+        );
         assert_eq!(true, evt.props().pull::<bool, _>("span_prop").unwrap());
+        assert_eq!(
+            Kind::Span,
+            evt.props().pull::<Kind, _>(KEY_EVENT_KIND).unwrap()
+        );
     }
 
     #[test]
@@ -1542,18 +1551,18 @@ mod tests {
 
         let mut guard = SpanGuard::filtered_new(
             |_| true,
-            crate::Path::new_unchecked("test"),
-            crate::Timer::start(&clock),
+            Path::new_unchecked("test"),
+            Timer::start(&clock),
             "span",
             span_ctxt,
             ("event_prop", 1),
             |evt| {
                 assert_eq!(
-                    crate::Timestamp::from_unix(Duration::from_secs(0)).unwrap(),
+                    Timestamp::from_unix(Duration::from_secs(0)).unwrap(),
                     evt.extent().unwrap().as_span().unwrap().start
                 );
                 assert_eq!(
-                    crate::Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
+                    Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
                     evt.extent().unwrap().as_span().unwrap().end
                 );
 
@@ -1590,8 +1599,8 @@ mod tests {
 
         let mut guard = SpanGuard::filtered_new(
             |_| false,
-            crate::Path::new_unchecked("test"),
-            crate::Timer::start(&clock),
+            Path::new_unchecked("test"),
+            Timer::start(&clock),
             "span",
             SpanCtxt::new_root(&rng),
             crate::Empty,
@@ -1620,8 +1629,8 @@ mod tests {
 
         let guard = SpanGuard::filtered_new(
             |_| true,
-            crate::Path::new_unchecked("test"),
-            crate::Timer::start(&clock),
+            Path::new_unchecked("test"),
+            Timer::start(&clock),
             "span",
             SpanCtxt::new_root(&rng),
             crate::Empty,

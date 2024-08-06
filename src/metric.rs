@@ -944,19 +944,90 @@ pub mod sampler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
+
+    use crate::Timestamp;
 
     #[test]
     fn metric_new() {
-        todo!()
+        let metric = Metric::new(
+            Path::new_unchecked("test"),
+            Timestamp::from_unix(Duration::from_secs(1)),
+            "my metric",
+            "count",
+            42,
+            ("metric_prop", true),
+        );
+
+        assert_eq!("test", metric.module());
+        assert_eq!(
+            Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
+            metric.extent().unwrap().as_point()
+        );
+        assert_eq!("my metric", metric.name());
+        assert_eq!("count", metric.agg());
+        assert_eq!(42, metric.value().by_ref().cast::<i32>().unwrap());
+        assert_eq!(true, metric.props().pull::<bool, _>("metric_prop").unwrap());
     }
 
     #[test]
     fn metric_to_event() {
-        todo!()
+        let metric = Metric::new(
+            Path::new_unchecked("test"),
+            Timestamp::from_unix(Duration::from_secs(1)),
+            "my metric",
+            "count",
+            42,
+            ("metric_prop", true),
+        );
+
+        let evt = metric.to_event();
+
+        assert_eq!("test", evt.module());
+        assert_eq!(
+            Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
+            evt.extent().unwrap().as_point()
+        );
+        assert_eq!("count of my metric is 42", evt.msg().to_string());
+        assert_eq!("count", evt.props().pull::<Str, _>(KEY_METRIC_AGG).unwrap());
+        assert_eq!(42, evt.props().pull::<i32, _>(KEY_METRIC_VALUE).unwrap());
+        assert_eq!(
+            "my metric",
+            evt.props().pull::<Str, _>(KEY_METRIC_NAME).unwrap()
+        );
+        assert_eq!(true, evt.props().pull::<bool, _>("metric_prop").unwrap());
+        assert_eq!(
+            Kind::Metric,
+            evt.props().pull::<Kind, _>(KEY_EVENT_KIND).unwrap()
+        );
     }
 
     #[test]
     fn metric_to_extent() {
-        todo!()
+        for (case, expected) in [
+            (
+                Some(Timestamp::from_unix(Duration::from_secs(1)).unwrap()),
+                Some(Extent::point(
+                    Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
+                )),
+            ),
+            (None, None),
+        ] {
+            let metric = Metric::new(
+                Path::new_unchecked("test"),
+                case,
+                "my metric",
+                "count",
+                42,
+                ("metric_prop", true),
+            );
+
+            let extent = metric.to_extent();
+
+            assert_eq!(
+                expected.map(|extent| extent.as_range().clone()),
+                extent.map(|extent| extent.as_range().clone())
+            );
+        }
     }
 }
