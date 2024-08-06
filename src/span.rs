@@ -1247,6 +1247,7 @@ impl<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> SpanGuard<'a, C, P, F> {
 mod tests {
     use super::*;
 
+    use emit_core::timestamp::Timestamp;
     use std::{cell::Cell, time::Duration};
 
     #[test]
@@ -1455,17 +1456,67 @@ mod tests {
 
     #[test]
     fn span_new() {
-        todo!()
+        let span = Span::new(
+            Path::new_unchecked("test"),
+            Timestamp::from_unix(Duration::from_secs(1)),
+            "my span",
+            ("span_prop", true),
+        );
+
+        assert_eq!("test", span.module());
+        assert_eq!(
+            Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
+            span.extent().unwrap().as_point()
+        );
+        assert_eq!("my span", span.name());
+        assert_eq!(true, span.props().pull::<bool, _>("span_prop").unwrap());
     }
 
     #[test]
     fn span_to_event() {
-        todo!()
+        let span = Span::new(
+            Path::new_unchecked("test"),
+            Timestamp::from_unix(Duration::from_secs(1)),
+            "my span",
+            ("span_prop", true),
+        );
+
+        let evt = span.to_event();
+
+        assert_eq!("test", evt.module());
+        assert_eq!(
+            Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
+            evt.extent().unwrap().as_point()
+        );
+        assert_eq!("my span completed", evt.msg().to_string());
+        assert_eq!(true, evt.props().pull::<bool, _>("span_prop").unwrap());
     }
 
     #[test]
     fn span_to_extent() {
-        todo!()
+        for (case, expected) in [
+            (
+                Some(Timestamp::from_unix(Duration::from_secs(1)).unwrap()),
+                Some(Extent::point(
+                    Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
+                )),
+            ),
+            (None, None),
+        ] {
+            let span = Span::new(
+                Path::new_unchecked("test"),
+                case,
+                "my span",
+                ("span_prop", true),
+            );
+
+            let extent = span.to_extent();
+
+            assert_eq!(
+                expected.map(|extent| extent.as_range().clone()),
+                extent.map(|extent| extent.as_range().clone())
+            );
+        }
     }
 
     struct MyClock(Cell<u64>);

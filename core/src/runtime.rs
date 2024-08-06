@@ -17,8 +17,8 @@ If an application is initializing both the [`shared()`] and [`internal()`] runti
 */
 
 use crate::{
-    clock::Clock, ctxt::Ctxt, emitter::Emitter, empty::Empty, event::ToEvent, extent::ToExtent,
-    filter::Filter, props::Props, rng::Rng, timestamp::Timestamp,
+    clock::Clock, ctxt::Ctxt, emitter::Emitter, empty::Empty, event::ToEvent, filter::Filter,
+    props::Props, rng::Rng, timestamp::Timestamp,
 };
 
 #[cfg(feature = "implicit_rt")]
@@ -298,22 +298,7 @@ impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt, TClock: Clock, TRng: Rng>
     You can bypass any of these steps by emitting the event directly through the runtime's [`Emitter`].
     */
     pub fn emit<E: ToEvent>(&self, evt: E) {
-        self.ctxt.with_current(|ctxt| {
-            let evt = evt.to_event();
-
-            let extent = evt
-                .extent()
-                .cloned()
-                .or_else(|| self.clock.now().to_extent());
-
-            let evt = evt
-                .with_extent(extent)
-                .map_props(|props| props.and_props(ctxt));
-
-            if self.filter.matches(&evt) {
-                self.emitter.emit(evt);
-            }
-        });
+        crate::emit(&self.emitter, &self.filter, &self.ctxt, &self.clock, evt)
     }
 }
 
@@ -788,7 +773,11 @@ mod std_support {
         fn ambient_slot_init() {
             let slot = AmbientSlot::new();
 
+            assert!(!slot.is_enabled());
+
             assert!(slot.init(Runtime::new()).is_some());
+            assert!(slot.is_enabled());
+
             assert!(slot.init(Runtime::new()).is_none());
         }
     }
@@ -898,87 +887,3 @@ mod no_std_support {
 
 #[cfg(not(feature = "std"))]
 pub use self::no_std_support::*;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use std::{cell::Cell, time::Duration};
-
-    struct MyClock(Option<Timestamp>);
-
-    impl Clock for MyClock {
-        fn now(&self) -> Option<Timestamp> {
-            self.0
-        }
-    }
-
-    struct MyCtxt(&'static str, usize);
-
-    impl Ctxt for MyCtxt {
-        type Current = (&'static str, usize);
-        type Frame = ();
-
-        fn open_root<P: Props>(&self, _: P) -> Self::Frame {}
-
-        fn enter(&self, _: &mut Self::Frame) {}
-
-        fn exit(&self, _: &mut Self::Frame) {}
-
-        fn close(&self, _: Self::Frame) {}
-
-        fn with_current<R, F: FnOnce(&Self::Current) -> R>(&self, with: F) -> R {
-            with(&(self.0, self.1))
-        }
-    }
-
-    #[test]
-    fn runtime_emit_uses_clock_ctxt() {
-        let called = Cell::new(false);
-
-        let runtime = Runtime::build(
-            crate::emitter::from_fn(|evt| {
-                assert_eq!(13, evt.props().pull::<usize, _>("ctxt_prop").unwrap());
-                assert_eq!(true, evt.props().pull::<bool, _>("evt_prop").unwrap());
-
-                assert_eq!(
-                    Timestamp::from_unix(Duration::from_secs(77)).unwrap(),
-                    evt.extent().unwrap().as_point()
-                );
-
-                called.set(true);
-            }),
-            crate::empty::Empty,
-            MyCtxt("ctxt_prop", 13),
-            MyClock(Timestamp::from_unix(Duration::from_secs(77))),
-            crate::empty::Empty,
-        );
-
-        runtime.emit(crate::event::Event::new(
-            crate::path::Path::new_unchecked("test"),
-            crate::empty::Empty,
-            crate::template::Template::literal("text"),
-            ("evt_prop", true),
-        ));
-
-        assert!(called.get());
-    }
-
-    #[test]
-    fn runtime_emit_uses_filter() {
-        let runtime = Runtime::build(
-            crate::emitter::from_fn(|_| panic!("filter should apply")),
-            crate::filter::from_fn(|_| false),
-            crate::empty::Empty,
-            crate::empty::Empty,
-            crate::empty::Empty,
-        );
-
-        runtime.emit(crate::event::Event::new(
-            crate::path::Path::new_unchecked("test"),
-            crate::empty::Empty,
-            crate::template::Template::literal("text"),
-            ("evt_prop", true),
-        ));
-    }
-}

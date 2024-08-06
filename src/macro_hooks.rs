@@ -644,19 +644,18 @@ pub fn __private_emit<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
     tpl: Template<'b>,
     props: impl Props,
 ) {
-    // TODO: Replace with `rt.emit()`; needs a way to pass `filter`
-    rt.ctxt().with_current(|ctxt| {
-        let evt = Event::new(
+    emit_core::emit(
+        rt.emitter(),
+        FirstDefined(when, rt.filter()),
+        rt.ctxt(),
+        rt.clock(),
+        Event::new(
             module,
             extent.to_extent().or_else(|| rt.clock().now().to_extent()),
             tpl,
-            props.and_props(ctxt),
-        );
-
-        if FirstDefined(when, rt.filter()).matches(&evt) {
-            rt.emitter().emit(&evt);
-        }
-    });
+            props,
+        ),
+    );
 }
 
 #[track_caller]
@@ -667,19 +666,21 @@ pub fn __private_emit_event<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R:
     tpl: Option<Template<'b>>,
     props: impl Props,
 ) {
-    rt.ctxt().with_current(|ctxt| {
-        let mut event = event.to_event();
+    let mut event = event.to_event();
 
-        if let Some(tpl) = tpl {
-            event = event.with_tpl(tpl);
-        }
+    if let Some(tpl) = tpl {
+        event = event.with_tpl(tpl);
+    }
 
-        let event = event.map_props(|event_props| props.and_props(event_props).and_props(ctxt));
+    let event = event.map_props(|event_props| props.and_props(event_props));
 
-        if FirstDefined(when, rt.filter()).matches(&event) {
-            rt.emitter().emit(&event);
-        }
-    });
+    emit_core::emit(
+        rt.emitter(),
+        FirstDefined(when, rt.filter()),
+        rt.ctxt(),
+        rt.clock(),
+        event,
+    );
 }
 
 #[track_caller]
