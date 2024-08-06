@@ -26,3 +26,13 @@ impl Clock for SystemClock {
 }
 
 impl InternalClock for SystemClock {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn now() {
+        todo!()
+    }
+}

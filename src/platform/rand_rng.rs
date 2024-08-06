@@ -37,3 +37,13 @@ impl Rng for RandRng {
 }
 
 impl InternalRng for RandRng {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gen() {
+        todo!()
+    }
+}

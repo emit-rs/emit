@@ -100,15 +100,15 @@ pub fn setup() -> Setup {
     Setup::default()
 }
 
-pub use platform::DefaultCtxt;
+pub use platform::{DefaultCtxt, DefaultRng, DefaultClock};
 
 /**
-The default [`crate::Emitter`] to use in [`crate::setup()`].
+The default [`Emitter`] to use in [`setup()`].
 */
 pub type DefaultEmitter = Empty;
 
 /**
-The default [`crate::Filter`] to use in [`crate::setup()`].
+The default [`Filter`] to use in [`setup()`].
 */
 pub type DefaultFilter = Empty;
 

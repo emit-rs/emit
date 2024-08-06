@@ -78,3 +78,18 @@ impl<C: Clock> ToExtent for Timer<C> {
         self.extent()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn timer_to_extent() {
+        todo!()
+    }
+
+    #[test]
+    fn timer_backwards_to_extent() {
+        todo!()
+    }
+}

@@ -165,3 +165,23 @@ fn swap(id: usize, incoming: &mut ThreadLocalCtxtFrame) {
         mem::swap(current, incoming);
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn push_props() {
+        todo!()
+    }
+
+    #[test]
+    fn isolation() {
+        todo!()
+    }
+
+    #[test]
+    fn frame_thread_propagation() {
+        todo!()
+    }
+}

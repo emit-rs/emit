@@ -16,17 +16,38 @@ pub mod thread_local_ctxt;
 #[cfg(feature = "rand")]
 pub mod rand_rng;
 
+/**
+The default [`crate::Clock`].
+*/
 #[cfg(feature = "std")]
-type DefaultClock = system_clock::SystemClock;
+pub type DefaultClock = system_clock::SystemClock;
+/**
+The default [`crate::Clock`].
+*/
+#[cfg(not(feature = "std"))]
+pub type DefaultClock = crate::Empty;
 
+/**
+The default [`crate::Rng`].
+*/
 #[cfg(feature = "rand")]
-type DefaultIdGen = rand_rng::RandRng;
+pub type DefaultRng = rand_rng::RandRng;
+/**
+The default [`crate::Rng`].
+*/
+#[cfg(not(feature = "rand"))]
+pub type DefaultRng = crate::Empty;
 
 /**
 The default [`crate::Ctxt`] to use in [`crate::setup()`].
 */
 #[cfg(feature = "std")]
 pub type DefaultCtxt = thread_local_ctxt::ThreadLocalCtxt;
+/**
+The default [`crate::Ctxt`]..
+*/
+#[cfg(not(feature = "std"))]
+pub type DefaultCtxt = crate::Empty;
 
 /**
 A type-erased container for system services used when intiailizing runtimes.
@@ -50,7 +71,7 @@ impl Platform {
             #[cfg(feature = "std")]
             clock: AssertInternal(Box::new(DefaultClock::default())),
             #[cfg(feature = "std")]
-            rng: AssertInternal(Box::new(DefaultIdGen::default())),
+            rng: AssertInternal(Box::new(DefaultRng::default())),
         }
     }
 }
