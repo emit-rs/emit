@@ -238,7 +238,7 @@ mod tests {
         assert!(!ts.is_point());
         assert!(ts.is_span());
 
-        assert_eq!(&Timestamp::MAX, ts.as_point());
+        assert_eq!(&Timestamp::MIN, ts.as_point());
 
         assert!(ts.len().is_none());
     }
