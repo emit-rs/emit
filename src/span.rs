@@ -1247,7 +1247,10 @@ impl<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> SpanGuard<'a, C, P, F> {
 mod tests {
     use super::*;
 
-    use std::{cell::Cell, time::Duration};
+    use std::time::Duration;
+
+    #[cfg(all(feature = "std", feature = "rand"))]
+    use std::cell::Cell;
 
     use crate::Timestamp;
 
@@ -1528,8 +1531,10 @@ mod tests {
         }
     }
 
+    #[cfg(all(feature = "std", feature = "rand"))]
     struct MyClock(Cell<u64>);
 
+    #[cfg(all(feature = "std", feature = "rand"))]
     impl Clock for MyClock {
         fn now(&self) -> Option<crate::Timestamp> {
             let ts = crate::Timestamp::from_unix(Duration::from_secs(self.0.get()));

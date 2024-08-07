@@ -97,6 +97,8 @@ impl FromStr for Level {
     type Err = ParseLevelError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.trim();
+
         let lvl = s.as_bytes();
 
         match lvl.get(0) {
@@ -183,6 +185,7 @@ A [`Filter`] that matches events with a specific [`Level`].
 
 The level to match is pulled from the [`KEY_LVL`] well-known property. Events that don't carry any specific level are treated as carrying a default one, as set by [`MinLevelFilter::treat_unleveled_as`].
 */
+#[derive(Debug)]
 pub struct MinLevelFilter {
     min: Level,
     default: Level,
@@ -231,8 +234,8 @@ mod alloc_support {
     use super::*;
 
     use alloc::vec::Vec;
-
     use emit_core::path::Path;
+    use emit_core::str::Str;
 
     /**
     Construct a set of [`MinLevelFilter`]s that are applied based on the module of an event.
@@ -250,9 +253,15 @@ mod alloc_support {
 
     Event modules are matched based on [`Path::is_child_of`]. If an event's module is a child of one in the map then its [`MinLevelFilter`] will be checked against it. If an event's module doesn't match any in the map then it will pass the filter.
     */
+    #[derive(Debug)]
     pub struct MinLevelPathMap {
-        // TODO: Ensure more specific paths apply ahead of less specific ones
-        paths: Vec<(Path<'static>, MinLevelFilter)>,
+        root: PathNode,
+    }
+
+    #[derive(Debug)]
+    struct PathNode {
+        min_level: Option<MinLevelFilter>,
+        children: Vec<(Str<'static>, PathNode)>,
     }
 
     impl MinLevelPathMap {
@@ -260,7 +269,21 @@ mod alloc_support {
         Create an empty map.
         */
         pub const fn new() -> Self {
-            MinLevelPathMap { paths: Vec::new() }
+            MinLevelPathMap {
+                root: PathNode {
+                    min_level: None,
+                    children: Vec::new(),
+                },
+            }
+        }
+
+        /**
+        Specify the minimum level for any modules that don't match any added by [`MinLevelPathMap::min_level`].
+        */
+        pub fn default_min_level(&mut self, min_level: impl Into<MinLevelFilter>) -> &mut Self {
+            self.root.min_level = Some(min_level.into());
+
+            self
         }
 
         /**
@@ -270,17 +293,36 @@ mod alloc_support {
             &mut self,
             path: impl Into<Path<'static>>,
             min_level: impl Into<MinLevelFilter>,
-        ) {
+        ) -> &mut Self {
             let path = path.into();
 
-            match self.paths.binary_search_by_key(&&path, |(path, _)| path) {
-                Ok(index) => {
-                    self.paths[index] = (path, min_level.into());
-                }
-                Err(index) => {
-                    self.paths.insert(index, (path, min_level.into()));
-                }
+            let mut node = &mut self.root;
+            for segment in path.segments() {
+                node = match node
+                    .children
+                    .binary_search_by_key(&segment, |(key, _)| key.by_ref())
+                {
+                    Ok(idx) => &mut node.children[idx].1,
+                    Err(idx) => {
+                        node.children.insert(
+                            idx,
+                            (
+                                segment.to_owned(),
+                                PathNode {
+                                    min_level: None,
+                                    children: Vec::new(),
+                                },
+                            ),
+                        );
+
+                        &mut node.children[idx].1
+                    }
+                };
             }
+
+            node.min_level = Some(min_level.into());
+
+            self
         }
     }
 
@@ -288,19 +330,24 @@ mod alloc_support {
         fn matches<E: ToEvent>(&self, evt: E) -> bool {
             let evt = evt.to_event();
 
-            let evt_path = evt.module();
+            let path = evt.module();
 
-            if let Ok(index) = self.paths.binary_search_by_key(&evt_path, |(path, _)| path) {
-                self.paths[index].1.matches(evt)
-            } else {
-                for (path, min_level) in &self.paths {
-                    if evt_path.is_child_of(path) {
-                        return min_level.matches(evt);
-                    }
-                }
+            // Find the most specific path to the given node
+            let mut node = &self.root;
+            let mut filter = self.root.min_level.as_ref();
+            for segment in path.segments() {
+                let Ok(idx) = node
+                    .children
+                    .binary_search_by_key(&segment, |(key, _)| key.by_ref())
+                else {
+                    break;
+                };
 
-                true
+                node = &node.children[idx].1;
+                filter = node.min_level.as_ref().or(filter);
             }
+
+            filter.matches(evt)
         }
     }
 
@@ -317,6 +364,113 @@ mod alloc_support {
             map
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn min_level() {
+            let mut filter = MinLevelPathMap::new();
+
+            filter.min_level(Path::new_unchecked("a"), Level::Error);
+
+            assert!(!filter.matches(crate::Event::new(
+                Path::new_unchecked("a"),
+                crate::Empty,
+                crate::Template::literal("test"),
+                (KEY_LVL, Level::Warn),
+            )));
+
+            assert!(filter.matches(crate::Event::new(
+                Path::new_unchecked("a"),
+                crate::Empty,
+                crate::Template::literal("test"),
+                (KEY_LVL, Level::Error),
+            )));
+        }
+
+        #[test]
+        fn min_level_default() {
+            let mut filter = MinLevelPathMap::new();
+
+            filter.default_min_level(Level::Error);
+
+            assert!(!filter.matches(crate::Event::new(
+                Path::new_unchecked("a"),
+                crate::Empty,
+                crate::Template::literal("test"),
+                (KEY_LVL, Level::Warn),
+            )));
+
+            assert!(filter.matches(crate::Event::new(
+                Path::new_unchecked("a"),
+                crate::Empty,
+                crate::Template::literal("test"),
+                (KEY_LVL, Level::Error),
+            )));
+        }
+
+        #[test]
+        fn min_level_child() {
+            let mut filter = MinLevelPathMap::new();
+
+            filter
+                .min_level(Path::new_unchecked("a"), Level::Error)
+                .min_level(Path::new_unchecked("a::b::c"), Level::Warn);
+
+            assert!(!filter.matches(crate::Event::new(
+                Path::new_unchecked("a"),
+                crate::Empty,
+                crate::Template::literal("test"),
+                (KEY_LVL, Level::Warn),
+            )));
+
+            assert!(!filter.matches(crate::Event::new(
+                Path::new_unchecked("a::b"),
+                crate::Empty,
+                crate::Template::literal("test"),
+                (KEY_LVL, Level::Warn),
+            )));
+
+            assert!(filter.matches(crate::Event::new(
+                Path::new_unchecked("a::b::c"),
+                crate::Empty,
+                crate::Template::literal("test"),
+                (KEY_LVL, Level::Warn),
+            )));
+        }
+
+        #[test]
+        fn min_level_unmatched() {
+            let mut filter = MinLevelPathMap::new();
+
+            filter.min_level(Path::new_unchecked("a"), Level::Error);
+
+            assert!(filter.matches(crate::Event::new(
+                Path::new_unchecked("b"),
+                crate::Empty,
+                crate::Template::literal("test"),
+                (KEY_LVL, Level::Warn),
+            )));
+        }
+
+        #[test]
+        fn min_level_default_unmatched() {
+            let mut filter = MinLevelPathMap::new();
+
+            filter
+                .default_min_level(Level::Error)
+                .min_level(Path::new_unchecked("a"), Level::Error);
+
+            assert!(!filter.matches(crate::Event::new(
+                Path::new_unchecked("b"),
+                crate::Empty,
+                crate::Template::literal("test"),
+                (KEY_LVL, Level::Warn),
+            )));
+        }
+    }
 }
 
 #[cfg(feature = "alloc")]
@@ -327,7 +481,44 @@ mod tests {
     use super::*;
 
     #[test]
-    fn level_roundtrip() {
+    fn parse() {
+        for (case, expected) in [
+            ("d", Ok(Level::Debug)),
+            ("dbg", Ok(Level::Debug)),
+            ("debug", Ok::<Level, ParseLevelError>(Level::Debug)),
+            ("i", Ok(Level::Info)),
+            ("inf", Ok(Level::Info)),
+            ("info", Ok(Level::Info)),
+            ("information", Ok(Level::Info)),
+            ("w", Ok(Level::Warn)),
+            ("wrn", Ok(Level::Warn)),
+            ("warn", Ok(Level::Warn)),
+            ("warning", Ok(Level::Warn)),
+            ("e", Ok(Level::Error)),
+            ("err", Ok(Level::Error)),
+            ("error", Ok(Level::Error)),
+            ("", Err(ParseLevelError {})),
+            ("ifo", Err(ParseLevelError {})),
+            ("trace", Err(ParseLevelError {})),
+            ("erroneous", Err(ParseLevelError {})),
+            ("info info", Err(ParseLevelError {})),
+        ] {
+            match expected {
+                Ok(expected) => {
+                    assert_eq!(expected, Level::from_str(case).unwrap());
+                    assert_eq!(expected, Level::from_str(&case.to_uppercase()).unwrap());
+                    assert_eq!(expected, Level::from_str(&format!(" {case} ")).unwrap());
+                }
+                Err(expected) => assert_eq!(
+                    expected.to_string(),
+                    Level::from_str(case).unwrap_err().to_string()
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn roundtrip() {
         for lvl in [Level::Info, Level::Debug, Level::Warn, Level::Error] {
             let fmt = lvl.to_string();
 
@@ -335,5 +526,99 @@ mod tests {
 
             assert_eq!(lvl, parsed, "{}", fmt);
         }
+    }
+
+    #[test]
+    fn to_from_value() {
+        for case in [Level::Debug, Level::Info, Level::Warn, Level::Error] {
+            let value = case.to_value();
+
+            assert_eq!(case, value.cast::<Level>().unwrap());
+
+            let formatted = case.to_string();
+            let value = Value::from(&*formatted);
+
+            assert_eq!(case, value.cast::<Level>().unwrap());
+        }
+    }
+
+    #[test]
+    fn min_level_filter() {
+        let filter = MinLevelFilter::new(Level::Warn);
+
+        assert!(filter.matches(crate::Event::new(
+            crate::Path::new_unchecked("test"),
+            crate::Empty,
+            crate::Template::literal("test"),
+            (KEY_LVL, LVL_ERROR),
+        )));
+
+        assert!(filter.matches(crate::Event::new(
+            crate::Path::new_unchecked("test"),
+            crate::Empty,
+            crate::Template::literal("test"),
+            (KEY_LVL, LVL_WARN),
+        )));
+
+        assert!(!filter.matches(crate::Event::new(
+            crate::Path::new_unchecked("test"),
+            crate::Empty,
+            crate::Template::literal("test"),
+            crate::Empty,
+        )));
+
+        assert!(!filter.matches(crate::Event::new(
+            crate::Path::new_unchecked("test"),
+            crate::Empty,
+            crate::Template::literal("test"),
+            (KEY_LVL, LVL_DEBUG),
+        )));
+
+        assert!(!filter.matches(crate::Event::new(
+            crate::Path::new_unchecked("test"),
+            crate::Empty,
+            crate::Template::literal("test"),
+            (KEY_LVL, LVL_INFO),
+        )));
+    }
+
+    #[test]
+    fn min_level_filter_with_default() {
+        let filter = MinLevelFilter::new(Level::Info).treat_unleveled_as(Level::Info);
+
+        assert!(filter.matches(crate::Event::new(
+            crate::Path::new_unchecked("test"),
+            crate::Empty,
+            crate::Template::literal("test"),
+            (KEY_LVL, LVL_ERROR),
+        )));
+
+        assert!(filter.matches(crate::Event::new(
+            crate::Path::new_unchecked("test"),
+            crate::Empty,
+            crate::Template::literal("test"),
+            (KEY_LVL, LVL_WARN),
+        )));
+
+        assert!(filter.matches(crate::Event::new(
+            crate::Path::new_unchecked("test"),
+            crate::Empty,
+            crate::Template::literal("test"),
+            (KEY_LVL, LVL_INFO),
+        )));
+
+        assert!(filter.matches(crate::Event::new(
+            crate::Path::new_unchecked("test"),
+            crate::Empty,
+            crate::Template::literal("test"),
+            crate::Empty,
+        )));
+
+        assert!(!filter.matches(crate::Event::new(
+            crate::Path::new_unchecked("test"),
+            crate::Empty,
+            crate::Template::literal("test"),
+            (KEY_LVL, LVL_DEBUG),
+        )));
     }
 }

@@ -160,3 +160,39 @@ impl<C: Ctxt, F: Future> Future for FrameFuture<C, F> {
         unsafe { Pin::new_unchecked(&mut unpinned.future) }.poll(cx)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[cfg(feature = "std")]
+    use super::*;
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn frame_exec() {
+        let ctxt = crate::platform::thread_local_ctxt::ThreadLocalCtxt::new();
+
+        let mut frame = Frame::push(&ctxt, ("a", 1));
+
+        frame.with(|props| {
+            assert_eq!(1, props.pull::<i32, _>("a").unwrap());
+        });
+
+        drop(frame);
+    }
+
+    #[cfg(feature = "std")]
+    #[tokio::test]
+    async fn frame_in_future() {
+        let ctxt = crate::platform::thread_local_ctxt::ThreadLocalCtxt::new();
+
+        let frame = Frame::push(&ctxt, ("a", 1));
+
+        frame
+            .in_future(async {
+                Frame::current(&ctxt).with(|props| {
+                    assert_eq!(1, props.pull::<i32, _>("a").unwrap());
+                })
+            })
+            .await;
+    }
+}
