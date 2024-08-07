@@ -82,14 +82,76 @@ impl<C: Clock> ToExtent for Timer<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
 
-    #[test]
-    fn timer_to_extent() {
-        todo!()
+    struct MyClock(Cell<Timestamp>);
+
+    impl Clock for MyClock {
+        fn now(&self) -> Option<Timestamp> {
+            Some(self.0.get())
+        }
     }
 
     #[test]
-    fn timer_backwards_to_extent() {
-        todo!()
+    fn timer_forwards() {
+        let clock = MyClock(Cell::new(
+            Timestamp::from_unix(Duration::from_secs(0)).unwrap(),
+        ));
+
+        let timer = Timer::start(&clock);
+
+        assert_eq!(
+            Timestamp::from_unix(Duration::from_secs(0)).unwrap(),
+            timer.start_timestamp().unwrap()
+        );
+
+        assert_eq!(Duration::from_secs(0), timer.elapsed().unwrap());
+
+        assert_eq!(
+            Timestamp::from_unix(Duration::from_secs(0)).unwrap()
+                ..Timestamp::from_unix(Duration::from_secs(0)).unwrap(),
+            timer.extent().unwrap().as_span().unwrap().clone()
+        );
+
+        clock
+            .0
+            .set(Timestamp::from_unix(Duration::from_secs(1)).unwrap());
+
+        assert_eq!(Duration::from_secs(1), timer.elapsed().unwrap());
+
+        assert_eq!(
+            Timestamp::from_unix(Duration::from_secs(0)).unwrap()
+                ..Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
+            timer.extent().unwrap().as_span().unwrap().clone()
+        );
+    }
+
+    #[test]
+    fn timer_backwards() {
+        let clock = MyClock(Cell::new(
+            Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
+        ));
+
+        let timer = Timer::start(&clock);
+
+        clock
+            .0
+            .set(Timestamp::from_unix(Duration::from_secs(0)).unwrap());
+
+        assert_eq!(None, timer.elapsed());
+
+        assert_eq!(
+            Timestamp::from_unix(Duration::from_secs(1)).unwrap()
+                ..Timestamp::from_unix(Duration::from_secs(0)).unwrap(),
+            timer.extent().unwrap().as_span().unwrap().clone()
+        );
+    }
+
+    #[test]
+    fn timer_empty() {
+        let timer = Timer::start(crate::Empty);
+
+        assert!(timer.start_timestamp().is_none());
+        assert!(timer.elapsed().is_none());
     }
 }

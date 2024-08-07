@@ -100,7 +100,7 @@ pub fn setup() -> Setup {
     Setup::default()
 }
 
-pub use platform::{DefaultCtxt, DefaultRng, DefaultClock};
+pub use platform::{DefaultClock, DefaultCtxt, DefaultRng};
 
 /**
 The default [`Emitter`] to use in [`setup()`].
