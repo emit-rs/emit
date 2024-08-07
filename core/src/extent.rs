@@ -230,4 +230,16 @@ mod tests {
 
         assert_eq!(Some(Duration::from_secs(0)), ts.len());
     }
+
+    #[test]
+    fn span_backwards() {
+        let ts = Extent::span(Timestamp::MAX..Timestamp::MIN);
+
+        assert!(!ts.is_point());
+        assert!(ts.is_span());
+
+        assert_eq!(&Timestamp::MAX, ts.as_point());
+
+        assert!(ts.len().is_none());
+    }
 }
