@@ -185,6 +185,7 @@ A [`Filter`] that matches events with a specific [`Level`].
 
 The level to match is pulled from the [`KEY_LVL`] well-known property. Events that don't carry any specific level are treated as carrying a default one, as set by [`MinLevelFilter::treat_unleveled_as`].
 */
+#[derive(Debug)]
 pub struct MinLevelFilter {
     min: Level,
     default: Level,
@@ -252,10 +253,12 @@ mod alloc_support {
 
     Event modules are matched based on [`Path::is_child_of`]. If an event's module is a child of one in the map then its [`MinLevelFilter`] will be checked against it. If an event's module doesn't match any in the map then it will pass the filter.
     */
+    #[derive(Debug)]
     pub struct MinLevelPathMap {
         root: PathNode,
     }
 
+    #[derive(Debug)]
     struct PathNode {
         min_level: Option<MinLevelFilter>,
         children: Vec<(Str<'static>, PathNode)>,
@@ -275,13 +278,22 @@ mod alloc_support {
         }
 
         /**
+        Specify the minimum level for any modules that don't match any added by [`MinLevelPathMap::min_level`].
+        */
+        pub fn default_min_level(&mut self, min_level: impl Into<MinLevelFilter>) -> &mut Self {
+            self.root.min_level = Some(min_level.into());
+
+            self
+        }
+
+        /**
         Specify the minimum level for a module and its children.
         */
         pub fn min_level(
             &mut self,
             path: impl Into<Path<'static>>,
             min_level: impl Into<MinLevelFilter>,
-        ) {
+        ) -> &mut Self {
             let path = path.into();
 
             let mut node = &mut self.root;
@@ -309,6 +321,8 @@ mod alloc_support {
             }
 
             node.min_level = Some(min_level.into());
+
+            self
         }
     }
 
@@ -318,7 +332,9 @@ mod alloc_support {
 
             let path = evt.module();
 
+            // Find the most specific path to the given node
             let mut node = &self.root;
+            let mut filter = self.root.min_level.as_ref();
             for segment in path.segments() {
                 let Ok(idx) = node
                     .children
@@ -328,13 +344,10 @@ mod alloc_support {
                 };
 
                 node = &node.children[idx].1;
+                filter = node.min_level.as_ref().or(filter);
             }
 
-            if let Some(ref filter) = node.min_level {
-                filter.matches(evt)
-            } else {
-                true
-            }
+            filter.matches(evt)
         }
     }
 
@@ -357,21 +370,11 @@ mod alloc_support {
         use super::*;
 
         #[test]
-        fn min_level_specificity() {
+        fn min_level() {
             let mut filter = MinLevelPathMap::new();
 
             filter.min_level(Path::new_unchecked("a"), Level::Error);
-            filter.min_level(Path::new_unchecked("a::b"), Level::Warn);
 
-            // Unspecified path
-            assert!(filter.matches(crate::Event::new(
-                Path::new_unchecked("b"),
-                crate::Empty,
-                crate::Template::literal("test"),
-                (KEY_LVL, Level::Debug),
-            )));
-
-            // Exact path
             assert!(!filter.matches(crate::Event::new(
                 Path::new_unchecked("a"),
                 crate::Empty,
@@ -385,18 +388,83 @@ mod alloc_support {
                 crate::Template::literal("test"),
                 (KEY_LVL, Level::Error),
             )));
+        }
 
-            // Child path
+        #[test]
+        fn min_level_default() {
+            let mut filter = MinLevelPathMap::new();
+
+            filter.default_min_level(Level::Error);
+
             assert!(!filter.matches(crate::Event::new(
-                Path::new_unchecked("a::c"),
+                Path::new_unchecked("a"),
                 crate::Empty,
                 crate::Template::literal("test"),
                 (KEY_LVL, Level::Warn),
             )));
 
-            // Child path (override)
             assert!(filter.matches(crate::Event::new(
+                Path::new_unchecked("a"),
+                crate::Empty,
+                crate::Template::literal("test"),
+                (KEY_LVL, Level::Error),
+            )));
+        }
+
+        #[test]
+        fn min_level_child() {
+            let mut filter = MinLevelPathMap::new();
+
+            filter
+                .min_level(Path::new_unchecked("a"), Level::Error)
+                .min_level(Path::new_unchecked("a::b::c"), Level::Warn);
+
+            assert!(!filter.matches(crate::Event::new(
+                Path::new_unchecked("a"),
+                crate::Empty,
+                crate::Template::literal("test"),
+                (KEY_LVL, Level::Warn),
+            )));
+
+            assert!(!filter.matches(crate::Event::new(
                 Path::new_unchecked("a::b"),
+                crate::Empty,
+                crate::Template::literal("test"),
+                (KEY_LVL, Level::Warn),
+            )));
+
+            assert!(filter.matches(crate::Event::new(
+                Path::new_unchecked("a::b::c"),
+                crate::Empty,
+                crate::Template::literal("test"),
+                (KEY_LVL, Level::Warn),
+            )));
+        }
+
+        #[test]
+        fn min_level_unmatched() {
+            let mut filter = MinLevelPathMap::new();
+
+            filter.min_level(Path::new_unchecked("a"), Level::Error);
+
+            assert!(filter.matches(crate::Event::new(
+                Path::new_unchecked("b"),
+                crate::Empty,
+                crate::Template::literal("test"),
+                (KEY_LVL, Level::Warn),
+            )));
+        }
+
+        #[test]
+        fn min_level_default_unmatched() {
+            let mut filter = MinLevelPathMap::new();
+
+            filter
+                .default_min_level(Level::Error)
+                .min_level(Path::new_unchecked("a"), Level::Error);
+
+            assert!(!filter.matches(crate::Event::new(
+                Path::new_unchecked("b"),
                 crate::Empty,
                 crate::Template::literal("test"),
                 (KEY_LVL, Level::Warn),

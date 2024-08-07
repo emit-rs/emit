@@ -123,6 +123,7 @@ A [`Filter`] that matches events with a specific [`Kind`].
 
 The kind to match is pulled from the [`KEY_EVENT_KIND`] well-known property. Events that don't carry any kind are not matched.
 */
+#[derive(Debug)]
 pub struct KindFilter(Kind);
 
 impl KindFilter {
