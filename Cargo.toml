@@ -66,3 +66,7 @@ optional = true
 [dev-dependencies.serde]
 version = "1"
 features = ["derive"]
+
+[dev-dependencies.tokio]
+version = "1"
+features = ["full"]

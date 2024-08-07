@@ -422,7 +422,7 @@ impl ToValue for (dyn std::error::Error + 'static) {
 mod alloc_support {
     use super::*;
 
-    use alloc::{borrow::Cow, vec::Vec};
+    use alloc::{borrow::Cow, string::String, vec::Vec};
 
     impl<'v> Value<'v> {
         /**
@@ -515,6 +515,18 @@ mod alloc_support {
     impl serde::Serialize for OwnedValue {
         fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
             self.0.serialize(serializer)
+        }
+    }
+
+    impl<'a> From<&'a String> for Value<'a> {
+        fn from(value: &'a String) -> Self {
+            Value(value.into())
+        }
+    }
+
+    impl<'a> From<Option<&'a String>> for Value<'a> {
+        fn from(value: Option<&'a String>) -> Self {
+            Value(value_bag::ValueBag::from_option(value))
         }
     }
 
