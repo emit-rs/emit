@@ -203,7 +203,7 @@ mod tests {
             assert_eq!(case, value.cast::<Kind>().unwrap());
 
             let formatted = case.to_string();
-            let value = Value::from(&formatted);
+            let value = Value::from(&*formatted);
 
             assert_eq!(case, value.cast::<Kind>().unwrap());
         }
