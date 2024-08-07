@@ -732,6 +732,149 @@ pub mod source {
             (self as &(dyn ErasedSource + 'a)).emit_metrics(emitter)
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use std::cell::Cell;
+
+        #[test]
+        fn source_sample_emit() {
+            struct MySource;
+
+            impl Source for MySource {
+                fn sample_metrics<S: Sampler>(&self, sampler: S) {
+                    sampler.metric(Metric::new(
+                        Path::new_unchecked("test"),
+                        crate::Empty,
+                        "metric 1",
+                        "count",
+                        42,
+                        crate::Empty,
+                    ));
+
+                    sampler.metric(Metric::new(
+                        Path::new_unchecked("test"),
+                        crate::Empty,
+                        "metric 2",
+                        "count",
+                        42,
+                        crate::Empty,
+                    ));
+                }
+            }
+
+            let calls = Cell::new(0);
+
+            MySource.sample_metrics(sampler::from_fn(|_| {
+                calls.set(calls.get() + 1);
+            }));
+
+            assert_eq!(2, calls.get());
+
+            let calls = Cell::new(0);
+
+            MySource.emit_metrics(crate::emitter::from_fn(|_| {
+                calls.set(calls.get() + 1);
+            }));
+
+            assert_eq!(2, calls.get());
+        }
+
+        #[test]
+        fn and_sample() {
+            let calls = Cell::new(0);
+
+            from_fn(|sampler| {
+                sampler.metric(Metric::new(
+                    Path::new_unchecked("test"),
+                    crate::Empty,
+                    "metric 1",
+                    "count",
+                    42,
+                    crate::Empty,
+                ));
+            })
+            .and_sample(from_fn(|sampler| {
+                sampler.metric(Metric::new(
+                    Path::new_unchecked("test"),
+                    crate::Empty,
+                    "metric 2",
+                    "count",
+                    42,
+                    crate::Empty,
+                ));
+            }))
+            .sample_metrics(sampler::from_fn(|_| {
+                calls.set(calls.get() + 1);
+            }));
+
+            assert_eq!(2, calls.get());
+        }
+
+        #[test]
+        fn from_fn_source() {
+            let calls = Cell::new(0);
+
+            from_fn(|sampler| {
+                sampler.metric(Metric::new(
+                    Path::new_unchecked("test"),
+                    crate::Empty,
+                    "metric 1",
+                    "count",
+                    42,
+                    crate::Empty,
+                ));
+
+                sampler.metric(Metric::new(
+                    Path::new_unchecked("test"),
+                    crate::Empty,
+                    "metric 2",
+                    "count",
+                    42,
+                    crate::Empty,
+                ));
+            })
+            .sample_metrics(sampler::from_fn(|_| {
+                calls.set(calls.get() + 1);
+            }));
+
+            assert_eq!(2, calls.get());
+        }
+
+        #[test]
+        fn erased_source() {
+            let source = from_fn(|sampler| {
+                sampler.metric(Metric::new(
+                    Path::new_unchecked("test"),
+                    crate::Empty,
+                    "metric 1",
+                    "count",
+                    42,
+                    crate::Empty,
+                ));
+
+                sampler.metric(Metric::new(
+                    Path::new_unchecked("test"),
+                    crate::Empty,
+                    "metric 2",
+                    "count",
+                    42,
+                    crate::Empty,
+                ));
+            });
+
+            let source = &source as &dyn ErasedSource;
+
+            let calls = Cell::new(0);
+
+            source.sample_metrics(sampler::from_fn(|_| {
+                calls.set(calls.get() + 1);
+            }));
+
+            assert_eq!(2, calls.get());
+        }
+    }
 }
 
 #[cfg(feature = "alloc")]
@@ -778,6 +921,54 @@ mod alloc_support {
             for source in &self.0 {
                 source.emit_metrics(&emitter);
             }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use std::cell::Cell;
+
+        #[test]
+        fn reporter_is_send_sync() {
+            fn check<T: Send + Sync>() {}
+
+            check::<Reporter>();
+        }
+
+        #[test]
+        fn reporter_sample() {
+            let mut reporter = Reporter::new();
+
+            reporter
+                .add_source(source::from_fn(|sampler| {
+                    sampler.metric(Metric::new(
+                        Path::new_unchecked("test"),
+                        crate::Empty,
+                        "metric 1",
+                        "count",
+                        42,
+                        crate::Empty,
+                    ));
+                }))
+                .add_source(source::from_fn(|sampler| {
+                    sampler.metric(Metric::new(
+                        Path::new_unchecked("test"),
+                        crate::Empty,
+                        "metric 2",
+                        "count",
+                        42,
+                        crate::Empty,
+                    ));
+                }));
+
+            let calls = Cell::new(0);
+
+            reporter.sample_metrics(sampler::from_fn(|_| {
+                calls.set(calls.get() + 1);
+            }));
+
+            assert_eq!(2, calls.get());
         }
     }
 }
@@ -887,6 +1078,149 @@ pub mod sampler {
     impl<'a> Sampler for dyn ErasedSampler + Send + Sync + 'a {
         fn metric<P: Props>(&self, metric: Metric<P>) {
             (self as &(dyn ErasedSampler + 'a)).metric(metric)
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use std::cell::Cell;
+
+        #[test]
+        fn from_fn_sampler() {
+            let called = Cell::new(false);
+
+            let sampler = from_fn(|metric| {
+                assert_eq!("test", metric.name());
+
+                called.set(true);
+            });
+
+            sampler.metric(Metric::new(
+                Path::new_unchecked("test"),
+                Empty,
+                "test",
+                "count",
+                1,
+                Empty,
+            ));
+
+            assert!(called.get());
+        }
+
+        #[test]
+        fn erased_sampler() {
+            let called = Cell::new(false);
+
+            let sampler = from_fn(|metric| {
+                assert_eq!("test", metric.name());
+
+                called.set(true);
+            });
+
+            let sampler = &sampler as &dyn ErasedSampler;
+
+            sampler.metric(Metric::new(
+                Path::new_unchecked("test"),
+                Empty,
+                "test",
+                "count",
+                1,
+                Empty,
+            ));
+
+            assert!(called.get());
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    use crate::Timestamp;
+
+    #[test]
+    fn metric_new() {
+        let metric = Metric::new(
+            Path::new_unchecked("test"),
+            Timestamp::from_unix(Duration::from_secs(1)),
+            "my metric",
+            "count",
+            42,
+            ("metric_prop", true),
+        );
+
+        assert_eq!("test", metric.module());
+        assert_eq!(
+            Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
+            metric.extent().unwrap().as_point()
+        );
+        assert_eq!("my metric", metric.name());
+        assert_eq!("count", metric.agg());
+        assert_eq!(42, metric.value().by_ref().cast::<i32>().unwrap());
+        assert_eq!(true, metric.props().pull::<bool, _>("metric_prop").unwrap());
+    }
+
+    #[test]
+    fn metric_to_event() {
+        let metric = Metric::new(
+            Path::new_unchecked("test"),
+            Timestamp::from_unix(Duration::from_secs(1)),
+            "my metric",
+            "count",
+            42,
+            ("metric_prop", true),
+        );
+
+        let evt = metric.to_event();
+
+        assert_eq!("test", evt.module());
+        assert_eq!(
+            Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
+            evt.extent().unwrap().as_point()
+        );
+        assert_eq!("count of my metric is 42", evt.msg().to_string());
+        assert_eq!("count", evt.props().pull::<Str, _>(KEY_METRIC_AGG).unwrap());
+        assert_eq!(42, evt.props().pull::<i32, _>(KEY_METRIC_VALUE).unwrap());
+        assert_eq!(
+            "my metric",
+            evt.props().pull::<Str, _>(KEY_METRIC_NAME).unwrap()
+        );
+        assert_eq!(true, evt.props().pull::<bool, _>("metric_prop").unwrap());
+        assert_eq!(
+            Kind::Metric,
+            evt.props().pull::<Kind, _>(KEY_EVENT_KIND).unwrap()
+        );
+    }
+
+    #[test]
+    fn metric_to_extent() {
+        for (case, expected) in [
+            (
+                Some(Timestamp::from_unix(Duration::from_secs(1)).unwrap()),
+                Some(Extent::point(
+                    Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
+                )),
+            ),
+            (None, None),
+        ] {
+            let metric = Metric::new(
+                Path::new_unchecked("test"),
+                case,
+                "my metric",
+                "count",
+                42,
+                ("metric_prop", true),
+            );
+
+            let extent = metric.to_extent();
+
+            assert_eq!(
+                expected.map(|extent| extent.as_range().clone()),
+                extent.map(|extent| extent.as_range().clone())
+            );
         }
     }
 }

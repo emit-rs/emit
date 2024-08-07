@@ -165,3 +165,144 @@ fn swap(id: usize, incoming: &mut ThreadLocalCtxtFrame) {
         mem::swap(current, incoming);
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::thread;
+
+    impl ThreadLocalCtxtFrame {
+        fn props(&self) -> HashMap<Str<'static>, OwnedValue> {
+            self.props
+                .as_ref()
+                .map(|props| (**props).clone())
+                .unwrap_or_default()
+        }
+    }
+
+    #[test]
+    fn push_props() {
+        let ctxt = ThreadLocalCtxt::new();
+
+        ctxt.clone().with_current(|props| {
+            assert_eq!(0, props.props().len());
+        });
+
+        let mut frame = ctxt.clone().open_push(("a", 1));
+
+        assert_eq!(1, frame.props().len());
+        ctxt.clone().with_current(|props| {
+            assert_eq!(0, props.props().len());
+        });
+
+        ctxt.clone().enter(&mut frame);
+
+        assert_eq!(0, frame.props().len());
+
+        let mut inner = ctxt.clone().open_push([("b", 1), ("a", 2)]);
+
+        ctxt.clone().with_current(|props| {
+            let props = props.props();
+
+            assert_eq!(1, props.len());
+            assert_eq!(1, props["a"].by_ref().cast::<i32>().unwrap());
+        });
+
+        ctxt.clone().enter(&mut inner);
+
+        ctxt.clone().with_current(|props| {
+            let props = props.props();
+
+            assert_eq!(2, props.len());
+            assert_eq!(2, props["a"].by_ref().cast::<i32>().unwrap());
+            assert_eq!(1, props["b"].by_ref().cast::<i32>().unwrap());
+        });
+
+        ctxt.clone().exit(&mut inner);
+
+        ctxt.clone().exit(&mut frame);
+
+        assert_eq!(1, frame.props().len());
+        ctxt.clone().with_current(|props| {
+            assert_eq!(0, props.props().len());
+        });
+    }
+
+    #[test]
+    fn out_of_order_enter_exit() {
+        let ctxt = ThreadLocalCtxt::new();
+
+        let mut a = ctxt.open_push(("a", 1));
+
+        ctxt.enter(&mut a);
+
+        let mut b = ctxt.open_push(("b", 1));
+
+        ctxt.enter(&mut b);
+
+        // Ensure out-of-order exit doesn't panic
+
+        ctxt.exit(&mut a);
+        ctxt.exit(&mut b);
+    }
+
+    #[test]
+    fn isolation() {
+        let ctxt_a = ThreadLocalCtxt::new();
+
+        let ctxt_b = ThreadLocalCtxt::new();
+
+        let mut frame_a = ctxt_a.open_push(("a", 1));
+
+        ctxt_a.enter(&mut frame_a);
+
+        ctxt_a.with_current(|props| {
+            assert_eq!(1, props.props().len());
+        });
+
+        ctxt_b.with_current(|props| {
+            assert_eq!(0, props.props().len());
+        });
+
+        ctxt_a.exit(&mut frame_a);
+    }
+
+    #[test]
+    fn frame_thread_propagation() {
+        let ctxt = ThreadLocalCtxt::new();
+
+        let mut frame = ctxt.open_push(("a", 1));
+
+        ctxt.enter(&mut frame);
+
+        thread::spawn({
+            let ctxt = ctxt.clone();
+
+            move || {
+                ctxt.with_current(|props| {
+                    assert_eq!(0, props.props().len());
+                });
+            }
+        })
+        .join()
+        .unwrap();
+
+        let mut current = ctxt.with_current(|props| props.clone());
+
+        thread::spawn({
+            let ctxt = ctxt.clone();
+
+            move || {
+                ctxt.enter(&mut current);
+
+                ctxt.with_current(|props| {
+                    assert_eq!(1, props.props().len());
+                });
+
+                ctxt.exit(&mut current);
+            }
+        })
+        .join()
+        .unwrap();
+    }
+}

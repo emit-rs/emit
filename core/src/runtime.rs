@@ -17,8 +17,8 @@ If an application is initializing both the [`shared()`] and [`internal()`] runti
 */
 
 use crate::{
-    clock::Clock, ctxt::Ctxt, emitter::Emitter, empty::Empty, event::ToEvent, extent::ToExtent,
-    filter::Filter, props::Props, rng::Rng, timestamp::Timestamp,
+    clock::Clock, ctxt::Ctxt, emitter::Emitter, empty::Empty, event::ToEvent, filter::Filter,
+    props::Props, rng::Rng, timestamp::Timestamp,
 };
 
 #[cfg(feature = "implicit_rt")]
@@ -298,22 +298,7 @@ impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt, TClock: Clock, TRng: Rng>
     You can bypass any of these steps by emitting the event directly through the runtime's [`Emitter`].
     */
     pub fn emit<E: ToEvent>(&self, evt: E) {
-        self.ctxt.with_current(|ctxt| {
-            let evt = evt.to_event();
-
-            let extent = evt
-                .extent()
-                .cloned()
-                .or_else(|| self.clock.now().to_extent());
-
-            let evt = evt
-                .with_extent(extent)
-                .map_props(|props| props.and_props(ctxt));
-
-            if self.filter.matches(&evt) {
-                self.emitter.emit(evt);
-            }
-        });
+        crate::emit(&self.emitter, &self.filter, &self.ctxt, &self.clock, evt)
     }
 }
 
@@ -788,7 +773,11 @@ mod std_support {
         fn ambient_slot_init() {
             let slot = AmbientSlot::new();
 
+            assert!(!slot.is_enabled());
+
             assert!(slot.init(Runtime::new()).is_some());
+            assert!(slot.is_enabled());
+
             assert!(slot.init(Runtime::new()).is_none());
         }
     }

@@ -21,8 +21,20 @@ impl SystemClock {
 
 impl Clock for SystemClock {
     fn now(&self) -> Option<Timestamp> {
-        Timestamp::from_unix(std::time::UNIX_EPOCH.elapsed().unwrap_or_default())
+        Timestamp::from_unix(std::time::UNIX_EPOCH.elapsed().ok()?)
     }
 }
 
 impl InternalClock for SystemClock {}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(not(miri))]
+    use super::*;
+
+    #[test]
+    #[cfg(not(miri))]
+    fn now() {
+        assert!(SystemClock::new().now().is_some())
+    }
+}

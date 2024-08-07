@@ -63,12 +63,8 @@ impl<'k> Clone for Str<'k> {
         #[cfg(feature = "alloc")]
         {
             match self.owner {
-                StrOwner::Box(_) => {
-                    Str::new_owned(unsafe { &*self.value })
-                }
-                StrOwner::Shared(ref value) => {
-                    Str::new_shared(value.clone())
-                }
+                StrOwner::Box(_) => Str::new_owned(unsafe { &*self.value }),
+                StrOwner::Shared(ref value) => Str::new_shared(value.clone()),
                 StrOwner::Static(owner) => Str {
                     value: self.value,
                     owner: StrOwner::Static(owner),
@@ -78,7 +74,7 @@ impl<'k> Clone for Str<'k> {
                     value: self.value,
                     owner: StrOwner::None,
                     _marker: PhantomData,
-                }
+                },
             }
         }
         #[cfg(not(feature = "alloc"))]
@@ -323,12 +319,12 @@ impl<'k> serde::Serialize for Str<'k> {
 
 #[cfg(feature = "alloc")]
 mod alloc_support {
-    use core::mem;
+    use super::*;
     use alloc::{
         borrow::{Cow, ToOwned},
         string::String,
     };
-    use super::*;
+    use core::mem;
 
     impl Str<'static> {
         /**
@@ -415,7 +411,7 @@ mod alloc_support {
                     mem::forget(self);
 
                     unsafe { Box::from_raw(boxed) }.into()
-                },
+                }
                 _ => self.get().to_owned(),
             }
         }

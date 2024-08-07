@@ -403,6 +403,18 @@ impl<'v> FromValue<'v> for Timestamp {
     }
 }
 
+impl<'a> PartialEq<&'a Timestamp> for Timestamp {
+    fn eq(&self, other: &&'a Timestamp) -> bool {
+        self == *other
+    }
+}
+
+impl<'a> PartialEq<Timestamp> for &'a Timestamp {
+    fn eq(&self, other: &Timestamp) -> bool {
+        *self == other
+    }
+}
+
 /**
 An error attempting to parse a [`Timestamp`] from text.
 */

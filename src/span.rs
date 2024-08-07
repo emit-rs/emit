@@ -474,7 +474,7 @@ use core::{
 /**
 A [W3C Trace Id](https://www.w3.org/TR/trace-context/#trace-id).
 */
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TraceId(NonZeroU128);
 
 impl fmt::Debug for TraceId {
@@ -625,7 +625,7 @@ impl TraceId {
 /**
 A [W3C Span Id](https://www.w3.org/TR/trace-context/#parent-id).
 */
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SpanId(NonZeroU64);
 
 impl fmt::Debug for SpanId {
@@ -987,6 +987,12 @@ impl<'a, P: Props> ToEvent for Span<'a, P> {
     }
 }
 
+impl<'a, P: Props> ToExtent for Span<'a, P> {
+    fn to_extent(&self) -> Option<Extent> {
+        self.extent().cloned()
+    }
+}
+
 impl<'a, P: Props> Props for Span<'a, P> {
     fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
         &'kv self,
@@ -1008,7 +1014,7 @@ The `SpanCtxt` for the currently executing span can be pulled from the ambient c
 
 `SpanCtxt` should be pushed onto the ambient context with [`SpanCtxt::push`] so any events emitted during its execution are correlated to it.
 */
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SpanCtxt {
     trace_id: Option<TraceId>,
     span_parent: Option<SpanId>,
@@ -1241,6 +1247,98 @@ impl<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> SpanGuard<'a, C, P, F> {
 mod tests {
     use super::*;
 
+    use std::{cell::Cell, time::Duration};
+
+    use crate::Timestamp;
+
+    #[test]
+    fn span_id_parse() {
+        for (case, expected) in [
+            (
+                "0123456789abcdef",
+                Ok(SpanId::from_u64(0x0123456789abcdef).unwrap()),
+            ),
+            (
+                "0000000000000001",
+                Ok(SpanId::from_u64(0x0000000000000001).unwrap()),
+            ),
+            ("0000000000000000", Err(ParseIdError {})),
+            ("0x00000000000001", Err(ParseIdError {})),
+            ("0x0000000000000001", Err(ParseIdError {})),
+            ("1", Err(ParseIdError {})),
+            ("", Err::<SpanId, ParseIdError>(ParseIdError {})),
+        ] {
+            match expected {
+                Ok(expected) => {
+                    assert_eq!(expected, SpanId::try_from_hex(case).unwrap());
+                    assert_eq!(expected, SpanId::try_from_hex(case).unwrap());
+                }
+                Err(e) => assert_eq!(
+                    e.to_string(),
+                    SpanId::try_from_hex(case).unwrap_err().to_string()
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn trace_id_parse() {
+        for (case, expected) in [
+            (
+                "0123456789abcdef0123456789abcdef",
+                Ok(TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap()),
+            ),
+            (
+                "00000000000000000000000000000001",
+                Ok(TraceId::from_u128(0x00000000000000000000000000000001).unwrap()),
+            ),
+            ("00000000000000000000000000000000", Err(ParseIdError {})),
+            ("0x000000000000000000000000000001", Err(ParseIdError {})),
+            ("0x00000000000000000000000000000001", Err(ParseIdError {})),
+            ("1", Err(ParseIdError {})),
+            ("", Err::<TraceId, ParseIdError>(ParseIdError {})),
+        ] {
+            match expected {
+                Ok(expected) => assert_eq!(expected, TraceId::try_from_hex(case).unwrap()),
+                Err(e) => assert_eq!(
+                    e.to_string(),
+                    TraceId::try_from_hex(case).unwrap_err().to_string()
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn span_id_fmt() {
+        for (case, expected) in [
+            (SpanId::from_u64(1).unwrap(), "0000000000000001"),
+            (
+                SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                "0123456789abcdef",
+            ),
+        ] {
+            assert_eq!(expected, case.to_string());
+            assert_eq!(expected, str::from_utf8(&case.to_hex()).unwrap());
+        }
+    }
+
+    #[test]
+    fn trace_id_fmt() {
+        for (case, expected) in [
+            (
+                TraceId::from_u128(1).unwrap(),
+                "00000000000000000000000000000001",
+            ),
+            (
+                TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                "0123456789abcdef0123456789abcdef",
+            ),
+        ] {
+            assert_eq!(expected, case.to_string());
+            assert_eq!(expected, str::from_utf8(&case.to_hex()).unwrap());
+        }
+    }
+
     #[test]
     fn span_id_roundtrip() {
         let id = SpanId::new(NonZeroU64::new(u64::MAX / 2).unwrap());
@@ -1261,5 +1359,293 @@ mod tests {
         let parsed: TraceId = fmt.parse().unwrap();
 
         assert_eq!(id, parsed, "{}", fmt);
+    }
+
+    #[test]
+    fn span_id_random_empty() {
+        assert!(SpanId::random(crate::Empty).is_none());
+    }
+
+    #[test]
+    #[cfg(feature = "rand")]
+    fn span_id_random_rand() {
+        assert!(SpanId::random(crate::platform::rand_rng::RandRng::new()).is_some());
+    }
+
+    #[test]
+    fn trace_id_random_empty() {
+        assert!(TraceId::random(crate::Empty).is_none());
+    }
+
+    #[test]
+    #[cfg(feature = "rand")]
+    fn trace_id_random_rand() {
+        assert!(TraceId::random(crate::platform::rand_rng::RandRng::new()).is_some());
+    }
+
+    #[test]
+    fn span_id_to_from_value() {
+        let id = SpanId::from_u64(u64::MAX / 2).unwrap();
+
+        assert_eq!(id, SpanId::from_value(id.to_value()).unwrap());
+    }
+
+    #[test]
+    fn span_id_from_value_string() {
+        assert_eq!(
+            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+            Value::from("0123456789abcdef").cast().unwrap()
+        );
+    }
+
+    #[test]
+    fn trace_id_to_from_value() {
+        let id = TraceId::from_u128(u128::MAX / 2).unwrap();
+
+        assert_eq!(id, TraceId::from_value(id.to_value()).unwrap());
+    }
+
+    #[test]
+    fn trace_id_from_value_string() {
+        assert_eq!(
+            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+            Value::from("0123456789abcdef0123456789abcdef")
+                .cast()
+                .unwrap()
+        );
+    }
+
+    #[test]
+    #[cfg(all(feature = "std", feature = "rand"))]
+    fn span_ctxt_new() {
+        let rng = crate::platform::rand_rng::RandRng::new();
+        let ctxt = crate::platform::thread_local_ctxt::ThreadLocalCtxt::new();
+
+        // Span context from an empty source is empty
+        let root = SpanCtxt::current(&ctxt);
+        assert_eq!(SpanCtxt::empty(), root);
+
+        // New root context has a new trace id and span id, but no parent
+        let root = SpanCtxt::new_root(&rng);
+
+        assert!(root.span_id.is_some());
+        assert!(root.trace_id.is_some());
+        assert!(root.span_parent.is_none());
+
+        // Push the span context onto the source
+        let mut frame = ctxt.open_push(root);
+
+        ctxt.enter(&mut frame);
+
+        // Span context from a non-empty source is the last pushed
+        let current = SpanCtxt::current(&ctxt);
+        assert_eq!(root, current);
+        let root = current;
+
+        // A child span shares the same trace id, but has a new span id
+        // The span id of the parent becomes the span parent
+        let child = SpanCtxt::new_child(&root, &rng);
+
+        assert_eq!(root.trace_id, child.trace_id);
+        assert_ne!(root.span_id, child.span_id);
+        assert!(child.span_id.is_some());
+        assert_eq!(root.span_id, child.span_parent);
+
+        ctxt.exit(&mut frame);
+        ctxt.close(frame);
+    }
+
+    #[test]
+    fn span_new() {
+        let span = Span::new(
+            Path::new_unchecked("test"),
+            Timestamp::from_unix(Duration::from_secs(1)),
+            "my span",
+            ("span_prop", true),
+        );
+
+        assert_eq!("test", span.module());
+        assert_eq!(
+            Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
+            span.extent().unwrap().as_point()
+        );
+        assert_eq!("my span", span.name());
+        assert_eq!(true, span.props().pull::<bool, _>("span_prop").unwrap());
+    }
+
+    #[test]
+    fn span_to_event() {
+        let span = Span::new(
+            Path::new_unchecked("test"),
+            Timestamp::from_unix(Duration::from_secs(1)),
+            "my span",
+            ("span_prop", true),
+        );
+
+        let evt = span.to_event();
+
+        assert_eq!("test", evt.module());
+        assert_eq!(
+            Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
+            evt.extent().unwrap().as_point()
+        );
+        assert_eq!("my span completed", evt.msg().to_string());
+        assert_eq!(
+            "my span",
+            evt.props().pull::<Str, _>(KEY_SPAN_NAME).unwrap()
+        );
+        assert_eq!(true, evt.props().pull::<bool, _>("span_prop").unwrap());
+        assert_eq!(
+            Kind::Span,
+            evt.props().pull::<Kind, _>(KEY_EVENT_KIND).unwrap()
+        );
+    }
+
+    #[test]
+    fn span_to_extent() {
+        for (case, expected) in [
+            (
+                Some(Timestamp::from_unix(Duration::from_secs(1)).unwrap()),
+                Some(Extent::point(
+                    Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
+                )),
+            ),
+            (None, None),
+        ] {
+            let span = Span::new(
+                Path::new_unchecked("test"),
+                case,
+                "my span",
+                ("span_prop", true),
+            );
+
+            let extent = span.to_extent();
+
+            assert_eq!(
+                expected.map(|extent| extent.as_range().clone()),
+                extent.map(|extent| extent.as_range().clone())
+            );
+        }
+    }
+
+    struct MyClock(Cell<u64>);
+
+    impl Clock for MyClock {
+        fn now(&self) -> Option<crate::Timestamp> {
+            let ts = crate::Timestamp::from_unix(Duration::from_secs(self.0.get()));
+            self.0.set(self.0.get() + 1);
+            ts
+        }
+    }
+
+    #[test]
+    #[cfg(all(feature = "std", feature = "rand"))]
+    fn span_guard_filtered_new() {
+        let clock = MyClock(Cell::new(0));
+        let rng = crate::platform::rand_rng::RandRng::new();
+        let ctxt = crate::platform::thread_local_ctxt::ThreadLocalCtxt::new();
+
+        let span_ctxt = SpanCtxt::new_root(&rng);
+
+        let complete_called = Cell::new(false);
+
+        let mut guard = SpanGuard::filtered_new(
+            |_| true,
+            Path::new_unchecked("test"),
+            Timer::start(&clock),
+            "span",
+            span_ctxt,
+            ("event_prop", 1),
+            |evt| {
+                assert_eq!(
+                    Timestamp::from_unix(Duration::from_secs(0)).unwrap(),
+                    evt.extent().unwrap().as_span().unwrap().start
+                );
+                assert_eq!(
+                    Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
+                    evt.extent().unwrap().as_span().unwrap().end
+                );
+
+                assert_eq!("test", evt.module());
+                assert_eq!("span", evt.name());
+
+                assert_eq!(1, evt.props().pull::<usize, _>("event_prop").unwrap());
+
+                let current_ctxt = SpanCtxt::current(&ctxt);
+
+                assert_eq!(span_ctxt, current_ctxt);
+
+                complete_called.set(true);
+            },
+        );
+
+        assert!(guard.is_enabled());
+
+        guard.push_ctxt(&ctxt, ("ctxt_prop", 2)).call(move || {
+            drop(guard);
+        });
+
+        assert!(complete_called.get());
+    }
+
+    #[test]
+    #[cfg(all(feature = "std", feature = "rand", not(miri)))]
+    fn span_guard_filtered_new_disabled() {
+        let rng = crate::platform::rand_rng::RandRng::new();
+        let clock = crate::platform::system_clock::SystemClock::new();
+        let ctxt = crate::platform::thread_local_ctxt::ThreadLocalCtxt::new();
+
+        let complete_called = Cell::new(false);
+
+        let mut guard = SpanGuard::filtered_new(
+            |_| false,
+            Path::new_unchecked("test"),
+            Timer::start(&clock),
+            "span",
+            SpanCtxt::new_root(&rng),
+            crate::Empty,
+            |_| {
+                complete_called.set(true);
+            },
+        );
+
+        assert!(!guard.is_enabled());
+
+        guard.push_ctxt(&ctxt, crate::Empty).call(move || {
+            drop(guard);
+        });
+
+        assert!(!complete_called.get());
+    }
+
+    #[test]
+    #[cfg(all(feature = "std", feature = "rand", not(miri)))]
+    fn span_guard_custom_complete() {
+        let clock = crate::platform::system_clock::SystemClock::new();
+        let rng = crate::platform::rand_rng::RandRng::new();
+
+        let custom_complete_called = Cell::new(false);
+        let default_complete_called = Cell::new(false);
+
+        let guard = SpanGuard::filtered_new(
+            |_| true,
+            Path::new_unchecked("test"),
+            Timer::start(&clock),
+            "span",
+            SpanCtxt::new_root(&rng),
+            crate::Empty,
+            |_| {
+                default_complete_called.set(true);
+            },
+        );
+
+        assert!(guard.is_enabled());
+
+        guard.complete_with(|_| {
+            custom_complete_called.set(true);
+        });
+
+        assert!(!default_complete_called.get());
+        assert!(custom_complete_called.get());
     }
 }
