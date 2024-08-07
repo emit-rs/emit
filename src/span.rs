@@ -1589,7 +1589,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(feature = "std", feature = "rand"))]
+    #[cfg(all(feature = "std", feature = "rand", not(miri)))]
     fn span_guard_filtered_new_disabled() {
         let rng = crate::platform::rand_rng::RandRng::new();
         let clock = crate::platform::system_clock::SystemClock::new();
@@ -1619,7 +1619,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(feature = "std", feature = "rand"))]
+    #[cfg(all(feature = "std", feature = "rand", not(miri)))]
     fn span_guard_custom_complete() {
         let clock = crate::platform::system_clock::SystemClock::new();
         let rng = crate::platform::rand_rng::RandRng::new();

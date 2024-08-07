@@ -29,9 +29,11 @@ impl InternalClock for SystemClock {}
 
 #[cfg(test)]
 mod tests {
+    #[cfg(not(miri))]
     use super::*;
 
     #[test]
+    #[cfg(not(miri))]
     fn now() {
         assert!(SystemClock::new().now().is_some())
     }
