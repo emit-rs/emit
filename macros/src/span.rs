@@ -69,9 +69,9 @@ impl Parse for Args {
         )?;
 
         Ok(Args {
-            rt: rt.take_rt()?,
+            rt: rt.take_rt_ref()?,
             module: module.take().unwrap_or_else(|| module_tokens()),
-            when: when.take_some_or_empty(),
+            when: when.take_some_or_empty_ref(),
             ok_lvl: ok_lvl.take_if_std()?,
             err_lvl: err_lvl.take_if_std()?,
             guard: guard.take(),
