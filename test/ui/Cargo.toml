@@ -1,0 +1,23 @@
+[package]
+name = "emit_test_ui"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[features]
+std = ["emit/std"]
+sval = ["emit/sval"]
+serde = ["emit/serde"]
+implicit_rt = ["emit/implicit_rt"]
+implicit_internal_rt = ["emit/implicit_internal_rt"]
+
+[dependencies.emit]
+path = "../../"
+default-features = false
+
+[dev-dependencies.trybuild]
+version = "1"
+
+[dev-dependencies.tokio]
+version = "1"
+features = ["full"]

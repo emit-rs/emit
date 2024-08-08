@@ -249,10 +249,7 @@ where
     Initialize a runtime in the given static `slot`.
     */
     #[must_use = "call `blocking_flush` at the end of `main` to ensure events are flushed."]
-    pub fn init_slot(
-        self,
-        slot: &'static emit_core::runtime::AmbientSlot,
-    ) -> Init<&'static TEmitter, &'static TCtxt> {
+    pub fn init_slot(self, slot: &emit_core::runtime::AmbientSlot) -> Init<&TEmitter, &TCtxt> {
         let ambient = slot
             .init(
                 emit_core::runtime::Runtime::new()

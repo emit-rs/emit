@@ -76,10 +76,12 @@ impl Parse for Args {
         Ok(Args {
             module: module.take().unwrap_or_else(|| module_tokens()),
             extent: extent.take().unwrap_or_else(|| quote!(emit::empty::Empty)),
-            props: props.take().unwrap_or_else(|| quote!(emit::empty::Empty)),
+            props: props
+                .take_ref()
+                .unwrap_or_else(|| quote!(emit::empty::Empty)),
             evt: evt.take(),
-            rt: rt.take_rt()?,
-            when: when.take_some_or_empty(),
+            rt: rt.take_rt_ref()?,
+            when: when.take_some_or_empty_ref(),
         })
     }
 }

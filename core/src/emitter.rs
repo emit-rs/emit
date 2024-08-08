@@ -116,7 +116,7 @@ An [`Emitter`] from a function.
 
 This type can be created directly, or via [`from_fn`].
 */
-pub struct FromFn<F>(F);
+pub struct FromFn<F = fn(&Event<&dyn ErasedProps>)>(F);
 
 impl<F> FromFn<F> {
     /**

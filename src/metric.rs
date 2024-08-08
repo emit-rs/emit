@@ -648,7 +648,7 @@ pub mod source {
 
     This type can be created directly, or via [`from_fn`].
     */
-    pub struct FromFn<F>(F);
+    pub struct FromFn<F = fn(&mut dyn ErasedSampler)>(F);
 
     /**
     Create a [`Source`] from a function.
@@ -1012,7 +1012,7 @@ pub mod sampler {
 
     This type can be created directly, or via [`from_fn`].
     */
-    pub struct FromFn<F>(F);
+    pub struct FromFn<F = fn(&Metric<&dyn ErasedProps>)>(F);
 
     /**
     Create a [`Sampler`] from a function.
