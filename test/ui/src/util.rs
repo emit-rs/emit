@@ -10,7 +10,7 @@ use std::{
     ops::ControlFlow,
     sync::{
         atomic::{AtomicU64, Ordering},
-        Arc, Mutex,
+        Arc, LazyLock, Mutex,
     },
     time::Duration,
 };
@@ -49,6 +49,26 @@ impl Called {
 
     pub(crate) fn was_called(&self) -> bool {
         self.called_times() > 0
+    }
+}
+
+pub(crate) struct StaticCalled(LazyLock<Called>);
+
+impl StaticCalled {
+    pub(crate) const fn new() -> Self {
+        StaticCalled(LazyLock::new(Called::new))
+    }
+
+    pub(crate) fn record(&self) {
+        self.0.record()
+    }
+
+    pub(crate) fn called_times(&self) -> usize {
+        self.0.called_times()
+    }
+
+    pub(crate) fn was_called(&self) -> bool {
+        self.0.was_called()
     }
 }
 
