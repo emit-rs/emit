@@ -642,6 +642,7 @@ pub fn __private_emit<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
     when: Option<impl Filter>,
     extent: impl ToExtent,
     tpl: Template<'b>,
+    base_props: impl Props,
     props: impl Props,
 ) {
     emit_core::emit(
@@ -653,7 +654,7 @@ pub fn __private_emit<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
             module,
             extent.to_extent().or_else(|| rt.clock().now().to_extent()),
             tpl,
-            props,
+            props.and_props(base_props),
         ),
     );
 }
@@ -738,7 +739,8 @@ pub fn __private_complete_span<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock,
         Some(crate::filter::always()),
         span.extent(),
         tpl,
-        evt_props.and_props(&span),
+        &span,
+        evt_props,
     );
 }
 
@@ -757,9 +759,8 @@ pub fn __private_complete_span_ok<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clo
         Some(crate::filter::always()),
         span.extent(),
         tpl,
-        (crate::well_known::KEY_LVL, lvl)
-            .and_props(evt_props)
-            .and_props(&span),
+        (crate::well_known::KEY_LVL, lvl).and_props(&span),
+        evt_props,
     );
 }
 
@@ -783,8 +784,8 @@ pub fn __private_complete_span_err<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Cl
             (crate::well_known::KEY_LVL, Value::from_any(lvl)),
             (crate::well_known::KEY_ERR, Value::capture_error(err)),
         ]
-        .and_props(evt_props)
         .and_props(&span),
+        evt_props,
     );
 }
 

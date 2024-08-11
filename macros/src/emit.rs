@@ -79,7 +79,7 @@ impl Parse for Args {
             props: props
                 .take_ref()
                 .unwrap_or_else(|| quote!(emit::empty::Empty)),
-            evt: evt.take(),
+            evt: evt.take_ref(),
             rt: rt.take_rt_ref()?,
             when: when.take_some_or_empty_ref(),
         })
@@ -114,7 +114,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
             emit::__private::__private_emit_event(
                 #rt_tokens,
                 #when_tokens,
-                &#event_tokens,
+                #event_tokens,
                 #template_tokens,
                 #props_tokens,
             );
@@ -135,7 +135,8 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 #when_tokens,
                 #extent_tokens,
                 #template_tokens,
-                emit::Props::and_props(&#base_props_tokens, #props_tokens),
+                #base_props_tokens,
+                #props_tokens,
             );
         )
     };

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use emit::Emitter;
+use emit::{Emitter, Props};
 
 use crate::util::{simple_runtime, StaticCalled};
 
@@ -14,6 +14,8 @@ fn emit_basic() {
             assert_eq!(module_path!(), evt.module());
 
             assert!(evt.extent().is_some());
+
+            assert_eq!("Rust", evt.props().pull::<&str, _>("user").unwrap());
 
             CALLED.record();
         },
@@ -39,7 +41,7 @@ fn emit_filter() {
 
     rt.emitter().blocking_flush(Duration::from_secs(1));
 
-    assert_eq!(1, CALLED.called_times());
+    assert!(CALLED.was_called());
 }
 
 #[test]
@@ -51,7 +53,60 @@ fn emit_when() {
 
     rt.emitter().blocking_flush(Duration::from_secs(1));
 
-    assert_eq!(1, CALLED.called_times());
+    assert!(CALLED.was_called());
+}
+
+#[test]
+fn emit_extent_point() {
+    static CALLED: StaticCalled = StaticCalled::new();
+
+    let rt = simple_runtime(
+        |evt| {
+            assert_eq!(
+                emit::Timestamp::from_unix(Duration::from_secs(42)).unwrap(),
+                evt.extent().unwrap().as_point()
+            );
+            CALLED.record();
+        },
+        |_| true,
+    );
+
+    emit::emit!(
+        rt,
+        extent: emit::Timestamp::from_unix(Duration::from_secs(42)),
+        "test",
+    );
+
+    rt.emitter().blocking_flush(Duration::from_secs(1));
+
+    assert!(CALLED.was_called());
+}
+
+#[test]
+fn emit_extent_span() {
+    static CALLED: StaticCalled = StaticCalled::new();
+
+    let rt = simple_runtime(
+        |evt| {
+            assert_eq!(
+                emit::Timestamp::from_unix(Duration::from_secs(42)).unwrap()
+                    ..emit::Timestamp::from_unix(Duration::from_secs(47)).unwrap(),
+                evt.extent().unwrap().as_span().unwrap().clone()
+            );
+            CALLED.record();
+        },
+        |_| true,
+    );
+
+    emit::emit!(
+        rt,
+        extent: emit::Timestamp::from_unix(Duration::from_secs(42))..emit::Timestamp::from_unix(Duration::from_secs(47)),
+        "test",
+    );
+
+    rt.emitter().blocking_flush(Duration::from_secs(1));
+
+    assert!(CALLED.was_called());
 }
 
 #[test]
@@ -67,6 +122,120 @@ fn emit_module() {
     );
 
     emit::emit!(rt, module: emit::path!("custom_module"), "test");
+
+    rt.emitter().blocking_flush(Duration::from_secs(1));
+
+    assert!(CALLED.was_called());
+}
+
+#[test]
+fn emit_props() {
+    static CALLED: StaticCalled = StaticCalled::new();
+    let rt = simple_runtime(
+        |evt| {
+            assert_eq!(1, evt.props().pull::<i32, _>("ambient_prop1").unwrap());
+            assert_eq!(2, evt.props().pull::<i32, _>("ambient_prop2").unwrap());
+
+            assert_eq!(1, evt.props().pull::<i32, _>("evt_prop1").unwrap());
+            assert_eq!(2, evt.props().pull::<i32, _>("evt_prop2").unwrap());
+
+            CALLED.record();
+        },
+        |_| true,
+    );
+
+    emit::emit!(
+        rt,
+        props: emit::props! {
+            ambient_prop1: 1,
+            ambient_prop2: 2,
+        },
+        "test",
+        evt_prop1: 1,
+        evt_prop2: 2,
+    );
+
+    rt.emitter().blocking_flush(Duration::from_secs(1));
+
+    assert!(CALLED.was_called());
+}
+
+#[test]
+fn emit_event() {
+    static CALLED: StaticCalled = StaticCalled::new();
+    let rt = simple_runtime(
+        |evt| {
+            assert_eq!("Hello, Rust", evt.msg().to_string());
+            assert_eq!("Hello, {user}", evt.tpl().to_string());
+            assert_eq!(module_path!(), evt.module());
+
+            assert!(evt.extent().is_some());
+
+            assert_eq!("Rust", evt.props().pull::<&str, _>("user").unwrap());
+
+            CALLED.record();
+        },
+        |_| true,
+    );
+
+    emit::emit!(
+        rt,
+        evt: emit::event!(
+            "Hello, {user}",
+            user: "Rust",
+        ),
+    );
+
+    rt.emitter().blocking_flush(Duration::from_secs(1));
+
+    assert!(CALLED.was_called());
+}
+
+#[test]
+fn emit_props_precedence() {
+    static CALLED: StaticCalled = StaticCalled::new();
+    let rt = simple_runtime(
+        |evt| {
+            assert_eq!(
+                "evt",
+                evt.props().pull::<&str, _>("ctxt_props_evt").unwrap()
+            );
+            assert_eq!("props", evt.props().pull::<&str, _>("ctxt_props").unwrap());
+            assert_eq!("ctxt", evt.props().pull::<&str, _>("ctxt").unwrap());
+
+            assert_eq!("evt", evt.props().pull::<&str, _>("props_evt").unwrap());
+            assert_eq!("props", evt.props().pull::<&str, _>("props").unwrap());
+
+            assert_eq!("evt", evt.props().pull::<&str, _>("evt").unwrap());
+
+            CALLED.record();
+        },
+        |_| true,
+    );
+
+    emit::Frame::push(
+        rt.ctxt(),
+        emit::props! {
+            ctxt_props_evt: "ctxt",
+            ctxt_props: "ctxt",
+            ctxt: "ctxt",
+        },
+    )
+    .call(|| {
+        emit::emit!(
+            rt,
+            props: emit::props! {
+                ctxt_props_evt: "props",
+                ctxt_props: "props",
+                props_evt: "props",
+                props: "props",
+            },
+            "test",
+            ctxt_props_evt: "evt",
+            props_evt: "evt",
+            evt: "evt",
+        );
+    });
 
     rt.emitter().blocking_flush(Duration::from_secs(1));
 
