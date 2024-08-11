@@ -15,13 +15,30 @@ use std::{
     time::Duration,
 };
 
-pub type SimpleRuntime =
-    Runtime<emit::emitter::FromFn, emit::filter::FromFn, SimpleCtxt, CountingClock, CountingRng>;
+pub type SimpleRuntime<E, F> = Runtime<E, F, SimpleCtxt, CountingClock, CountingRng>;
 
-pub const fn simple_runtime(
+pub type StaticRuntime = SimpleRuntime<emit::emitter::FromFn, emit::filter::FromFn>;
+
+pub const fn static_runtime(
     emitter: fn(&Event<&dyn ErasedProps>),
     filter: fn(&Event<&dyn ErasedProps>) -> bool,
-) -> SimpleRuntime {
+) -> StaticRuntime {
+    Runtime::build(
+        emit::emitter::FromFn::new(emitter),
+        emit::filter::FromFn::new(filter),
+        SimpleCtxt::new(),
+        CountingClock::new(),
+        CountingRng::new(),
+    )
+}
+
+pub const fn simple_runtime<
+    E: Fn(&Event<&dyn ErasedProps>),
+    F: Fn(&Event<&dyn ErasedProps>) -> bool,
+>(
+    emitter: E,
+    filter: F,
+) -> SimpleRuntime<emit::emitter::FromFn<E>, emit::filter::FromFn<F>> {
     Runtime::build(
         emit::emitter::FromFn::new(emitter),
         emit::filter::FromFn::new(filter),

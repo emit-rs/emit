@@ -2,13 +2,13 @@ use std::time::Duration;
 
 use emit::{Emitter, Props};
 
-use crate::util::{simple_runtime, SimpleRuntime, StaticCalled};
+use crate::util::{static_runtime, StaticCalled, StaticRuntime};
 
 #[test]
 fn span_basic() {
     // We need a static runtime so it's available in item position for the `#[span]` macro
     static CALLED: StaticCalled = StaticCalled::new();
-    static RT: SimpleRuntime = simple_runtime(
+    static RT: StaticRuntime = static_runtime(
         |evt| {
             assert_eq!("greet Rust", evt.msg().to_string());
             assert_eq!("greet {user}", evt.tpl().to_string());
@@ -39,4 +39,36 @@ fn span_basic() {
     RT.emitter().blocking_flush(Duration::from_secs(1));
 
     assert!(CALLED.was_called());
+}
+
+#[test]
+fn span_guard() {
+    /*
+    Complete the guard by dropping
+    */
+    todo!()
+}
+
+#[test]
+fn span_ok_lvl() {
+    /*
+    Autocomplete a result span
+    */
+    todo!()
+}
+
+#[test]
+fn span_ok_err_lvl() {
+    /*
+    Autocomplete a result span
+    */
+    todo!()
+}
+
+#[test]
+fn span_props_precedence() {
+    /*
+    Ensure event props override span props
+    */
+    todo!()
 }
