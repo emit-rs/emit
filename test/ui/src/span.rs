@@ -136,6 +136,16 @@ fn span_basic() {
     assert!(ERROR_CALLED.was_called());
 }
 
+#[tokio::test]
+async fn span_basic_async() {
+    todo!()
+}
+
+#[test]
+fn span_filter() {
+    todo!()
+}
+
 #[test]
 fn span_guard() {
     static CALLED: StaticCalled = StaticCalled::new();
@@ -380,6 +390,12 @@ fn info_span_err_lvl() {
 
     assert!(OK_CALLED.was_called());
     assert!(ERR_CALLED.was_called());
+}
+
+#[tokio::test]
+#[cfg(feature = "std")]
+async fn info_span_err_lvl_async() {
+    todo!()
 }
 
 #[test]
