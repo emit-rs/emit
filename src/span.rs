@@ -26,7 +26,7 @@ Event {
         "2024-04-27T22:40:24.112859000Z".."2024-04-27T22:40:25.318273000Z",
     ),
     props: {
-        "event_kind": span,
+        "evt_kind": span,
         "span_name": "wait a bit",
         "span_id": 71ea734fcbb4dc41,
         "trace_id": 6d6bb9c23a5f76e7185fb3957c2f5527,
@@ -97,7 +97,7 @@ emit::SpanCtxt::current(emit::ctxt())
 
 The data model of spans is an extension of `emit`'s events. Span events include the following well-known properties:
 
-- `event_kind`: with a value of `"span"` to indicate that the event is a span.
+- `evt_kind`: with a value of `"span"` to indicate that the event is a span.
 - `span_name`: a name for the operation the span represents. This defaults to the template.
 - `span_id`: an identifier for this specific invocation of the operation.
 - `parent_id`: the `span_id` of the operation that invoked this one.
@@ -142,7 +142,7 @@ Event {
         "2024-04-27T22:47:33.574839000Z".."2024-04-27T22:47:35.985844000Z",
     ),
     props: {
-        "event_kind": span,
+        "evt_kind": span,
         "span_name": "wait a bit",
         "trace_id": d2a5e592546010570472ac6e6457c086,
         "sleep_ms": 1200,
@@ -179,7 +179,7 @@ Event {
         "2024-04-27T22:50:50.385706000Z".."2024-04-27T22:50:50.994509000Z",
     ),
     props: {
-        "event_kind": span,
+        "evt_kind": span,
         "span_name": "inner span",
         "trace_id": 12b2fde225aebfa6758ede9cac81bf4d,
         "span_parent": 23995f85b4610391,
@@ -194,7 +194,7 @@ Event {
         "2024-04-27T22:50:49.180025000Z".."2024-04-27T22:50:50.994797000Z",
     ),
     props: {
-        "event_kind": span,
+        "evt_kind": span,
         "span_name": "outer span",
         "sleep_ms": 1200,
         "span_id": 23995f85b4610391,
@@ -275,7 +275,7 @@ Event {
         "2024-04-29T05:37:05.278488400Z".."2024-04-29T05:37:05.278636100Z",
     ),
     props: {
-        "event_kind": span,
+        "evt_kind": span,
         "span_name": "incoming request",
         "span_parent": 23995f85b4610391,
         "trace_id": 12b2fde225aebfa6758ede9cac81bf4d,
@@ -346,7 +346,7 @@ Event {
     ),
     props: {
         "lvl": info,
-        "event_kind": span,
+        "evt_kind": span,
         "span_name": "wait a bit",
         "trace_id": 6a3fc0e46bfa1da71537e39e3bf1942c,
         "span_id": f5bcc5821c6c3227,
@@ -365,7 +365,7 @@ Event {
             kind: Other,
             error: "the wait is too long",
         },
-        "event_kind": span,
+        "evt_kind": span,
         "span_name": "wait a bit",
         "trace_id": 3226b70b45ff90f92f4feccee4325d4d,
         "span_id": 3702ba2429f9a7b7,
@@ -410,7 +410,7 @@ Event {
         "2024-04-28T21:12:20.497595000Z".."2024-04-28T21:12:20.603108000Z",
     ),
     props: {
-        "event_kind": span,
+        "evt_kind": span,
         "span_name": "wait a bit",
         "trace_id": 5b9ab977a530dfa782eedd6db08fdb66,
         "sleep_ms": 100,
@@ -424,7 +424,7 @@ Event {
         "2024-04-28T21:12:20.603916000Z".."2024-04-28T21:12:21.808502000Z",
     ),
     props: {
-        "event_kind": span,
+        "evt_kind": span,
         "span_name": "wait a bit",
         "lvl": warn,
         "trace_id": 9abad69ac8bf6d6ef6ccde8453226aa3,
@@ -456,7 +456,7 @@ use emit_core::{
     str::{Str, ToStr},
     template::{self, Template},
     value::FromValue,
-    well_known::{KEY_EVENT_KIND, KEY_SPAN_ID, KEY_SPAN_NAME, KEY_SPAN_PARENT, KEY_TRACE_ID},
+    well_known::{KEY_EVT_KIND, KEY_SPAN_ID, KEY_SPAN_NAME, KEY_SPAN_PARENT, KEY_TRACE_ID},
 };
 
 use crate::{
@@ -998,7 +998,7 @@ impl<'a, P: Props> Props for Span<'a, P> {
         &'kv self,
         mut for_each: F,
     ) -> ControlFlow<()> {
-        for_each(KEY_EVENT_KIND.to_str(), Kind::Span.to_value())?;
+        for_each(KEY_EVT_KIND.to_str(), Kind::Span.to_value())?;
         for_each(KEY_SPAN_NAME.to_str(), self.name.to_value())?;
 
         self.props.for_each(&mut for_each)
@@ -1155,7 +1155,7 @@ impl<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> Drop for SpanGuard<'a, C, P
 
 impl<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> SpanGuard<'a, C, P, F> {
     pub(crate) fn filtered_new(
-        filter: impl FnOnce(Span<&P>) -> bool,
+        filter: impl FnOnce(&SpanCtxt, Span<&P>) -> bool,
         module: impl Into<Path<'a>>,
         timer: Timer<C>,
         name: impl Into<Str<'a>>,
@@ -1166,12 +1166,15 @@ impl<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> SpanGuard<'a, C, P, F> {
         let module = module.into();
         let name = name.into();
 
-        if filter(Span::new(
-            module.by_ref(),
-            timer.start_timestamp(),
-            name.by_ref(),
-            &event_props,
-        )) {
+        if filter(
+            &ctxt,
+            Span::new(
+                module.by_ref(),
+                timer.start_timestamp(),
+                name.by_ref(),
+                &event_props,
+            ),
+        ) {
             SpanGuard {
                 state: Some(SpanGuardState {
                     timer,
@@ -1500,7 +1503,7 @@ mod tests {
         assert_eq!(true, evt.props().pull::<bool, _>("span_prop").unwrap());
         assert_eq!(
             Kind::Span,
-            evt.props().pull::<Kind, _>(KEY_EVENT_KIND).unwrap()
+            evt.props().pull::<Kind, _>(KEY_EVT_KIND).unwrap()
         );
     }
 
@@ -1555,7 +1558,7 @@ mod tests {
         let complete_called = Cell::new(false);
 
         let mut guard = SpanGuard::filtered_new(
-            |_| true,
+            |_, _| true,
             Path::new_unchecked("test"),
             Timer::start(&clock),
             "span",
@@ -1603,7 +1606,7 @@ mod tests {
         let complete_called = Cell::new(false);
 
         let mut guard = SpanGuard::filtered_new(
-            |_| false,
+            |_, _| false,
             Path::new_unchecked("test"),
             Timer::start(&clock),
             "span",
@@ -1633,7 +1636,7 @@ mod tests {
         let default_complete_called = Cell::new(false);
 
         let guard = SpanGuard::filtered_new(
-            |_| true,
+            |_, _| true,
             Path::new_unchecked("test"),
             Timer::start(&clock),
             "span",

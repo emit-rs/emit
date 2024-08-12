@@ -700,12 +700,13 @@ pub fn __private_begin_span<
     default_complete: S,
 ) -> (Frame<Option<&'a C>>, SpanGuard<'static, &'a T, Empty, S>) {
     let mut span = SpanGuard::filtered_new(
-        |span| {
+        |span_ctxt, span| {
             rt.ctxt().with_current(|ctxt_props| {
                 FirstDefined(when, rt.filter()).matches(&span.to_event().with_tpl(tpl).map_props(
                     |span_props| {
                         span_evt_props
                             .and_props(span_props)
+                            .and_props(&span_ctxt)
                             .and_props(&span_ctxt_props)
                             .and_props(ctxt_props)
                     },

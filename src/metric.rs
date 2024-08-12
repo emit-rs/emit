@@ -34,7 +34,7 @@ Event {
         "2024-04-29T10:08:24.780230000Z",
     ),
     props: {
-        "event_kind": metric,
+        "evt_kind": metric,
         "metric_name": "bytes_written",
         "metric_agg": "count",
         "metric_value": 4643,
@@ -54,7 +54,7 @@ let sample = sample_bytes_written();
 
 emit::emit!(
     "{metric_agg} of {metric_name} is {metric_value}",
-    event_kind: EVENT_KIND_METRIC,
+    evt_kind: EVENT_KIND_METRIC,
     metric_agg: METRIC_AGG_COUNT,
     metric_name: "bytes_written",
     metric_value: sample,
@@ -66,7 +66,7 @@ emit::emit!(
 
 The data model of metrics is an extension of `emit`'s events. Metric events are points or buckets in a time-series. They don't model the underlying instruments collecting metrics like counters or gauges. They instead model the aggregation of readings from those instruments over their lifetime. Metric events include the following well-known properties:
 
-- `event_kind`: with a value of `"metric"` to indicate that the event is a metric sample.
+- `evt_kind`: with a value of `"metric"` to indicate that the event is a metric sample.
 - `metric_agg`: the aggregation over the underlying data stream that produced the sample.
     - `"count"`: A monotonic sum of `1`'s for defined values, and `0`'s for undefined values.
     - `"sum"`: A potentially non-monotonic sum of defined values.
@@ -108,7 +108,7 @@ Event {
         "2024-04-30T06:53:41.069203000Z",
     ),
     props: {
-        "event_kind": metric,
+        "evt_kind": metric,
         "metric_name": "bytes_written",
         "metric_agg": "count",
         "metric_value": 591,
@@ -151,7 +151,7 @@ Event {
         "2024-04-30T06:55:59.839770000Z".."2024-04-30T06:56:29.839770000Z",
     ),
     props: {
-        "event_kind": metric,
+        "evt_kind": metric,
         "metric_name": "bytes_written",
         "metric_agg": "count",
         "metric_value": 17,
@@ -210,7 +210,7 @@ Event {
         "2024-04-30T07:03:07.828185000Z".."2024-04-30T07:03:22.828185000Z",
     ),
     props: {
-        "event_kind": metric,
+        "evt_kind": metric,
         "metric_name": "bytes_written",
         "metric_agg": "count",
         "metric_value": [
@@ -300,7 +300,7 @@ use emit_core::{
     str::{Str, ToStr},
     template::{self, Template},
     value::{ToValue, Value},
-    well_known::{KEY_EVENT_KIND, KEY_METRIC_AGG, KEY_METRIC_NAME, KEY_METRIC_VALUE},
+    well_known::{KEY_EVT_KIND, KEY_METRIC_AGG, KEY_METRIC_NAME, KEY_METRIC_VALUE},
 };
 
 use crate::kind::Kind;
@@ -518,7 +518,7 @@ impl<'a, P: Props> Props for Metric<'a, P> {
         &'kv self,
         mut for_each: F,
     ) -> ControlFlow<()> {
-        for_each(KEY_EVENT_KIND.to_str(), Kind::Metric.to_value())?;
+        for_each(KEY_EVT_KIND.to_str(), Kind::Metric.to_value())?;
         for_each(KEY_METRIC_NAME.to_str(), self.name.to_value())?;
         for_each(KEY_METRIC_AGG.to_str(), self.agg.to_value())?;
         for_each(KEY_METRIC_VALUE.to_str(), self.value.by_ref())?;
@@ -1191,7 +1191,7 @@ mod tests {
         assert_eq!(true, evt.props().pull::<bool, _>("metric_prop").unwrap());
         assert_eq!(
             Kind::Metric,
-            evt.props().pull::<Kind, _>(KEY_EVENT_KIND).unwrap()
+            evt.props().pull::<Kind, _>(KEY_EVT_KIND).unwrap()
         );
     }
 

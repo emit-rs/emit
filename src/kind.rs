@@ -9,7 +9,7 @@ use emit_core::{
     filter::Filter,
     props::Props,
     value::{FromValue, ToValue, Value},
-    well_known::{EVENT_KIND_METRIC, EVENT_KIND_SPAN, KEY_EVENT_KIND},
+    well_known::{EVENT_KIND_METRIC, EVENT_KIND_SPAN, KEY_EVT_KIND},
 };
 
 /**
@@ -21,7 +21,7 @@ If a [`crate::Event`] has a kind associated with it, it can be pulled from its p
 # use emit::{Event, Props};
 # fn with_event(evt: impl emit::event::ToEvent) {
 # let evt = evt.to_event();
-match evt.props().pull::<emit::Kind, _>(emit::well_known::KEY_EVENT_KIND) {
+match evt.props().pull::<emit::Kind, _>(emit::well_known::KEY_EVT_KIND) {
     Some(emit::Kind::Span) => {
         // The event is a span
     }
@@ -121,7 +121,7 @@ impl std::error::Error for ParseKindError {}
 /**
 A [`Filter`] that matches events with a specific [`Kind`].
 
-The kind to match is pulled from the [`KEY_EVENT_KIND`] well-known property. Events that don't carry any kind are not matched.
+The kind to match is pulled from the [`KEY_EVT_KIND`] well-known property. Events that don't carry any kind are not matched.
 */
 #[derive(Debug)]
 pub struct KindFilter(Kind);
@@ -155,7 +155,7 @@ pub fn is_metric_filter() -> KindFilter {
 
 impl Filter for KindFilter {
     fn matches<E: ToEvent>(&self, evt: E) -> bool {
-        evt.to_event().props().pull::<Kind, _>(KEY_EVENT_KIND) == Some(self.0)
+        evt.to_event().props().pull::<Kind, _>(KEY_EVT_KIND) == Some(self.0)
     }
 }
 
@@ -217,14 +217,14 @@ mod tests {
             crate::Path::new_unchecked("test"),
             crate::Empty,
             crate::Template::literal("test"),
-            (KEY_EVENT_KIND, EVENT_KIND_SPAN),
+            (KEY_EVT_KIND, EVENT_KIND_SPAN),
         )));
 
         assert!(!filter.matches(crate::Event::new(
             crate::Path::new_unchecked("test"),
             crate::Empty,
             crate::Template::literal("test"),
-            (KEY_EVENT_KIND, EVENT_KIND_METRIC),
+            (KEY_EVT_KIND, EVENT_KIND_METRIC),
         )));
 
         assert!(!filter.matches(crate::Event::new(

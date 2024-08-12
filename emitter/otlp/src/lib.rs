@@ -406,7 +406,7 @@ http://localhost:4318/v1/logs
                            }
                         },
                         {
-                           "key": "event_kind",
+                           "key": "evt_kind",
                            "value": {
                               "stringValue": "span"
                            }
@@ -480,7 +480,7 @@ http://localhost:4318/v1/logs
                      },
                      "attributes": [
                         {
-                           "key": "event_kind",
+                           "key": "evt_kind",
                            "value": {
                               "stringValue": "metric"
                            }
@@ -521,7 +521,7 @@ When the traces signal is configured, [`emit::Event`]s can be represented as OTL
 
 - They have a valid [`emit::span::TraceId`] in the [`emit::well_known::KEY_TRACE_ID`] property and [`emit::span::SpanId`] in the [`emit::well_known::KEY_SPAN_ID`] property.
 - Their [`emit::Event::extent`] is a span. That is, [`emit::Extent::is_span`] is `true`.
-- They have an [`emit::Kind::Span`] in the [`emit::well_known::KEY_EVENT_KIND`] property.
+- They have an [`emit::Kind::Span`] in the [`emit::well_known::KEY_EVT_KIND`] property.
 
 If any condition is not met, the event will be represented as an OTLP log record. If the logs signal is not configured then it will be discarded.
 
@@ -785,7 +785,7 @@ When the metrics signal is configured, [`emit::Event`]s can be represented as OT
 
 - They have a [`emit::well_known::KEY_METRIC_AGG`] properties.
 - They have a [`emit::well_known::KEY_METRIC_VALUE`] property with a numeric value or sequence of numeric values.
-- They have an [`emit::Kind::Metric`] in the [`emit::well_known::KEY_EVENT_KIND`] property.
+- They have an [`emit::Kind::Metric`] in the [`emit::well_known::KEY_EVT_KIND`] property.
 
 If any condition is not met, the event will be represented as an OTLP log record. If the logs signal is not configured then it will be discarded.
 

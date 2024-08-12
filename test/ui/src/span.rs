@@ -6,12 +6,16 @@ use crate::util::{static_runtime, StaticCalled, StaticRuntime};
 
 #[test]
 fn span_basic() {
-    fn assert_event(evt: &emit::Event<impl Props>) {
+    fn assert_event_base(evt: &emit::Event<impl Props>) {
         assert_eq!("greet Rust", evt.msg().to_string());
         assert_eq!("greet {user}", evt.tpl().to_string());
         assert_eq!(module_path!(), evt.module());
 
-        assert!(evt.extent().unwrap().is_span());
+        assert_eq!(
+            emit::Kind::Span,
+            evt.props().pull::<emit::Kind, _>("evt_kind").unwrap()
+        );
+
         assert!(evt
             .props()
             .pull::<emit::span::TraceId, _>("trace_id")
@@ -22,6 +26,10 @@ fn span_basic() {
             .is_some());
     }
 
+    fn assert_event(evt: &emit::Event<impl Props>) {
+        assert!(evt.extent().unwrap().is_span());
+    }
+
     static CALLED: StaticCalled = StaticCalled::new();
     static RT: StaticRuntime = static_runtime(
         |evt| {
@@ -29,7 +37,11 @@ fn span_basic() {
 
             CALLED.record();
         },
-        |_| true,
+        |evt| {
+            assert_event_base(evt);
+
+            true
+        },
     );
 
     static DEBUG_CALLED: StaticCalled = StaticCalled::new();
@@ -44,7 +56,11 @@ fn span_basic() {
 
             DEBUG_CALLED.record();
         },
-        |_| true,
+        |evt| {
+            assert_event_base(evt);
+
+            true
+        },
     );
 
     static INFO_CALLED: StaticCalled = StaticCalled::new();
@@ -59,7 +75,11 @@ fn span_basic() {
 
             INFO_CALLED.record();
         },
-        |_| true,
+        |evt| {
+            assert_event_base(evt);
+
+            true
+        },
     );
 
     static WARN_CALLED: StaticCalled = StaticCalled::new();
@@ -74,7 +94,11 @@ fn span_basic() {
 
             WARN_CALLED.record();
         },
-        |_| true,
+        |evt| {
+            assert_event_base(evt);
+
+            true
+        },
     );
 
     static ERROR_CALLED: StaticCalled = StaticCalled::new();
@@ -89,7 +113,11 @@ fn span_basic() {
 
             ERROR_CALLED.record();
         },
-        |_| true,
+        |evt| {
+            assert_event_base(evt);
+
+            true
+        },
     );
 
     #[emit::span(rt: RT, "greet {user}")]
@@ -174,7 +202,21 @@ async fn span_basic_async() {
 
 #[test]
 fn span_filter() {
-    todo!()
+    static CALLED: StaticCalled = StaticCalled::new();
+    static RT: StaticRuntime = static_runtime(|_| CALLED.record(), |evt| evt.module() == "true");
+
+    #[emit::span(rt: RT, module: emit::path!("true"), "test")]
+    fn exec_true() {}
+
+    #[emit::span(rt: RT, module: emit::path!("false"), "test")]
+    fn exec_false() {}
+
+    exec_true();
+    exec_false();
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+
+    assert_eq!(1, CALLED.called_times());
 }
 
 #[test]

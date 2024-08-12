@@ -18,15 +18,15 @@ Components can use the presence of well-known properties to change the way they 
         - [`LVL_ERROR`]: An erroneous event.
     - [`KEY_ERR`]: A [`std::error::Error`] associated with the event.
 
-Extensions to the data model are signaled by the well-known [`KEY_EVENT_KIND`] property.
+Extensions to the data model are signaled by the well-known [`KEY_EVT_KIND`] property.
 
-- Tracing [`KEY_EVENT_KIND`] = [`EVENT_KIND_SPAN`]:
+- Tracing [`KEY_EVT_KIND`] = [`EVENT_KIND_SPAN`]:
     - [`KEY_SPAN_NAME`]: The informative name of the span.
     - [`KEY_TRACE_ID`]: The trace id.
     - [`KEY_SPAN_ID`]: The span id.
     - [`KEY_SPAN_PARENT`]: The parent span id.
 
-- Metrics [`KEY_EVENT_KIND`] = [`EVENT_KIND_METRIC`]:
+- Metrics [`KEY_EVT_KIND`] = [`EVENT_KIND_METRIC`]:
     - [`KEY_METRIC_NAME`]: The name of the underlying data source.
     - [`KEY_METRIC_AGG`]: The aggregation applied to the underlying data source to produce a sample.
         - [`METRIC_AGG_SUM`]: The sample is the possibly non-monotonic sum of values.
@@ -50,7 +50,7 @@ pub const KEY_TPL: &'static str = "tpl";
 /** The [`crate::event::Event::msg()`]. */
 pub const KEY_MSG: &'static str = "msg";
 /** The kind of extension the event belongs to. */
-pub const KEY_EVENT_KIND: &'static str = "event_kind";
+pub const KEY_EVT_KIND: &'static str = "evt_kind";
 
 /** The event is a span in a distributed trace. */
 pub const EVENT_KIND_SPAN: &'static str = "span";
