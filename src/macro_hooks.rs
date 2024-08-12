@@ -650,12 +650,7 @@ pub fn __private_emit<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
         FirstDefined(when, rt.filter()),
         rt.ctxt(),
         rt.clock(),
-        Event::new(
-            module,
-            extent.to_extent().or_else(|| rt.clock().now().to_extent()),
-            tpl,
-            props.and_props(base_props),
-        ),
+        Event::new(module, extent, tpl, props.and_props(base_props)),
     );
 }
 
@@ -710,7 +705,7 @@ pub fn __private_begin_span<
                 &span
                     .to_event()
                     .with_tpl(tpl)
-                    .map_props(|props| props.and_props(&evt_props).and_props(&ctxt_props)),
+                    .map_props(|span_props| evt_props.and_props(span_props).and_props(&ctxt_props)),
             )
         },
         module,
@@ -733,67 +728,15 @@ pub fn __private_complete_span<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock,
     tpl: Template<'b>,
     evt_props: impl Props,
 ) {
-    __private_emit(
-        rt,
-        span.module(),
-        Some(crate::filter::always()),
-        span.extent(),
-        tpl,
-        Empty,
-        (&span).and_props(&evt_props),
+    emit_core::emit(
+        rt.emitter(),
+        crate::filter::always(),
+        rt.ctxt(),
+        rt.clock(),
+        span.to_event()
+            .with_tpl(tpl)
+            .map_props(|span_props| evt_props.and_props(span_props)),
     );
-}
-
-#[track_caller]
-#[cfg(feature = "std")]
-pub fn __private_complete_span_ok<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
-    rt: &'a Runtime<E, F, C, T, R>,
-    span: Span<'static, Empty>,
-    tpl: Template<'b>,
-    evt_props: impl Props,
-    lvl: Option<&impl ToValue>,
-) {
-    if let Some(lvl) = lvl {
-        __private_complete_span(
-            rt,
-            span,
-            tpl,
-            (crate::well_known::KEY_LVL, lvl).and_props(&evt_props),
-        )
-    } else {
-        __private_complete_span(rt, span, tpl, evt_props)
-    }
-}
-
-#[track_caller]
-#[cfg(feature = "std")]
-pub fn __private_complete_span_err<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
-    rt: &'a Runtime<E, F, C, T, R>,
-    span: Span<'static, Empty>,
-    tpl: Template<'b>,
-    evt_props: impl Props,
-    lvl: Option<&impl ToValue>,
-    err: &(impl std::error::Error + Send + Sync + 'static),
-) {
-    if let Some(lvl) = lvl {
-        __private_complete_span(
-            rt,
-            span,
-            tpl,
-            [
-                (crate::well_known::KEY_LVL, Value::from_any(lvl)),
-                (crate::well_known::KEY_ERR, Value::capture_error(err)),
-            ]
-            .and_props(&evt_props),
-        )
-    } else {
-        __private_complete_span(
-            rt,
-            span,
-            tpl,
-            (crate::well_known::KEY_ERR, Value::capture_error(err)).and_props(&evt_props),
-        )
-    }
 }
 
 #[repr(transparent)]

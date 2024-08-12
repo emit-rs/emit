@@ -1,7 +1,7 @@
 use proc_macro2::{Ident, Span, TokenStream};
 use syn::{
     parse::Parse, spanned::Spanned, Block, Expr, ExprAsync, ExprBlock, FieldValue, Item, ItemFn,
-    Signature, Stmt,
+    ReturnType, Signature, Stmt,
 };
 
 use crate::{
@@ -93,20 +93,21 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
 
     let module_tokens = args.module;
 
-    let base_lvl = opts.level;
-    let ok_lvl = args.ok_lvl;
-    let err_lvl = args.err_lvl;
-
-    let evt_props = Props::new();
+    let base_lvl_tokens = opts.level;
+    let ok_lvl_tokens = args.ok_lvl;
+    let err_lvl_tokens = args.err_lvl;
 
     let mut item = syn::parse2::<Stmt>(opts.item)?;
     match &mut item {
         // A synchronous function
         Stmt::Item(Item::Fn(ItemFn {
             block,
-            sig: Signature {
-                asyncness: None, ..
-            },
+            sig:
+                Signature {
+                    asyncness: None,
+                    output,
+                    ..
+                },
             ..
         })) => {
             **block = syn::parse2::<Block>(inject_sync(
@@ -115,12 +116,12 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &args.when,
                 &template,
                 &ctxt_props,
-                evt_props,
                 &span_guard,
                 quote!(#block),
-                base_lvl,
-                ok_lvl,
-                err_lvl,
+                ret_ty_tokens(output),
+                base_lvl_tokens,
+                ok_lvl_tokens,
+                err_lvl_tokens,
             )?)?;
         }
         // A synchronous block
@@ -131,20 +132,23 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &args.when,
                 &template,
                 &ctxt_props,
-                evt_props,
                 &span_guard,
                 quote!(#block),
-                base_lvl,
-                ok_lvl,
-                err_lvl,
+                ret_ty_tokens(&ReturnType::Default),
+                base_lvl_tokens,
+                ok_lvl_tokens,
+                err_lvl_tokens,
             )?)?;
         }
         // An asynchronous function
         Stmt::Item(Item::Fn(ItemFn {
             block,
-            sig: Signature {
-                asyncness: Some(_), ..
-            },
+            sig:
+                Signature {
+                    asyncness: Some(_),
+                    output,
+                    ..
+                },
             ..
         })) => {
             **block = syn::parse2::<Block>(inject_async(
@@ -153,12 +157,12 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &args.when,
                 &template,
                 &ctxt_props,
-                evt_props,
                 &span_guard,
                 quote!(#block),
-                base_lvl,
-                ok_lvl,
-                err_lvl,
+                ret_ty_tokens(output),
+                base_lvl_tokens,
+                ok_lvl_tokens,
+                err_lvl_tokens,
             )?)?;
         }
         // An asynchronous block
@@ -169,12 +173,12 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &args.when,
                 &template,
                 &ctxt_props,
-                evt_props,
                 &span_guard,
                 quote!(#block),
-                base_lvl,
-                ok_lvl,
-                err_lvl,
+                ret_ty_tokens(&ReturnType::Default),
+                base_lvl_tokens,
+                ok_lvl_tokens,
+                err_lvl_tokens,
             )?)?;
         }
         _ => return Err(syn::Error::new(item.span(), "unrecognized item type")),
@@ -189,12 +193,12 @@ fn inject_sync(
     when_tokens: &TokenStream,
     template: &Template,
     ctxt_props: &Props,
-    evt_props: Props,
     span_guard: &Ident,
-    body: TokenStream,
-    base_lvl: Option<TokenStream>,
-    ok_lvl: Option<TokenStream>,
-    err_lvl: Option<TokenStream>,
+    body_tokens: TokenStream,
+    ret_ty_tokens: TokenStream,
+    base_lvl_tokens: Option<TokenStream>,
+    ok_lvl_tokens: Option<TokenStream>,
+    err_lvl_tokens: Option<TokenStream>,
 ) -> Result<TokenStream, syn::Error> {
     let ctxt_props_tokens = ctxt_props.props_tokens();
     let template_tokens = template.template_tokens();
@@ -205,11 +209,11 @@ fn inject_sync(
         evt_props_tokens,
         completion_tokens,
     } = completion(
-        evt_props,
-        body,
-        base_lvl,
-        ok_lvl,
-        err_lvl,
+        body_tokens,
+        ret_ty_tokens,
+        base_lvl_tokens,
+        ok_lvl_tokens,
+        err_lvl_tokens,
         span_guard,
         rt_tokens,
         &template_tokens,
@@ -240,12 +244,12 @@ fn inject_async(
     when_tokens: &TokenStream,
     template: &Template,
     ctxt_props: &Props,
-    evt_props: Props,
     span_guard: &Ident,
-    body: TokenStream,
-    base_lvl: Option<TokenStream>,
-    ok_lvl: Option<TokenStream>,
-    err_lvl: Option<TokenStream>,
+    body_tokens: TokenStream,
+    ret_ty_tokens: TokenStream,
+    base_lvl_tokens: Option<TokenStream>,
+    ok_lvl_tokens: Option<TokenStream>,
+    err_lvl_tokens: Option<TokenStream>,
 ) -> Result<TokenStream, syn::Error> {
     let ctxt_props_tokens = ctxt_props.props_tokens();
     let template_tokens = template.template_tokens();
@@ -256,11 +260,11 @@ fn inject_async(
         evt_props_tokens,
         completion_tokens,
     } = completion(
-        evt_props,
-        quote!(async #body.await),
-        base_lvl,
-        ok_lvl,
-        err_lvl,
+        quote!(async #body_tokens.await),
+        ret_ty_tokens,
+        base_lvl_tokens,
+        ok_lvl_tokens,
+        err_lvl_tokens,
         span_guard,
         rt_tokens,
         &template_tokens,
@@ -286,6 +290,13 @@ fn inject_async(
     }))
 }
 
+fn ret_ty_tokens(output: &ReturnType) -> TokenStream {
+    match output {
+        ReturnType::Type(_, ty) => quote!(#ty),
+        _ => quote!(_),
+    }
+}
+
 struct Completion {
     body_tokens: TokenStream,
     evt_props_tokens: TokenStream,
@@ -293,77 +304,82 @@ struct Completion {
 }
 
 fn completion(
-    mut evt_props: Props,
-    body: TokenStream,
-    base_lvl: Option<TokenStream>,
-    ok_lvl: Option<TokenStream>,
-    err_lvl: Option<TokenStream>,
+    body_tokens: TokenStream,
+    ret_ty_tokens: TokenStream,
+    base_lvl_tokens: Option<TokenStream>,
+    ok_lvl_tokens: Option<TokenStream>,
+    err_lvl_tokens: Option<TokenStream>,
     span_guard: &Ident,
     rt_tokens: &TokenStream,
     template_tokens: &TokenStream,
 ) -> Result<Completion, syn::Error> {
-    let body_tokens = if ok_lvl.is_some() || err_lvl.is_some() {
+    let body_tokens = if ok_lvl_tokens.is_some() || err_lvl_tokens.is_some() {
         // If the span is applied to a Result-returning function then wrap the body
         // We'll attach the error to the span if the call fails and set the appropriate level
-        let evt_props_tokens = evt_props.props_tokens();
 
-        let base_lvl_tokens = base_lvl
-            .as_ref()
-            .map(|lvl| quote!(Some(&#lvl)))
-            .unwrap_or_else(|| quote!(None::<&emit::Level>));
+        let ok_branch = {
+            let mut evt_props = Props::new();
+            push_evt_props(
+                &mut evt_props,
+                ok_lvl_tokens.or_else(|| base_lvl_tokens.clone()),
+            )?;
+            let evt_props_tokens = evt_props.props_tokens();
 
-        let ok_lvl = ok_lvl
-            .map(|lvl| quote!(Some(&#lvl)))
-            .unwrap_or_else(|| base_lvl_tokens.clone());
+            quote!(
+                Ok(_) => {
+                    #span_guard.complete_with(|span| {
+                        emit::__private::__private_complete_span(
+                            #rt_tokens,
+                            span,
+                            #template_tokens,
+                            #evt_props_tokens,
+                        )
+                    });
+                }
+            )
+        };
 
-        let ok_branch = quote!(
-            Ok(ok) => {
-                #span_guard.complete_with(|span| {
-                    emit::__private::__private_complete_span_ok(
-                        #rt_tokens,
-                        span,
-                        #template_tokens,
-                        #evt_props_tokens,
-                        #ok_lvl,
-                    )
-                });
+        let err_branch = {
+            let err_ident = Ident::new(emit_core::well_known::KEY_ERR, Span::call_site());
 
-                Ok(ok)
-            }
-        );
+            let mut evt_props = Props::new();
+            push_evt_props(
+                &mut evt_props,
+                err_lvl_tokens.or_else(|| base_lvl_tokens.clone()),
+            )?;
+            evt_props.push(&syn::parse2::<FieldValue>(quote!(#err_ident))?, false, true)?;
+            let evt_props_tokens = evt_props.props_tokens();
 
-        let err_lvl = err_lvl
-            .map(|lvl| quote!(Some(&#lvl)))
-            .unwrap_or_else(|| base_lvl_tokens.clone());
+            quote!(
+                Err(ref #err_ident) => {
+                    #span_guard.complete_with(|span| {
+                        emit::__private::__private_complete_span(
+                            #rt_tokens,
+                            span,
+                            #template_tokens,
+                            #evt_props_tokens,
+                        )
+                    });
+                }
+            )
+        };
 
-        let err_branch = quote!(
-            Err(err) => {
-                #span_guard.complete_with(|span| {
-                    emit::__private::__private_complete_span_err(
-                        #rt_tokens,
-                        span,
-                        #template_tokens,
-                        #evt_props_tokens,
-                        #err_lvl,
-                        &err,
-                    )
-                });
+        quote!({
+            let __r: #ret_ty_tokens = #body_tokens;
 
-                Err(err)
-            }
-        );
-
-        quote!(
-            match #body {
+            match __r {
                 #ok_branch,
                 #err_branch,
             }
-        )
+
+            __r
+        })
     } else {
-        body
+        body_tokens
     };
 
-    push_evt_props(&mut evt_props, base_lvl)?;
+    let mut evt_props = Props::new();
+    push_evt_props(&mut evt_props, base_lvl_tokens)?;
     let evt_props_tokens = evt_props.props_tokens();
 
     let completion_tokens = quote!(|span| {

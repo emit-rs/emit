@@ -390,6 +390,8 @@ fn span_props_precedence() {
     static CALLED: StaticCalled = StaticCalled::new();
     static RT: StaticRuntime = static_runtime(
         |evt| {
+            println!("{:?}", evt);
+
             assert_eq!("ctxt", evt.props().pull::<&str, _>("ctxt").unwrap());
 
             assert_eq!("evt", evt.props().pull::<&str, _>("ctxt_evt").unwrap());
@@ -422,7 +424,7 @@ fn span_props_precedence() {
         },
     )
     .call(|| {
-        exec();
+        let _ = exec();
     });
 
     RT.emitter().blocking_flush(Duration::from_secs(1));
