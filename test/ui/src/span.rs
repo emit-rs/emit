@@ -392,11 +392,23 @@ fn span_props_precedence() {
         |evt| {
             println!("{:?}", evt);
 
-            assert_eq!("ctxt", evt.props().pull::<&str, _>("ctxt").unwrap());
+            assert_eq!(
+                "outer_ctxt",
+                evt.props().pull::<&str, _>("outer_ctxt").unwrap()
+            );
 
-            assert_eq!("evt", evt.props().pull::<&str, _>("ctxt_evt").unwrap());
-            assert_eq!("evt", evt.props().pull::<&str, _>("evt").unwrap());
-            assert_eq!("evt", evt.props().pull::<&str, _>("lvl").unwrap());
+            assert_eq!(
+                "inner_ctxt",
+                evt.props()
+                    .pull::<&str, _>("outer_ctxt_inner_ctxt")
+                    .unwrap()
+            );
+            assert_eq!(
+                "inner_ctxt",
+                evt.props().pull::<&str, _>("inner_ctxt").unwrap()
+            );
+
+            assert_eq!("span", evt.props().pull::<&str, _>("lvl").unwrap());
 
             CALLED.record()
         },
@@ -407,9 +419,9 @@ fn span_props_precedence() {
         rt: RT,
         ok_lvl: "span",
         "test",
-        ctxt_evt: "evt",
-        evt: "evt",
-        lvl: "evt",
+        outer_ctxt_inner_ctxt: "inner_ctxt",
+        inner_ctxt: "inner_ctxt",
+        lvl: "inner_ctxt",
     )]
     fn exec() -> Result<(), io::Error> {
         Ok(())
@@ -418,9 +430,9 @@ fn span_props_precedence() {
     emit::Frame::push(
         RT.ctxt(),
         emit::props! {
-            ctxt_evt: "ctxt",
-            ctxt: "ctxt",
-            lvl: "ctxt",
+            outer_ctxt_inner_ctxt: "outer_ctxt",
+            outer_ctxt: "outer_ctxt",
+            lvl: "outer_ctxt",
         },
     )
     .call(|| {

@@ -175,7 +175,10 @@ impl Ctxt for SimpleCtxt {
         let mut serialized = HashMap::new();
 
         props.for_each(|k, v| {
-            serialized.insert(k.get().into(), v.to_string());
+            if !serialized.contains_key(k.get()) {
+                serialized.insert(k.get().into(), v.to_string());
+            }
+
             ControlFlow::Continue(())
         });
 
