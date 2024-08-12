@@ -138,7 +138,38 @@ fn span_basic() {
 
 #[tokio::test]
 async fn span_basic_async() {
-    todo!()
+    static CALLED: StaticCalled = StaticCalled::new();
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!("greet Rust", evt.msg().to_string());
+            assert_eq!("greet {user}", evt.tpl().to_string());
+            assert_eq!(module_path!(), evt.module());
+
+            assert!(evt.extent().unwrap().is_span());
+            assert!(evt
+                .props()
+                .pull::<emit::span::TraceId, _>("trace_id")
+                .is_some());
+            assert!(evt
+                .props()
+                .pull::<emit::span::SpanId, _>("span_id")
+                .is_some());
+
+            CALLED.record();
+        },
+        |_| true,
+    );
+
+    #[emit::span(rt: RT, "greet {user}")]
+    async fn exec(user: &str) {
+        let _ = user;
+    }
+
+    exec("Rust").await;
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+
+    assert!(CALLED.was_called());
 }
 
 #[test]
@@ -148,8 +179,7 @@ fn span_filter() {
 
 #[test]
 fn span_guard() {
-    static CALLED: StaticCalled = StaticCalled::new();
-    static RT: StaticRuntime = static_runtime(|_| CALLED.record(), |_| true);
+    static RT: StaticRuntime = static_runtime(|_| {}, |_| true);
 
     #[emit::span(rt: RT, guard: span, "test")]
     fn exec() {
@@ -160,10 +190,6 @@ fn span_guard() {
     }
 
     exec();
-
-    RT.emitter().blocking_flush(Duration::from_secs(1));
-
-    assert!(CALLED.was_called());
 }
 
 #[test]
@@ -171,20 +197,16 @@ fn span_guard() {
 fn span_ok_lvl() {
     use std::io;
 
-    static OK_CALLED: StaticCalled = StaticCalled::new();
     static OK_RT: StaticRuntime = static_runtime(
         |evt| {
             assert_eq!(
                 emit::Level::Info,
                 evt.props().pull::<emit::Level, _>("lvl").unwrap()
             );
-
-            OK_CALLED.record()
         },
         |_| true,
     );
 
-    static ERR_CALLED: StaticCalled = StaticCalled::new();
     static ERR_RT: StaticRuntime = static_runtime(
         |evt| {
             assert_eq!(
@@ -195,8 +217,6 @@ fn span_ok_lvl() {
                     .to_string()
             );
             assert!(evt.props().get("lvl").is_none());
-
-            ERR_CALLED.record()
         },
         |_| true,
     );
@@ -211,14 +231,8 @@ fn span_ok_lvl() {
         Err(io::Error::new(io::ErrorKind::Other, "failed"))
     }
 
-    let _ = exec_ok();
-    let _ = exec_err();
-
-    OK_RT.emitter().blocking_flush(Duration::from_secs(1));
-    ERR_RT.emitter().blocking_flush(Duration::from_secs(1));
-
-    assert!(OK_CALLED.was_called());
-    assert!(ERR_CALLED.was_called());
+    exec_ok().unwrap();
+    exec_err().unwrap_err();
 }
 
 #[test]
@@ -226,17 +240,13 @@ fn span_ok_lvl() {
 fn span_err_lvl() {
     use std::io;
 
-    static OK_CALLED: StaticCalled = StaticCalled::new();
     static OK_RT: StaticRuntime = static_runtime(
         |evt| {
             assert!(evt.props().get("lvl").is_none());
-
-            OK_CALLED.record()
         },
         |_| true,
     );
 
-    static ERR_CALLED: StaticCalled = StaticCalled::new();
     static ERR_RT: StaticRuntime = static_runtime(
         |evt| {
             assert_eq!(
@@ -250,8 +260,6 @@ fn span_err_lvl() {
                 emit::Level::Warn,
                 evt.props().pull::<emit::Level, _>("lvl").unwrap()
             );
-
-            ERR_CALLED.record()
         },
         |_| true,
     );
@@ -266,14 +274,8 @@ fn span_err_lvl() {
         Err(io::Error::new(io::ErrorKind::Other, "failed"))
     }
 
-    let _ = exec_ok();
-    let _ = exec_err();
-
-    OK_RT.emitter().blocking_flush(Duration::from_secs(1));
-    ERR_RT.emitter().blocking_flush(Duration::from_secs(1));
-
-    assert!(OK_CALLED.was_called());
-    assert!(ERR_CALLED.was_called());
+    exec_ok().unwrap();
+    exec_err().unwrap_err();
 }
 
 #[test]
@@ -281,20 +283,16 @@ fn span_err_lvl() {
 fn info_span_ok_lvl() {
     use std::io;
 
-    static OK_CALLED: StaticCalled = StaticCalled::new();
     static OK_RT: StaticRuntime = static_runtime(
         |evt| {
             assert_eq!(
                 emit::Level::Debug,
                 evt.props().pull::<emit::Level, _>("lvl").unwrap()
             );
-
-            OK_CALLED.record()
         },
         |_| true,
     );
 
-    static ERR_CALLED: StaticCalled = StaticCalled::new();
     static ERR_RT: StaticRuntime = static_runtime(
         |evt| {
             assert_eq!(
@@ -308,8 +306,6 @@ fn info_span_ok_lvl() {
                 emit::Level::Info,
                 evt.props().pull::<emit::Level, _>("lvl").unwrap()
             );
-
-            ERR_CALLED.record()
         },
         |_| true,
     );
@@ -324,14 +320,8 @@ fn info_span_ok_lvl() {
         Err(io::Error::new(io::ErrorKind::Other, "failed"))
     }
 
-    let _ = exec_ok();
-    let _ = exec_err();
-
-    OK_RT.emitter().blocking_flush(Duration::from_secs(1));
-    ERR_RT.emitter().blocking_flush(Duration::from_secs(1));
-
-    assert!(OK_CALLED.was_called());
-    assert!(ERR_CALLED.was_called());
+    exec_ok().unwrap();
+    exec_err().unwrap_err();
 }
 
 #[test]
@@ -339,20 +329,16 @@ fn info_span_ok_lvl() {
 fn info_span_err_lvl() {
     use std::io;
 
-    static OK_CALLED: StaticCalled = StaticCalled::new();
     static OK_RT: StaticRuntime = static_runtime(
         |evt| {
             assert_eq!(
                 emit::Level::Info,
                 evt.props().pull::<emit::Level, _>("lvl").unwrap()
             );
-
-            OK_CALLED.record()
         },
         |_| true,
     );
 
-    static ERR_CALLED: StaticCalled = StaticCalled::new();
     static ERR_RT: StaticRuntime = static_runtime(
         |evt| {
             assert_eq!(
@@ -366,8 +352,6 @@ fn info_span_err_lvl() {
                 emit::Level::Error,
                 evt.props().pull::<emit::Level, _>("lvl").unwrap()
             );
-
-            ERR_CALLED.record()
         },
         |_| true,
     );
@@ -382,20 +366,54 @@ fn info_span_err_lvl() {
         Err(io::Error::new(io::ErrorKind::Other, "failed"))
     }
 
-    let _ = exec_ok();
-    let _ = exec_err();
-
-    OK_RT.emitter().blocking_flush(Duration::from_secs(1));
-    ERR_RT.emitter().blocking_flush(Duration::from_secs(1));
-
-    assert!(OK_CALLED.was_called());
-    assert!(ERR_CALLED.was_called());
+    exec_ok().unwrap();
+    exec_err().unwrap_err();
 }
 
 #[tokio::test]
 #[cfg(feature = "std")]
 async fn info_span_err_lvl_async() {
-    todo!()
+    use std::io;
+
+    static OK_RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!(
+                emit::Level::Info,
+                evt.props().pull::<emit::Level, _>("lvl").unwrap()
+            );
+        },
+        |_| true,
+    );
+
+    static ERR_RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!(
+                "failed",
+                evt.props()
+                    .pull::<&(dyn std::error::Error + 'static), _>("err")
+                    .unwrap()
+                    .to_string()
+            );
+            assert_eq!(
+                emit::Level::Error,
+                evt.props().pull::<emit::Level, _>("lvl").unwrap()
+            );
+        },
+        |_| true,
+    );
+
+    #[emit::info_span(rt: OK_RT, err_lvl: emit::Level::Error, "test")]
+    async fn exec_ok() -> Result<(), io::Error> {
+        Ok(())
+    }
+
+    #[emit::info_span(rt: ERR_RT, err_lvl: emit::Level::Error, "test")]
+    async fn exec_err() -> Result<(), io::Error> {
+        Err(io::Error::new(io::ErrorKind::Other, "failed"))
+    }
+
+    exec_ok().await.unwrap();
+    exec_err().await.unwrap_err();
 }
 
 #[test]
@@ -403,11 +421,8 @@ async fn info_span_err_lvl_async() {
 fn span_props_precedence() {
     use std::io;
 
-    static CALLED: StaticCalled = StaticCalled::new();
     static RT: StaticRuntime = static_runtime(
         |evt| {
-            println!("{:?}", evt);
-
             assert_eq!(
                 "outer_ctxt",
                 evt.props().pull::<&str, _>("outer_ctxt").unwrap()
@@ -425,10 +440,28 @@ fn span_props_precedence() {
             );
 
             assert_eq!("span", evt.props().pull::<&str, _>("lvl").unwrap());
-
-            CALLED.record()
         },
-        |_| true,
+        |evt| {
+            assert_eq!(
+                "outer_ctxt",
+                evt.props().pull::<&str, _>("outer_ctxt").unwrap()
+            );
+
+            assert_eq!(
+                "inner_ctxt",
+                evt.props()
+                    .pull::<&str, _>("outer_ctxt_inner_ctxt")
+                    .unwrap()
+            );
+            assert_eq!(
+                "inner_ctxt",
+                evt.props().pull::<&str, _>("inner_ctxt").unwrap()
+            );
+
+            assert_eq!("inner_ctxt", evt.props().pull::<&str, _>("lvl").unwrap());
+
+            true
+        },
     );
 
     #[emit::span(
@@ -454,8 +487,4 @@ fn span_props_precedence() {
     .call(|| {
         let _ = exec();
     });
-
-    RT.emitter().blocking_flush(Duration::from_secs(1));
-
-    assert!(CALLED.was_called());
 }

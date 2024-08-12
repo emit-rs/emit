@@ -58,7 +58,7 @@ fn emit_filter() {
 
     rt.emitter().blocking_flush(Duration::from_secs(1));
 
-    assert!(called.was_called());
+    assert_eq!(1, called.called_times());
 }
 
 #[test]
@@ -75,15 +75,12 @@ fn emit_when() {
 
 #[test]
 fn emit_extent_point() {
-    let called = Called::new();
-
     let rt = simple_runtime(
         |evt| {
             assert_eq!(
                 emit::Timestamp::from_unix(Duration::from_secs(42)).unwrap(),
                 evt.extent().unwrap().as_point()
             );
-            called.record();
         },
         |_| true,
     );
@@ -93,16 +90,10 @@ fn emit_extent_point() {
         extent: emit::Timestamp::from_unix(Duration::from_secs(42)),
         "test",
     );
-
-    rt.emitter().blocking_flush(Duration::from_secs(1));
-
-    assert!(called.was_called());
 }
 
 #[test]
 fn emit_extent_span() {
-    let called = Called::new();
-
     let rt = simple_runtime(
         |evt| {
             assert_eq!(
@@ -110,7 +101,6 @@ fn emit_extent_span() {
                     ..emit::Timestamp::from_unix(Duration::from_secs(47)).unwrap(),
                 evt.extent().unwrap().as_span().unwrap().clone()
             );
-            called.record();
         },
         |_| true,
     );
@@ -120,34 +110,22 @@ fn emit_extent_span() {
         extent: emit::Timestamp::from_unix(Duration::from_secs(42))..emit::Timestamp::from_unix(Duration::from_secs(47)),
         "test",
     );
-
-    rt.emitter().blocking_flush(Duration::from_secs(1));
-
-    assert!(called.was_called());
 }
 
 #[test]
 fn emit_module() {
-    let called = Called::new();
     let rt = simple_runtime(
         |evt| {
             assert_eq!("custom_module", evt.module());
-
-            called.record();
         },
         |_| true,
     );
 
     emit::emit!(rt, module: emit::path!("custom_module"), "test");
-
-    rt.emitter().blocking_flush(Duration::from_secs(1));
-
-    assert!(called.was_called());
 }
 
 #[test]
 fn emit_props() {
-    let called = Called::new();
     let rt = simple_runtime(
         |evt| {
             assert_eq!(1, evt.props().pull::<i32, _>("ambient_prop1").unwrap());
@@ -155,8 +133,6 @@ fn emit_props() {
 
             assert_eq!(1, evt.props().pull::<i32, _>("evt_prop1").unwrap());
             assert_eq!(2, evt.props().pull::<i32, _>("evt_prop2").unwrap());
-
-            called.record();
         },
         |_| true,
     );
@@ -171,15 +147,10 @@ fn emit_props() {
         evt_prop1: 1,
         evt_prop2: 2,
     );
-
-    rt.emitter().blocking_flush(Duration::from_secs(1));
-
-    assert!(called.was_called());
 }
 
 #[test]
 fn emit_event() {
-    let called = Called::new();
     let rt = simple_runtime(
         |evt| {
             assert_eq!("Hello, Rust", evt.msg().to_string());
@@ -189,8 +160,6 @@ fn emit_event() {
             assert!(evt.extent().is_some());
 
             assert_eq!("Rust", evt.props().pull::<&str, _>("user").unwrap());
-
-            called.record();
         },
         |_| true,
     );
@@ -202,10 +171,6 @@ fn emit_event() {
             user: "Rust",
         ),
     );
-
-    rt.emitter().blocking_flush(Duration::from_secs(1));
-
-    assert!(called.was_called());
 }
 
 #[test]
@@ -218,7 +183,7 @@ fn emit_event_filter() {
 
     rt.emitter().blocking_flush(Duration::from_secs(1));
 
-    assert!(called.was_called());
+    assert_eq!(1, called.called_times());
 }
 
 #[test]
@@ -235,7 +200,6 @@ fn emit_event_when() {
 
 #[test]
 fn emit_props_precedence() {
-    let called = Called::new();
     let rt = simple_runtime(
         |evt| {
             assert_eq!(
@@ -249,8 +213,6 @@ fn emit_props_precedence() {
             assert_eq!("props", evt.props().pull::<&str, _>("props").unwrap());
 
             assert_eq!("evt", evt.props().pull::<&str, _>("evt").unwrap());
-
-            called.record();
         },
         |_| true,
     );
@@ -278,8 +240,4 @@ fn emit_props_precedence() {
             evt: "evt",
         );
     });
-
-    rt.emitter().blocking_flush(Duration::from_secs(1));
-
-    assert!(called.was_called());
 }

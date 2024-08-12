@@ -694,19 +694,23 @@ pub fn __private_begin_span<
     module: impl Into<Path<'static>>,
     when: Option<impl Filter>,
     tpl: Template<'b>,
-    ctxt_props: impl Props,
-    evt_props: impl Props,
+    span_ctxt_props: impl Props,
+    span_evt_props: impl Props,
     name: impl Into<Str<'static>>,
     default_complete: S,
 ) -> (Frame<Option<&'a C>>, SpanGuard<'static, &'a T, Empty, S>) {
     let mut span = SpanGuard::filtered_new(
         |span| {
-            FirstDefined(when, rt.filter()).matches(
-                &span
-                    .to_event()
-                    .with_tpl(tpl)
-                    .map_props(|span_props| evt_props.and_props(span_props).and_props(&ctxt_props)),
-            )
+            rt.ctxt().with_current(|ctxt_props| {
+                FirstDefined(when, rt.filter()).matches(&span.to_event().with_tpl(tpl).map_props(
+                    |span_props| {
+                        span_evt_props
+                            .and_props(span_props)
+                            .and_props(&span_ctxt_props)
+                            .and_props(ctxt_props)
+                    },
+                ))
+            })
         },
         module,
         Timer::start(rt.clock()),
@@ -716,7 +720,7 @@ pub fn __private_begin_span<
         default_complete,
     );
 
-    let frame = span.push_ctxt(rt.ctxt(), ctxt_props);
+    let frame = span.push_ctxt(rt.ctxt(), span_ctxt_props);
 
     (frame, span)
 }
@@ -726,7 +730,7 @@ pub fn __private_complete_span<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock,
     rt: &'a Runtime<E, F, C, T, R>,
     span: Span<'static, Empty>,
     tpl: Template<'b>,
-    evt_props: impl Props,
+    span_evt_props: impl Props,
 ) {
     emit_core::emit(
         rt.emitter(),
@@ -735,7 +739,7 @@ pub fn __private_complete_span<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock,
         rt.clock(),
         span.to_event()
             .with_tpl(tpl)
-            .map_props(|span_props| evt_props.and_props(span_props)),
+            .map_props(|span_props| span_evt_props.and_props(span_props)),
     );
 }
 
