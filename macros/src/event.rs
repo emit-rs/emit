@@ -78,7 +78,7 @@ pub fn push_evt_props(props: &mut Props, level: Option<TokenStream>) -> Result<(
         let level_ident = Ident::new(emit_core::well_known::KEY_LVL, Span::call_site());
 
         props.push(
-            &syn::parse2::<FieldValue>(quote!(#level_ident: emit::Level::#level_value))?,
+            &syn::parse2::<FieldValue>(quote!(#level_ident: #level_value))?,
             false,
             true,
         )?;

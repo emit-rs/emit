@@ -418,6 +418,13 @@ impl ToValue for (dyn std::error::Error + 'static) {
     }
 }
 
+#[cfg(feature = "std")]
+impl<'v> FromValue<'v> for &'v (dyn std::error::Error + 'static) {
+    fn from_value(value: Value<'v>) -> Option<Self> {
+        value.to_borrowed_err()
+    }
+}
+
 #[cfg(feature = "alloc")]
 mod alloc_support {
     use super::*;

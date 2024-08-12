@@ -177,6 +177,13 @@ fn span_ok_lvl() {
     static ERR_CALLED: StaticCalled = StaticCalled::new();
     static ERR_RT: StaticRuntime = static_runtime(
         |evt| {
+            assert_eq!(
+                "failed",
+                evt.props()
+                    .pull::<&(dyn std::error::Error + 'static), _>("err")
+                    .unwrap()
+                    .to_string()
+            );
             assert!(evt.props().get("lvl").is_none());
 
             ERR_CALLED.record()
@@ -222,6 +229,13 @@ fn span_err_lvl() {
     static ERR_CALLED: StaticCalled = StaticCalled::new();
     static ERR_RT: StaticRuntime = static_runtime(
         |evt| {
+            assert_eq!(
+                "failed",
+                evt.props()
+                    .pull::<&(dyn std::error::Error + 'static), _>("err")
+                    .unwrap()
+                    .to_string()
+            );
             assert_eq!(
                 emit::Level::Warn,
                 evt.props().pull::<emit::Level, _>("lvl").unwrap()
@@ -274,6 +288,13 @@ fn info_span_ok_lvl() {
     static ERR_RT: StaticRuntime = static_runtime(
         |evt| {
             assert_eq!(
+                "failed",
+                evt.props()
+                    .pull::<&(dyn std::error::Error + 'static), _>("err")
+                    .unwrap()
+                    .to_string()
+            );
+            assert_eq!(
                 emit::Level::Info,
                 evt.props().pull::<emit::Level, _>("lvl").unwrap()
             );
@@ -325,6 +346,13 @@ fn info_span_err_lvl() {
     static ERR_RT: StaticRuntime = static_runtime(
         |evt| {
             assert_eq!(
+                "failed",
+                evt.props()
+                    .pull::<&(dyn std::error::Error + 'static), _>("err")
+                    .unwrap()
+                    .to_string()
+            );
+            assert_eq!(
                 emit::Level::Error,
                 evt.props().pull::<emit::Level, _>("lvl").unwrap()
             );
@@ -355,9 +383,49 @@ fn info_span_err_lvl() {
 }
 
 #[test]
+#[cfg(feature = "std")]
 fn span_props_precedence() {
-    /*
-    Ensure event props override span props
-    */
-    todo!()
+    use std::io;
+
+    static CALLED: StaticCalled = StaticCalled::new();
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!("ctxt", evt.props().pull::<&str, _>("ctxt").unwrap());
+
+            assert_eq!("evt", evt.props().pull::<&str, _>("ctxt_evt").unwrap());
+            assert_eq!("evt", evt.props().pull::<&str, _>("evt").unwrap());
+            assert_eq!("evt", evt.props().pull::<&str, _>("lvl").unwrap());
+
+            CALLED.record()
+        },
+        |_| true,
+    );
+
+    #[emit::span(
+        rt: RT,
+        ok_lvl: "span",
+        "test",
+        ctxt_evt: "evt",
+        evt: "evt",
+        lvl: "evt",
+    )]
+    fn exec() -> Result<(), io::Error> {
+        Ok(())
+    }
+
+    emit::Frame::push(
+        RT.ctxt(),
+        emit::props! {
+            ctxt_evt: "ctxt",
+            ctxt: "ctxt",
+            lvl: "ctxt",
+        },
+    )
+    .call(|| {
+        exec();
+    });
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+
+    assert!(CALLED.was_called());
 }

@@ -269,7 +269,7 @@ An `emit::Event`.
 #[proc_macro]
 pub fn debug_event(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     event::expand_tokens(event::ExpandTokens {
-        level: Some(quote!(Debug)),
+        level: Some(quote!(emit::Level::Debug)),
         input: item.into(),
     })
     .unwrap_or_compile_error()
@@ -289,7 +289,7 @@ An `emit::Event`.
 #[proc_macro]
 pub fn info_event(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     event::expand_tokens(event::ExpandTokens {
-        level: Some(quote!(Info)),
+        level: Some(quote!(emit::Level::Info)),
         input: item.into(),
     })
     .unwrap_or_compile_error()
@@ -309,7 +309,7 @@ An `emit::Event`.
 #[proc_macro]
 pub fn warn_event(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     event::expand_tokens(event::ExpandTokens {
-        level: Some(quote!(Warn)),
+        level: Some(quote!(emit::Level::Warn)),
         input: item.into(),
     })
     .unwrap_or_compile_error()
@@ -329,7 +329,7 @@ An `emit::Event`.
 #[proc_macro]
 pub fn error_event(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     event::expand_tokens(event::ExpandTokens {
-        level: Some(quote!(Error)),
+        level: Some(quote!(emit::Level::Error)),
         input: item.into(),
     })
     .unwrap_or_compile_error()
@@ -390,7 +390,7 @@ pub fn debug_span(
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     base_span(
-        Some(quote!(Debug)),
+        Some(quote!(emit::Level::Debug)),
         TokenStream::from(args),
         TokenStream::from(item),
     )
@@ -409,7 +409,7 @@ pub fn info_span(
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     base_span(
-        Some(quote!(Info)),
+        Some(quote!(emit::Level::Info)),
         TokenStream::from(args),
         TokenStream::from(item),
     )
@@ -428,7 +428,7 @@ pub fn warn_span(
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     base_span(
-        Some(quote!(Warn)),
+        Some(quote!(emit::Level::Warn)),
         TokenStream::from(args),
         TokenStream::from(item),
     )
@@ -447,7 +447,7 @@ pub fn error_span(
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     base_span(
-        Some(quote!(Error)),
+        Some(quote!(emit::Level::Error)),
         TokenStream::from(args),
         TokenStream::from(item),
     )
@@ -550,7 +550,7 @@ See the [`macro@emit`] macro for syntax.
 */
 #[proc_macro]
 pub fn debug(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    base_emit(Some(quote!(Debug)), TokenStream::from(item))
+    base_emit(Some(quote!(emit::Level::Debug)), TokenStream::from(item))
 }
 
 /**
@@ -562,7 +562,7 @@ See the [`macro@emit`] macro for syntax.
 */
 #[proc_macro]
 pub fn info(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    base_emit(Some(quote!(Info)), TokenStream::from(item))
+    base_emit(Some(quote!(emit::Level::Info)), TokenStream::from(item))
 }
 
 /**
@@ -574,7 +574,7 @@ See the [`macro@emit`] macro for syntax.
 */
 #[proc_macro]
 pub fn warn(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    base_emit(Some(quote!(Warn)), TokenStream::from(item))
+    base_emit(Some(quote!(emit::Level::Warn)), TokenStream::from(item))
 }
 
 /**
@@ -586,7 +586,7 @@ See the [`macro@emit`] macro for syntax.
 */
 #[proc_macro]
 pub fn error(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    base_emit(Some(quote!(Error)), TokenStream::from(item))
+    base_emit(Some(quote!(emit::Level::Error)), TokenStream::from(item))
 }
 
 /**

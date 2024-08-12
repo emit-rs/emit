@@ -303,61 +303,55 @@ fn completion(
     template_tokens: &TokenStream,
 ) -> Result<Completion, syn::Error> {
     let body_tokens = if ok_lvl.is_some() || err_lvl.is_some() {
-        // Get the event tokens _before_ pushing the default level
+        // If the span is applied to a Result-returning function then wrap the body
+        // We'll attach the error to the span if the call fails and set the appropriate level
         let evt_props_tokens = evt_props.props_tokens();
 
-        let ok_branch = ok_lvl
-            .map(|lvl| {
-                // If a level is provided then complete using it
-                quote!(
-                    Ok(ok) => {
-                        #span_guard.complete_with(|span| {
-                            emit::__private::__private_complete_span_ok(
-                                #rt_tokens,
-                                span,
-                                #template_tokens,
-                                #evt_props_tokens,
-                                &#lvl,
-                            )
-                        });
+        let base_lvl_tokens = base_lvl
+            .as_ref()
+            .map(|lvl| quote!(Some(&#lvl)))
+            .unwrap_or_else(|| quote!(None::<&emit::Level>));
 
-                        Ok(ok)
-                    }
-                )
-            })
-            .unwrap_or_else(|| {
-                // Fall-through to the default completion
-                quote!(
-                    Ok(ok) => Ok(ok)
-                )
-            });
+        let ok_lvl = ok_lvl
+            .map(|lvl| quote!(Some(&#lvl)))
+            .unwrap_or_else(|| base_lvl_tokens.clone());
 
-        let err_branch = err_lvl
-            .map(|lvl| {
-                // If a level is provided then complete using it
-                quote!(
-                    Err(err) => {
-                        #span_guard.complete_with(|span| {
-                            emit::__private::__private_complete_span_err(
-                                #rt_tokens,
-                                span,
-                                #template_tokens,
-                                #evt_props_tokens,
-                                &#lvl,
-                                &err,
-                            )
-                        });
+        let ok_branch = quote!(
+            Ok(ok) => {
+                #span_guard.complete_with(|span| {
+                    emit::__private::__private_complete_span_ok(
+                        #rt_tokens,
+                        span,
+                        #template_tokens,
+                        #evt_props_tokens,
+                        #ok_lvl,
+                    )
+                });
 
-                        Err(err)
-                    }
-                )
-            })
-            .unwrap_or_else(|| {
-                // Fall-through to the default completion
-                quote!(
-                    Err(err) => Err(err)
-                )
-            });
+                Ok(ok)
+            }
+        );
+
+        let err_lvl = err_lvl
+            .map(|lvl| quote!(Some(&#lvl)))
+            .unwrap_or_else(|| base_lvl_tokens.clone());
+
+        let err_branch = quote!(
+            Err(err) => {
+                #span_guard.complete_with(|span| {
+                    emit::__private::__private_complete_span_err(
+                        #rt_tokens,
+                        span,
+                        #template_tokens,
+                        #evt_props_tokens,
+                        #err_lvl,
+                        &err,
+                    )
+                });
+
+                Err(err)
+            }
+        );
 
         quote!(
             match #body {
