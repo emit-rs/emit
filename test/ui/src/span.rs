@@ -12,6 +12,11 @@ fn span_basic() {
         assert_eq!(module_path!(), evt.module());
 
         assert_eq!(
+            "greet {user}",
+            evt.props().pull::<&str, _>("span_name").unwrap()
+        );
+
+        assert_eq!(
             emit::Kind::Span,
             evt.props().pull::<emit::Kind, _>("evt_kind").unwrap()
         );
@@ -201,6 +206,21 @@ async fn span_basic_async() {
 }
 
 #[test]
+fn span_guard() {
+    static RT: StaticRuntime = static_runtime(|_| {}, |_| true);
+
+    #[emit::span(rt: RT, guard: span, "test")]
+    fn exec() {
+        let span: emit::span::SpanGuard<_, _, _> = span;
+
+        assert!(span.is_enabled());
+        span.complete();
+    }
+
+    exec();
+}
+
+#[test]
 fn span_filter() {
     static CALLED: StaticCalled = StaticCalled::new();
     static RT: StaticRuntime = static_runtime(|_| CALLED.record(), |evt| evt.module() == "true");
@@ -220,18 +240,26 @@ fn span_filter() {
 }
 
 #[test]
-fn span_guard() {
-    static RT: StaticRuntime = static_runtime(|_| {}, |_| true);
+fn span_filter_guard() {
+    static CALLED: StaticCalled = StaticCalled::new();
+    static RT: StaticRuntime = static_runtime(|_| CALLED.record(), |evt| evt.module() == "true");
 
-    #[emit::span(rt: RT, guard: span, "test")]
-    fn exec() {
-        let span: emit::span::SpanGuard<_, _, _> = span;
-
+    #[emit::span(rt: RT, guard: span, module: emit::path!("true"), "test")]
+    fn exec_true() {
         assert!(span.is_enabled());
-        span.complete();
     }
 
-    exec();
+    #[emit::span(rt: RT, guard: span, module: emit::path!("false"), "test")]
+    fn exec_false() {
+        assert!(!span.is_enabled());
+    }
+
+    exec_true();
+    exec_false();
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+
+    assert_eq!(1, CALLED.called_times());
 }
 
 #[test]
@@ -246,7 +274,11 @@ fn span_ok_lvl() {
                 evt.props().pull::<emit::Level, _>("lvl").unwrap()
             );
         },
-        |_| true,
+        |evt| {
+            assert!(evt.props().get("lvl").is_none());
+
+            true
+        },
     );
 
     static ERR_RT: StaticRuntime = static_runtime(
@@ -260,7 +292,11 @@ fn span_ok_lvl() {
             );
             assert!(evt.props().get("lvl").is_none());
         },
-        |_| true,
+        |evt| {
+            assert!(evt.props().get("lvl").is_none());
+
+            true
+        },
     );
 
     #[emit::span(rt: OK_RT, ok_lvl: emit::Level::Info, "test")]

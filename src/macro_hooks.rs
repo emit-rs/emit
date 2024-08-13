@@ -706,6 +706,8 @@ pub fn __private_begin_span<
                     |span_props| {
                         span_evt_props
                             .and_props(span_props)
+                            // These props will be pushed onto the context
+                            // if the filter matches, so are only needed explicitly here
                             .and_props(&span_ctxt)
                             .and_props(&span_ctxt_props)
                             .and_props(ctxt_props)

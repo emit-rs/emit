@@ -7,6 +7,31 @@ fn props_basic() {
 }
 
 #[test]
+fn props_capture_err() {
+    todo!()
+}
+
+#[test]
+fn props_capture_lvl() {
+    todo!()
+}
+
+#[test]
+fn props_capture_trace_id() {
+    todo!()
+}
+
+#[test]
+fn props_capture_span_id() {
+    todo!()
+}
+
+#[test]
+fn props_capture_span_parent() {
+    todo!()
+}
+
+#[test]
 fn props_key() {
     todo!()
 }
