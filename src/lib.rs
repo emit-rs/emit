@@ -562,12 +562,12 @@ extern crate alloc;
 extern crate core;
 
 /**
-Get a [`Path`] of the executing module for use in [`Event::module`].
+Get a [`Path`] of the executing module for use in [`Event::mdl`].
 
 This defers uses the standard `module_path` macro.
 */
 #[macro_export]
-macro_rules! module {
+macro_rules! mdl {
     () => {
         $crate::Path::new_unchecked($crate::__private::core::module_path!())
     };

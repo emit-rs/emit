@@ -20,7 +20,7 @@ pub struct ExpandTokens {
 
 struct Args {
     rt: TokenStream,
-    module: TokenStream,
+    mdl: TokenStream,
     when: TokenStream,
     guard: Option<Ident>,
     ok_lvl: Option<TokenStream>,
@@ -34,7 +34,7 @@ impl Parse for Args {
 
             Ok(quote_spanned!(expr.span()=> #expr))
         });
-        let mut module = Arg::token_stream("module", |fv| {
+        let mut mdl = Arg::token_stream("mdl", |fv| {
             let expr = &fv.expr;
 
             Ok(quote_spanned!(expr.span()=> #expr))

@@ -315,10 +315,10 @@ Metrics are an extension of [`Event`]s that explicitly take the well-known prope
 A `Metric` can be converted into an [`Event`] through its [`ToEvent`] implemenation, or passed directly to an [`Emitter`] to emit it.
 */
 pub struct Metric<'a, P> {
-    module: Path<'a>,
-    extent: Option<Extent>,
+    mdl: Path<'a>,
     name: Str<'a>,
     agg: Str<'a>,
+    extent: Option<Extent>,
     value: Value<'a>,
     props: P,
 }
@@ -329,7 +329,7 @@ impl<'a, P> Metric<'a, P> {
 
     Each metric consists of:
 
-    - `module`: The module that owns the underlying data source.
+    - `mdl`: The module that owns the underlying data source.
     - `extent`: The [`Extent`] that the sample covers.
     - `name`: The name of the underlying data source.
     - `agg`: The aggregation applied to the underlying data source to produce the sample. See the [`crate::metric`] module for details.
@@ -337,15 +337,15 @@ impl<'a, P> Metric<'a, P> {
     - `props`: Additional [`Props`] to associate with the sample.
     */
     pub fn new(
-        module: impl Into<Path<'a>>,
-        extent: impl ToExtent,
+        mdl: impl Into<Path<'a>>,
         name: impl Into<Str<'a>>,
         agg: impl Into<Str<'a>>,
+        extent: impl ToExtent,
         value: impl Into<Value<'a>>,
         props: P,
     ) -> Self {
         Metric {
-            module: module.into(),
+            mdl: mdl.into(),
             extent: extent.to_extent(),
             name: name.into(),
             agg: agg.into(),
@@ -357,15 +357,15 @@ impl<'a, P> Metric<'a, P> {
     /**
     Get the module that owns the underlying data source.
     */
-    pub fn module(&self) -> &Path<'a> {
-        &self.module
+    pub fn mdl(&self) -> &Path<'a> {
+        &self.mdl
     }
 
     /**
     Set the module of the underlying data source to a new value.
     */
-    pub fn with_module(mut self, module: impl Into<Path<'a>>) -> Self {
-        self.module = module.into();
+    pub fn with_mdl(mut self, mdl: impl Into<Path<'a>>) -> Self {
+        self.mdl = mdl.into();
         self
     }
 

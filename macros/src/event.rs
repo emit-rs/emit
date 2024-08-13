@@ -14,14 +14,14 @@ pub struct ExpandTokens {
 }
 
 struct Args {
-    module: TokenStream,
+    mdl: TokenStream,
     props: TokenStream,
     extent: TokenStream,
 }
 
 impl Parse for Args {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut module = Arg::token_stream("module", |fv| {
+        let mut mdl = Arg::token_stream("mdl", |fv| {
             let expr = &fv.expr;
 
             Ok(quote_spanned!(expr.span()=> #expr))

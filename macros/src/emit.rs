@@ -16,7 +16,7 @@ pub struct ExpandTokens {
 struct Args {
     rt: TokenStream,
     evt: Option<TokenStream>,
-    module: TokenStream,
+    mdl: TokenStream,
     props: TokenStream,
     extent: TokenStream,
     when: TokenStream,
@@ -24,7 +24,7 @@ struct Args {
 
 impl Parse for Args {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut module = Arg::token_stream("module", |fv| {
+        let mut module = Arg::token_stream("mdl", |fv| {
             let expr = &fv.expr;
 
             Ok(quote_spanned!(expr.span()=> #expr))

@@ -38,7 +38,7 @@ mod fmt;
 mod format;
 mod hook;
 mod key;
-mod module;
+mod mdl;
 mod optional;
 mod props;
 mod span;

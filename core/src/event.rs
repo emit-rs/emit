@@ -23,12 +23,14 @@ A captured record of something significant that occurred during the operation of
 */
 #[derive(Clone)]
 pub struct Event<'a, P> {
+    // Fields that identify an event callsite
     // "where"
-    module: Path<'a>,
-    // "when"
-    extent: Option<Extent>,
+    mdl: Path<'a>,
     // "what"
     tpl: Template<'a>,
+    // Fields that vary per instance of an event callsite
+    // "when"
+    extent: Option<Extent>,
     // "why"
     props: P,
 }
@@ -39,21 +41,21 @@ impl<'a, P> Event<'a, P> {
 
     Events are composed of:
 
-    - `module`: A [`Path`] to the module that produced the event. This will typically be a [`module_path!`].
-    - `extent`: The [`Extent`] of the event. This is the point in time at which it occurred, or the timespan for which it was active.
+    - `mdl`: A [`Path`] to the module that produced the event. This will typically be a [`module_path!`].
     - `tpl`: The [`Template`] of the event. This is the user-facing description of the event that can be rendered into a readable form.
+    - `extent`: The [`Extent`] of the event. This is the point in time at which it occurred, or the timespan for which it was active.
     - `props`: The [`Props`] attached to the event, captured from the surrounding environment.
     */
     pub fn new(
-        module: impl Into<Path<'a>>,
-        extent: impl ToExtent,
+        mdl: impl Into<Path<'a>>,
         tpl: impl Into<Template<'a>>,
+        extent: impl ToExtent,
         props: P,
     ) -> Self {
         Event {
-            module: module.into(),
-            extent: extent.to_extent(),
+            mdl: mdl.into(),
             tpl: tpl.into(),
+            extent: extent.to_extent(),
             props,
         }
     }
@@ -61,15 +63,15 @@ impl<'a, P> Event<'a, P> {
     /**
     Get a reference to the module that produced the event.
     */
-    pub fn module(&self) -> &Path<'a> {
-        &self.module
+    pub fn mdl(&self) -> &Path<'a> {
+        &self.mdl
     }
 
     /**
     Set the module of the event, returning a new one.
     */
-    pub fn with_module(mut self, module: impl Into<Path<'a>>) -> Self {
-        self.module = module.into();
+    pub fn with_mdl(mut self, mdl: impl Into<Path<'a>>) -> Self {
+        self.mdl = mdl.into();
         self
     }
 
@@ -212,7 +214,7 @@ impl<'a, P: Props> fmt::Debug for Event<'a, P> {
 
         let mut f = f.debug_struct("Event");
 
-        f.field("module", &self.module);
+        f.field("mdl", &self.mdl);
         f.field("tpl", &self.tpl);
         f.field("extent", &self.extent);
         f.field("props", &AsDebug(&self.props));
@@ -274,7 +276,7 @@ mod tests {
         );
 
         fn assert(evt: &Event<impl Props>) {
-            assert_eq!(Path::new_unchecked("module"), evt.module());
+            assert_eq!(Path::new_unchecked("module"), evt.mdl());
             assert_eq!(
                 Timestamp::MIN..Timestamp::MAX,
                 evt.extent().unwrap().as_span().unwrap().clone()

@@ -529,7 +529,7 @@ fn default_writer(
     use std::ops::ControlFlow;
 
     use emit::{
-        well_known::{KEY_MODULE, KEY_MSG, KEY_TPL, KEY_TS, KEY_TS_START},
+        well_known::{KEY_MDL, KEY_MSG, KEY_TPL, KEY_TS, KEY_TS_START},
         Props as _,
     };
 
@@ -556,9 +556,9 @@ fn default_writer(
                 stream.record_value_end(None, &sval::Label::new(KEY_TS))?;
             }
 
-            stream.record_value_begin(None, &sval::Label::new(KEY_MODULE))?;
+            stream.record_value_begin(None, &sval::Label::new(KEY_MDL))?;
             sval::stream_display(&mut *stream, self.0.module())?;
-            stream.record_value_end(None, &sval::Label::new(KEY_MODULE))?;
+            stream.record_value_end(None, &sval::Label::new(KEY_MDL))?;
 
             stream.record_value_begin(None, &sval::Label::new(KEY_MSG))?;
             sval::stream_display(&mut *stream, self.0.msg())?;

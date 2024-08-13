@@ -1,5 +1,5 @@
 use proc_macro2::TokenStream;
 
-pub(crate) fn module_tokens() -> TokenStream {
+pub(crate) fn mdl_tokens() -> TokenStream {
     quote!(emit::module!())
 }

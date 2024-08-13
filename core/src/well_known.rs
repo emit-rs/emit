@@ -4,7 +4,7 @@ Extensions to the diagnostic model using well-known properties.
 Components can use the presence of well-known properties to change the way they interpret events. The current categories of well-known properties are:
 
 - Built-in:
-    - [`KEY_MODULE`]: The [`crate::event::Event::module()`].
+    - [`KEY_MDL`]: The [`crate::event::Event::mdl()`].
     - [`KEY_TS`]: The [`crate::event::Event::ts()`].
     - [`KEY_TS_START`]: The [`crate::event::Event::ts_start()`].
     - [`KEY_TPL`]: The [`crate::event::Event::tpl()`].
@@ -39,8 +39,8 @@ Extensions to the data model are signaled by the well-known [`KEY_EVT_KIND`] pro
 */
 
 // Event
-/** The [`crate::event::Event::module()`]. */
-pub const KEY_MODULE: &'static str = "module";
+/** The [`crate::event::Event::mdl()`]. */
+pub const KEY_MDL: &'static str = "mdl";
 /** The [`crate::event::Event::ts()`]. */
 pub const KEY_TS: &'static str = "ts";
 /** The [`crate::event::Event::ts_start()`]. */

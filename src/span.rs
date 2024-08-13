@@ -886,7 +886,7 @@ pub struct SpanGuard<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> {
 }
 
 struct SpanGuardState<'a, C: Clock, P: Props> {
-    module: Path<'a>,
+    mdl: Path<'a>,
     timer: Timer<C>,
     name: Str<'a>,
     ctxt: SpanCtxt,
@@ -895,7 +895,7 @@ struct SpanGuardState<'a, C: Clock, P: Props> {
 
 impl<'a, C: Clock, P: Props> SpanGuardState<'a, C, P> {
     fn complete(self) -> Span<'a, P> {
-        Span::new(self.module, self.timer, self.name, self.props)
+        Span::new(self.mdl, self.timer, self.name, self.props)
     }
 }
 
@@ -907,9 +907,9 @@ Spans are an extension of [`Event`]s that explicitly take the well-known propert
 A `SpanEvent` can be converted into an [`Event`] through its [`ToEvent`] implemenation, or passed directly to a [`crate::Emitter`] to emit it.
 */
 pub struct Span<'a, P> {
-    module: Path<'a>,
-    extent: Option<Extent>,
+    mdl: Path<'a>,
     name: Str<'a>,
+    extent: Option<Extent>,
     props: P,
 }
 
@@ -919,20 +919,20 @@ impl<'a, P: Props> Span<'a, P> {
 
     Each span consists of:
 
-    - `module`: The module that executed the operation the span is tracking.
+    - `mdl`: The module that executed the operation the span is tracking.
     - `extent`: The time the operation spent executing.
     - `ctxt`: The [`TraceId`] and [`SpanId`] that identify the span.
     - `name`: The name of the operation the span is tracking.
     - `props`: Additional [`Props`] to associate with the span.
     */
     pub fn new(
-        module: impl Into<Path<'a>>,
-        extent: impl ToExtent,
+        mdl: impl Into<Path<'a>>,
         name: impl Into<Str<'a>>,
+        extent: impl ToExtent,
         props: P,
     ) -> Self {
         Span {
-            module: module.into(),
+            mdl: mdl.into(),
             extent: extent.to_extent(),
             name: name.into(),
             props,
@@ -942,8 +942,8 @@ impl<'a, P: Props> Span<'a, P> {
     /**
     Get the module that executed the operation.
     */
-    pub fn module(&self) -> &Path<'a> {
-        &self.module
+    pub fn mdl(&self) -> &Path<'a> {
+        &self.mdl
     }
 
     /**
