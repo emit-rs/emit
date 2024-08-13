@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use emit::{Emitter, Props};
+use emit::{Ctxt, Emitter, Props};
 
 use crate::util::{static_runtime, StaticCalled, StaticRuntime};
 
@@ -10,6 +10,8 @@ fn span_basic() {
         assert_eq!("greet Rust", evt.msg().to_string());
         assert_eq!("greet {user}", evt.tpl().to_string());
         assert_eq!(module_path!(), evt.module());
+
+        assert!(evt.props().pull::<&str, _>("user").is_some());
 
         assert_eq!(
             "greet {user}",
@@ -32,6 +34,8 @@ fn span_basic() {
     }
 
     fn assert_event(evt: &emit::Event<impl Props>) {
+        assert_event_base(evt);
+
         assert!(evt.extent().unwrap().is_span());
     }
 
@@ -127,26 +131,46 @@ fn span_basic() {
 
     #[emit::span(rt: RT, "greet {user}")]
     fn exec(user: &str) {
+        RT.ctxt().with_current(|props| {
+            assert_eq!(user, props.pull::<&str, _>("user").unwrap());
+        });
+
         let _ = user;
     }
 
     #[emit::debug_span(rt: DEBUG_RT, "greet {user}")]
     fn exec_debug(user: &str) {
+        DEBUG_RT.ctxt().with_current(|props| {
+            assert_eq!(user, props.pull::<&str, _>("user").unwrap());
+        });
+
         let _ = user;
     }
 
     #[emit::info_span(rt: INFO_RT, "greet {user}")]
     fn exec_info(user: &str) {
+        INFO_RT.ctxt().with_current(|props| {
+            assert_eq!(user, props.pull::<&str, _>("user").unwrap());
+        });
+
         let _ = user;
     }
 
     #[emit::warn_span(rt: WARN_RT, "greet {user}")]
     fn exec_warn(user: &str) {
+        WARN_RT.ctxt().with_current(|props| {
+            assert_eq!(user, props.pull::<&str, _>("user").unwrap());
+        });
+
         let _ = user;
     }
 
     #[emit::error_span(rt: ERROR_RT, "greet {user}")]
     fn exec_error(user: &str) {
+        ERROR_RT.ctxt().with_current(|props| {
+            assert_eq!(user, props.pull::<&str, _>("user").unwrap());
+        });
+
         let _ = user;
     }
 
