@@ -15,9 +15,9 @@ fn example(i: i32) {
             // Emit a span event on completion
             emit::error!(
                 evt: emit::Span::new(
-                    emit::module!(),
-                    timer,
+                    emit::mdl!(),
                     "example",
+                    timer,
                     emit::props! {},
                 ),
                 "Running an example failed with {r}",
@@ -26,9 +26,9 @@ fn example(i: i32) {
             // Emit a span event on completion
             emit::info!(
                 evt: emit::Span::new(
-                    emit::module!(),
-                    timer,
+                    emit::mdl!(),
                     "example",
+                    timer,
                     emit::props! {},
                 ),
                 "Running an example produced {r}",

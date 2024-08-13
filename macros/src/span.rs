@@ -7,7 +7,7 @@ use syn::{
 use crate::{
     args::{self, Arg},
     event::push_evt_props,
-    module::module_tokens,
+    mdl::mdl_tokens,
     props::Props,
     template::{self, Template},
 };
@@ -59,7 +59,7 @@ impl Parse for Args {
         args::set_from_field_values(
             input.parse_terminated(FieldValue::parse, Token![,])?.iter(),
             [
-                &mut module,
+                &mut mdl,
                 &mut guard,
                 &mut rt,
                 &mut when,
@@ -70,7 +70,7 @@ impl Parse for Args {
 
         Ok(Args {
             rt: rt.take_rt_ref()?,
-            module: module.take().unwrap_or_else(|| module_tokens()),
+            mdl: mdl.take().unwrap_or_else(|| mdl_tokens()),
             when: when.take_some_or_empty_ref(),
             ok_lvl: ok_lvl.take_if_std()?,
             err_lvl: err_lvl.take_if_std()?,
@@ -91,7 +91,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         .guard
         .unwrap_or_else(|| Ident::new("__span", Span::call_site()));
 
-    let module_tokens = args.module;
+    let mdl_tokens = args.mdl;
 
     let default_lvl_tokens = opts.level;
     let ok_lvl_tokens = args.ok_lvl;
@@ -112,7 +112,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         })) => {
             **block = syn::parse2::<Block>(inject_sync(
                 &args.rt,
-                &module_tokens,
+                &mdl_tokens,
                 &args.when,
                 &template,
                 &ctxt_props,
@@ -128,7 +128,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         Stmt::Expr(Expr::Block(ExprBlock { block, .. }), _) => {
             *block = syn::parse2::<Block>(inject_sync(
                 &args.rt,
-                &module_tokens,
+                &mdl_tokens,
                 &args.when,
                 &template,
                 &ctxt_props,
@@ -153,7 +153,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         })) => {
             **block = syn::parse2::<Block>(inject_async(
                 &args.rt,
-                &module_tokens,
+                &mdl_tokens,
                 &args.when,
                 &template,
                 &ctxt_props,
@@ -169,7 +169,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         Stmt::Expr(Expr::Async(ExprAsync { block, .. }), _) => {
             *block = syn::parse2::<Block>(inject_async(
                 &args.rt,
-                &module_tokens,
+                &mdl_tokens,
                 &args.when,
                 &template,
                 &ctxt_props,
@@ -189,7 +189,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
 
 fn inject_sync(
     rt_tokens: &TokenStream,
-    module_tokens: &TokenStream,
+    mdl_tokens: &TokenStream,
     when_tokens: &TokenStream,
     template: &Template,
     ctxt_props: &Props,
@@ -222,7 +222,7 @@ fn inject_sync(
     Ok(quote!({
         let (mut __ctxt, __span_guard) = emit::__private::__private_begin_span(
             #rt_tokens,
-            #module_tokens,
+            #mdl_tokens,
             #when_tokens,
             #template_tokens,
             #ctxt_props_tokens,
@@ -240,7 +240,7 @@ fn inject_sync(
 
 fn inject_async(
     rt_tokens: &TokenStream,
-    module_tokens: &TokenStream,
+    mdl_tokens: &TokenStream,
     when_tokens: &TokenStream,
     template: &Template,
     ctxt_props: &Props,
@@ -273,7 +273,7 @@ fn inject_async(
     Ok(quote!({
         let (__ctxt, __span_guard) = emit::__private::__private_begin_span(
             #rt_tokens,
-            #module_tokens,
+            #mdl_tokens,
             #when_tokens,
             #template_tokens,
             #ctxt_props_tokens,

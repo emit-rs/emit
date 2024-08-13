@@ -215,22 +215,22 @@ mod tests {
 
         assert!(filter.matches(crate::Event::new(
             crate::Path::new_unchecked("test"),
-            crate::Empty,
             crate::Template::literal("test"),
+            crate::Empty,
             (KEY_EVT_KIND, EVENT_KIND_SPAN),
         )));
 
         assert!(!filter.matches(crate::Event::new(
             crate::Path::new_unchecked("test"),
-            crate::Empty,
             crate::Template::literal("test"),
+            crate::Empty,
             (KEY_EVT_KIND, EVENT_KIND_METRIC),
         )));
 
         assert!(!filter.matches(crate::Event::new(
             crate::Path::new_unchecked("test"),
-            crate::Empty,
             crate::Template::literal("test"),
+            crate::Empty,
             crate::Empty,
         )));
     }

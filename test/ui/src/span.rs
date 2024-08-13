@@ -9,7 +9,7 @@ fn span_basic() {
     fn assert_event_base(evt: &emit::Event<impl Props>) {
         assert_eq!("greet Rust", evt.msg().to_string());
         assert_eq!("greet {user}", evt.tpl().to_string());
-        assert_eq!(module_path!(), evt.module());
+        assert_eq!(module_path!(), evt.mdl());
 
         assert!(evt.props().pull::<&str, _>("user").is_some());
 
@@ -200,7 +200,7 @@ async fn span_basic_async() {
         |evt| {
             assert_eq!("greet Rust", evt.msg().to_string());
             assert_eq!("greet {user}", evt.tpl().to_string());
-            assert_eq!(module_path!(), evt.module());
+            assert_eq!(module_path!(), evt.mdl());
 
             assert!(evt.extent().unwrap().is_span());
             assert!(evt
@@ -247,12 +247,12 @@ fn span_guard() {
 #[test]
 fn span_filter() {
     static CALLED: StaticCalled = StaticCalled::new();
-    static RT: StaticRuntime = static_runtime(|_| CALLED.record(), |evt| evt.module() == "true");
+    static RT: StaticRuntime = static_runtime(|_| CALLED.record(), |evt| evt.mdl() == "true");
 
-    #[emit::span(rt: RT, module: emit::path!("true"), "test")]
+    #[emit::span(rt: RT, mdl: emit::path!("true"), "test")]
     fn exec_true() {}
 
-    #[emit::span(rt: RT, module: emit::path!("false"), "test")]
+    #[emit::span(rt: RT, mdl: emit::path!("false"), "test")]
     fn exec_false() {}
 
     exec_true();
@@ -266,14 +266,14 @@ fn span_filter() {
 #[test]
 fn span_filter_guard() {
     static CALLED: StaticCalled = StaticCalled::new();
-    static RT: StaticRuntime = static_runtime(|_| CALLED.record(), |evt| evt.module() == "true");
+    static RT: StaticRuntime = static_runtime(|_| CALLED.record(), |evt| evt.mdl() == "true");
 
-    #[emit::span(rt: RT, guard: span, module: emit::path!("true"), "test")]
+    #[emit::span(rt: RT, guard: span, mdl: emit::path!("true"), "test")]
     fn exec_true() {
         assert!(span.is_enabled());
     }
 
-    #[emit::span(rt: RT, guard: span, module: emit::path!("false"), "test")]
+    #[emit::span(rt: RT, guard: span, mdl: emit::path!("false"), "test")]
     fn exec_false() {
         assert!(!span.is_enabled());
     }

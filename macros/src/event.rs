@@ -3,7 +3,7 @@ use syn::{parse::Parse, spanned::Spanned, FieldValue, Ident};
 
 use crate::{
     args::{self, Arg},
-    module::module_tokens,
+    mdl::mdl_tokens,
     props::Props,
     template,
 };
@@ -40,11 +40,11 @@ impl Parse for Args {
 
         args::set_from_field_values(
             input.parse_terminated(FieldValue::parse, Token![,])?.iter(),
-            [&mut module, &mut extent, &mut props],
+            [&mut mdl, &mut extent, &mut props],
         )?;
 
         Ok(Args {
-            module: module.take().unwrap_or_else(|| module_tokens()),
+            mdl: mdl.take().unwrap_or_else(|| mdl_tokens()),
             extent: extent.take().unwrap_or_else(|| quote!(emit::empty::Empty)),
             props: props.take().unwrap_or_else(|| quote!(emit::empty::Empty)),
         })
@@ -65,10 +65,10 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     let base_props_tokens = args.props;
     let template_tokens = template.template_tokens();
     let props_tokens = props.props_tokens();
-    let module_tokens = args.module;
+    let mdl_tokens = args.mdl;
 
     Ok(
-        quote!(emit::Event::new(#module_tokens, #extent_tokens, #template_tokens, emit::Props::and_props(&#base_props_tokens, #props_tokens))),
+        quote!(emit::Event::new(#mdl_tokens, #template_tokens, #extent_tokens, emit::Props::and_props(&#base_props_tokens, #props_tokens))),
     )
 }
 

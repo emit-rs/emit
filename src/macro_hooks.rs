@@ -638,7 +638,7 @@ impl<A: Filter, B: Filter> Filter for FirstDefined<A, B> {
 #[track_caller]
 pub fn __private_emit<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
     rt: &'a Runtime<E, F, C, T, R>,
-    module: impl Into<Path<'b>>,
+    mdl: impl Into<Path<'b>>,
     when: Option<impl Filter>,
     extent: impl ToExtent,
     tpl: Template<'b>,
@@ -650,7 +650,7 @@ pub fn __private_emit<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
         FirstDefined(when, rt.filter()),
         rt.ctxt(),
         rt.clock(),
-        Event::new(module, extent, tpl, props.and_props(base_props)),
+        Event::new(mdl, tpl, extent, props.and_props(base_props)),
     );
 }
 

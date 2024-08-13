@@ -330,7 +330,7 @@ mod alloc_support {
         fn matches<E: ToEvent>(&self, evt: E) -> bool {
             let evt = evt.to_event();
 
-            let path = evt.module();
+            let path = evt.mdl();
 
             // Find the most specific path to the given node
             let mut node = &self.root;
@@ -377,15 +377,15 @@ mod alloc_support {
 
             assert!(!filter.matches(crate::Event::new(
                 Path::new_unchecked("a"),
-                crate::Empty,
                 crate::Template::literal("test"),
+                crate::Empty,
                 (KEY_LVL, Level::Warn),
             )));
 
             assert!(filter.matches(crate::Event::new(
                 Path::new_unchecked("a"),
-                crate::Empty,
                 crate::Template::literal("test"),
+                crate::Empty,
                 (KEY_LVL, Level::Error),
             )));
         }
@@ -398,15 +398,15 @@ mod alloc_support {
 
             assert!(!filter.matches(crate::Event::new(
                 Path::new_unchecked("a"),
-                crate::Empty,
                 crate::Template::literal("test"),
+                crate::Empty,
                 (KEY_LVL, Level::Warn),
             )));
 
             assert!(filter.matches(crate::Event::new(
                 Path::new_unchecked("a"),
-                crate::Empty,
                 crate::Template::literal("test"),
+                crate::Empty,
                 (KEY_LVL, Level::Error),
             )));
         }
@@ -421,22 +421,22 @@ mod alloc_support {
 
             assert!(!filter.matches(crate::Event::new(
                 Path::new_unchecked("a"),
-                crate::Empty,
                 crate::Template::literal("test"),
+                crate::Empty,
                 (KEY_LVL, Level::Warn),
             )));
 
             assert!(!filter.matches(crate::Event::new(
                 Path::new_unchecked("a::b"),
-                crate::Empty,
                 crate::Template::literal("test"),
+                crate::Empty,
                 (KEY_LVL, Level::Warn),
             )));
 
             assert!(filter.matches(crate::Event::new(
                 Path::new_unchecked("a::b::c"),
-                crate::Empty,
                 crate::Template::literal("test"),
+                crate::Empty,
                 (KEY_LVL, Level::Warn),
             )));
         }
@@ -449,8 +449,8 @@ mod alloc_support {
 
             assert!(filter.matches(crate::Event::new(
                 Path::new_unchecked("b"),
-                crate::Empty,
                 crate::Template::literal("test"),
+                crate::Empty,
                 (KEY_LVL, Level::Warn),
             )));
         }
@@ -465,8 +465,8 @@ mod alloc_support {
 
             assert!(!filter.matches(crate::Event::new(
                 Path::new_unchecked("b"),
-                crate::Empty,
                 crate::Template::literal("test"),
+                crate::Empty,
                 (KEY_LVL, Level::Warn),
             )));
         }
@@ -548,36 +548,36 @@ mod tests {
 
         assert!(filter.matches(crate::Event::new(
             crate::Path::new_unchecked("test"),
-            crate::Empty,
             crate::Template::literal("test"),
+            crate::Empty,
             (KEY_LVL, LVL_ERROR),
         )));
 
         assert!(filter.matches(crate::Event::new(
             crate::Path::new_unchecked("test"),
-            crate::Empty,
             crate::Template::literal("test"),
+            crate::Empty,
             (KEY_LVL, LVL_WARN),
         )));
 
         assert!(!filter.matches(crate::Event::new(
             crate::Path::new_unchecked("test"),
-            crate::Empty,
             crate::Template::literal("test"),
+            crate::Empty,
             crate::Empty,
         )));
 
         assert!(!filter.matches(crate::Event::new(
             crate::Path::new_unchecked("test"),
-            crate::Empty,
             crate::Template::literal("test"),
+            crate::Empty,
             (KEY_LVL, LVL_DEBUG),
         )));
 
         assert!(!filter.matches(crate::Event::new(
             crate::Path::new_unchecked("test"),
-            crate::Empty,
             crate::Template::literal("test"),
+            crate::Empty,
             (KEY_LVL, LVL_INFO),
         )));
     }
@@ -588,36 +588,36 @@ mod tests {
 
         assert!(filter.matches(crate::Event::new(
             crate::Path::new_unchecked("test"),
-            crate::Empty,
             crate::Template::literal("test"),
+            crate::Empty,
             (KEY_LVL, LVL_ERROR),
         )));
 
         assert!(filter.matches(crate::Event::new(
             crate::Path::new_unchecked("test"),
-            crate::Empty,
             crate::Template::literal("test"),
+            crate::Empty,
             (KEY_LVL, LVL_WARN),
         )));
 
         assert!(filter.matches(crate::Event::new(
             crate::Path::new_unchecked("test"),
-            crate::Empty,
             crate::Template::literal("test"),
+            crate::Empty,
             (KEY_LVL, LVL_INFO),
         )));
 
         assert!(filter.matches(crate::Event::new(
             crate::Path::new_unchecked("test"),
-            crate::Empty,
             crate::Template::literal("test"),
+            crate::Empty,
             crate::Empty,
         )));
 
         assert!(!filter.matches(crate::Event::new(
             crate::Path::new_unchecked("test"),
-            crate::Empty,
             crate::Template::literal("test"),
+            crate::Empty,
             (KEY_LVL, LVL_DEBUG),
         )));
     }

@@ -557,7 +557,7 @@ fn default_writer(
             }
 
             stream.record_value_begin(None, &sval::Label::new(KEY_MDL))?;
-            sval::stream_display(&mut *stream, self.0.module())?;
+            sval::stream_display(&mut *stream, self.0.mdl())?;
             stream.record_value_end(None, &sval::Label::new(KEY_MDL))?;
 
             stream.record_value_begin(None, &sval::Label::new(KEY_MSG))?;

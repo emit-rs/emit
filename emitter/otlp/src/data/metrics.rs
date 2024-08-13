@@ -144,7 +144,7 @@ impl EventEncoder for MetricsEventEncoder {
             };
 
             return Some(EncodedEvent {
-                scope: evt.module().to_owned(),
+                scope: evt.mdl().to_owned(),
                 payload: encoded,
             });
         }

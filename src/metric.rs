@@ -15,7 +15,7 @@ let sample = sample_bytes_written();
 
 emit::emit!(
     evt: emit::Metric::new(
-        emit::module!(),
+        emit::mdl!(),
         emit::Empty,
         "bytes_written",
         METRIC_AGG_COUNT,
@@ -89,7 +89,7 @@ use emit::{Clock, well_known::METRIC_AGG_COUNT};
 
 emit::emit!(
     evt: emit::Metric::new(
-        emit::module!(),
+        emit::mdl!(),
         emit::Empty,
         "bytes_written",
         METRIC_AGG_COUNT,
@@ -132,7 +132,7 @@ let last_sample = now.map(|now| now - std::time::Duration::from_secs(30));
 
 emit::emit!(
     evt: emit::Metric::new(
-        emit::module!(),
+        emit::mdl!(),
         last_sample..now,
         "bytes_written",
         METRIC_AGG_COUNT,
@@ -175,7 +175,7 @@ let last_sample = now.map(|now| now - std::time::Duration::from_secs(15));
 
 emit::emit!(
     evt: emit::Metric::new(
-        emit::module!(),
+        emit::mdl!(),
         last_sample..now,
         "bytes_written",
         METRIC_AGG_COUNT,
@@ -299,6 +299,7 @@ use emit_core::{
     props::{ErasedProps, Props},
     str::{Str, ToStr},
     template::{self, Template},
+    timestamp::Timestamp,
     value::{ToValue, Value},
     well_known::{KEY_EVT_KIND, KEY_METRIC_AGG, KEY_METRIC_NAME, KEY_METRIC_VALUE},
 };
@@ -434,6 +435,27 @@ impl<'a, P> Metric<'a, P> {
     }
 
     /**
+    Get the extent of the metric as a point in time.
+
+    If the metric has an extent then this method will return `Some`, with the result of [`Extent::as_point`]. If the metric doesn't have an extent then this method will return `None`.
+    */
+    pub fn ts(&self) -> Option<&Timestamp> {
+        self.extent.as_ref().map(|extent| extent.as_point())
+    }
+
+    /**
+    Get the start point of the extent of the metric.
+
+    If the metric has an extent, and that extent covers a timespan then this method will return `Some`. Otherwise this method will return `None`.
+    */
+    pub fn ts_start(&self) -> Option<&Timestamp> {
+        self.extent
+            .as_ref()
+            .and_then(|extent| extent.as_span())
+            .map(|span| &span.start)
+    }
+
+    /**
     Get the additional properties associated with the sample.
     */
     pub fn props(&self) -> &P {
@@ -445,7 +467,7 @@ impl<'a, P> Metric<'a, P> {
     */
     pub fn with_props<U>(self, props: U) -> Metric<'a, U> {
         Metric {
-            module: self.module,
+            mdl: self.mdl,
             extent: self.extent,
             name: self.name,
             agg: self.agg,
@@ -469,9 +491,9 @@ impl<'a, P: Props> ToEvent for Metric<'a, P> {
         ];
 
         Event::new(
-            self.module.by_ref(),
-            self.extent.clone(),
+            self.mdl.by_ref(),
             Template::new(TEMPLATE),
+            self.extent.clone(),
             self,
         )
     }
@@ -483,7 +505,7 @@ impl<'a, P: Props> Metric<'a, P> {
     */
     pub fn by_ref<'b>(&'b self) -> Metric<'b, &'b P> {
         Metric {
-            module: self.module.by_ref(),
+            mdl: self.mdl.by_ref(),
             extent: self.extent.clone(),
             name: self.name.by_ref(),
             agg: self.agg.by_ref(),
@@ -497,7 +519,7 @@ impl<'a, P: Props> Metric<'a, P> {
     */
     pub fn erase<'b>(&'b self) -> Metric<'b, &'b dyn ErasedProps> {
         Metric {
-            module: self.module.by_ref(),
+            mdl: self.mdl.by_ref(),
             extent: self.extent.clone(),
             name: self.name.by_ref(),
             agg: self.agg.by_ref(),
@@ -746,18 +768,18 @@ pub mod source {
                 fn sample_metrics<S: Sampler>(&self, sampler: S) {
                     sampler.metric(Metric::new(
                         Path::new_unchecked("test"),
-                        crate::Empty,
                         "metric 1",
                         "count",
+                        crate::Empty,
                         42,
                         crate::Empty,
                     ));
 
                     sampler.metric(Metric::new(
                         Path::new_unchecked("test"),
-                        crate::Empty,
                         "metric 2",
                         "count",
+                        crate::Empty,
                         42,
                         crate::Empty,
                     ));
@@ -788,9 +810,9 @@ pub mod source {
             from_fn(|sampler| {
                 sampler.metric(Metric::new(
                     Path::new_unchecked("test"),
-                    crate::Empty,
                     "metric 1",
                     "count",
+                    crate::Empty,
                     42,
                     crate::Empty,
                 ));
@@ -798,9 +820,9 @@ pub mod source {
             .and_sample(from_fn(|sampler| {
                 sampler.metric(Metric::new(
                     Path::new_unchecked("test"),
-                    crate::Empty,
                     "metric 2",
                     "count",
+                    crate::Empty,
                     42,
                     crate::Empty,
                 ));
@@ -819,18 +841,18 @@ pub mod source {
             from_fn(|sampler| {
                 sampler.metric(Metric::new(
                     Path::new_unchecked("test"),
-                    crate::Empty,
                     "metric 1",
                     "count",
+                    crate::Empty,
                     42,
                     crate::Empty,
                 ));
 
                 sampler.metric(Metric::new(
                     Path::new_unchecked("test"),
-                    crate::Empty,
                     "metric 2",
                     "count",
+                    crate::Empty,
                     42,
                     crate::Empty,
                 ));
@@ -847,18 +869,18 @@ pub mod source {
             let source = from_fn(|sampler| {
                 sampler.metric(Metric::new(
                     Path::new_unchecked("test"),
-                    crate::Empty,
                     "metric 1",
                     "count",
+                    crate::Empty,
                     42,
                     crate::Empty,
                 ));
 
                 sampler.metric(Metric::new(
                     Path::new_unchecked("test"),
-                    crate::Empty,
                     "metric 2",
                     "count",
+                    crate::Empty,
                     42,
                     crate::Empty,
                 ));
@@ -944,9 +966,9 @@ mod alloc_support {
                 .add_source(source::from_fn(|sampler| {
                     sampler.metric(Metric::new(
                         Path::new_unchecked("test"),
-                        crate::Empty,
                         "metric 1",
                         "count",
+                        crate::Empty,
                         42,
                         crate::Empty,
                     ));
@@ -954,9 +976,9 @@ mod alloc_support {
                 .add_source(source::from_fn(|sampler| {
                     sampler.metric(Metric::new(
                         Path::new_unchecked("test"),
-                        crate::Empty,
                         "metric 2",
                         "count",
+                        crate::Empty,
                         42,
                         crate::Empty,
                     ));
@@ -1098,9 +1120,9 @@ pub mod sampler {
 
             sampler.metric(Metric::new(
                 Path::new_unchecked("test"),
-                Empty,
                 "test",
                 "count",
+                Empty,
                 1,
                 Empty,
             ));
@@ -1122,9 +1144,9 @@ pub mod sampler {
 
             sampler.metric(Metric::new(
                 Path::new_unchecked("test"),
-                Empty,
                 "test",
                 "count",
+                Empty,
                 1,
                 Empty,
             ));
@@ -1145,14 +1167,14 @@ mod tests {
     fn metric_new() {
         let metric = Metric::new(
             Path::new_unchecked("test"),
-            Timestamp::from_unix(Duration::from_secs(1)),
             "my metric",
             "count",
+            Timestamp::from_unix(Duration::from_secs(1)),
             42,
             ("metric_prop", true),
         );
 
-        assert_eq!("test", metric.module());
+        assert_eq!("test", metric.mdl());
         assert_eq!(
             Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
             metric.extent().unwrap().as_point()
@@ -1167,16 +1189,16 @@ mod tests {
     fn metric_to_event() {
         let metric = Metric::new(
             Path::new_unchecked("test"),
-            Timestamp::from_unix(Duration::from_secs(1)),
             "my metric",
             "count",
+            Timestamp::from_unix(Duration::from_secs(1)),
             42,
             ("metric_prop", true),
         );
 
         let evt = metric.to_event();
 
-        assert_eq!("test", evt.module());
+        assert_eq!("test", evt.mdl());
         assert_eq!(
             Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
             evt.extent().unwrap().as_point()
@@ -1208,9 +1230,9 @@ mod tests {
         ] {
             let metric = Metric::new(
                 Path::new_unchecked("test"),
-                case,
                 "my metric",
                 "count",
+                case,
                 42,
                 ("metric_prop", true),
             );

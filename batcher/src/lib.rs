@@ -581,9 +581,9 @@ impl<T: Channel> emit::metric::Source for ChannelMetrics<T> {
             .sample()
             .chain(Some(emit::metric::Metric::new(
                 emit::pkg!(),
-                emit::empty::Empty,
                 "queue_length",
                 emit::well_known::METRIC_AGG_LAST,
+                emit::empty::Empty,
                 queue_length,
                 emit::empty::Empty,
             )));

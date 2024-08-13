@@ -81,7 +81,7 @@ emit::SpanCtxt::current(emit::ctxt())
         // complete before the future does
         emit::emit!(
             evt: emit::Span::new(
-                emit::module!(),
+                emit::mdl!(),
                 timer,
                 "wait a bit",
                 emit::props! {
@@ -455,6 +455,7 @@ use emit_core::{
     rng::Rng,
     str::{Str, ToStr},
     template::{self, Template},
+    timestamp::Timestamp,
     value::FromValue,
     well_known::{KEY_EVT_KIND, KEY_SPAN_ID, KEY_SPAN_NAME, KEY_SPAN_PARENT, KEY_TRACE_ID},
 };
@@ -895,7 +896,7 @@ struct SpanGuardState<'a, C: Clock, P: Props> {
 
 impl<'a, C: Clock, P: Props> SpanGuardState<'a, C, P> {
     fn complete(self) -> Span<'a, P> {
-        Span::new(self.mdl, self.timer, self.name, self.props)
+        Span::new(self.mdl, self.name, self.timer, self.props)
     }
 }
 
@@ -920,10 +921,9 @@ impl<'a, P: Props> Span<'a, P> {
     Each span consists of:
 
     - `mdl`: The module that executed the operation the span is tracking.
-    - `extent`: The time the operation spent executing.
-    - `ctxt`: The [`TraceId`] and [`SpanId`] that identify the span.
     - `name`: The name of the operation the span is tracking.
-    - `props`: Additional [`Props`] to associate with the span.
+    - `extent`: The time the operation spent executing. The extent should be a span.
+    - `props`: Additional [`Props`] to associate with the span. These may include the [`SpanCtxt`] with the trace and span ids for the span, or they may be part of the ambient context.
     */
     pub fn new(
         mdl: impl Into<Path<'a>>,
@@ -961,6 +961,27 @@ impl<'a, P: Props> Span<'a, P> {
     }
 
     /**
+    Get the extent of the metric as a point in time.
+
+    If the span has an extent then this method will return `Some`, with the result of [`Extent::as_point`]. If the span doesn't have an extent then this method will return `None`.
+    */
+    pub fn ts(&self) -> Option<&Timestamp> {
+        self.extent.as_ref().map(|extent| extent.as_point())
+    }
+
+    /**
+    Get the start point of the extent of the span.
+
+    If the span has an extent, and that extent covers a timespan then this method will return `Some`. Otherwise this method will return `None`.
+    */
+    pub fn ts_start(&self) -> Option<&Timestamp> {
+        self.extent
+            .as_ref()
+            .and_then(|extent| extent.as_span())
+            .map(|span| &span.start)
+    }
+
+    /**
     Get the additional properties associated with the span.
     */
     pub fn props(&self) -> &P {
@@ -979,9 +1000,9 @@ impl<'a, P: Props> ToEvent for Span<'a, P> {
         ];
 
         Event::new(
-            self.module.by_ref(),
-            self.extent.clone(),
+            self.mdl.by_ref(),
             Template::new(TEMPLATE),
+            self.extent.clone(),
             &self,
         )
     }
@@ -1156,29 +1177,29 @@ impl<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> Drop for SpanGuard<'a, C, P
 impl<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> SpanGuard<'a, C, P, F> {
     pub(crate) fn filtered_new(
         filter: impl FnOnce(&SpanCtxt, Span<&P>) -> bool,
-        module: impl Into<Path<'a>>,
+        mdl: impl Into<Path<'a>>,
         timer: Timer<C>,
         name: impl Into<Str<'a>>,
         ctxt: SpanCtxt,
         event_props: P,
         default_complete: F,
     ) -> Self {
-        let module = module.into();
+        let mdl = mdl.into();
         let name = name.into();
 
         if filter(
             &ctxt,
             Span::new(
-                module.by_ref(),
-                timer.start_timestamp(),
+                mdl.by_ref(),
                 name.by_ref(),
+                timer.start_timestamp(),
                 &event_props,
             ),
         ) {
             SpanGuard {
                 state: Some(SpanGuardState {
                     timer,
-                    module,
+                    mdl,
                     ctxt,
                     name,
                     props: event_props,
@@ -1465,12 +1486,12 @@ mod tests {
     fn span_new() {
         let span = Span::new(
             Path::new_unchecked("test"),
-            Timestamp::from_unix(Duration::from_secs(1)),
             "my span",
+            Timestamp::from_unix(Duration::from_secs(1)),
             ("span_prop", true),
         );
 
-        assert_eq!("test", span.module());
+        assert_eq!("test", span.mdl());
         assert_eq!(
             Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
             span.extent().unwrap().as_point()
@@ -1483,14 +1504,14 @@ mod tests {
     fn span_to_event() {
         let span = Span::new(
             Path::new_unchecked("test"),
-            Timestamp::from_unix(Duration::from_secs(1)),
             "my span",
+            Timestamp::from_unix(Duration::from_secs(1)),
             ("span_prop", true),
         );
 
         let evt = span.to_event();
 
-        assert_eq!("test", evt.module());
+        assert_eq!("test", evt.mdl());
         assert_eq!(
             Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
             evt.extent().unwrap().as_point()
@@ -1520,8 +1541,8 @@ mod tests {
         ] {
             let span = Span::new(
                 Path::new_unchecked("test"),
-                case,
                 "my span",
+                case,
                 ("span_prop", true),
             );
 
@@ -1574,7 +1595,7 @@ mod tests {
                     evt.extent().unwrap().as_span().unwrap().end
                 );
 
-                assert_eq!("test", evt.module());
+                assert_eq!("test", evt.mdl());
                 assert_eq!("span", evt.name());
 
                 assert_eq!(1, evt.props().pull::<usize, _>("event_prop").unwrap());

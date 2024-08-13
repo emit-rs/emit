@@ -436,7 +436,7 @@ When the metrics signal is not configured, diagnostic events for metric samples 
 ```
 emit::runtime::shared().emit(
     emit::Metric::new(
-        emit::module!(),
+        emit::mdl!(),
         emit::Empty,
         "my_metric",
         "count",
@@ -810,7 +810,7 @@ If the metric aggregation is `"count"` then the resulting OTLP metric is a monot
 ```
 emit::runtime::shared().emit(
     emit::Metric::new(
-        emit::module!(),
+        emit::mdl!(),
         emit::Empty,
         "my_metric",
         "count",
@@ -882,7 +882,7 @@ If the metric aggregation is `"sum"` then the resulting OTLP metric is a non-mon
 ```
 emit::runtime::shared().emit(
     emit::Metric::new(
-        emit::module!(),
+        emit::mdl!(),
         emit::Empty,
         "my_metric",
         "sum",
@@ -954,7 +954,7 @@ Any other aggregation will be represented as an OTLP gauge:
 ```
 emit::runtime::shared().emit(
     emit::Metric::new(
-        emit::module!(),
+        emit::mdl!(),
         emit::Empty,
         "my_metric",
         "last",
@@ -1024,7 +1024,7 @@ If the metric aggregation is `"count"` or `"sum"`, and value is a sequence, then
 ```
 emit::runtime::shared().emit(
     emit::Metric::new(
-        emit::module!(),
+        emit::mdl!(),
         emit::Timestamp::from_unix(std::time::Duration::from_secs(1716890420))..emit::Timestamp::from_unix(std::time::Duration::from_secs(1716890425)),
         "my_metric",
         "count",

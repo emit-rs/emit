@@ -54,7 +54,7 @@ impl EventEncoder for TracesEventEncoder {
             })?;
 
         Some(EncodedEvent {
-            scope: evt.module().to_owned(),
+            scope: evt.mdl().to_owned(),
             payload: E::encode(Span {
                 start_time_unix_nano,
                 end_time_unix_nano,

@@ -12,10 +12,10 @@ fn run() {
 
     // Emit a metric sample
     emit::runtime::shared().emit(emit::Metric::new(
-        emit::module!(),
-        emit::Empty,
+        emit::mdl!(),
         "counter",
         emit::well_known::METRIC_AGG_COUNT,
+        emit::Empty,
         counter,
         emit::Empty,
     ));

@@ -30,9 +30,9 @@ macro_rules! metrics {
                 [$(
                     emit::metric::Metric::new(
                         emit::pkg!(),
-                        emit::empty::Empty,
                         stringify!($metric),
                         <$ty>::AGG,
+                        emit::empty::Empty,
                         $metric.sample(),
                         emit::empty::Empty,
                     ),
@@ -147,7 +147,7 @@ impl emit::metric::Source for OtlpMetrics {
                 sampler.metric(
                     metric
                         .by_ref()
-                        .with_module(emit::pkg!().append(emit::path!("logs_channel"))),
+                        .with_mdl(emit::pkg!().append(emit::path!("logs_channel"))),
                 );
             }));
         }
@@ -157,7 +157,7 @@ impl emit::metric::Source for OtlpMetrics {
                 sampler.metric(
                     metric
                         .by_ref()
-                        .with_module(emit::pkg!().append(emit::path!("traces_channel"))),
+                        .with_mdl(emit::pkg!().append(emit::path!("traces_channel"))),
                 );
             }));
         }
@@ -167,7 +167,7 @@ impl emit::metric::Source for OtlpMetrics {
                 sampler.metric(
                     metric
                         .by_ref()
-                        .with_module(emit::pkg!().append(emit::path!("metrics_channel"))),
+                        .with_mdl(emit::pkg!().append(emit::path!("metrics_channel"))),
                 );
             }));
         }

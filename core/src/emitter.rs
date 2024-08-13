@@ -279,8 +279,8 @@ mod tests {
 
             emitter.emit(Event::new(
                 Path::new_unchecked("a"),
-                Empty,
                 Template::literal("event 1"),
+                Empty,
                 Empty,
             ));
             emitter.blocking_flush(Duration::from_secs(0));
@@ -297,8 +297,8 @@ mod tests {
         ] {
             emitter.emit(Event::new(
                 Path::new_unchecked("a"),
-                Empty,
                 Template::literal("event 1"),
+                Empty,
                 Empty,
             ));
             emitter.blocking_flush(Duration::from_secs(0));
@@ -314,15 +314,15 @@ mod tests {
         let count = Cell::new(0);
 
         let emitter = from_fn(|evt| {
-            assert_eq!(Path::new_unchecked("a"), evt.module());
+            assert_eq!(Path::new_unchecked("a"), evt.mdl());
 
             count.set(count.get() + 1);
         });
 
         emitter.emit(Event::new(
             Path::new_unchecked("a"),
-            Empty,
             Template::literal("event 1"),
+            Empty,
             Empty,
         ));
 
@@ -335,8 +335,8 @@ mod tests {
 
         emitter.emit(Event::new(
             Path::new_unchecked("a"),
-            Empty,
             Template::literal("event 1"),
+            Empty,
             Empty,
         ));
         emitter.blocking_flush(Duration::from_secs(0));

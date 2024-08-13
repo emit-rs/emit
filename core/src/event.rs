@@ -140,7 +140,7 @@ impl<'a, P> Event<'a, P> {
     */
     pub fn with_props<U>(self, props: U) -> Event<'a, U> {
         Event {
-            module: self.module,
+            mdl: self.mdl,
             extent: self.extent,
             tpl: self.tpl,
             props,
@@ -152,7 +152,7 @@ impl<'a, P> Event<'a, P> {
     */
     pub fn map_props<U>(self, map: impl FnOnce(P) -> U) -> Event<'a, U> {
         Event {
-            module: self.module,
+            mdl: self.mdl,
             extent: self.extent,
             tpl: self.tpl,
             props: map(self.props),
@@ -173,7 +173,7 @@ impl<'a, P: Props> Event<'a, P> {
     */
     pub fn by_ref<'b>(&'b self) -> Event<'b, &'b P> {
         Event {
-            module: self.module.by_ref(),
+            mdl: self.mdl.by_ref(),
             extent: self.extent.clone(),
             tpl: self.tpl.by_ref(),
             props: &self.props,
@@ -185,7 +185,7 @@ impl<'a, P: Props> Event<'a, P> {
     */
     pub fn erase<'b>(&'b self) -> Event<'b, &'b dyn ErasedProps> {
         Event {
-            module: self.module.by_ref(),
+            mdl: self.mdl.by_ref(),
             extent: self.extent.clone(),
             tpl: self.tpl.by_ref(),
             props: &self.props,
@@ -266,8 +266,8 @@ mod tests {
     fn event_new() {
         let evt = Event::new(
             Path::new_unchecked("module"),
-            Extent::span(Timestamp::MIN..Timestamp::MAX),
             Template::literal("An event"),
+            Extent::span(Timestamp::MIN..Timestamp::MAX),
             [
                 ("a", Value::from(true)),
                 ("b", Value::from(1)),

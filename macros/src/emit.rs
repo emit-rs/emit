@@ -4,7 +4,7 @@ use syn::{parse::Parse, spanned::Spanned, FieldValue};
 use crate::{
     args::{self, Arg},
     event::push_evt_props,
-    module::module_tokens,
+    mdl::mdl_tokens,
     template,
 };
 
@@ -24,7 +24,7 @@ struct Args {
 
 impl Parse for Args {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut module = Arg::token_stream("mdl", |fv| {
+        let mut mdl = Arg::token_stream("mdl", |fv| {
             let expr = &fv.expr;
 
             Ok(quote_spanned!(expr.span()=> #expr))
@@ -58,7 +58,7 @@ impl Parse for Args {
         args::set_from_field_values(
             input.parse_terminated(FieldValue::parse, Token![,])?.iter(),
             [
-                &mut module,
+                &mut mdl,
                 &mut extent,
                 &mut props,
                 &mut rt,
@@ -68,13 +68,13 @@ impl Parse for Args {
         )?;
 
         if let Some(ref evt) = evt.peek() {
-            if module.peek().is_some() || extent.peek().is_some() || props.peek().is_some() {
-                return Err(syn::Error::new(evt.span(), "the `evt` argument cannot be set if any of `module`, `extent`, or `props` are also set"));
+            if mdl.peek().is_some() || extent.peek().is_some() || props.peek().is_some() {
+                return Err(syn::Error::new(evt.span(), "the `evt` argument cannot be set if any of `mdl`, `extent`, or `props` are also set"));
             }
         }
 
         Ok(Args {
-            module: module.take().unwrap_or_else(|| module_tokens()),
+            mdl: mdl.take().unwrap_or_else(|| mdl_tokens()),
             extent: extent.take().unwrap_or_else(|| quote!(emit::empty::Empty)),
             props: props
                 .take_ref()
@@ -122,7 +122,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     } else {
         let base_props_tokens = args.props;
         let extent_tokens = args.extent;
-        let module_tokens = args.module;
+        let mdl_tokens = args.mdl;
 
         let template =
             template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;
@@ -131,7 +131,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         quote!(
             emit::__private::__private_emit(
                 #rt_tokens,
-                #module_tokens,
+                #mdl_tokens,
                 #when_tokens,
                 #extent_tokens,
                 #template_tokens,

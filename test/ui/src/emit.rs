@@ -19,7 +19,7 @@ fn emit_basic() {
             |evt| {
                 assert_eq!("Hello, Rust", evt.msg().to_string());
                 assert_eq!("Hello, {user}", evt.tpl().to_string());
-                assert_eq!(module_path!(), evt.module());
+                assert_eq!(module_path!(), evt.mdl());
 
                 assert!(evt.extent().is_some());
 
@@ -51,10 +51,10 @@ fn emit_basic() {
 #[test]
 fn emit_filter() {
     let called = Called::new();
-    let rt = simple_runtime(|_| called.record(), |evt| evt.module() == "true");
+    let rt = simple_runtime(|_| called.record(), |evt| evt.mdl() == "true");
 
-    emit::emit!(rt, module: emit::path!("false"), "test");
-    emit::emit!(rt, module: emit::path!("true"), "test");
+    emit::emit!(rt, mdl: emit::path!("false"), "test");
+    emit::emit!(rt, mdl: emit::path!("true"), "test");
 
     rt.emitter().blocking_flush(Duration::from_secs(1));
 
@@ -64,9 +64,9 @@ fn emit_filter() {
 #[test]
 fn emit_when() {
     let called = Called::new();
-    let rt = simple_runtime(|_| called.record(), |evt| evt.module() == "true");
+    let rt = simple_runtime(|_| called.record(), |evt| evt.mdl() == "true");
 
-    emit::emit!(rt, when: emit::filter::from_fn(|_| true), module: emit::path!("false"), "test");
+    emit::emit!(rt, when: emit::filter::from_fn(|_| true), mdl: emit::path!("false"), "test");
 
     rt.emitter().blocking_flush(Duration::from_secs(1));
 
@@ -116,12 +116,12 @@ fn emit_extent_span() {
 fn emit_module() {
     let rt = simple_runtime(
         |evt| {
-            assert_eq!("custom_module", evt.module());
+            assert_eq!("custom_module", evt.mdl());
         },
         |_| true,
     );
 
-    emit::emit!(rt, module: emit::path!("custom_module"), "test");
+    emit::emit!(rt, mdl: emit::path!("custom_module"), "test");
 }
 
 #[test]
@@ -155,7 +155,7 @@ fn emit_event() {
         |evt| {
             assert_eq!("Hello, Rust", evt.msg().to_string());
             assert_eq!("Hello, {user}", evt.tpl().to_string());
-            assert_eq!(module_path!(), evt.module());
+            assert_eq!(module_path!(), evt.mdl());
 
             assert!(evt.extent().is_some());
 
@@ -176,10 +176,10 @@ fn emit_event() {
 #[test]
 fn emit_event_filter() {
     let called = Called::new();
-    let rt = simple_runtime(|_| called.record(), |evt| evt.module() == "true");
+    let rt = simple_runtime(|_| called.record(), |evt| evt.mdl() == "true");
 
-    emit::emit!(rt, evt: emit::event!(module: emit::path!("false"), "test"));
-    emit::emit!(rt, evt: emit::event!(module: emit::path!("true"), "test"));
+    emit::emit!(rt, evt: emit::event!(mdl: emit::path!("false"), "test"));
+    emit::emit!(rt, evt: emit::event!(mdl: emit::path!("true"), "test"));
 
     rt.emitter().blocking_flush(Duration::from_secs(1));
 
@@ -189,9 +189,9 @@ fn emit_event_filter() {
 #[test]
 fn emit_event_when() {
     let called = Called::new();
-    let rt = simple_runtime(|_| called.record(), |evt| evt.module() == "true");
+    let rt = simple_runtime(|_| called.record(), |evt| evt.mdl() == "true");
 
-    emit::emit!(rt, when: emit::filter::from_fn(|_| true), evt: emit::event!(module: emit::path!("false"), "test"));
+    emit::emit!(rt, when: emit::filter::from_fn(|_| true), evt: emit::event!(mdl: emit::path!("false"), "test"));
 
     rt.emitter().blocking_flush(Duration::from_secs(1));
 
