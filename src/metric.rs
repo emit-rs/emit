@@ -16,9 +16,9 @@ let sample = sample_bytes_written();
 emit::emit!(
     evt: emit::Metric::new(
         emit::mdl!(),
-        emit::Empty,
         "bytes_written",
         METRIC_AGG_COUNT,
+        emit::Empty,
         sample,
         emit::Empty,
     )
@@ -28,7 +28,7 @@ emit::emit!(
 
 ```text
 Event {
-    module: "my_app",
+    mdl: "my_app",
     tpl: "`metric_agg` of `metric_name` is `metric_value`",
     extent: Some(
         "2024-04-29T10:08:24.780230000Z",
@@ -90,9 +90,9 @@ use emit::{Clock, well_known::METRIC_AGG_COUNT};
 emit::emit!(
     evt: emit::Metric::new(
         emit::mdl!(),
-        emit::Empty,
         "bytes_written",
         METRIC_AGG_COUNT,
+        emit::Empty,
         591,
         emit::Empty,
     )
@@ -102,7 +102,7 @@ emit::emit!(
 
 ```text
 Event {
-    module: "my_app",
+    mdl: "my_app",
     tpl: "`metric_agg` of `metric_name` is `metric_value`",
     extent: Some(
         "2024-04-30T06:53:41.069203000Z",
@@ -133,9 +133,9 @@ let last_sample = now.map(|now| now - std::time::Duration::from_secs(30));
 emit::emit!(
     evt: emit::Metric::new(
         emit::mdl!(),
-        last_sample..now,
         "bytes_written",
         METRIC_AGG_COUNT,
+        last_sample..now,
         17,
         emit::Empty,
     )
@@ -145,7 +145,7 @@ emit::emit!(
 
 ```text
 Event {
-    module: "my_app",
+    mdl: "my_app",
     tpl: "`metric_agg` of `metric_name` is `metric_value`",
     extent: Some(
         "2024-04-30T06:55:59.839770000Z".."2024-04-30T06:56:29.839770000Z",
@@ -176,9 +176,9 @@ let last_sample = now.map(|now| now - std::time::Duration::from_secs(15));
 emit::emit!(
     evt: emit::Metric::new(
         emit::mdl!(),
-        last_sample..now,
         "bytes_written",
         METRIC_AGG_COUNT,
+        last_sample..now,
         &[
             0,
             5,
@@ -204,7 +204,7 @@ emit::emit!(
 
 ```text
 Event {
-    module: "my_app",
+    mdl: "my_app",
     tpl: "`metric_agg` of `metric_name` is `metric_value`",
     extent: Some(
         "2024-04-30T07:03:07.828185000Z".."2024-04-30T07:03:22.828185000Z",
@@ -247,9 +247,9 @@ use emit::metric::{Source as _, Sampler as _};
 let source_1 = emit::metric::source::from_fn(|sampler| {
     sampler.metric(emit::Metric::new(
         emit::path!("source_1"),
-        emit::Empty,
         "bytes_written",
         emit::well_known::METRIC_AGG_COUNT,
+        emit::Empty,
         1,
         emit::Empty,
     ));
@@ -258,9 +258,9 @@ let source_1 = emit::metric::source::from_fn(|sampler| {
 let source_2 = emit::metric::source::from_fn(|sampler| {
     sampler.metric(emit::Metric::new(
         emit::path!("source_2"),
-        emit::Empty,
         "bytes_written",
         emit::well_known::METRIC_AGG_COUNT,
+        emit::Empty,
         2,
         emit::Empty,
     ));

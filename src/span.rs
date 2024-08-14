@@ -20,7 +20,7 @@ wait_a_bit(1200);
 
 ```text
 Event {
-    module: "my_app",
+    mdl: "my_app",
     tpl: "wait a bit",
     extent: Some(
         "2024-04-27T22:40:24.112859000Z".."2024-04-27T22:40:25.318273000Z",
@@ -82,8 +82,8 @@ emit::SpanCtxt::current(emit::ctxt())
         emit::emit!(
             evt: emit::Span::new(
                 emit::mdl!(),
-                timer,
                 "wait a bit",
+                timer,
                 emit::props! {
                     sleep_ms,
                 },
@@ -124,7 +124,7 @@ fn wait_a_bit(sleep_ms: u64) {
 
 ```text
 Event {
-    module: "my_app",
+    mdl: "my_app",
     tpl: "waiting a bit longer",
     extent: Some(
         "2024-04-27T22:47:34.780288000Z",
@@ -136,7 +136,7 @@ Event {
     },
 }
 Event {
-    module: "my_app",
+    mdl: "my_app",
     tpl: "wait a bit",
     extent: Some(
         "2024-04-27T22:47:33.574839000Z".."2024-04-27T22:47:35.985844000Z",
@@ -173,7 +173,7 @@ fn inner_span(sleep_ms: u64) {
 
 ```text
 Event {
-    module: "my_app",
+    mdl: "my_app",
     tpl: "inner span",
     extent: Some(
         "2024-04-27T22:50:50.385706000Z".."2024-04-27T22:50:50.994509000Z",
@@ -188,7 +188,7 @@ Event {
     },
 }
 Event {
-    module: "my_app",
+    mdl: "my_app",
     tpl: "outer span",
     extent: Some(
         "2024-04-27T22:50:49.180025000Z".."2024-04-27T22:50:50.994797000Z",
@@ -269,7 +269,7 @@ fn handle_request() {
 
 ```text
 Event {
-    module: "my_app",
+    mdl: "my_app",
     tpl: "incoming request",
     extent: Some(
         "2024-04-29T05:37:05.278488400Z".."2024-04-29T05:37:05.278636100Z",
@@ -339,7 +339,7 @@ let _ = wait_a_bit(1200);
 
 ```text
 Event {
-    module: "my_app",
+    mdl: "my_app",
     tpl: "wait a bit",
     extent: Some(
         "2024-06-12T21:43:03.556361000Z".."2024-06-12T21:43:03.661164000Z",
@@ -354,7 +354,7 @@ Event {
     },
 }
 Event {
-    module: "my_app",
+    mdl: "my_app",
     tpl: "wait a bit",
     extent: Some(
         "2024-06-12T21:43:03.661850000Z".."2024-06-12T21:43:03.661986000Z",
@@ -404,7 +404,7 @@ wait_a_bit(1200);
 
 ```text
 Event {
-    module: "my_app",
+    mdl: "my_app",
     tpl: "wait a bit",
     extent: Some(
         "2024-04-28T21:12:20.497595000Z".."2024-04-28T21:12:20.603108000Z",
@@ -418,7 +418,7 @@ Event {
     },
 }
 Event {
-    module: "my_app",
+    mdl: "my_app",
     tpl: "wait a bit took too long",
     extent: Some(
         "2024-04-28T21:12:20.603916000Z".."2024-04-28T21:12:21.808502000Z",

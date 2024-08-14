@@ -13,7 +13,7 @@ fn run() {
     emit::info!("Counted up to {counter}");
 
     // Emit a metric sample
-    emit::runtime::shared().emit(emit::Metric::new(
+    emit::emit!(evt: emit::Metric::new(
         emit::mdl!(),
         "counter",
         emit::well_known::METRIC_AGG_COUNT,

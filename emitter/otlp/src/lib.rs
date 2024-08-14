@@ -434,12 +434,12 @@ http://localhost:4318/v1/logs
 When the metrics signal is not configured, diagnostic events for metric samples are represented as regular OTLP log records. The following diagnostic:
 
 ```
-emit::runtime::shared().emit(
-    emit::Metric::new(
+emit::emit!(
+    evt: emit::Metric::new(
         emit::mdl!(),
-        emit::Empty,
         "my_metric",
         "count",
+        emit::Empty,
         42,
         emit::Empty,
     )
@@ -808,12 +808,12 @@ emit_otlp::new()
 If the metric aggregation is `"count"` then the resulting OTLP metric is a monotonic sum:
 
 ```
-emit::runtime::shared().emit(
-    emit::Metric::new(
+emit::emit!(
+    evt: emit::Metric::new(
         emit::mdl!(),
-        emit::Empty,
         "my_metric",
         "count",
+        emit::Empty,
         42,
         emit::props! {
             a: true
@@ -880,12 +880,12 @@ http://localhost:4318/v1/metrics
 If the metric aggregation is `"sum"` then the resulting OTLP metric is a non-monotonic sum:
 
 ```
-emit::runtime::shared().emit(
-    emit::Metric::new(
+emit::emit!(
+    evt: emit::Metric::new(
         emit::mdl!(),
-        emit::Empty,
         "my_metric",
         "sum",
+        emit::Empty,
         -8,
         emit::props! {
             a: true
@@ -952,12 +952,12 @@ http://localhost:4318/v1/metrics
 Any other aggregation will be represented as an OTLP gauge:
 
 ```
-emit::runtime::shared().emit(
-    emit::Metric::new(
+emit::emit!(
+    evt: emit::Metric::new(
         emit::mdl!(),
-        emit::Empty,
         "my_metric",
         "last",
+        emit::Empty,
         615,
         emit::props! {
             a: true
@@ -1022,12 +1022,15 @@ http://localhost:4318/v1/metrics
 If the metric aggregation is `"count"` or `"sum"`, and value is a sequence, then each value will be summed to produce a single data point:
 
 ```
-emit::runtime::shared().emit(
-    emit::Metric::new(
+let start = emit::Timestamp::from_unix(std::time::Duration::from_secs(1716890420));
+let end = emit::Timestamp::from_unix(std::time::Duration::from_secs(1716890425));
+
+emit::emit!(
+    evt: emit::Metric::new(
         emit::mdl!(),
-        emit::Timestamp::from_unix(std::time::Duration::from_secs(1716890420))..emit::Timestamp::from_unix(std::time::Duration::from_secs(1716890425)),
         "my_metric",
         "count",
+        start..end,
         &[
             1.0,
             1.0,

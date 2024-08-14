@@ -691,7 +691,7 @@ pub fn __private_begin_span<
     S: FnOnce(Span<'static, Empty>),
 >(
     rt: &'a Runtime<E, F, C, T, R>,
-    module: impl Into<Path<'static>>,
+    mdl: impl Into<Path<'static>>,
     when: Option<impl Filter>,
     tpl: Template<'b>,
     span_ctxt_props: impl Props,
@@ -715,7 +715,7 @@ pub fn __private_begin_span<
                 ))
             })
         },
-        module,
+        mdl,
         Timer::start(rt.clock()),
         name,
         SpanCtxt::current(rt.ctxt()).new_child(rt.rng()),

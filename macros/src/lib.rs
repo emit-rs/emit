@@ -230,7 +230,7 @@ where
 
 This macro accepts the following optional control parameters:
 
-- `module: impl Into<emit::Path>`: The module the event belongs to. If unspecified the current module path is used.
+- `mdl: impl Into<emit::Path>`: The module the event belongs to. If unspecified the current module path is used.
 - `props: impl emit::Props`: A base set of properties to add to the event.
 - `extent: impl emit::ToExtent`: The extent to use on the event.
 
@@ -355,7 +355,7 @@ where
 This macro accepts the following optional control parameters:
 
 - `rt: impl emit::runtime::Runtime`: The runtime to emit the event through.
-- `module: impl Into<emit::Path>`: The module the event belongs to. If unspecified the current module path is used.
+- `mdl: impl Into<emit::Path>`: The module the event belongs to. If unspecified the current module path is used.
 - `when: impl emit::Filter`: A filter to use instead of the one configured on the runtime.
 - `arg`: An identifier to bind an `emit::Span` to in the body of the span for manual completion.
 - `ok_lvl`: Assume the instrumented block returns a `Result`. Assign the event the given level when the result is `Ok`.
@@ -523,7 +523,7 @@ This macro accepts the following optional control parameters:
 
 - `rt: impl emit::runtime::Runtime`: The runtime to emit the event through.
 - `evt: impl emit::event::ToEvent`: A base event to emit. Any properties captured by the macro will be appended to the base event. If this control parameter is specified then `module`, `props`, and `extent` cannot also be set.
-- `module: impl Into<emit::Path>`: The module the event belongs to. If unspecified the current module path is used.
+- `mdl: impl Into<emit::Path>`: The module the event belongs to. If unspecified the current module path is used.
 - `props: impl emit::Props`: A base set of properties to add to the event.
 - `extent: impl emit::ToExtent`: The extent to use on the event. If it resolves to `None` then the clock on the runtime will be used to assign a point extent.
 - `when: impl emit::Filter`: A filter to use instead of the one configured on the runtime.

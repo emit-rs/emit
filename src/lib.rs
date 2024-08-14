@@ -57,7 +57,7 @@ Using the `std::fmt` emitter from earlier, it will output:
 
 ```text
 Event {
-    module: "my_app",
+    mdl: "my_app",
     tpl: "Hello, world!",
     extent: Some(
         "2024-04-23T10:04:37.632304000Z",
@@ -90,7 +90,7 @@ emit::emit!("Hello, {user}!");
 
 ```text
 Event {
-    module: "my_app",
+    mdl: "my_app",
     tpl: "Hello, `user`!",
     extent: Some(
         "2024-04-25T00:53:36.364794000Z",
@@ -138,7 +138,7 @@ emit::emit!("Hello, {user}!", lang, greeter);
 
 ```text
 Event {
-    module: "my_app",
+    mdl: "my_app",
     tpl: "Hello, `user`!",
     extent: Some(
         "2024-04-25T22:32:23.013651640Z",
@@ -162,7 +162,7 @@ emit::emit!("Hello, {user}", user: "World");
 
 ```text
 Event {
-    module: "my_app",
+    mdl: "my_app",
     tpl: "Hello, `user`",
     extent: Some(
         "2024-04-25T22:34:25.536438193Z",
@@ -177,18 +177,18 @@ Event {
 
 Control parameters appear before the template. They use the same field value syntax as properties, but aren't captured as properties on the event. They instead customize other aspects of the event.
 
-The `module` control parameter sets the module:
+The `module` control parameter sets the mdl:
 
 ```
 # #[cfg(not(feature = "std"))] fn main() {}
 # #[cfg(feature = "std")] fn main() {
-emit::emit!(module: emit::path!("my_module"), "Hello, World!");
+emit::emit!(mdl: emit::path!("my_module"), "Hello, World!");
 # }
 ```
 
 ```text
 Event {
-    module: "my_module",
+    mdl: "my_module",
     tpl: "Hello, World!",
     extent: Some(
         "2024-04-25T22:42:52.180968127Z",
@@ -212,7 +212,7 @@ emit::emit!(
 
 ```text
 Event {
-    module: "my_app",
+    mdl: "my_app",
     tpl: "Hello, World!",
     extent: Some(
         "2001-09-09T01:46:40.000000000Z",
@@ -238,7 +238,7 @@ emit::emit!(
 
 ```text
 Event {
-    module: "my_app",
+    mdl: "my_app",
     tpl: "Hello, `user`!",
     extent: Some(
         "2024-04-29T03:36:07.751177000Z",
@@ -267,7 +267,7 @@ emit::emit!(
 
 ```text
 Event {
-    module: "my_app",
+    mdl: "my_app",
     tpl: "Hello, `user.name`!",
     extent: Some(
         "2024-04-26T06:33:59.159727258Z",
@@ -300,7 +300,7 @@ emit::emit!(
 
 ```text
 Event {
-    module: "my_app",
+    mdl: "my_app",
     tpl: "Hello, `user`!",
     extent: Some(
         "2024-04-26T06:29:55.778795150Z",
@@ -366,7 +366,7 @@ Primitive types like booleans and numbers are always structure-preserving, so `a
 
 ## Filtering events
 
-Managing the volume of diagnostic data is an important activity in application development to keep costs down and make debugging more efficient. Ideally, applications would only produce useful diagnostics, but reality demands tooling to limit volume at a high-level. `emit` lets you configure a [`Filter`] during [`setup()`] to reduce the volume of diagnostic data. A useful filter is [`level::min_by_path_filter`], which only emits events when they are produced for at least a given [`Level`] within a given module:
+Managing the volume of diagnostic data is an important activity in application development to keep costs down and make debugging more efficient. Ideally, applications would only produce useful diagnostics, but reality demands tooling to limit volume at a high-level. `emit` lets you configure a [`Filter`] during [`setup()`] to reduce the volume of diagnostic data. A useful filter is [`level::min_by_path_filter`], which only emits events when they are produced for at least a given [`Level`] within a given mdl:
 
 ```
 # #[cfg(not(feature = "std"))] fn main() {}
@@ -397,7 +397,7 @@ mod submodule {
 
 ```text
 Event {
-    module: "my_app",
+    mdl: "my_app",
     tpl: "Up and running",
     extent: Some(
         "2024-04-29T04:31:24.085826100Z",
@@ -407,7 +407,7 @@ Event {
     },
 }
 Event {
-    module: "my_app::submodule",
+    mdl: "my_app::submodule",
     tpl: "Hello, `user`!",
     extent: Some(
         "2024-04-29T04:31:24.086327500Z",
@@ -441,7 +441,7 @@ The `when` control parameter of the emit macros can be used to override the glob
 # #[cfg(feature = "std")] fn main() {
 // This event matches the filter
 emit::emit!(
-    when: emit::filter::from_fn(|evt| evt.module() == "my_app"),
+    when: emit::filter::from_fn(|evt| evt.mdl() == "my_app"),
     "Hello, World!",
 );
 # }
@@ -449,7 +449,7 @@ emit::emit!(
 
 ```text
 Event {
-    module: "my_app",
+    mdl: "my_app",
     tpl: "Hello, World!",
     extent: Some(
         "2024-04-25T22:54:50.055493407Z",
@@ -463,8 +463,8 @@ Event {
 # #[cfg(feature = "std")] fn main() {
 // This event does not match the filter
 emit::emit!(
-    when: emit::filter::from_fn(|evt| evt.module() == "my_app"),
-    module: emit::path!("not_my_app"),
+    when: emit::filter::from_fn(|evt| evt.mdl() == "my_app"),
+    mdl: emit::path!("not_my_app"),
     "Hello, World!",
 );
 # }
