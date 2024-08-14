@@ -1,9 +1,23 @@
+use emit::Props;
+
 #[test]
 fn props_basic() {
-    /*
-    Ensure props are sorted
-    */
-    todo!()
+    match emit::props! {
+        b: 1,
+        a: true,
+        c: 2.0,
+        d: "text",
+
+    } {
+        props => {
+            assert!(props.is_unique());
+
+            assert_eq!(1, props.pull::<i32, _>("b").unwrap());
+            assert_eq!(true, props.pull::<bool, _>("a").unwrap());
+            assert_eq!(2.0, props.pull::<f64, _>("c").unwrap());
+            assert_eq!("text", props.pull::<&str, _>("d").unwrap());
+        }
+    }
 }
 
 #[test]

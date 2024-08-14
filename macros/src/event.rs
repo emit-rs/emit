@@ -31,7 +31,6 @@ impl Parse for Args {
 
             Ok(quote_spanned!(expr.span()=> #expr))
         });
-
         let mut props = Arg::token_stream("props", |fv| {
             let expr = &fv.expr;
 
