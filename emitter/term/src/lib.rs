@@ -55,7 +55,7 @@ use core::{fmt, str, time::Duration};
 use std::{cell::RefCell, cmp, io::Write, iter};
 
 use emit::well_known::{
-    KEY_ERR, KEY_EVENT_KIND, KEY_LVL, KEY_METRIC_VALUE, KEY_SPAN_ID, KEY_TRACE_ID,
+    KEY_ERR, KEY_EVT_KIND, KEY_LVL, KEY_METRIC_VALUE, KEY_SPAN_ID, KEY_TRACE_ID,
 };
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
@@ -182,7 +182,7 @@ fn print_event(
         write_plain(buf, " ");
     }
 
-    if let Some(kind) = evt.props().get(KEY_EVENT_KIND) {
+    if let Some(kind) = evt.props().get(KEY_EVT_KIND) {
         write_fg(buf, kind, KIND);
         write_plain(buf, " ");
     }
@@ -191,7 +191,7 @@ fn print_event(
     write_plain(buf, "\n");
 
     if let Some(err) = evt.props().get(KEY_ERR) {
-        if let Some(err) = err.to_borrowed_err() {
+        if let Some(err) = err.to_borrowed_error() {
             write_plain(buf, "  ");
             try_write_fg(buf, "err", lvl);
             write_plain(buf, format_args!(": {err}\n"));

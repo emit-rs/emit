@@ -40,7 +40,7 @@ impl EventEncoder for LogsEventEncoder {
         let observed_time_unix_nano = time_unix_nano;
 
         Some(EncodedEvent {
-            scope: evt.module().to_owned(),
+            scope: evt.mdl().to_owned(),
             payload: E::encode(LogRecord {
                 time_unix_nano,
                 observed_time_unix_nano,

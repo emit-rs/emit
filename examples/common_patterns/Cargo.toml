@@ -7,7 +7,7 @@ publish = false
 
 [dependencies.emit]
 path = "../../"
-features = ["serde"]
+features = ["serde", "std"]
 
 [dependencies.emit_term]
 path = "../../emitter/term"

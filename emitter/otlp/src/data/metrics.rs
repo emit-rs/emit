@@ -9,7 +9,7 @@ pub use self::{export_metrics_service::*, metric::*};
 
 use emit::{
     well_known::{
-        KEY_EVENT_KIND, KEY_METRIC_AGG, KEY_METRIC_NAME, KEY_METRIC_UNIT, KEY_METRIC_VALUE,
+        KEY_EVT_KIND, KEY_METRIC_AGG, KEY_METRIC_NAME, KEY_METRIC_UNIT, KEY_METRIC_VALUE,
         KEY_SPAN_ID, KEY_SPAN_PARENT, KEY_TRACE_ID, METRIC_AGG_COUNT, METRIC_AGG_SUM,
     },
     Filter, Props,
@@ -90,7 +90,7 @@ impl EventEncoder for MetricsEventEncoder {
                     ControlFlow::Continue(())
                 }
                 KEY_METRIC_NAME | KEY_METRIC_VALUE | KEY_METRIC_AGG | KEY_SPAN_ID
-                | KEY_SPAN_PARENT | KEY_TRACE_ID | KEY_EVENT_KIND => ControlFlow::Continue(()),
+                | KEY_SPAN_PARENT | KEY_TRACE_ID | KEY_EVT_KIND => ControlFlow::Continue(()),
                 _ => {
                     if let Ok(value) = sval_buffer::stream_to_value_owned(any_value::EmitValue(v)) {
                         attributes.push(KeyValue {
@@ -144,7 +144,7 @@ impl EventEncoder for MetricsEventEncoder {
             };
 
             return Some(EncodedEvent {
-                scope: evt.module().to_owned(),
+                scope: evt.mdl().to_owned(),
                 payload: encoded,
             });
         }

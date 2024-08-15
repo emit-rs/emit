@@ -289,7 +289,7 @@ impl CaptureAsAnonSerde for str {
 }
 
 #[diagnostic::on_unimplemented(
-    message = "capturing with `#[emit::as_error]` requires `Error + 'static`. Use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
+    message = "capturing an error requires a `str` or `Error + 'static`."
 )]
 pub trait CaptureAsError {
     fn capture(&self) -> Option<Value>;
@@ -638,10 +638,11 @@ impl<A: Filter, B: Filter> Filter for FirstDefined<A, B> {
 #[track_caller]
 pub fn __private_emit<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
     rt: &'a Runtime<E, F, C, T, R>,
-    module: impl Into<Path<'b>>,
+    mdl: impl Into<Path<'b>>,
     when: Option<impl Filter>,
     extent: impl ToExtent,
     tpl: Template<'b>,
+    base_props: impl Props,
     props: impl Props,
 ) {
     emit_core::emit(
@@ -649,12 +650,7 @@ pub fn __private_emit<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
         FirstDefined(when, rt.filter()),
         rt.ctxt(),
         rt.clock(),
-        Event::new(
-            module,
-            extent.to_extent().or_else(|| rt.clock().now().to_extent()),
-            tpl,
-            props,
-        ),
+        Event::new(mdl, tpl, extent, props.and_props(base_props)),
     );
 }
 
@@ -695,24 +691,31 @@ pub fn __private_begin_span<
     S: FnOnce(Span<'static, Empty>),
 >(
     rt: &'a Runtime<E, F, C, T, R>,
-    module: impl Into<Path<'static>>,
+    mdl: impl Into<Path<'static>>,
     when: Option<impl Filter>,
     tpl: Template<'b>,
-    ctxt_props: impl Props,
-    evt_props: impl Props,
+    span_ctxt_props: impl Props,
+    span_evt_props: impl Props,
     name: impl Into<Str<'static>>,
     default_complete: S,
 ) -> (Frame<Option<&'a C>>, SpanGuard<'static, &'a T, Empty, S>) {
     let mut span = SpanGuard::filtered_new(
-        |span| {
-            FirstDefined(when, rt.filter()).matches(
-                &span
-                    .to_event()
-                    .with_tpl(tpl)
-                    .map_props(|props| props.and_props(&ctxt_props).and_props(&evt_props)),
-            )
+        |span_ctxt, span| {
+            rt.ctxt().with_current(|ctxt_props| {
+                FirstDefined(when, rt.filter()).matches(&span.to_event().with_tpl(tpl).map_props(
+                    |span_props| {
+                        span_evt_props
+                            .and_props(span_props)
+                            // These props will be pushed onto the context
+                            // if the filter matches, so are only needed explicitly here
+                            .and_props(&span_ctxt)
+                            .and_props(&span_ctxt_props)
+                            .and_props(ctxt_props)
+                    },
+                ))
+            })
         },
-        module,
+        mdl,
         Timer::start(rt.clock()),
         name,
         SpanCtxt::current(rt.ctxt()).new_child(rt.rng()),
@@ -720,7 +723,7 @@ pub fn __private_begin_span<
         default_complete,
     );
 
-    let frame = span.push_ctxt(rt.ctxt(), ctxt_props);
+    let frame = span.push_ctxt(rt.ctxt(), span_ctxt_props);
 
     (frame, span)
 }
@@ -730,61 +733,16 @@ pub fn __private_complete_span<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock,
     rt: &'a Runtime<E, F, C, T, R>,
     span: Span<'static, Empty>,
     tpl: Template<'b>,
-    evt_props: impl Props,
+    span_evt_props: impl Props,
 ) {
-    __private_emit(
-        rt,
-        span.module(),
-        Some(crate::filter::always()),
-        span.extent(),
-        tpl,
-        evt_props.and_props(&span),
-    );
-}
-
-#[track_caller]
-#[cfg(feature = "std")]
-pub fn __private_complete_span_ok<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
-    rt: &'a Runtime<E, F, C, T, R>,
-    span: Span<'static, Empty>,
-    tpl: Template<'b>,
-    evt_props: impl Props,
-    lvl: &impl ToValue,
-) {
-    __private_emit(
-        rt,
-        span.module(),
-        Some(crate::filter::always()),
-        span.extent(),
-        tpl,
-        (crate::well_known::KEY_LVL, lvl)
-            .and_props(evt_props)
-            .and_props(&span),
-    );
-}
-
-#[track_caller]
-#[cfg(feature = "std")]
-pub fn __private_complete_span_err<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
-    rt: &'a Runtime<E, F, C, T, R>,
-    span: Span<'static, Empty>,
-    tpl: Template<'b>,
-    evt_props: impl Props,
-    lvl: &impl ToValue,
-    err: &(impl std::error::Error + Send + Sync + 'static),
-) {
-    __private_emit(
-        rt,
-        span.module(),
-        Some(crate::filter::always()),
-        span.extent(),
-        tpl,
-        [
-            (crate::well_known::KEY_LVL, Value::from_any(lvl)),
-            (crate::well_known::KEY_ERR, Value::capture_error(err)),
-        ]
-        .and_props(evt_props)
-        .and_props(&span),
+    emit_core::emit(
+        rt.emitter(),
+        crate::filter::always(),
+        rt.ctxt(),
+        rt.clock(),
+        span.to_event()
+            .with_tpl(tpl)
+            .map_props(|span_props| span_evt_props.and_props(span_props)),
     );
 }
 

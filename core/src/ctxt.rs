@@ -520,6 +520,32 @@ mod tests {
     use core::{cell::Cell, ops::ControlFlow};
 
     #[test]
+    fn open_push_precedence() {
+        struct MyCtxt;
+
+        impl Ctxt for MyCtxt {
+            type Current = (&'static str, usize);
+            type Frame = ();
+
+            fn open_root<P: Props>(&self, props: P) -> Self::Frame {
+                assert_eq!(2, props.pull::<i32, _>("prop").unwrap());
+            }
+
+            fn enter(&self, _: &mut Self::Frame) {}
+
+            fn exit(&self, _: &mut Self::Frame) {}
+
+            fn close(&self, _: Self::Frame) {}
+
+            fn with_current<R, F: FnOnce(&Self::Current) -> R>(&self, with: F) -> R {
+                with(&("prop", 1))
+            }
+        }
+
+        MyCtxt.open_push(("prop", 2));
+    }
+
+    #[test]
     fn option_ctxt() {
         struct MyCtxt {
             count: Cell<usize>,

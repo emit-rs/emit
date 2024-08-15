@@ -38,7 +38,7 @@ mod fmt;
 mod format;
 mod hook;
 mod key;
-mod module;
+mod mdl;
 mod optional;
 mod props;
 mod span;
@@ -111,52 +111,52 @@ fn hooks() -> HashMap<&'static str, fn(TokenStream, TokenStream) -> syn::Result<
     );
 
     map.insert(
-            "as_sval",
-            (|args: TokenStream, expr: TokenStream| {
-                #[cfg(feature = "sval")]
-                {
-                    capture_as(
-                        "as_sval",
-                        args,
-                        expr,
-                        quote!(__private_capture_as_sval),
-                        quote!(__private_capture_anon_as_sval),
-                    )
-                }
-                #[cfg(not(feature = "sval"))]
-                {
-                    use syn::spanned::Spanned;
+        "as_sval",
+        (|args: TokenStream, expr: TokenStream| {
+            #[cfg(feature = "sval")]
+            {
+                capture_as(
+                    "as_sval",
+                    args,
+                    expr,
+                    quote!(__private_capture_as_sval),
+                    quote!(__private_capture_anon_as_sval),
+                )
+            }
+            #[cfg(not(feature = "sval"))]
+            {
+                use syn::spanned::Spanned;
 
-                    let _ = args;
+                let _ = args;
 
-                    Err(syn::Error::new(expr.span(), "capturing with `sval` is only possible when the `sval` Cargo feature is enabled"))
-                }
-            }) as fn(TokenStream, TokenStream) -> syn::Result<TokenStream>
-        );
+                Err(syn::Error::new(expr.span(), "capturing with `sval` is only possible when the `sval` Cargo feature is enabled"))
+            }
+        }) as fn(TokenStream, TokenStream) -> syn::Result<TokenStream>
+    );
 
     map.insert(
-            "as_serde",
-            (|args: TokenStream, expr: TokenStream| {
-                #[cfg(feature = "serde")]
-                {
-                    capture_as(
-                        "as_serde",
-                        args,
-                        expr,
-                        quote!(__private_capture_as_serde),
-                        quote!(__private_capture_anon_as_serde),
-                    )
-                }
-                #[cfg(not(feature = "serde"))]
-                {
-                    use syn::spanned::Spanned;
+        "as_serde",
+        (|args: TokenStream, expr: TokenStream| {
+            #[cfg(feature = "serde")]
+            {
+                capture_as(
+                    "as_serde",
+                    args,
+                    expr,
+                    quote!(__private_capture_as_serde),
+                    quote!(__private_capture_anon_as_serde),
+                )
+            }
+            #[cfg(not(feature = "serde"))]
+            {
+                use syn::spanned::Spanned;
 
-                    let _ = args;
+                let _ = args;
 
-                    Err(syn::Error::new(expr.span(), "capturing with `serde` is only possible when the `serde` Cargo feature is enabled"))
-                }
-            }) as fn(TokenStream, TokenStream) -> syn::Result<TokenStream>
-        );
+                Err(syn::Error::new(expr.span(), "capturing with `serde` is only possible when the `serde` Cargo feature is enabled"))
+            }
+        }) as fn(TokenStream, TokenStream) -> syn::Result<TokenStream>
+    );
 
     map.insert(
         "as_error",
@@ -230,7 +230,7 @@ where
 
 This macro accepts the following optional control parameters:
 
-- `module: impl Into<emit::Path>`: The module the event belongs to. If unspecified the current module path is used.
+- `mdl: impl Into<emit::Path>`: The module the event belongs to. If unspecified the current module path is used.
 - `props: impl emit::Props`: A base set of properties to add to the event.
 - `extent: impl emit::ToExtent`: The extent to use on the event.
 
@@ -269,7 +269,7 @@ An `emit::Event`.
 #[proc_macro]
 pub fn debug_event(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     event::expand_tokens(event::ExpandTokens {
-        level: Some(quote!(Debug)),
+        level: Some(quote!(emit::Level::Debug)),
         input: item.into(),
     })
     .unwrap_or_compile_error()
@@ -289,7 +289,7 @@ An `emit::Event`.
 #[proc_macro]
 pub fn info_event(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     event::expand_tokens(event::ExpandTokens {
-        level: Some(quote!(Info)),
+        level: Some(quote!(emit::Level::Info)),
         input: item.into(),
     })
     .unwrap_or_compile_error()
@@ -309,7 +309,7 @@ An `emit::Event`.
 #[proc_macro]
 pub fn warn_event(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     event::expand_tokens(event::ExpandTokens {
-        level: Some(quote!(Warn)),
+        level: Some(quote!(emit::Level::Warn)),
         input: item.into(),
     })
     .unwrap_or_compile_error()
@@ -329,7 +329,7 @@ An `emit::Event`.
 #[proc_macro]
 pub fn error_event(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     event::expand_tokens(event::ExpandTokens {
-        level: Some(quote!(Error)),
+        level: Some(quote!(emit::Level::Error)),
         input: item.into(),
     })
     .unwrap_or_compile_error()
@@ -355,7 +355,7 @@ where
 This macro accepts the following optional control parameters:
 
 - `rt: impl emit::runtime::Runtime`: The runtime to emit the event through.
-- `module: impl Into<emit::Path>`: The module the event belongs to. If unspecified the current module path is used.
+- `mdl: impl Into<emit::Path>`: The module the event belongs to. If unspecified the current module path is used.
 - `when: impl emit::Filter`: A filter to use instead of the one configured on the runtime.
 - `arg`: An identifier to bind an `emit::Span` to in the body of the span for manual completion.
 - `ok_lvl`: Assume the instrumented block returns a `Result`. Assign the event the given level when the result is `Ok`.
@@ -390,7 +390,7 @@ pub fn debug_span(
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     base_span(
-        Some(quote!(Debug)),
+        Some(quote!(emit::Level::Debug)),
         TokenStream::from(args),
         TokenStream::from(item),
     )
@@ -409,7 +409,7 @@ pub fn info_span(
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     base_span(
-        Some(quote!(Info)),
+        Some(quote!(emit::Level::Info)),
         TokenStream::from(args),
         TokenStream::from(item),
     )
@@ -428,7 +428,7 @@ pub fn warn_span(
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     base_span(
-        Some(quote!(Warn)),
+        Some(quote!(emit::Level::Warn)),
         TokenStream::from(args),
         TokenStream::from(item),
     )
@@ -447,7 +447,7 @@ pub fn error_span(
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     base_span(
-        Some(quote!(Error)),
+        Some(quote!(emit::Level::Error)),
         TokenStream::from(args),
         TokenStream::from(item),
     )
@@ -523,7 +523,7 @@ This macro accepts the following optional control parameters:
 
 - `rt: impl emit::runtime::Runtime`: The runtime to emit the event through.
 - `evt: impl emit::event::ToEvent`: A base event to emit. Any properties captured by the macro will be appended to the base event. If this control parameter is specified then `module`, `props`, and `extent` cannot also be set.
-- `module: impl Into<emit::Path>`: The module the event belongs to. If unspecified the current module path is used.
+- `mdl: impl Into<emit::Path>`: The module the event belongs to. If unspecified the current module path is used.
 - `props: impl emit::Props`: A base set of properties to add to the event.
 - `extent: impl emit::ToExtent`: The extent to use on the event. If it resolves to `None` then the clock on the runtime will be used to assign a point extent.
 - `when: impl emit::Filter`: A filter to use instead of the one configured on the runtime.
@@ -550,7 +550,7 @@ See the [`macro@emit`] macro for syntax.
 */
 #[proc_macro]
 pub fn debug(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    base_emit(Some(quote!(Debug)), TokenStream::from(item))
+    base_emit(Some(quote!(emit::Level::Debug)), TokenStream::from(item))
 }
 
 /**
@@ -562,7 +562,7 @@ See the [`macro@emit`] macro for syntax.
 */
 #[proc_macro]
 pub fn info(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    base_emit(Some(quote!(Info)), TokenStream::from(item))
+    base_emit(Some(quote!(emit::Level::Info)), TokenStream::from(item))
 }
 
 /**
@@ -574,7 +574,7 @@ See the [`macro@emit`] macro for syntax.
 */
 #[proc_macro]
 pub fn warn(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    base_emit(Some(quote!(Warn)), TokenStream::from(item))
+    base_emit(Some(quote!(emit::Level::Warn)), TokenStream::from(item))
 }
 
 /**
@@ -586,7 +586,7 @@ See the [`macro@emit`] macro for syntax.
 */
 #[proc_macro]
 pub fn error(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    base_emit(Some(quote!(Error)), TokenStream::from(item))
+    base_emit(Some(quote!(emit::Level::Error)), TokenStream::from(item))
 }
 
 /**

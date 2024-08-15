@@ -406,7 +406,7 @@ http://localhost:4318/v1/logs
                            }
                         },
                         {
-                           "key": "event_kind",
+                           "key": "evt_kind",
                            "value": {
                               "stringValue": "span"
                            }
@@ -434,12 +434,12 @@ http://localhost:4318/v1/logs
 When the metrics signal is not configured, diagnostic events for metric samples are represented as regular OTLP log records. The following diagnostic:
 
 ```
-emit::runtime::shared().emit(
-    emit::Metric::new(
-        emit::module!(),
-        emit::Empty,
+emit::emit!(
+    evt: emit::Metric::new(
+        emit::mdl!(),
         "my_metric",
         "count",
+        emit::Empty,
         42,
         emit::Empty,
     )
@@ -480,7 +480,7 @@ http://localhost:4318/v1/logs
                      },
                      "attributes": [
                         {
-                           "key": "event_kind",
+                           "key": "evt_kind",
                            "value": {
                               "stringValue": "metric"
                            }
@@ -521,7 +521,7 @@ When the traces signal is configured, [`emit::Event`]s can be represented as OTL
 
 - They have a valid [`emit::span::TraceId`] in the [`emit::well_known::KEY_TRACE_ID`] property and [`emit::span::SpanId`] in the [`emit::well_known::KEY_SPAN_ID`] property.
 - Their [`emit::Event::extent`] is a span. That is, [`emit::Extent::is_span`] is `true`.
-- They have an [`emit::Kind::Span`] in the [`emit::well_known::KEY_EVENT_KIND`] property.
+- They have an [`emit::Kind::Span`] in the [`emit::well_known::KEY_EVT_KIND`] property.
 
 If any condition is not met, the event will be represented as an OTLP log record. If the logs signal is not configured then it will be discarded.
 
@@ -785,7 +785,7 @@ When the metrics signal is configured, [`emit::Event`]s can be represented as OT
 
 - They have a [`emit::well_known::KEY_METRIC_AGG`] properties.
 - They have a [`emit::well_known::KEY_METRIC_VALUE`] property with a numeric value or sequence of numeric values.
-- They have an [`emit::Kind::Metric`] in the [`emit::well_known::KEY_EVENT_KIND`] property.
+- They have an [`emit::Kind::Metric`] in the [`emit::well_known::KEY_EVT_KIND`] property.
 
 If any condition is not met, the event will be represented as an OTLP log record. If the logs signal is not configured then it will be discarded.
 
@@ -808,12 +808,12 @@ emit_otlp::new()
 If the metric aggregation is `"count"` then the resulting OTLP metric is a monotonic sum:
 
 ```
-emit::runtime::shared().emit(
-    emit::Metric::new(
-        emit::module!(),
-        emit::Empty,
+emit::emit!(
+    evt: emit::Metric::new(
+        emit::mdl!(),
         "my_metric",
         "count",
+        emit::Empty,
         42,
         emit::props! {
             a: true
@@ -880,12 +880,12 @@ http://localhost:4318/v1/metrics
 If the metric aggregation is `"sum"` then the resulting OTLP metric is a non-monotonic sum:
 
 ```
-emit::runtime::shared().emit(
-    emit::Metric::new(
-        emit::module!(),
-        emit::Empty,
+emit::emit!(
+    evt: emit::Metric::new(
+        emit::mdl!(),
         "my_metric",
         "sum",
+        emit::Empty,
         -8,
         emit::props! {
             a: true
@@ -952,12 +952,12 @@ http://localhost:4318/v1/metrics
 Any other aggregation will be represented as an OTLP gauge:
 
 ```
-emit::runtime::shared().emit(
-    emit::Metric::new(
-        emit::module!(),
-        emit::Empty,
+emit::emit!(
+    evt: emit::Metric::new(
+        emit::mdl!(),
         "my_metric",
         "last",
+        emit::Empty,
         615,
         emit::props! {
             a: true
@@ -1022,12 +1022,15 @@ http://localhost:4318/v1/metrics
 If the metric aggregation is `"count"` or `"sum"`, and value is a sequence, then each value will be summed to produce a single data point:
 
 ```
-emit::runtime::shared().emit(
-    emit::Metric::new(
-        emit::module!(),
-        emit::Timestamp::from_unix(std::time::Duration::from_secs(1716890420))..emit::Timestamp::from_unix(std::time::Duration::from_secs(1716890425)),
+let start = emit::Timestamp::from_unix(std::time::Duration::from_secs(1716890420));
+let end = emit::Timestamp::from_unix(std::time::Duration::from_secs(1716890425));
+
+emit::emit!(
+    evt: emit::Metric::new(
+        emit::mdl!(),
         "my_metric",
         "count",
+        start..end,
         &[
             1.0,
             1.0,

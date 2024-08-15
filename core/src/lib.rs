@@ -135,8 +135,8 @@ mod tests {
             MyClock(timestamp::Timestamp::from_unix(Duration::from_secs(77))),
             event::Event::new(
                 path::Path::new_unchecked("test"),
-                empty::Empty,
                 template::Template::literal("text"),
+                empty::Empty,
                 ("evt_prop", true),
             ),
         );
@@ -153,8 +153,8 @@ mod tests {
             empty::Empty,
             event::Event::new(
                 path::Path::new_unchecked("test"),
-                empty::Empty,
                 template::Template::literal("text"),
+                empty::Empty,
                 ("evt_prop", true),
             ),
         );

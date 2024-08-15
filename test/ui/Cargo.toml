@@ -1,0 +1,45 @@
+[package]
+name = "emit_test_ui"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[features]
+std = ["emit/std"]
+sval = ["emit/sval"]
+serde = ["emit/serde"]
+implicit_rt = ["emit/implicit_rt"]
+implicit_internal_rt = ["emit/implicit_internal_rt"]
+
+[dependencies.emit]
+path = "../../"
+default-features = false
+
+[dependencies.serde]
+version = "1"
+
+[dependencies.serde_derive]
+version = "1"
+
+[dependencies.serde_json]
+version = "1"
+
+[dependencies.sval]
+version = "2"
+
+[dependencies.sval_derive]
+version = "2"
+
+[dependencies.sval_json]
+version = "2"
+features = ["std"]
+
+[dependencies.trybuild]
+version = "1"
+
+[dependencies.tokio]
+version = "1"
+features = ["full"]
+
+[lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = ['cfg(emit_disabled)'] }

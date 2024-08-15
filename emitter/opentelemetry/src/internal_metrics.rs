@@ -29,9 +29,9 @@ macro_rules! metrics {
                 [$(
                     emit::metric::Metric::new(
                         emit::pkg!(),
-                        emit::empty::Empty,
                         stringify!($metric),
                         <$ty>::AGG,
+                        emit::empty::Empty,
                         $metric.sample(),
                         emit::empty::Empty,
                     ),

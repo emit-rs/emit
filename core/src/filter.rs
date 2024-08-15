@@ -109,7 +109,7 @@ A [`Filter`] from a function.
 
 This type can be created directly, or via [`from_fn`].
 */
-pub struct FromFn<F>(F);
+pub struct FromFn<F = fn(&Event<&dyn ErasedProps>) -> bool>(F);
 
 impl<F> FromFn<F> {
     /**
@@ -266,8 +266,8 @@ mod tests {
                 matches,
                 case.matches(Event::new(
                     Path::new_unchecked("module"),
-                    Empty,
                     Template::literal("Event"),
+                    Empty,
                     Empty,
                 ))
             );
@@ -285,8 +285,8 @@ mod tests {
                     a && b,
                     fa.and_when(fb).matches(Event::new(
                         Path::new_unchecked("module"),
-                        Empty,
                         Template::literal("Event"),
+                        Empty,
                         Empty,
                     ))
                 );
@@ -305,8 +305,8 @@ mod tests {
                     a || b,
                     fa.or_when(fb).matches(Event::new(
                         Path::new_unchecked("module"),
-                        Empty,
                         Template::literal("Event"),
+                        Empty,
                         Empty,
                     ))
                 );
@@ -316,19 +316,19 @@ mod tests {
 
     #[test]
     fn from_fn_filter() {
-        let f = from_fn(|evt| evt.module() == Path::new_unchecked("module"));
+        let f = from_fn(|evt| evt.mdl() == Path::new_unchecked("module"));
 
         assert!(f.matches(Event::new(
             Path::new_unchecked("module"),
-            Empty,
             Template::literal("Event"),
+            Empty,
             Empty,
         )));
 
         assert!(!f.matches(Event::new(
             Path::new_unchecked("not_module"),
-            Empty,
             Template::literal("Event"),
+            Empty,
             Empty,
         )));
     }
@@ -340,8 +340,8 @@ mod tests {
 
         assert!(f.matches(Event::new(
             Path::new_unchecked("module"),
-            Empty,
             Template::literal("Event"),
+            Empty,
             Empty,
         )));
 
@@ -350,8 +350,8 @@ mod tests {
 
         assert!(!f.matches(Event::new(
             Path::new_unchecked("module"),
-            Empty,
             Template::literal("Event"),
+            Empty,
             Empty,
         )));
     }
