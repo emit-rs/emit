@@ -21,3 +21,6 @@ version = "1"
 [dev-dependencies.tokio]
 version = "1"
 features = ["full"]
+
+[lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = ['cfg(emit_disabled)'] }

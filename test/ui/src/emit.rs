@@ -49,6 +49,30 @@ fn emit_basic() {
 }
 
 #[test]
+fn emit_interpolation() {
+    let rt = simple_runtime(
+        |evt| {
+            assert_eq!("Rust", evt.props().pull::<&str, _>("user").unwrap());
+        },
+        |_| true,
+    );
+
+    let user = "Rust";
+
+    emit::emit!(rt, "Hello, {user}");
+    emit::emit!(rt, "Hello, {user}", user: "Rust");
+    emit::emit!(rt, "Hello, {user}", user: String::from("Rust"));
+    emit::emit!(rt, "Hello, {user}", user);
+    emit::emit!(rt, "Hello, {user: \"Rust\"}");
+    emit::emit!(rt, "Hello, {user: String::from(\"Rust\")}");
+
+    emit::emit!(rt, "Hello, {user: {user}}");
+    emit::emit!(rt, "Hello, {user}", user: {"Rust"});
+    emit::emit!(rt, "Hello, {user: {\"Rust\"}}");
+    emit::emit!(rt, "Hello, {user: {String::from(\"Rust\")}}");
+}
+
+#[test]
 fn emit_filter() {
     let called = Called::new();
     let rt = simple_runtime(|_| called.record(), |evt| evt.mdl() == "true");
