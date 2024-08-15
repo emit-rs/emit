@@ -132,6 +132,13 @@ impl<'v> Value<'v> {
     }
 
     /**
+    Whether the value is null.
+    */
+    pub fn is_null(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /**
     Get a new value, borrowing data from this one.
     */
     pub fn by_ref<'b>(&'b self) -> Value<'b> {
@@ -205,7 +212,7 @@ impl<'v> Value<'v> {
     Try get a borrowed error value.
     */
     #[cfg(feature = "std")]
-    pub fn to_borrowed_err(&self) -> Option<&'v (dyn std::error::Error + 'static)> {
+    pub fn to_borrowed_error(&self) -> Option<&'v (dyn std::error::Error + 'static)> {
         self.0.to_borrowed_error()
     }
 
@@ -421,7 +428,7 @@ impl ToValue for (dyn std::error::Error + 'static) {
 #[cfg(feature = "std")]
 impl<'v> FromValue<'v> for &'v (dyn std::error::Error + 'static) {
     fn from_value(value: Value<'v>) -> Option<Self> {
-        value.to_borrowed_err()
+        value.to_borrowed_error()
     }
 }
 

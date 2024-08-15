@@ -111,52 +111,52 @@ fn hooks() -> HashMap<&'static str, fn(TokenStream, TokenStream) -> syn::Result<
     );
 
     map.insert(
-            "as_sval",
-            (|args: TokenStream, expr: TokenStream| {
-                #[cfg(feature = "sval")]
-                {
-                    capture_as(
-                        "as_sval",
-                        args,
-                        expr,
-                        quote!(__private_capture_as_sval),
-                        quote!(__private_capture_anon_as_sval),
-                    )
-                }
-                #[cfg(not(feature = "sval"))]
-                {
-                    use syn::spanned::Spanned;
+        "as_sval",
+        (|args: TokenStream, expr: TokenStream| {
+            #[cfg(feature = "sval")]
+            {
+                capture_as(
+                    "as_sval",
+                    args,
+                    expr,
+                    quote!(__private_capture_as_sval),
+                    quote!(__private_capture_anon_as_sval),
+                )
+            }
+            #[cfg(not(feature = "sval"))]
+            {
+                use syn::spanned::Spanned;
 
-                    let _ = args;
+                let _ = args;
 
-                    Err(syn::Error::new(expr.span(), "capturing with `sval` is only possible when the `sval` Cargo feature is enabled"))
-                }
-            }) as fn(TokenStream, TokenStream) -> syn::Result<TokenStream>
-        );
+                Err(syn::Error::new(expr.span(), "capturing with `sval` is only possible when the `sval` Cargo feature is enabled"))
+            }
+        }) as fn(TokenStream, TokenStream) -> syn::Result<TokenStream>
+    );
 
     map.insert(
-            "as_serde",
-            (|args: TokenStream, expr: TokenStream| {
-                #[cfg(feature = "serde")]
-                {
-                    capture_as(
-                        "as_serde",
-                        args,
-                        expr,
-                        quote!(__private_capture_as_serde),
-                        quote!(__private_capture_anon_as_serde),
-                    )
-                }
-                #[cfg(not(feature = "serde"))]
-                {
-                    use syn::spanned::Spanned;
+        "as_serde",
+        (|args: TokenStream, expr: TokenStream| {
+            #[cfg(feature = "serde")]
+            {
+                capture_as(
+                    "as_serde",
+                    args,
+                    expr,
+                    quote!(__private_capture_as_serde),
+                    quote!(__private_capture_anon_as_serde),
+                )
+            }
+            #[cfg(not(feature = "serde"))]
+            {
+                use syn::spanned::Spanned;
 
-                    let _ = args;
+                let _ = args;
 
-                    Err(syn::Error::new(expr.span(), "capturing with `serde` is only possible when the `serde` Cargo feature is enabled"))
-                }
-            }) as fn(TokenStream, TokenStream) -> syn::Result<TokenStream>
-        );
+                Err(syn::Error::new(expr.span(), "capturing with `serde` is only possible when the `serde` Cargo feature is enabled"))
+            }
+        }) as fn(TokenStream, TokenStream) -> syn::Result<TokenStream>
+    );
 
     map.insert(
         "as_error",

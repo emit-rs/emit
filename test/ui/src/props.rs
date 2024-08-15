@@ -1,3 +1,5 @@
+use std::fmt;
+
 use emit::Props;
 
 #[test]
@@ -235,40 +237,133 @@ fn props_capture_span_parent_as_non_span_id() {
 
 #[test]
 fn props_key() {
-    todo!()
+    match emit::props! {
+        #[emit::key("not an identifier")] a: 1,
+    } {
+        props => {
+            assert_eq!(1, props.pull::<i32, _>("not an identifier").unwrap());
+        }
+    }
 }
 
 #[test]
 fn props_optional() {
-    todo!()
+    match emit::props! {
+        #[emit::optional] some: Some(1),
+        #[emit::optional] none: None::<i32>,
+    } {
+        props => {
+            assert_eq!(1, props.pull::<i32, _>("some").unwrap());
+            assert!(props.get("none").is_none());
+        }
+    }
 }
 
 #[test]
 fn props_as_debug() {
-    todo!()
+    #[derive(Debug)]
+    struct Data;
+
+    match emit::props! {
+        #[emit::as_debug] a: Data,
+    } {
+        props => {
+            assert_eq!(format!("{:?}", Data), props.get("a").unwrap().to_string());
+        }
+    }
 }
 
 #[test]
 fn props_as_display() {
-    todo!()
+    struct Data;
+
+    impl fmt::Display for Data {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "Data")
+        }
+    }
+
+    match emit::props! {
+        #[emit::as_display] a: Data,
+    } {
+        props => {
+            assert_eq!(format!("{}", Data), props.get("a").unwrap().to_string());
+        }
+    }
 }
 
 #[test]
 fn props_as_error() {
-    todo!()
+    use std::{error, io};
+
+    match emit::props! {
+        #[emit::as_error] a: io::Error::new(io::ErrorKind::Other, "Some error"),
+    } {
+        props => {
+            let err = props.pull::<&(dyn error::Error + 'static), _>("a").unwrap();
+
+            assert_eq!("Some error", err.to_string());
+        }
+    }
 }
 
 #[test]
 fn props_as_value() {
-    todo!()
+    struct Data;
+
+    impl emit::value::ToValue for Data {
+        fn to_value(&self) -> emit::Value {
+            "Data".to_value()
+        }
+    }
+
+    match emit::props! {
+        #[emit::as_value] data: Data,
+        #[emit::as_value] some: Some(Data),
+        #[emit::as_value] none: None::<Data>,
+    } {
+        props => {
+            assert_eq!("Data", props.pull::<&str, _>("data").unwrap());
+            assert_eq!("Data", props.pull::<&str, _>("some").unwrap());
+            assert!(props.get("none").unwrap().is_null());
+        }
+    }
 }
 
 #[test]
 fn props_as_sval() {
-    todo!()
+    #[derive(Value)]
+    struct Data {
+        a: i32,
+    }
+
+    match emit::props! {
+        #[emit::as_sval] a: Data { a: 42 },
+    } {
+        props => {
+            assert_eq!(
+                "{\"a\":42}",
+                sval_json::stream_to_string(props.get("a").unwrap()).unwrap()
+            );
+        }
+    }
 }
 
 #[test]
 fn props_as_serde() {
-    todo!()
+    #[derive(Serialize)]
+    struct Data {
+        a: i32,
+    }
+
+    match emit::props! {
+        #[emit::as_serde] a: Data { a: 42 },
+    } {
+        props => {
+            assert_eq!(
+                "{\"a\":42}",
+                serde_json::to_string(&props.get("a").unwrap()).unwrap()
+            );
+        }
+    }
 }

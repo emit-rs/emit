@@ -15,10 +15,29 @@ implicit_internal_rt = ["emit/implicit_internal_rt"]
 path = "../../"
 default-features = false
 
-[dev-dependencies.trybuild]
+[dependencies.serde]
 version = "1"
 
-[dev-dependencies.tokio]
+[dependencies.serde_derive]
+version = "1"
+
+[dependencies.serde_json]
+version = "1"
+
+[dependencies.sval]
+version = "2"
+
+[dependencies.sval_derive]
+version = "2"
+
+[dependencies.sval_json]
+version = "2"
+features = ["std"]
+
+[dependencies.trybuild]
+version = "1"
+
+[dependencies.tokio]
 version = "1"
 features = ["full"]
 

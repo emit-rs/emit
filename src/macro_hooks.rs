@@ -289,7 +289,7 @@ impl CaptureAsAnonSerde for str {
 }
 
 #[diagnostic::on_unimplemented(
-    message = "capturing with `#[emit::as_error]` requires `Error + 'static`. Use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
+    message = "capturing an error requires a `str` or `Error + 'static`."
 )]
 pub trait CaptureAsError {
     fn capture(&self) -> Option<Value>;

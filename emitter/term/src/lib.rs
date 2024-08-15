@@ -191,7 +191,7 @@ fn print_event(
     write_plain(buf, "\n");
 
     if let Some(err) = evt.props().get(KEY_ERR) {
-        if let Some(err) = err.to_borrowed_err() {
+        if let Some(err) = err.to_borrowed_error() {
             write_plain(buf, "  ");
             try_write_fg(buf, "err", lvl);
             write_plain(buf, format_args!(": {err}\n"));
