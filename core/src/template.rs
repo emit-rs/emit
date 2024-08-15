@@ -16,7 +16,7 @@ Hello, Rust.
 `Template`s are conceptually similar to the standard library's `Arguments` type. The key difference between them is that templates are a runtime construct rather than a compile time one. You can construct a template programmatically, inspect its holes, and choose to render it in any way you like. The standard library's formatting APIs are optimized for producing strings. Templates are both a property capturing and a formatting tool.
 */
 
-use core::{cmp, fmt};
+use core::{cmp, fmt, slice};
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
@@ -137,6 +137,13 @@ impl<'a> Template<'a> {
     }
 
     /**
+    Iterate over the parts of the template.
+    */
+    pub fn parts(&'_ self) -> Parts<'_, 'a> {
+        Parts(self.0.parts().iter())
+    }
+
+    /**
     Lazily render the template, using the given properties for interpolation.
     */
     pub fn render<'b, P>(&'b self, props: P) -> Render<'b, P> {
@@ -144,6 +151,19 @@ impl<'a> Template<'a> {
             tpl: self.by_ref(),
             props,
         }
+    }
+}
+
+/**
+The result of calling [`Template::parts`].
+*/
+pub struct Parts<'a, 'b>(slice::Iter<'a, Part<'b>>);
+
+impl<'a, 'b> Iterator for Parts<'a, 'b> {
+    type Item = &'a Part<'b>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next()
     }
 }
 
@@ -470,6 +490,30 @@ impl<'a> Part<'a> {
     pub const fn as_text(&'_ self) -> Option<&'_ Str<'a>> {
         match self.0 {
             PartKind::Text { ref value, .. } => Some(value),
+            _ => None,
+        }
+    }
+
+    /**
+    Try get the label of the part.
+
+    If the part is a [`Part::hole`] this method will return `Some`. Otherwise it will return `None.
+    */
+    pub const fn label(&'_ self) -> Option<&'_ Str<'a>> {
+        match self.0 {
+            PartKind::Hole { ref label, .. } => Some(label),
+            _ => None,
+        }
+    }
+
+    /**
+    Try get the formatter of the part.
+
+    If the part is a [`Part::hole`] and a formatter has been set through [`Part::with_formatter`] then this method will return `Some`. Otherwise it will return `None.
+    */
+    pub const fn formatter(&self) -> Option<&Formatter> {
+        match self.0 {
+            PartKind::Hole { ref formatter, .. } => formatter.as_ref(),
             _ => None,
         }
     }

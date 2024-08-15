@@ -1,11 +1,21 @@
 #[test]
 fn tpl_basic() {
-    todo!()
+    match emit::tpl!("Hello, {user}") {
+        tpl => {
+            let parts = tpl.parts().collect::<Vec<_>>();
+
+            assert_eq!("Hello, ", parts[0].as_text().unwrap());
+            assert_eq!("user", parts[1].label().unwrap());
+        }
+    }
 }
 
 #[test]
 fn tpl_parts() {
-    todo!()
+    let parts = emit::tpl_parts!("Hello, {user}");
+
+    assert_eq!("Hello, ", parts[0].as_text().unwrap());
+    assert_eq!("user", parts[1].label().unwrap());
 }
 
 #[test]
@@ -19,5 +29,17 @@ fn tpl_cfg() {
 
 #[test]
 fn tpl_fmt() {
-    todo!()
+    match emit::tpl!(
+        "Hello, {user}",
+        #[emit::fmt("?")]
+        user
+    ) {
+        tpl => {
+            let parts = tpl.parts().collect::<Vec<_>>();
+
+            assert_eq!("Hello, ", parts[0].as_text().unwrap());
+            assert_eq!("user", parts[1].label().unwrap());
+            assert!(parts[1].formatter().is_some());
+        }
+    }
 }
