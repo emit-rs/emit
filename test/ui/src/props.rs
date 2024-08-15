@@ -37,6 +37,7 @@ fn props_cfg() {
 }
 
 #[test]
+#[cfg(feature = "std")]
 fn props_capture_err() {
     use std::{error, io};
 
@@ -293,6 +294,7 @@ fn props_as_display() {
 }
 
 #[test]
+#[cfg(feature = "std")]
 fn props_as_error() {
     use std::{error, io};
 
@@ -331,6 +333,7 @@ fn props_as_value() {
 }
 
 #[test]
+#[cfg(feature = "sval")]
 fn props_as_sval() {
     #[derive(Value)]
     struct Data {
@@ -350,6 +353,7 @@ fn props_as_sval() {
 }
 
 #[test]
+#[cfg(feature = "serde")]
 fn props_as_serde() {
     #[derive(Serialize)]
     struct Data {

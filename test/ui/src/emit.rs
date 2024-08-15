@@ -52,7 +52,7 @@ fn emit_basic() {
 fn emit_interpolation() {
     let rt = simple_runtime(
         |evt| {
-            assert_eq!("Rust", evt.props().pull::<&str, _>("user").unwrap());
+            assert_eq!("Rust", evt.props().get("user").unwrap().to_string());
         },
         |_| true,
     );
