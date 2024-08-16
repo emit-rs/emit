@@ -8,6 +8,12 @@ use crate::{
     util::{AttributeCfg, FieldValueKey},
 };
 
+pub struct PropsArg(Option<TokenStream>);
+
+impl PropsArg {
+    
+}
+
 pub struct Props {
     match_value_tokens: Vec<TokenStream>,
     match_binding_tokens: Vec<TokenStream>,

@@ -635,37 +635,45 @@ impl<A: Filter, B: Filter> Filter for FirstDefined<A, B> {
     }
 }
 
+pub trait __PrivateToMdl {
+    fn __private_to_mdl(&self) -> Path;
+}
+
+pub trait __PrivateToTpl {
+    fn __private_to_tpl(&self) -> Template;
+}
+
 #[track_caller]
 pub fn __private_emit<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
     rt: &'a Runtime<E, F, C, T, R>,
-    mdl: impl Into<Path<'b>>,
-    when: Option<impl Filter>,
-    extent: impl ToExtent,
-    tpl: Template<'b>,
-    base_props: impl Props,
-    props: impl Props,
+    mdl: &'b (impl __PrivateToMdl + ?Sized),
+    when: Option<&'b (impl Filter + ?Sized)>,
+    extent: &'b (impl ToExtent + ?Sized),
+    tpl: &'b (impl __PrivateToTpl + ?Sized),
+    base_props: &'b (impl Props + ?Sized),
+    props: &'b (impl Props + ?Sized),
 ) {
     emit_core::emit(
         rt.emitter(),
         FirstDefined(when, rt.filter()),
         rt.ctxt(),
         rt.clock(),
-        Event::new(mdl, tpl, extent, props.and_props(base_props)),
+        Event::new(mdl.__private_to_mdl(), tpl.__private_to_tpl(), extent, props.and_props(base_props)),
     );
 }
 
 #[track_caller]
 pub fn __private_emit_event<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
     rt: &'a Runtime<E, F, C, T, R>,
-    when: Option<impl Filter>,
-    event: &'b impl ToEvent,
-    tpl: Option<Template<'b>>,
-    props: impl Props,
+    when: Option<&'b (impl Filter + ?Sized)>,
+    event: &'b (impl ToEvent + ?Sized),
+    tpl: Option<&'b (impl __PrivateToTpl + ?Sized)>,
+    props: &'b (impl Props + ?Sized),
 ) {
     let mut event = event.to_event();
 
     if let Some(tpl) = tpl {
-        event = event.with_tpl(tpl);
+        event = event.with_tpl(tpl.__private_to_tpl());
     }
 
     let event = event.map_props(|event_props| props.and_props(event_props));
@@ -680,6 +688,21 @@ pub fn __private_emit_event<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R:
 }
 
 #[track_caller]
+pub fn __private_event<'a, P: Props + ?Sized>(
+    mdl: &'a (impl __PrivateToMdl + ?Sized),
+    tpl: &'a (impl __PrivateToTpl + ?Sized),
+    extent: &'a (impl ToExtent + ?Sized),
+    props: &'a P,
+) -> Event<'a, &'a P> {
+    Event::new(
+        mdl.__private_to_mdl(),
+        tpl.__private_to_tpl(),
+        extent.to_extent(),
+        props,
+    )
+}
+
+#[track_caller]
 pub fn __private_begin_span<
     'a,
     'b,
@@ -691,12 +714,12 @@ pub fn __private_begin_span<
     S: FnOnce(Span<'static, Empty>),
 >(
     rt: &'a Runtime<E, F, C, T, R>,
-    mdl: impl Into<Path<'static>>,
-    when: Option<impl Filter>,
-    tpl: Template<'b>,
-    span_ctxt_props: impl Props,
-    span_evt_props: impl Props,
-    name: impl Into<Str<'static>>,
+    mdl: Path<'static>,
+    when: Option<&'b (impl Filter + ?Sized)>,
+    tpl: Template<'static>,
+    span_ctxt_props: &'b (impl Props + ?Sized),
+    span_evt_props: &'b (impl Props + ?Sized),
+    name: Str<'static>,
     default_complete: S,
 ) -> (Frame<Option<&'a C>>, SpanGuard<'static, &'a T, Empty, S>) {
     let mut span = SpanGuard::filtered_new(
@@ -732,8 +755,8 @@ pub fn __private_begin_span<
 pub fn __private_complete_span<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
     rt: &'a Runtime<E, F, C, T, R>,
     span: Span<'static, Empty>,
-    tpl: Template<'b>,
-    span_evt_props: impl Props,
+    tpl: &'b (impl __PrivateToTpl + ?Sized),
+    span_evt_props: &'b (impl Props + ?Sized),
 ) {
     emit_core::emit(
         rt.emitter(),
@@ -741,7 +764,7 @@ pub fn __private_complete_span<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock,
         rt.ctxt(),
         rt.clock(),
         span.to_event()
-            .with_tpl(tpl)
+            .with_tpl(tpl.__private_to_tpl())
             .map_props(|span_props| span_evt_props.and_props(span_props)),
     );
 }

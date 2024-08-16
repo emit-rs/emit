@@ -79,60 +79,6 @@ impl Arg<TokenStream> {
     ) -> Self {
         Arg::new(key, to_tokens)
     }
-
-    /**
-    Returns `Some(&#tokens)` if the arg was present, or `None::<emit::Empty>` if it wasn't.
-     */
-    pub fn take_some_or_empty_ref(self) -> TokenStream {
-        self.take_ref()
-            .map(|tokens| quote!(Some(#tokens)))
-            .unwrap_or_else(|| quote!(None::<emit::Empty>))
-    }
-
-    /**
-    Returns `&#tokens`.
-    */
-    pub fn take_ref(self) -> Option<TokenStream> {
-        self.take().map(|tokens| quote!(&#tokens))
-    }
-
-    pub fn take_rt_ref(self) -> Result<TokenStream, syn::Error> {
-        let provided = self.take_ref();
-
-        #[cfg(feature = "implicit_rt")]
-        {
-            Ok(provided.unwrap_or_else(|| quote!(emit::runtime::shared())))
-        }
-        #[cfg(not(feature = "implicit_rt"))]
-        {
-            use proc_macro2::Span;
-
-            provided.ok_or_else(|| syn::Error::new(Span::call_site(), "a runtime must be specified by the `rt` parameter unless the `implicit_rt` feature of `emit` is enabled"))
-        }
-    }
-
-    pub fn take_if_std(self) -> Result<Option<TokenStream>, syn::Error> {
-        #[cfg(feature = "std")]
-        {
-            Ok(self.take())
-        }
-        #[cfg(not(feature = "std"))]
-        {
-            use syn::spanned::Spanned;
-
-            if let Some(value) = self.value {
-                Err(syn::Error::new(
-                    value.span(),
-                    format!(
-                        "capturing `{}` is only possible when the `std` Cargo feature is enabled",
-                        self.key
-                    ),
-                ))
-            } else {
-                Ok(None)
-            }
-        }
-    }
 }
 
 impl<T> Arg<T> {
@@ -153,6 +99,29 @@ impl<T> Arg<T> {
 
     pub fn take(self) -> Option<T> {
         self.value
+    }
+
+    pub fn take_if_std(self) -> Result<Option<T>, syn::Error> {
+        #[cfg(feature = "std")]
+        {
+            Ok(self.take())
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            use syn::spanned::Spanned;
+
+            if let Some(value) = self.value {
+                Err(syn::Error::new(
+                    value.span(),
+                    format!(
+                        "capturing `{}` is only possible when the `std` Cargo feature is enabled",
+                        self.key
+                    ),
+                ))
+            } else {
+                Ok(None)
+            }
+        }
     }
 }
 
@@ -210,4 +179,47 @@ pub fn set_from_field_values<'a, const N: usize>(
     }
 
     Ok(())
+}
+
+#[derive(Default)]
+pub struct ValueOrEmptyArg(Option<TokenStream>);
+
+impl ValueOrEmptyArg {
+    pub fn new(value: TokenStream) -> Self {
+        ValueOrEmptyArg(Some(value))
+    }
+
+    pub fn to_tokens(&self) -> TokenStream {
+        self.0.clone().unwrap_or_else(|| quote!(emit::Empty))
+    }
+}
+
+pub type ExtentArg = ValueOrEmptyArg;
+pub type WhenArg = ValueOrEmptyArg;
+pub type PropsArg = ValueOrEmptyArg;
+
+#[derive(Default)]
+pub struct MdlArg(Option<TokenStream>);
+
+impl MdlArg {
+    pub fn new(value: TokenStream) -> Self {
+        MdlArg(Some(value))
+    }
+
+    pub fn to_tokens(&self) -> TokenStream {
+        self.0.clone().unwrap_or_else(|| quote!(emit::mdl!()))
+    }
+}
+
+#[derive(Default)]
+pub struct RtArg(Option<TokenStream>);
+
+impl RtArg {
+    pub fn new(value: TokenStream) -> Self {
+        RtArg(Some(value))
+    }
+
+    pub fn to_tokens(&self) -> Result<TokenStream, syn::Error> {
+        todo!()
+    }
 }

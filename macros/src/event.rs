@@ -3,7 +3,6 @@ use syn::{parse::Parse, spanned::Spanned, FieldValue, Ident};
 
 use crate::{
     args::{self, Arg},
-    mdl::mdl_tokens,
     props::Props,
     template,
 };
@@ -14,27 +13,27 @@ pub struct ExpandTokens {
 }
 
 struct Args {
-    mdl: TokenStream,
-    props: TokenStream,
-    extent: TokenStream,
+    mdl: args::MdlArg,
+    props: args::PropsArg,
+    extent: args::ExtentArg,
 }
 
 impl Parse for Args {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut mdl = Arg::token_stream("mdl", |fv| {
+        let mut mdl = Arg::new("mdl", |fv| {
             let expr = &fv.expr;
 
-            Ok(quote_spanned!(expr.span()=> #expr))
+            Ok(args::MdlArg::new(quote_spanned!(expr.span()=> #expr)))
         });
-        let mut extent = Arg::token_stream("extent", |fv| {
+        let mut extent = Arg::new("extent", |fv| {
             let expr = &fv.expr;
 
-            Ok(quote_spanned!(expr.span()=> #expr))
+            Ok(args::ExtentArg::new(quote_spanned!(expr.span()=> #expr)))
         });
-        let mut props = Arg::token_stream("props", |fv| {
+        let mut props = Arg::new("props", |fv| {
             let expr = &fv.expr;
 
-            Ok(quote_spanned!(expr.span()=> #expr))
+            Ok(args::PropsArg::new(quote_spanned!(expr.span()=> #expr)))
         });
 
         args::set_from_field_values(
@@ -43,9 +42,9 @@ impl Parse for Args {
         )?;
 
         Ok(Args {
-            mdl: mdl.take().unwrap_or_else(|| mdl_tokens()),
-            extent: extent.take().unwrap_or_else(|| quote!(emit::empty::Empty)),
-            props: props.take().unwrap_or_else(|| quote!(emit::empty::Empty)),
+            mdl: mdl.take_or_default(),
+            extent: extent.take_or_default(),
+            props: props.take_or_default(),
         })
     }
 }
@@ -60,11 +59,11 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
 
     push_evt_props(&mut props, opts.level)?;
 
-    let extent_tokens = args.extent;
-    let base_props_tokens = args.props;
+    let extent_tokens = args.extent.to_tokens();
+    let base_props_tokens = args.props.to_tokens();
     let template_tokens = template.template_tokens();
     let props_tokens = props.props_tokens();
-    let mdl_tokens = args.mdl;
+    let mdl_tokens = args.mdl.to_tokens();
 
     Ok(
         quote!(emit::Event::new(#mdl_tokens, #template_tokens, #extent_tokens, emit::Props::and_props(&#base_props_tokens, #props_tokens))),

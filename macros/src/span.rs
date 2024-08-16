@@ -7,7 +7,6 @@ use syn::{
 use crate::{
     args::{self, Arg},
     event::push_evt_props,
-    mdl::mdl_tokens,
     props::Props,
     template::{self, Template},
 };
@@ -19,9 +18,9 @@ pub struct ExpandTokens {
 }
 
 struct Args {
-    rt: TokenStream,
-    mdl: TokenStream,
-    when: TokenStream,
+    rt: args::RtArg,
+    mdl: args::MdlArg,
+    when: args::WhenArg,
     guard: Option<Ident>,
     ok_lvl: Option<TokenStream>,
     err_lvl: Option<TokenStream>,
@@ -29,20 +28,20 @@ struct Args {
 
 impl Parse for Args {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut rt = Arg::token_stream("rt", |fv| {
+        let mut rt = Arg::new("rt", |fv| {
             let expr = &fv.expr;
 
-            Ok(quote_spanned!(expr.span()=> #expr))
+            Ok(args::RtArg::new(quote_spanned!(expr.span()=> #expr)))
         });
-        let mut mdl = Arg::token_stream("mdl", |fv| {
+        let mut mdl = Arg::new("mdl", |fv| {
             let expr = &fv.expr;
 
-            Ok(quote_spanned!(expr.span()=> #expr))
+            Ok(args::MdlArg::new(quote_spanned!(expr.span()=> #expr)))
         });
-        let mut when = Arg::token_stream("when", |fv| {
+        let mut when = Arg::new("when", |fv| {
             let expr = &fv.expr;
 
-            Ok(quote_spanned!(expr.span()=> #expr))
+            Ok(args::WhenArg::new(quote_spanned!(expr.span()=> #expr)))
         });
         let mut ok_lvl = Arg::token_stream("ok_lvl", |fv| {
             let expr = &fv.expr;
@@ -69,9 +68,9 @@ impl Parse for Args {
         )?;
 
         Ok(Args {
-            rt: rt.take_rt_ref()?,
-            mdl: mdl.take().unwrap_or_else(|| mdl_tokens()),
-            when: when.take_some_or_empty_ref(),
+            rt: rt.take_or_default(),
+            mdl: mdl.take_or_default(),
+            when: when.take_or_default(),
             ok_lvl: ok_lvl.take_if_std()?,
             err_lvl: err_lvl.take_if_std()?,
             guard: guard.take(),
