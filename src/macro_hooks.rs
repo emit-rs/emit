@@ -639,8 +639,20 @@ pub trait __PrivateToMdl {
     fn __private_to_mdl(&self) -> Path;
 }
 
+impl<'a> __PrivateToMdl for Path<'a> {
+    fn __private_to_mdl(&self) -> Path {
+        self.by_ref()
+    }
+}
+
 pub trait __PrivateToTpl {
     fn __private_to_tpl(&self) -> Template;
+}
+
+impl<'a> __PrivateToTpl for Template<'a> {
+    fn __private_to_tpl(&self) -> Template {
+        self.by_ref()
+    }
 }
 
 #[track_caller]
@@ -658,7 +670,12 @@ pub fn __private_emit<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
         FirstDefined(when, rt.filter()),
         rt.ctxt(),
         rt.clock(),
-        Event::new(mdl.__private_to_mdl(), tpl.__private_to_tpl(), extent, props.and_props(base_props)),
+        Event::new(
+            mdl.__private_to_mdl(),
+            tpl.__private_to_tpl(),
+            extent,
+            props.and_props(base_props),
+        ),
     );
 }
 
@@ -714,14 +731,18 @@ pub fn __private_begin_span<
     S: FnOnce(Span<'static, Empty>),
 >(
     rt: &'a Runtime<E, F, C, T, R>,
-    mdl: Path<'static>,
+    mdl: impl Into<Path<'static>>,
+    name: impl Into<Str<'static>>,
+    tpl: &'b (impl __PrivateToTpl + ?Sized),
     when: Option<&'b (impl Filter + ?Sized)>,
-    tpl: Template<'static>,
     span_ctxt_props: &'b (impl Props + ?Sized),
     span_evt_props: &'b (impl Props + ?Sized),
-    name: Str<'static>,
     default_complete: S,
 ) -> (Frame<Option<&'a C>>, SpanGuard<'static, &'a T, Empty, S>) {
+    let mdl = mdl.into();
+    let name = name.into();
+    let tpl = tpl.__private_to_tpl();
+
     let mut span = SpanGuard::filtered_new(
         |span_ctxt, span| {
             rt.ctxt().with_current(|ctxt_props| {

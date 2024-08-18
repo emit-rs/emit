@@ -9,6 +9,7 @@ use crate::{
     event::push_evt_props,
     props::Props,
     template::{self, Template},
+    util::{ToOptionTokens, ToRefTokens},
 };
 
 pub struct ExpandTokens {
@@ -90,11 +91,17 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         .guard
         .unwrap_or_else(|| Ident::new("__span", Span::call_site()));
 
-    let mdl_tokens = args.mdl;
-
     let default_lvl_tokens = opts.level;
     let ok_lvl_tokens = args.ok_lvl;
     let err_lvl_tokens = args.err_lvl;
+
+    let rt_tokens = args.rt.to_tokens()?.to_ref_tokens();
+    let mdl_tokens = args.mdl.to_tokens();
+    let when_tokens = args
+        .when
+        .to_tokens()
+        .map(|when| when.to_ref_tokens())
+        .to_option_tokens(quote!(&emit::Empty));
 
     let mut item = syn::parse2::<Stmt>(opts.item)?;
     match &mut item {
@@ -110,9 +117,9 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
             ..
         })) => {
             **block = syn::parse2::<Block>(inject_sync(
-                &args.rt,
+                &rt_tokens,
                 &mdl_tokens,
-                &args.when,
+                &when_tokens,
                 &template,
                 &ctxt_props,
                 &span_guard,
@@ -126,9 +133,9 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         // A synchronous block
         Stmt::Expr(Expr::Block(ExprBlock { block, .. }), _) => {
             *block = syn::parse2::<Block>(inject_sync(
-                &args.rt,
+                &rt_tokens,
                 &mdl_tokens,
-                &args.when,
+                &when_tokens,
                 &template,
                 &ctxt_props,
                 &span_guard,
@@ -151,9 +158,9 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
             ..
         })) => {
             **block = syn::parse2::<Block>(inject_async(
-                &args.rt,
+                &rt_tokens,
                 &mdl_tokens,
-                &args.when,
+                &when_tokens,
                 &template,
                 &ctxt_props,
                 &span_guard,
@@ -167,9 +174,9 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         // An asynchronous block
         Stmt::Expr(Expr::Async(ExprAsync { block, .. }), _) => {
             *block = syn::parse2::<Block>(inject_async(
-                &args.rt,
+                &rt_tokens,
                 &mdl_tokens,
-                &args.when,
+                &when_tokens,
                 &template,
                 &ctxt_props,
                 &span_guard,
@@ -200,7 +207,7 @@ fn inject_sync(
     err_lvl_tokens: Option<TokenStream>,
 ) -> Result<TokenStream, syn::Error> {
     let ctxt_props_tokens = ctxt_props.props_tokens();
-    let template_tokens = template.template_tokens();
+    let template_tokens = template.template_tokens().to_ref_tokens();
     let template_literal_tokens = template.template_literal_tokens();
 
     let Completion {
@@ -222,11 +229,11 @@ fn inject_sync(
         let (mut __ctxt, __span_guard) = emit::__private::__private_begin_span(
             #rt_tokens,
             #mdl_tokens,
-            #when_tokens,
+            #template_literal_tokens,
             #template_tokens,
+            #when_tokens,
             #ctxt_props_tokens,
             #span_evt_props_tokens,
-            #template_literal_tokens,
             #default_completion_tokens,
         );
         let __ctxt_guard = __ctxt.enter();
@@ -251,7 +258,7 @@ fn inject_async(
     err_lvl_tokens: Option<TokenStream>,
 ) -> Result<TokenStream, syn::Error> {
     let ctxt_props_tokens = ctxt_props.props_tokens();
-    let template_tokens = template.template_tokens();
+    let template_tokens = template.template_tokens().to_ref_tokens();
     let template_literal_tokens = template.template_literal_tokens();
 
     let Completion {
@@ -273,11 +280,11 @@ fn inject_async(
         let (__ctxt, __span_guard) = emit::__private::__private_begin_span(
             #rt_tokens,
             #mdl_tokens,
-            #when_tokens,
+            #template_literal_tokens,
             #template_tokens,
+            #when_tokens,
             #ctxt_props_tokens,
             #span_evt_props_tokens,
-            #template_literal_tokens,
             #default_completion_tokens,
         );
 

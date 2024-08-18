@@ -5,6 +5,7 @@ use crate::{
     args::{self, Arg},
     event::push_evt_props,
     template,
+    util::{ToOptionTokens, ToRefTokens},
 };
 
 pub struct ExpandTokens {
@@ -94,18 +95,19 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     let props_match_binding_tokens = props.match_binding_tokens();
     let props_tokens = props.match_bound_tokens();
 
-    let rt_tokens = args.rt.to_tokens()?;
-    let when_tokens = args.when.to_tokens();
+    let rt_tokens = args.rt.to_tokens()?.to_ref_tokens();
+    let when_tokens = args
+        .when
+        .to_tokens()
+        .map(|when| when.to_ref_tokens())
+        .to_option_tokens(quote!(&emit::Empty));
 
     let emit_tokens = if let Some(event_tokens) = args.evt {
         // If the `event` parameter is present, then we can emit it without a template
         let template_tokens = template
-            .map(|template| {
-                let template_tokens = template.template_tokens();
-
-                quote!(Some(#template_tokens))
-            })
-            .unwrap_or_else(|| quote!(None));
+            .map(|template| template.template_tokens().to_ref_tokens())
+            .to_option_tokens(quote!(&emit::Template));
+        let event_tokens = event_tokens.to_ref_tokens();
 
         quote!(
             emit::__private::__private_emit_event(
@@ -117,13 +119,13 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
             );
         )
     } else {
-        let base_props_tokens = args.props.to_tokens();
-        let extent_tokens = args.extent.to_tokens();
-        let mdl_tokens = args.mdl.to_tokens();
+        let base_props_tokens = args.props.to_tokens().to_ref_tokens();
+        let extent_tokens = args.extent.to_tokens().to_ref_tokens();
+        let mdl_tokens = args.mdl.to_tokens().to_ref_tokens();
 
         let template =
             template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;
-        let template_tokens = template.template_tokens();
+        let template_tokens = template.template_tokens().to_ref_tokens();
 
         quote!(
             emit::__private::__private_emit(

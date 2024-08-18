@@ -1,4 +1,4 @@
-use proc_macro2::{Ident, TokenStream};
+use proc_macro2::{Ident, Span, TokenStream};
 use syn::{spanned::Spanned, Expr, ExprLit, ExprPath, FieldValue, Lit};
 
 use crate::util::{print_list, FieldValueKey};
@@ -11,6 +11,7 @@ Arguments are set from a collection of field-values using either the `set_from_p
 pub struct Arg<T> {
     key: &'static str,
     set: Box<dyn FnMut(&FieldValue) -> Result<T, syn::Error>>,
+    span: Option<Span>,
     value: Option<T>,
 }
 
@@ -89,6 +90,7 @@ impl<T> Arg<T> {
         Arg {
             key,
             set: Box::new(to_custom),
+            span: None,
             value: None,
         }
     }
@@ -108,11 +110,9 @@ impl<T> Arg<T> {
         }
         #[cfg(not(feature = "std"))]
         {
-            use syn::spanned::Spanned;
-
-            if let Some(value) = self.value {
+            if self.value.is_some() {
                 Err(syn::Error::new(
-                    value.span(),
+                    self.span.unwrap_or_else(Span::call_site),
                     format!(
                         "capturing `{}` is only possible when the `std` Cargo feature is enabled",
                         self.key
@@ -149,6 +149,7 @@ impl<T> ArgDef for Arg<T> {
             ));
         }
 
+        self.span = Some(fv.span());
         self.value = Some((self.set)(fv)?);
         Ok(())
     }
@@ -195,7 +196,6 @@ impl ValueOrEmptyArg {
 }
 
 pub type ExtentArg = ValueOrEmptyArg;
-pub type WhenArg = ValueOrEmptyArg;
 pub type PropsArg = ValueOrEmptyArg;
 
 #[derive(Default)]
@@ -212,6 +212,19 @@ impl MdlArg {
 }
 
 #[derive(Default)]
+pub struct WhenArg(Option<TokenStream>);
+
+impl WhenArg {
+    pub fn new(value: TokenStream) -> Self {
+        WhenArg(Some(value))
+    }
+
+    pub fn to_tokens(&self) -> Option<TokenStream> {
+        self.0.clone()
+    }
+}
+
+#[derive(Default)]
 pub struct RtArg(Option<TokenStream>);
 
 impl RtArg {
@@ -220,6 +233,17 @@ impl RtArg {
     }
 
     pub fn to_tokens(&self) -> Result<TokenStream, syn::Error> {
-        todo!()
+        let provided = self.0.clone();
+
+        #[cfg(feature = "implicit_rt")]
+        {
+            Ok(provided.unwrap_or_else(|| quote!(emit::runtime::shared())))
+        }
+        #[cfg(not(feature = "implicit_rt"))]
+        {
+            use proc_macro2::Span;
+
+            provided.ok_or_else(|| syn::Error::new(Span::call_site(), "a runtime must be specified by the `rt` parameter unless the `implicit_rt` feature of `emit` is enabled"))
+        }
     }
 }
