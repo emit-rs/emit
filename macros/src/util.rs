@@ -128,3 +128,32 @@ pub fn print_list<'a, I: Iterator<Item = &'a str> + 'a>(
 
     PrintList(list, PhantomData)
 }
+
+pub trait ToRefTokens {
+    fn to_ref_tokens(&self) -> TokenStream;
+}
+
+impl ToRefTokens for TokenStream {
+    fn to_ref_tokens(&self) -> TokenStream {
+        quote!(&(#self))
+    }
+}
+
+pub trait ToOptionTokens {
+    fn to_option_tokens(&self, none_ty_hint: TokenStream) -> TokenStream;
+}
+
+impl ToOptionTokens for Option<TokenStream> {
+    fn to_option_tokens(&self, none_ty_hint: TokenStream) -> TokenStream {
+        match self {
+            Some(ref tokens) => quote!(Some(#tokens)),
+            None => quote!(None::<#none_ty_hint>),
+        }
+    }
+}
+
+impl ToOptionTokens for TokenStream {
+    fn to_option_tokens(&self, _: TokenStream) -> TokenStream {
+        quote!(Some(#self))
+    }
+}

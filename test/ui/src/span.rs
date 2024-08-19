@@ -230,6 +230,26 @@ async fn span_basic_async() {
 }
 
 #[test]
+fn span_rt_ref() {
+    static CALLED: StaticCalled = StaticCalled::new();
+    static RT: StaticRuntime = static_runtime(
+        |_| {
+            CALLED.record();
+        },
+        |_| true,
+    );
+
+    #[emit::span(rt: &RT, "test")]
+    fn exec() {}
+
+    exec();
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+
+    assert_eq!(1, CALLED.called_times());
+}
+
+#[test]
 fn span_guard() {
     static RT: StaticRuntime = static_runtime(|_| {}, |_| true);
 
@@ -245,6 +265,27 @@ fn span_guard() {
 }
 
 #[test]
+fn span_mdl() {
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!("custom_module", evt.mdl());
+        },
+        |evt| {
+            assert_eq!("custom_module", evt.mdl());
+
+            true
+        },
+    );
+
+    #[emit::span(rt: RT, mdl: emit::path!("custom_module"), "test")]
+    fn exec() {}
+
+    exec();
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+}
+
+#[test]
 fn span_filter() {
     static CALLED: StaticCalled = StaticCalled::new();
     static RT: StaticRuntime = static_runtime(|_| CALLED.record(), |evt| evt.mdl() == "true");
@@ -253,6 +294,25 @@ fn span_filter() {
     fn exec_true() {}
 
     #[emit::span(rt: RT, mdl: emit::path!("false"), "test")]
+    fn exec_false() {}
+
+    exec_true();
+    exec_false();
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+
+    assert_eq!(1, CALLED.called_times());
+}
+
+#[test]
+fn span_when() {
+    static CALLED: StaticCalled = StaticCalled::new();
+    static RT: StaticRuntime = static_runtime(|_| CALLED.record(), |evt| evt.mdl() == "tralse");
+
+    #[emit::span(rt: RT, when: emit::filter::from_fn(|evt| evt.mdl() == "false"), mdl: emit::path!("true"), "test")]
+    fn exec_true() {}
+
+    #[emit::span(rt: RT, when: emit::filter::from_fn(|evt| evt.mdl() == "false"), mdl: emit::path!("false"), "test")]
     fn exec_false() {}
 
     exec_true();

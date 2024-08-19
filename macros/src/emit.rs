@@ -4,8 +4,8 @@ use syn::{parse::Parse, spanned::Spanned, FieldValue};
 use crate::{
     args::{self, Arg},
     event::push_evt_props,
-    mdl::mdl_tokens,
     template,
+    util::{ToOptionTokens, ToRefTokens},
 };
 
 pub struct ExpandTokens {
@@ -14,40 +14,40 @@ pub struct ExpandTokens {
 }
 
 struct Args {
-    rt: TokenStream,
+    rt: args::RtArg,
     evt: Option<TokenStream>,
-    mdl: TokenStream,
-    props: TokenStream,
-    extent: TokenStream,
-    when: TokenStream,
+    mdl: args::MdlArg,
+    props: args::PropsArg,
+    extent: args::ExtentArg,
+    when: args::WhenArg,
 }
 
 impl Parse for Args {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut mdl = Arg::token_stream("mdl", |fv| {
+        let mut mdl = Arg::new("mdl", |fv| {
             let expr = &fv.expr;
 
-            Ok(quote_spanned!(expr.span()=> #expr))
+            Ok(args::MdlArg::new(quote_spanned!(expr.span()=> #expr)))
         });
-        let mut extent = Arg::token_stream("extent", |fv| {
+        let mut extent = Arg::new("extent", |fv| {
             let expr = &fv.expr;
 
-            Ok(quote_spanned!(expr.span()=> #expr))
+            Ok(args::ExtentArg::new(quote_spanned!(expr.span()=> #expr)))
         });
-        let mut rt = Arg::token_stream("rt", |fv| {
+        let mut rt = Arg::new("rt", |fv| {
             let expr = &fv.expr;
 
-            Ok(quote_spanned!(expr.span()=> #expr))
+            Ok(args::RtArg::new(quote_spanned!(expr.span()=> #expr)))
         });
-        let mut props = Arg::token_stream("props", |fv| {
+        let mut props = Arg::new("props", |fv| {
             let expr = &fv.expr;
 
-            Ok(quote_spanned!(expr.span()=> #expr))
+            Ok(args::PropsArg::new(quote_spanned!(expr.span()=> #expr)))
         });
-        let mut when = Arg::token_stream("when", |fv| {
+        let mut when = Arg::new("when", |fv| {
             let expr = &fv.expr;
 
-            Ok(quote_spanned!(expr.span()=> #expr))
+            Ok(args::WhenArg::new(quote_spanned!(expr.span()=> #expr)))
         });
         let mut evt = Arg::token_stream("evt", |fv| {
             let expr = &fv.expr;
@@ -74,14 +74,12 @@ impl Parse for Args {
         }
 
         Ok(Args {
-            mdl: mdl.take().unwrap_or_else(|| mdl_tokens()),
-            extent: extent.take().unwrap_or_else(|| quote!(emit::empty::Empty)),
-            props: props
-                .take_ref()
-                .unwrap_or_else(|| quote!(emit::empty::Empty)),
-            evt: evt.take_ref(),
-            rt: rt.take_rt_ref()?,
-            when: when.take_some_or_empty_ref(),
+            mdl: mdl.take_or_default(),
+            extent: extent.take_or_default(),
+            props: props.take_or_default(),
+            evt: evt.take(),
+            rt: rt.take_or_default(),
+            when: when.take_or_default(),
         })
     }
 }
@@ -97,18 +95,19 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     let props_match_binding_tokens = props.match_binding_tokens();
     let props_tokens = props.match_bound_tokens();
 
-    let rt_tokens = args.rt;
-    let when_tokens = args.when;
+    let rt_tokens = args.rt.to_tokens()?.to_ref_tokens();
+    let when_tokens = args
+        .when
+        .to_tokens()
+        .map(|when| when.to_ref_tokens())
+        .to_option_tokens(quote!(&emit::Empty));
 
     let emit_tokens = if let Some(event_tokens) = args.evt {
         // If the `event` parameter is present, then we can emit it without a template
         let template_tokens = template
-            .map(|template| {
-                let template_tokens = template.template_tokens();
-
-                quote!(Some(#template_tokens))
-            })
-            .unwrap_or_else(|| quote!(None));
+            .map(|template| template.template_tokens().to_ref_tokens())
+            .to_option_tokens(quote!(&emit::Template));
+        let event_tokens = event_tokens.to_ref_tokens();
 
         quote!(
             emit::__private::__private_emit_event(
@@ -120,13 +119,13 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
             );
         )
     } else {
-        let base_props_tokens = args.props;
-        let extent_tokens = args.extent;
-        let mdl_tokens = args.mdl;
+        let base_props_tokens = args.props.to_tokens().to_ref_tokens();
+        let extent_tokens = args.extent.to_tokens().to_ref_tokens();
+        let mdl_tokens = args.mdl.to_tokens().to_ref_tokens();
 
         let template =
             template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;
-        let template_tokens = template.template_tokens();
+        let template_tokens = template.template_tokens().to_ref_tokens();
 
         quote!(
             emit::__private::__private_emit(
