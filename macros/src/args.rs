@@ -182,6 +182,9 @@ pub fn set_from_field_values<'a, const N: usize>(
     Ok(())
 }
 
+/**
+An argument that evaluates to an expression when present, and `emit::Empty` when absent.
+*/
 #[derive(Default)]
 pub struct ValueOrEmptyArg(Option<TokenStream>);
 
@@ -198,6 +201,9 @@ impl ValueOrEmptyArg {
 pub type ExtentArg = ValueOrEmptyArg;
 pub type PropsArg = ValueOrEmptyArg;
 
+/**
+An argument that evaluates to a `Path` when present, and `emit::mdl!()` when absent.
+*/
 #[derive(Default)]
 pub struct MdlArg(Option<TokenStream>);
 
@@ -211,6 +217,9 @@ impl MdlArg {
     }
 }
 
+/**
+An argument that evaluates to a filter when present.
+*/
 #[derive(Default)]
 pub struct WhenArg(Option<TokenStream>);
 
@@ -224,6 +233,11 @@ impl WhenArg {
     }
 }
 
+/**
+An argument that evaluates to a runtime when present, and to `emit::runtime::shared()` when absent.
+
+If the `implicit_rt` feature isn't enabled, this argument will instead evaluate to an error if it's absent.
+*/
 #[derive(Default)]
 pub struct RtArg(Option<TokenStream>);
 

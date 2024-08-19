@@ -73,6 +73,18 @@ fn emit_interpolation() {
 }
 
 #[test]
+fn emit_rt_ref() {
+    let called = Called::new();
+    let rt = simple_runtime(|_| called.record(), |_| true);
+
+    emit::emit!(rt: &rt, "test");
+
+    rt.emitter().blocking_flush(Duration::from_secs(1));
+
+    assert_eq!(1, called.called_times());
+}
+
+#[test]
 fn emit_filter() {
     let called = Called::new();
     let rt = simple_runtime(|_| called.record(), |evt| evt.mdl() == "true");
@@ -98,6 +110,13 @@ fn emit_when() {
 }
 
 #[test]
+fn emit_when_ref() {
+    let rt = simple_runtime(|_| {}, |_| true);
+
+    emit::emit!(rt, when: &emit::filter::from_fn(|_| true), "test");
+}
+
+#[test]
 fn emit_extent_point() {
     let rt = simple_runtime(
         |evt| {
@@ -112,6 +131,17 @@ fn emit_extent_point() {
     emit::emit!(
         rt,
         extent: emit::Timestamp::from_unix(Duration::from_secs(42)),
+        "test",
+    );
+}
+
+#[test]
+fn emit_extent_point_ref() {
+    let rt = simple_runtime(|_| {}, |_| true);
+
+    emit::emit!(
+        rt,
+        extent: &emit::Timestamp::from_unix(Duration::from_secs(42)),
         "test",
     );
 }
@@ -137,28 +167,56 @@ fn emit_extent_span() {
 }
 
 #[test]
-fn emit_module() {
+fn emit_extent_span_ref() {
+    let rt = simple_runtime(|_| {}, |_| true);
+
+    emit::emit!(
+        rt,
+        extent: &(emit::Timestamp::from_unix(Duration::from_secs(42))..emit::Timestamp::from_unix(Duration::from_secs(47))),
+        "test",
+    );
+}
+
+#[test]
+fn emit_mdl() {
     let rt = simple_runtime(
         |evt| {
             assert_eq!("custom_module", evt.mdl());
         },
-        |_| true,
+        |evt| {
+            assert_eq!("custom_module", evt.mdl());
+
+            true
+        },
     );
 
     emit::emit!(rt, mdl: emit::path!("custom_module"), "test");
 }
 
 #[test]
-fn emit_props() {
-    let rt = simple_runtime(
-        |evt| {
-            assert_eq!(1, evt.props().pull::<i32, _>("ambient_prop1").unwrap());
-            assert_eq!(2, evt.props().pull::<i32, _>("ambient_prop2").unwrap());
+fn emit_mdl_ref() {
+    let rt = simple_runtime(|_| {}, |_| true);
 
-            assert_eq!(1, evt.props().pull::<i32, _>("evt_prop1").unwrap());
-            assert_eq!(2, evt.props().pull::<i32, _>("evt_prop2").unwrap());
+    emit::emit!(rt, mdl: &emit::path!("custom_module"), "test");
+}
+
+#[test]
+fn emit_props() {
+    fn assert_props(evt: &emit::Event<impl emit::Props>) {
+        assert_eq!(1, evt.props().pull::<i32, _>("ambient_prop1").unwrap());
+        assert_eq!(2, evt.props().pull::<i32, _>("ambient_prop2").unwrap());
+
+        assert_eq!(1, evt.props().pull::<i32, _>("evt_prop1").unwrap());
+        assert_eq!(2, evt.props().pull::<i32, _>("evt_prop2").unwrap());
+    }
+
+    let rt = simple_runtime(
+        |evt| assert_props(evt),
+        |evt| {
+            assert_props(evt);
+
+            true
         },
-        |_| true,
     );
 
     emit::emit!(
@@ -174,23 +232,56 @@ fn emit_props() {
 }
 
 #[test]
-fn emit_event() {
-    let rt = simple_runtime(
-        |evt| {
-            assert_eq!("Hello, Rust", evt.msg().to_string());
-            assert_eq!("Hello, {user}", evt.tpl().to_string());
-            assert_eq!(module_path!(), evt.mdl());
+fn emit_props_ref() {
+    let rt = simple_runtime(|_| {}, |_| true);
 
-            assert!(evt.extent().is_some());
-
-            assert_eq!("Rust", evt.props().pull::<&str, _>("user").unwrap());
+    emit::emit!(
+        rt,
+        props: &emit::props! {
+            ambient_prop1: 1,
+            ambient_prop2: 2,
         },
-        |_| true,
+        "test",
+    );
+}
+
+#[test]
+fn emit_evt() {
+    fn assert_evt(evt: &emit::Event<impl emit::Props>) {
+        assert_eq!("Hello, Rust", evt.msg().to_string());
+        assert_eq!("Hello, {user}", evt.tpl().to_string());
+        assert_eq!(module_path!(), evt.mdl());
+
+        assert!(evt.extent().is_some());
+
+        assert_eq!("Rust", evt.props().pull::<&str, _>("user").unwrap());
+    }
+
+    let rt = simple_runtime(
+        |evt| assert_evt(evt),
+        |evt| {
+            assert_evt(evt);
+
+            true
+        },
     );
 
     emit::emit!(
         rt,
         evt: emit::event!(
+            "Hello, {user}",
+            user: "Rust",
+        ),
+    );
+}
+
+#[test]
+fn emit_evt_ref() {
+    let rt = simple_runtime(|_| {}, |_| true);
+
+    emit::emit!(
+        rt,
+        evt: &emit::event!(
             "Hello, {user}",
             user: "Rust",
         ),

@@ -639,6 +639,12 @@ pub trait __PrivateToMdl {
     fn __private_to_mdl(&self) -> Path;
 }
 
+impl<'a, T: __PrivateToMdl + ?Sized> __PrivateToMdl for &'a T {
+    fn __private_to_mdl(&self) -> Path {
+        (**self).__private_to_mdl()
+    }
+}
+
 impl<'a> __PrivateToMdl for Path<'a> {
     fn __private_to_mdl(&self) -> Path {
         self.by_ref()
@@ -647,6 +653,12 @@ impl<'a> __PrivateToMdl for Path<'a> {
 
 pub trait __PrivateToTpl {
     fn __private_to_tpl(&self) -> Template;
+}
+
+impl<'a, T: __PrivateToTpl + ?Sized> __PrivateToTpl for &'a T {
+    fn __private_to_tpl(&self) -> Template {
+        (**self).__private_to_tpl()
+    }
 }
 
 impl<'a> __PrivateToTpl for Template<'a> {
