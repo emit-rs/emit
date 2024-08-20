@@ -83,6 +83,12 @@ pub(crate) mod util {
         }
     }
 
+    pub(crate) fn bytes_value(v: impl Into<Vec<u8>>) -> common::v1::AnyValue {
+        common::v1::AnyValue {
+            value: Some(common::v1::any_value::Value::BytesValue(v.into())),
+        }
+    }
+
     pub(crate) fn array_value(
         v: impl IntoIterator<Item = common::v1::AnyValue>,
     ) -> common::v1::AnyValue {

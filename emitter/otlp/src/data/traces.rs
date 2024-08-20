@@ -109,19 +109,21 @@ impl<'a> sval::Value for EncodedScopeSpans<'a> {
 mod tests {
     use super::*;
 
-    use std::time::Duration;
-
     use prost::Message;
 
-    use crate::data::{generated::trace::v1 as trace, Proto};
+    use crate::{
+        data::{generated::trace::v1 as trace, Proto},
+        util::*,
+    };
 
     #[test]
     fn encode_basic() {
         let de = trace::Span::decode(
             TracesEventEncoder::default()
                 .encode_event::<Proto>(&emit::event!(
-                    extent: emit::Timestamp::from_unix(Duration::from_secs(1))..emit::Timestamp::from_unix(Duration::from_secs(13)),
-                    "span",
+                    extent: ts(1)..ts(13),
+                    "greet {user}",
+                    user: "test",
                     evt_kind: "span",
                     span_name: "test",
                     trace_id: "00000000000000000000000000000001",

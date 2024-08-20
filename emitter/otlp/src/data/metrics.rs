@@ -402,12 +402,20 @@ mod tests {
 
     use crate::data::{generated::metrics::v1 as metrics, Proto};
 
+    fn double_point(v: impl Into<f64>) -> metrics::number_data_point::Value {
+        metrics::number_data_point::Value::AsDouble(v.into())
+    }
+
+    fn int_point(v: impl Into<i64>) -> metrics::number_data_point::Value {
+        metrics::number_data_point::Value::AsInt(v.into())
+    }
+
     #[test]
     fn encode_basic() {
         let de = metrics::Metric::decode(
             MetricsEventEncoder::default()
                 .encode_event::<Proto>(&emit::event!(
-                    "metric",
+                    "{metric_agg} of {metric_name} is {metric_value}",
                     evt_kind: "metric",
                     metric_name: "test",
                     metric_agg: "count",
@@ -420,5 +428,14 @@ mod tests {
         .unwrap();
 
         assert_eq!("test", de.name);
+
+        match de.data {
+            Some(metrics::metric::Data::Sum(sum)) => {
+                assert!(sum.is_monotonic);
+
+                assert_eq!(Some(int_point(43)), sum.data_points[0].value);
+            }
+            other => panic!("unexpected {other:?}"),
+        }
     }
 }

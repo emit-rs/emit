@@ -96,7 +96,7 @@ mod tests {
     use prost::Message;
 
     use crate::data::{
-        generated::{logs::v1 as logs, util},
+        generated::{logs::v1 as logs, util::*},
         Proto,
     };
 
@@ -104,13 +104,15 @@ mod tests {
     fn encode_basic() {
         let de = logs::LogRecord::decode(
             LogsEventEncoder::default()
-                .encode_event::<Proto>(&emit::event!("log"))
+                .encode_event::<Proto>(&emit::event!("log for {user}", user: "test"))
                 .unwrap()
                 .payload
                 .into_cursor(),
         )
         .unwrap();
 
-        assert_eq!(Some(util::string_value("log")), de.body);
+        assert_eq!(Some(string_value("log for test")), de.body);
+
+        assert_eq!(Some(string_value("test")), de.attributes[0].value);
     }
 }
