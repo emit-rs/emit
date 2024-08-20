@@ -315,3 +315,51 @@ impl<'a> sval_ref::ValueRef<'a> for EmitValue<'a> {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use prost::Message;
+
+    use crate::data::generated::{common::v1 as common, util};
+
+    fn encode<'a>(v: impl Into<emit::Value<'a>>) -> impl bytes::Buf {
+        sval_protobuf::stream_to_protobuf(EmitValue(v.into())).into_cursor()
+    }
+
+    #[test]
+    fn encode_string() {
+        let de = common::AnyValue::decode(encode("string value")).unwrap();
+
+        assert_eq!(util::string_value("string value"), de);
+    }
+
+    #[test]
+    fn encode_bool() {
+        let de = common::AnyValue::decode(encode(true)).unwrap();
+
+        assert_eq!(util::bool_value(true), de);
+    }
+
+    #[test]
+    fn encode_int_i32() {
+        let de = common::AnyValue::decode(encode(42)).unwrap();
+
+        assert_eq!(util::int_value(42), de);
+    }
+
+    #[test]
+    fn encode_int_i128_oversize() {
+        let de = common::AnyValue::decode(encode(i128::MAX)).unwrap();
+
+        assert_eq!(util::string_value(i128::MAX.to_string()), de);
+    }
+
+    #[test]
+    fn encode_double() {
+        let de = common::AnyValue::decode(encode(42.1)).unwrap();
+
+        assert_eq!(util::double_value(42.1), de);
+    }
+}

@@ -64,4 +64,22 @@ pub(crate) mod util {
             value: Some(common::v1::any_value::Value::StringValue(v.into())),
         }
     }
+
+    pub(crate) fn bool_value(v: impl Into<bool>) -> common::v1::AnyValue {
+        common::v1::AnyValue {
+            value: Some(common::v1::any_value::Value::BoolValue(v.into())),
+        }
+    }
+
+    pub(crate) fn int_value(v: impl Into<i64>) -> common::v1::AnyValue {
+        common::v1::AnyValue {
+            value: Some(common::v1::any_value::Value::IntValue(v.into())),
+        }
+    }
+
+    pub(crate) fn double_value(v: impl Into<f64>) -> common::v1::AnyValue {
+        common::v1::AnyValue {
+            value: Some(common::v1::any_value::Value::DoubleValue(v.into())),
+        }
+    }
 }
