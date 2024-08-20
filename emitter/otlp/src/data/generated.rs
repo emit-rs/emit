@@ -82,4 +82,34 @@ pub(crate) mod util {
             value: Some(common::v1::any_value::Value::DoubleValue(v.into())),
         }
     }
+
+    pub(crate) fn array_value(
+        v: impl IntoIterator<Item = common::v1::AnyValue>,
+    ) -> common::v1::AnyValue {
+        common::v1::AnyValue {
+            value: Some(common::v1::any_value::Value::ArrayValue(
+                common::v1::ArrayValue {
+                    values: v.into_iter().collect(),
+                },
+            )),
+        }
+    }
+
+    pub(crate) fn kvlist_value(
+        v: impl IntoIterator<Item = (String, common::v1::AnyValue)>,
+    ) -> common::v1::AnyValue {
+        common::v1::AnyValue {
+            value: Some(common::v1::any_value::Value::KvlistValue(
+                common::v1::KeyValueList {
+                    values: v
+                        .into_iter()
+                        .map(|(key, value)| common::v1::KeyValue {
+                            key,
+                            value: Some(value),
+                        })
+                        .collect(),
+                },
+            )),
+        }
+    }
 }

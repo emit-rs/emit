@@ -362,4 +362,34 @@ mod tests {
 
         assert_eq!(util::double_value(42.1), de);
     }
+
+    #[test]
+    fn encode_array() {
+        let de = common::AnyValue::decode(encode(emit::Value::capture_sval(&[1, 2, 3]))).unwrap();
+
+        assert_eq!(
+            util::array_value([util::int_value(1), util::int_value(2), util::int_value(3)]),
+            de
+        );
+    }
+
+    #[test]
+    fn encode_kvlist() {
+        let de =
+            common::AnyValue::decode(encode(emit::Value::capture_sval(&sval::MapSlice::new(&[
+                ("a", 1),
+                ("b", 2),
+                ("c", 3),
+            ]))))
+            .unwrap();
+
+        assert_eq!(
+            util::kvlist_value([
+                ("a".into(), util::int_value(1)),
+                ("b".into(), util::int_value(2)),
+                ("c".into(), util::int_value(3)),
+            ]),
+            de
+        );
+    }
 }
