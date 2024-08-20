@@ -393,3 +393,32 @@ impl<'a> sval::Value for EncodedScopeMetrics<'a> {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use prost::Message;
+
+    use crate::data::{generated::metrics::v1 as metrics, Proto};
+
+    #[test]
+    fn encode_basic() {
+        let de = metrics::Metric::decode(
+            MetricsEventEncoder::default()
+                .encode_event::<Proto>(&emit::event!(
+                    "metric",
+                    evt_kind: "metric",
+                    metric_name: "test",
+                    metric_agg: "count",
+                    metric_value: 43,
+                ))
+                .unwrap()
+                .payload
+                .into_cursor(),
+        )
+        .unwrap();
+
+        assert_eq!("test", de.name);
+    }
+}

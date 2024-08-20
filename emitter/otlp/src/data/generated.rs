@@ -54,3 +54,14 @@ pub(crate) mod collector {
         pub(crate) mod v1;
     }
 }
+
+#[cfg(test)]
+pub(crate) mod util {
+    use super::*;
+
+    pub(crate) fn string_value(v: impl Into<String>) -> common::v1::AnyValue {
+        common::v1::AnyValue {
+            value: Some(common::v1::any_value::Value::StringValue(v.into())),
+        }
+    }
+}

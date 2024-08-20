@@ -635,34 +635,34 @@ impl<A: Filter, B: Filter> Filter for FirstDefined<A, B> {
     }
 }
 
-pub trait __PrivateToMdl {
-    fn __private_to_mdl(&self) -> Path;
+pub trait MdlControlParam {
+    fn mdl_control_param(&self) -> Path;
 }
 
-impl<'a, T: __PrivateToMdl + ?Sized> __PrivateToMdl for &'a T {
-    fn __private_to_mdl(&self) -> Path {
-        (**self).__private_to_mdl()
+impl<'a, T: MdlControlParam + ?Sized> MdlControlParam for &'a T {
+    fn mdl_control_param(&self) -> Path {
+        (**self).mdl_control_param()
     }
 }
 
-impl<'a> __PrivateToMdl for Path<'a> {
-    fn __private_to_mdl(&self) -> Path {
+impl<'a> MdlControlParam for Path<'a> {
+    fn mdl_control_param(&self) -> Path {
         self.by_ref()
     }
 }
 
-pub trait __PrivateToTpl {
-    fn __private_to_tpl(&self) -> Template;
+pub trait TplControlParam {
+    fn tpl_control_param(&self) -> Template;
 }
 
-impl<'a, T: __PrivateToTpl + ?Sized> __PrivateToTpl for &'a T {
-    fn __private_to_tpl(&self) -> Template {
-        (**self).__private_to_tpl()
+impl<'a, T: TplControlParam + ?Sized> TplControlParam for &'a T {
+    fn tpl_control_param(&self) -> Template {
+        (**self).tpl_control_param()
     }
 }
 
-impl<'a> __PrivateToTpl for Template<'a> {
-    fn __private_to_tpl(&self) -> Template {
+impl<'a> TplControlParam for Template<'a> {
+    fn tpl_control_param(&self) -> Template {
         self.by_ref()
     }
 }
@@ -670,10 +670,10 @@ impl<'a> __PrivateToTpl for Template<'a> {
 #[track_caller]
 pub fn __private_emit<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
     rt: &'a Runtime<E, F, C, T, R>,
-    mdl: &'b (impl __PrivateToMdl + ?Sized),
+    mdl: &'b (impl MdlControlParam + ?Sized),
     when: Option<&'b (impl Filter + ?Sized)>,
     extent: &'b (impl ToExtent + ?Sized),
-    tpl: &'b (impl __PrivateToTpl + ?Sized),
+    tpl: &'b (impl TplControlParam + ?Sized),
     base_props: &'b (impl Props + ?Sized),
     props: &'b (impl Props + ?Sized),
 ) {
@@ -683,8 +683,8 @@ pub fn __private_emit<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
         rt.ctxt(),
         rt.clock(),
         Event::new(
-            mdl.__private_to_mdl(),
-            tpl.__private_to_tpl(),
+            mdl.mdl_control_param(),
+            tpl.tpl_control_param(),
             extent,
             props.and_props(base_props),
         ),
@@ -696,13 +696,13 @@ pub fn __private_emit_event<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R:
     rt: &'a Runtime<E, F, C, T, R>,
     when: Option<&'b (impl Filter + ?Sized)>,
     event: &'b (impl ToEvent + ?Sized),
-    tpl: Option<&'b (impl __PrivateToTpl + ?Sized)>,
+    tpl: Option<&'b (impl TplControlParam + ?Sized)>,
     props: &'b (impl Props + ?Sized),
 ) {
     let mut event = event.to_event();
 
     if let Some(tpl) = tpl {
-        event = event.with_tpl(tpl.__private_to_tpl());
+        event = event.with_tpl(tpl.tpl_control_param());
     }
 
     let event = event.map_props(|event_props| props.and_props(event_props));
@@ -718,14 +718,14 @@ pub fn __private_emit_event<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R:
 
 #[track_caller]
 pub fn __private_event<'a, P: Props + ?Sized>(
-    mdl: &'a (impl __PrivateToMdl + ?Sized),
-    tpl: &'a (impl __PrivateToTpl + ?Sized),
+    mdl: &'a (impl MdlControlParam + ?Sized),
+    tpl: &'a (impl TplControlParam + ?Sized),
     extent: &'a (impl ToExtent + ?Sized),
     props: &'a P,
 ) -> Event<'a, &'a P> {
     Event::new(
-        mdl.__private_to_mdl(),
-        tpl.__private_to_tpl(),
+        mdl.mdl_control_param(),
+        tpl.tpl_control_param(),
         extent.to_extent(),
         props,
     )
@@ -745,7 +745,7 @@ pub fn __private_begin_span<
     rt: &'a Runtime<E, F, C, T, R>,
     mdl: impl Into<Path<'static>>,
     name: impl Into<Str<'static>>,
-    tpl: &'b (impl __PrivateToTpl + ?Sized),
+    tpl: &'b (impl TplControlParam + ?Sized),
     when: Option<&'b (impl Filter + ?Sized)>,
     span_ctxt_props: &'b (impl Props + ?Sized),
     span_evt_props: &'b (impl Props + ?Sized),
@@ -753,7 +753,7 @@ pub fn __private_begin_span<
 ) -> (Frame<Option<&'a C>>, SpanGuard<'static, &'a T, Empty, S>) {
     let mdl = mdl.into();
     let name = name.into();
-    let tpl = tpl.__private_to_tpl();
+    let tpl = tpl.tpl_control_param();
 
     let mut span = SpanGuard::filtered_new(
         |span_ctxt, span| {
@@ -788,7 +788,7 @@ pub fn __private_begin_span<
 pub fn __private_complete_span<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
     rt: &'a Runtime<E, F, C, T, R>,
     span: Span<'static, Empty>,
-    tpl: &'b (impl __PrivateToTpl + ?Sized),
+    tpl: &'b (impl TplControlParam + ?Sized),
     span_evt_props: &'b (impl Props + ?Sized),
 ) {
     emit_core::emit(
@@ -797,7 +797,7 @@ pub fn __private_complete_span<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock,
         rt.ctxt(),
         rt.clock(),
         span.to_event()
-            .with_tpl(tpl.__private_to_tpl())
+            .with_tpl(tpl.tpl_control_param())
             .map_props(|span_props| span_evt_props.and_props(span_props)),
     );
 }
