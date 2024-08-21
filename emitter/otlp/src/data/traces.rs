@@ -104,3 +104,35 @@ impl<'a> sval::Value for EncodedScopeSpans<'a> {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use prost::Message;
+
+    use crate::{
+        data::{generated::trace::v1 as trace, util::*},
+        util::*,
+    };
+
+    #[test]
+    fn encode_basic() {
+        encode_event::<TracesEventEncoder>(
+            emit::evt!(
+                extent: ts(1)..ts(13),
+                "greet {user}",
+                user: "test",
+                evt_kind: "span",
+                span_name: "test",
+                trace_id: "00000000000000000000000000000001",
+                span_id: "0000000000000001"
+            ),
+            |buf| {
+                let de = trace::Span::decode(buf).unwrap();
+
+                assert_eq!("test", de.name);
+            },
+        );
+    }
+}

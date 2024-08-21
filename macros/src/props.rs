@@ -179,3 +179,21 @@ impl Props {
         Ok(())
     }
 }
+
+/**
+Push common properties for events.
+*/
+pub fn push_evt_props(props: &mut Props, level: Option<TokenStream>) -> Result<(), syn::Error> {
+    // Add the level as a property
+    if let Some(level_value) = level {
+        let level_ident = Ident::new(emit_core::well_known::KEY_LVL, Span::call_site());
+
+        props.push(
+            &syn::parse2::<FieldValue>(quote!(#level_ident: #level_value))?,
+            false,
+            true,
+        )?;
+    }
+
+    Ok(())
+}

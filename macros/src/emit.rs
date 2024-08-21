@@ -3,7 +3,7 @@ use syn::{parse::Parse, spanned::Spanned, FieldValue};
 
 use crate::{
     args::{self, Arg},
-    event::push_evt_props,
+    props::push_evt_props,
     template,
     util::{ToOptionTokens, ToRefTokens},
 };

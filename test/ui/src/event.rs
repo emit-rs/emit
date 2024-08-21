@@ -2,7 +2,7 @@ use emit::Props;
 
 #[test]
 fn event_basic() {
-    match emit::event!(
+    match emit::evt!(
         "Hello, {user}",
         user: "Rust",
     ) {

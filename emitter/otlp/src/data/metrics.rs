@@ -393,3 +393,298 @@ impl<'a> sval::Value for EncodedScopeMetrics<'a> {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::time::Duration;
+
+    use prost::Message;
+
+    use crate::data::{generated::metrics::v1 as metrics, util::*};
+
+    fn double_point(v: impl Into<f64>) -> metrics::number_data_point::Value {
+        metrics::number_data_point::Value::AsDouble(v.into())
+    }
+
+    fn int_point(v: impl Into<i64>) -> metrics::number_data_point::Value {
+        metrics::number_data_point::Value::AsInt(v.into())
+    }
+
+    #[test]
+    fn encode_count_int() {
+        encode_event::<MetricsEventEncoder>(
+            emit::evt!(
+                "{metric_agg} of {metric_name} is {metric_value}",
+                evt_kind: "metric",
+                metric_name: "test",
+                metric_agg: "count",
+                metric_value: 43,
+            ),
+            |buf| {
+                let de = metrics::Metric::decode(buf).unwrap();
+
+                assert_eq!("test", de.name);
+
+                match de.data {
+                    Some(metrics::metric::Data::Sum(sum)) => {
+                        assert!(sum.is_monotonic);
+
+                        assert_eq!(Some(int_point(43)), sum.data_points[0].value);
+                    }
+                    other => panic!("unexpected {other:?}"),
+                }
+            },
+        );
+    }
+
+    #[test]
+    fn encode_count_double() {
+        encode_event::<MetricsEventEncoder>(
+            emit::evt!(
+                "{metric_agg} of {metric_name} is {metric_value}",
+                evt_kind: "metric",
+                metric_name: "test",
+                metric_agg: "count",
+                metric_value: 43.1,
+            ),
+            |buf| {
+                let de = metrics::Metric::decode(buf).unwrap();
+
+                assert_eq!("test", de.name);
+
+                match de.data {
+                    Some(metrics::metric::Data::Sum(sum)) => {
+                        assert!(sum.is_monotonic);
+
+                        assert_eq!(Some(double_point(43.1)), sum.data_points[0].value);
+                    }
+                    other => panic!("unexpected {other:?}"),
+                }
+            },
+        );
+    }
+
+    #[test]
+    fn encode_count_histogram_int() {
+        encode_event::<MetricsEventEncoder>(
+            emit::evt!(
+                extent: emit::Timestamp::MIN..(emit::Timestamp::MIN + Duration::from_secs(10)),
+                "{metric_agg} of {metric_name} is {metric_value}",
+                evt_kind: "metric",
+                metric_name: "test",
+                metric_agg: "count",
+                #[emit::as_value]
+                metric_value: [
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                ],
+            ),
+            |buf| {
+                let de = metrics::Metric::decode(buf).unwrap();
+
+                assert_eq!("test", de.name);
+
+                match de.data {
+                    Some(metrics::metric::Data::Sum(sum)) => {
+                        assert!(sum.is_monotonic);
+
+                        assert_eq!(Some(int_point(10)), sum.data_points[0].value);
+                    }
+                    other => panic!("unexpected {other:?}"),
+                }
+            },
+        );
+    }
+
+    #[test]
+    fn encode_sum_int() {
+        encode_event::<MetricsEventEncoder>(
+            emit::evt!(
+                "{metric_agg} of {metric_name} is {metric_value}",
+                evt_kind: "metric",
+                metric_name: "test",
+                metric_agg: "sum",
+                metric_value: 43,
+            ),
+            |buf| {
+                let de = metrics::Metric::decode(buf).unwrap();
+
+                assert_eq!("test", de.name);
+
+                match de.data {
+                    Some(metrics::metric::Data::Sum(sum)) => {
+                        assert!(!sum.is_monotonic);
+
+                        assert_eq!(Some(int_point(43)), sum.data_points[0].value);
+                    }
+                    other => panic!("unexpected {other:?}"),
+                }
+            },
+        );
+    }
+
+    #[test]
+    fn encode_sum_double() {
+        encode_event::<MetricsEventEncoder>(
+            emit::evt!(
+                "{metric_agg} of {metric_name} is {metric_value}",
+                evt_kind: "metric",
+                metric_name: "test",
+                metric_agg: "sum",
+                metric_value: 43.1,
+            ),
+            |buf| {
+                let de = metrics::Metric::decode(buf).unwrap();
+
+                assert_eq!("test", de.name);
+
+                match de.data {
+                    Some(metrics::metric::Data::Sum(sum)) => {
+                        assert!(!sum.is_monotonic);
+
+                        assert_eq!(Some(double_point(43.1)), sum.data_points[0].value);
+                    }
+                    other => panic!("unexpected {other:?}"),
+                }
+            },
+        );
+    }
+
+    #[test]
+    fn encode_sum_histogram_int() {
+        encode_event::<MetricsEventEncoder>(
+            emit::evt!(
+                extent: emit::Timestamp::MIN..(emit::Timestamp::MIN + Duration::from_secs(10)),
+                "{metric_agg} of {metric_name} is {metric_value}",
+                evt_kind: "metric",
+                metric_name: "test",
+                metric_agg: "sum",
+                #[emit::as_value]
+                metric_value: [
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                ],
+            ),
+            |buf| {
+                let de = metrics::Metric::decode(buf).unwrap();
+
+                assert_eq!("test", de.name);
+
+                match de.data {
+                    Some(metrics::metric::Data::Sum(sum)) => {
+                        assert!(!sum.is_monotonic);
+
+                        assert_eq!(Some(int_point(-10)), sum.data_points[0].value);
+                    }
+                    other => panic!("unexpected {other:?}"),
+                }
+            },
+        );
+    }
+
+    #[test]
+    fn encode_gauge_int() {
+        encode_event::<MetricsEventEncoder>(
+            emit::evt!(
+                "{metric_agg} of {metric_name} is {metric_value}",
+                evt_kind: "metric",
+                metric_name: "test",
+                metric_agg: "last",
+                metric_value: 43,
+            ),
+            |buf| {
+                let de = metrics::Metric::decode(buf).unwrap();
+
+                assert_eq!("test", de.name);
+
+                match de.data {
+                    Some(metrics::metric::Data::Gauge(gauge)) => {
+                        assert_eq!(Some(int_point(43)), gauge.data_points[0].value);
+                    }
+                    other => panic!("unexpected {other:?}"),
+                }
+            },
+        );
+    }
+
+    #[test]
+    fn encode_gauge_double() {
+        encode_event::<MetricsEventEncoder>(
+            emit::evt!(
+                "{metric_agg} of {metric_name} is {metric_value}",
+                evt_kind: "metric",
+                metric_name: "test",
+                metric_agg: "last",
+                metric_value: 43.1,
+            ),
+            |buf| {
+                let de = metrics::Metric::decode(buf).unwrap();
+
+                assert_eq!("test", de.name);
+
+                match de.data {
+                    Some(metrics::metric::Data::Gauge(gauge)) => {
+                        assert_eq!(Some(double_point(43.1)), gauge.data_points[0].value);
+                    }
+                    other => panic!("unexpected {other:?}"),
+                }
+            },
+        );
+    }
+
+    #[test]
+    fn encode_gauge_histogram_int() {
+        encode_event::<MetricsEventEncoder>(
+            emit::evt!(
+                extent: emit::Timestamp::MIN..(emit::Timestamp::MIN + Duration::from_secs(10)),
+                "{metric_agg} of {metric_name} is {metric_value}",
+                evt_kind: "metric",
+                metric_name: "test",
+                metric_agg: "max",
+                #[emit::as_value]
+                metric_value: [
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                ],
+            ),
+            |buf| {
+                let de = metrics::Metric::decode(buf).unwrap();
+
+                assert_eq!("test", de.name);
+
+                match de.data {
+                    Some(metrics::metric::Data::Gauge(gauge)) => {
+                        assert_eq!(10, gauge.data_points.len());
+                    }
+                    other => panic!("unexpected {other:?}"),
+                }
+            },
+        );
+    }
+}

@@ -1355,3 +1355,12 @@ Get a metrics signal builder for the given transport with JSON encoding.
 pub fn metrics_json(transport: OtlpTransportBuilder) -> OtlpMetricsBuilder {
     OtlpMetricsBuilder::json(transport)
 }
+
+#[cfg(test)]
+pub(crate) mod util {
+    use std::time::Duration;
+
+    pub(crate) fn ts(unix_time: u64) -> emit::Timestamp {
+        emit::Timestamp::from_unix(Duration::from_secs(unix_time)).unwrap()
+    }
+}

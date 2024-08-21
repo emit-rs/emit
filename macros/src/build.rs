@@ -1,52 +1,63 @@
 use proc_macro2::TokenStream;
 use syn::{parse::Parse, spanned::Spanned, FieldValue, LitStr};
 
-use crate::{args, props::Props, template};
+use crate::{
+    args::{self, Arg},
+    props::{push_evt_props, Props},
+    template,
+    util::ToRefTokens,
+};
 
 pub struct ExpandPropsTokens {
     pub input: TokenStream,
 }
 
+/**
+The `props!` macro.
+*/
 pub fn expand_props_tokens(opts: ExpandPropsTokens) -> Result<TokenStream, syn::Error> {
     let props = syn::parse2::<Props>(opts.input)?;
 
     Ok(props.props_tokens())
 }
 
-pub struct ExpandTemplateTokens {
+pub struct ExpandTplTokens {
     pub input: TokenStream,
 }
 
-pub struct TemplateArgs {}
+pub struct TplArgs {}
 
-impl Parse for TemplateArgs {
+impl Parse for TplArgs {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         args::set_from_field_values(
             input.parse_terminated(FieldValue::parse, Token![,])?.iter(),
             [],
         )?;
 
-        Ok(TemplateArgs {})
+        Ok(TplArgs {})
     }
 }
 
-pub struct PartsArgs {}
+pub struct TplPartsArgs {}
 
-impl Parse for PartsArgs {
+impl Parse for TplPartsArgs {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         args::set_from_field_values(
             input.parse_terminated(FieldValue::parse, Token![,])?.iter(),
             [],
         )?;
 
-        Ok(PartsArgs {})
+        Ok(TplPartsArgs {})
     }
 }
 
-pub fn expand_template_parts_tokens(opts: ExpandTemplateTokens) -> Result<TokenStream, syn::Error> {
+/**
+The `tpl_parts!` macro.
+*/
+pub fn expand_tpl_parts_tokens(opts: ExpandTplTokens) -> Result<TokenStream, syn::Error> {
     let span = opts.input.span();
 
-    let (_, template, props) = template::parse2::<PartsArgs>(opts.input, false)?;
+    let (_, template, props) = template::parse2::<TplPartsArgs>(opts.input, false)?;
 
     let template =
         template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;
@@ -56,10 +67,13 @@ pub fn expand_template_parts_tokens(opts: ExpandTemplateTokens) -> Result<TokenS
     Ok(template.template_parts_tokens())
 }
 
-pub fn expand_template_tokens(opts: ExpandTemplateTokens) -> Result<TokenStream, syn::Error> {
+/**
+The `tpl!` macro.
+*/
+pub fn expand_tpl_tokens(opts: ExpandTplTokens) -> Result<TokenStream, syn::Error> {
     let span = opts.input.span();
 
-    let (_, template, props) = template::parse2::<TemplateArgs>(opts.input, false)?;
+    let (_, template, props) = template::parse2::<TplArgs>(opts.input, false)?;
 
     let template =
         template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;
@@ -87,6 +101,9 @@ pub struct ExpandPathTokens {
     pub input: TokenStream,
 }
 
+/**
+The `path!` macro.
+*/
 pub fn expand_path_tokens(opts: ExpandPathTokens) -> Result<TokenStream, syn::Error> {
     let path = syn::parse2::<LitStr>(opts.input)?;
     let span = path.span();
@@ -97,4 +114,184 @@ pub fn expand_path_tokens(opts: ExpandPathTokens) -> Result<TokenStream, syn::Er
     } else {
         Err(syn::Error::new(span, "the value is not a valid path"))
     }
+}
+
+pub struct ExpandNowTokens {
+    pub input: TokenStream,
+}
+
+pub struct NowArgs {
+    rt: args::RtArg,
+}
+
+impl Parse for NowArgs {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let mut rt = Arg::new("rt", |fv| {
+            let expr = &fv.expr;
+
+            Ok(args::RtArg::new(quote_spanned!(expr.span()=> #expr)))
+        });
+
+        args::set_from_field_values(
+            input.parse_terminated(FieldValue::parse, Token![,])?.iter(),
+            [&mut rt],
+        )?;
+
+        Ok(NowArgs {
+            rt: rt.take_or_default(),
+        })
+    }
+}
+
+/**
+The `now!` macro.
+*/
+pub fn expand_now_tokens(opts: ExpandNowTokens) -> Result<TokenStream, syn::Error> {
+    let args = syn::parse2::<NowArgs>(opts.input)?;
+
+    let rt_tokens = args.rt.to_tokens()?.to_ref_tokens();
+
+    Ok(quote!(emit::__private::__private_now(#rt_tokens)))
+}
+
+pub struct ExpandNewTraceIdTokens {
+    pub input: TokenStream,
+}
+
+pub struct NewTraceIdArgs {
+    rt: args::RtArg,
+}
+
+impl Parse for NewTraceIdArgs {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let mut rt = Arg::new("rt", |fv| {
+            let expr = &fv.expr;
+
+            Ok(args::RtArg::new(quote_spanned!(expr.span()=> #expr)))
+        });
+
+        args::set_from_field_values(
+            input.parse_terminated(FieldValue::parse, Token![,])?.iter(),
+            [&mut rt],
+        )?;
+
+        Ok(NewTraceIdArgs {
+            rt: rt.take_or_default(),
+        })
+    }
+}
+
+/**
+The `new_trace_id!` macro.
+*/
+pub fn expand_new_trace_id_tokens(opts: ExpandNewTraceIdTokens) -> Result<TokenStream, syn::Error> {
+    let args = syn::parse2::<NewTraceIdArgs>(opts.input)?;
+
+    let rt_tokens = args.rt.to_tokens()?.to_ref_tokens();
+
+    Ok(quote!(emit::__private::__private_new_trace_id(#rt_tokens)))
+}
+
+pub struct ExpandNewSpanIdTokens {
+    pub input: TokenStream,
+}
+
+pub struct NewSpanIdArgs {
+    rt: args::RtArg,
+}
+
+impl Parse for NewSpanIdArgs {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let mut rt = Arg::new("rt", |fv| {
+            let expr = &fv.expr;
+
+            Ok(args::RtArg::new(quote_spanned!(expr.span()=> #expr)))
+        });
+
+        args::set_from_field_values(
+            input.parse_terminated(FieldValue::parse, Token![,])?.iter(),
+            [&mut rt],
+        )?;
+
+        Ok(NewSpanIdArgs {
+            rt: rt.take_or_default(),
+        })
+    }
+}
+
+/**
+The `new_span_id!` macro.
+*/
+pub fn expand_new_span_id_tokens(opts: ExpandNewSpanIdTokens) -> Result<TokenStream, syn::Error> {
+    let args = syn::parse2::<NewSpanIdArgs>(opts.input)?;
+
+    let rt_tokens = args.rt.to_tokens()?.to_ref_tokens();
+
+    Ok(quote!(emit::__private::__private_new_span_id(#rt_tokens)))
+}
+
+pub struct ExpandEvtTokens {
+    pub level: Option<TokenStream>,
+    pub input: TokenStream,
+}
+
+struct EvtArgs {
+    mdl: args::MdlArg,
+    props: args::PropsArg,
+    extent: args::ExtentArg,
+}
+
+impl Parse for EvtArgs {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let mut mdl = Arg::new("mdl", |fv| {
+            let expr = &fv.expr;
+
+            Ok(args::MdlArg::new(quote_spanned!(expr.span()=> #expr)))
+        });
+        let mut extent = Arg::new("extent", |fv| {
+            let expr = &fv.expr;
+
+            Ok(args::ExtentArg::new(quote_spanned!(expr.span()=> #expr)))
+        });
+        let mut props = Arg::new("props", |fv| {
+            let expr = &fv.expr;
+
+            Ok(args::PropsArg::new(quote_spanned!(expr.span()=> #expr)))
+        });
+
+        args::set_from_field_values(
+            input.parse_terminated(FieldValue::parse, Token![,])?.iter(),
+            [&mut mdl, &mut extent, &mut props],
+        )?;
+
+        Ok(EvtArgs {
+            mdl: mdl.take_or_default(),
+            extent: extent.take_or_default(),
+            props: props.take_or_default(),
+        })
+    }
+}
+
+/**
+The `evt!` macro.
+*/
+pub fn expand_evt_tokens(opts: ExpandEvtTokens) -> Result<TokenStream, syn::Error> {
+    let span = opts.input.span();
+
+    let (args, template, mut props) = template::parse2::<EvtArgs>(opts.input, true)?;
+
+    let template =
+        template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;
+
+    push_evt_props(&mut props, opts.level)?;
+
+    let extent_tokens = args.extent.to_tokens().to_ref_tokens();
+    let base_props_tokens = args.props.to_tokens().to_ref_tokens();
+    let template_tokens = template.template_tokens().to_ref_tokens();
+    let props_tokens = props.props_tokens().to_ref_tokens();
+    let mdl_tokens = args.mdl.to_tokens().to_ref_tokens();
+
+    Ok(
+        quote!(emit::__private::__private_evt(#mdl_tokens, #template_tokens, #extent_tokens, #base_props_tokens, #props_tokens)),
+    )
 }

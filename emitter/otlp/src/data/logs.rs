@@ -88,3 +88,26 @@ impl<'a> sval::Value for EncodedScopeLogs<'a> {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use prost::Message;
+
+    use crate::data::{
+        generated::{logs::v1 as logs, util::*},
+        util::*,
+    };
+
+    #[test]
+    fn encode_basic() {
+        encode_event::<LogsEventEncoder>(emit::evt!("log for {user}", user: "test"), |buf| {
+            let de = logs::LogRecord::decode(buf).unwrap();
+
+            assert_eq!(Some(string_value("log for test")), de.body);
+
+            assert_eq!(Some(string_value("test")), de.attributes[0].value);
+        });
+    }
+}

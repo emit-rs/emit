@@ -1,3 +1,9 @@
+/*!
+Infrastructure for arguments passed to macros.
+
+Arguments are the field-value inputs to attribute macros, like `x` in `#[attr(x: true)]` and the field-value inputs before templates, like `x` in `macro!(x: true, "template")`.
+*/
+
 use proc_macro2::{Ident, Span, TokenStream};
 use syn::{spanned::Spanned, Expr, ExprLit, ExprPath, FieldValue, Lit};
 

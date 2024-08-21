@@ -1,3 +1,13 @@
+/*!
+Conversion of `emit` events into OTLP payloads.
+
+Events are converted into individual payloads on-thread by an [`EventEncoder`]. The background receiver then stitches all of these encoded events into a single request using a [`RequestEncoder`].
+
+Each signal (logs, traces, metrics) implements `EventEncoder` and `ReceiverEncoder`.
+
+Each protocol (protobuf and JSON) implements [`RawEncoder`]. This manages the difference between trace/span id encoding between them.
+*/
+
 use std::{collections::HashMap, fmt, ops::ControlFlow};
 
 use bytes::Buf;
@@ -179,6 +189,11 @@ impl RawEncoder for Json {
     }
 }
 
+/**
+An encoded buffer for a specific protocol.
+
+The buffer may contain a protobuf or a JSON payload.
+*/
 #[derive(Value)]
 #[sval(dynamic)]
 pub(crate) enum EncodedPayload {
@@ -211,6 +226,9 @@ impl EncodedPayload {
     }
 }
 
+/**
+A readable cursor for an [`EncodedPayload`].
+*/
 pub(crate) enum PreEncodedCursor {
     Proto(ProtoBufCursor),
     Json(JsonCursor),
@@ -311,5 +329,34 @@ pub(crate) struct MessageRenderer<'a, P> {
 impl<'a, P: emit::props::Props> fmt::Display for MessageRenderer<'a, P> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         (self.fmt)(&self.evt.erase(), f)
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod util {
+    use super::*;
+
+    pub(crate) fn encode_event<E: EventEncoder + Default>(
+        evt: emit::Event<impl emit::Props>,
+        proto: impl FnOnce(PreEncodedCursor),
+    ) {
+        // Ensure the JSON representation is valid JSON
+        let _: serde_json::Value = serde_json::from_reader(
+            E::default()
+                .encode_event::<Json>(&evt)
+                .unwrap()
+                .payload
+                .into_cursor()
+                .reader(),
+        )
+        .unwrap();
+
+        proto(
+            E::default()
+                .encode_event::<Proto>(&evt)
+                .unwrap()
+                .payload
+                .into_cursor(),
+        );
     }
 }

@@ -13,6 +13,10 @@ This crate contains the proc-macros that are exported in the `emit` crate. It ex
 # Hooks
 
 Code is transformed through _hooks_. A hook is a well-known method call, like `a.__private_emit_capture_as_default()`. The behavior of the hook is defined in `emit::macro_hooks`. Attribute macros look for these hooks and replace them to change behavior. For example, `#[emit::as_debug]` looks for any `__private_emit_capture_as_*` method and replaces it with `__private_emit_capture_as_debug`.
+
+# Testing
+
+Tests for this project mostly live in the top-level `test/ui` crate.
 */
 #![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]
 
@@ -32,7 +36,6 @@ mod args;
 mod build;
 mod capture;
 mod emit;
-mod event;
 mod filter;
 mod fmt;
 mod format;
@@ -46,6 +49,11 @@ mod util;
 
 use util::ResultToTokens;
 
+/**
+The set of hooks defined as a map.
+
+Hooks are regular attribute macros, but will be eagerly applied when expanding other macros to avoid the nightly-only feature that allows attribute macros on expressions. The `hook::eval_hooks` function will do this expansion.
+*/
 fn hooks() -> HashMap<&'static str, fn(TokenStream, TokenStream) -> syn::Result<TokenStream>> {
     let mut map = HashMap::new();
 
@@ -246,8 +254,8 @@ Properties that appear within the template or after it are added to the emitted 
 An `emit::Event`.
 */
 #[proc_macro]
-pub fn event(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    event::expand_tokens(event::ExpandTokens {
+pub fn evt(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    build::expand_evt_tokens(build::ExpandEvtTokens {
         level: None,
         input: item.into(),
     })
@@ -266,8 +274,8 @@ See the [`macro@event`] macro for syntax.
 An `emit::Event`.
 */
 #[proc_macro]
-pub fn debug_event(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    event::expand_tokens(event::ExpandTokens {
+pub fn debug_evt(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    build::expand_evt_tokens(build::ExpandEvtTokens {
         level: Some(quote!(emit::Level::Debug)),
         input: item.into(),
     })
@@ -286,8 +294,8 @@ See the [`macro@event`] macro for syntax.
 An `emit::Event`.
 */
 #[proc_macro]
-pub fn info_event(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    event::expand_tokens(event::ExpandTokens {
+pub fn info_evt(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    build::expand_evt_tokens(build::ExpandEvtTokens {
         level: Some(quote!(emit::Level::Info)),
         input: item.into(),
     })
@@ -306,8 +314,8 @@ See the [`macro@event`] macro for syntax.
 An `emit::Event`.
 */
 #[proc_macro]
-pub fn warn_event(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    event::expand_tokens(event::ExpandTokens {
+pub fn warn_evt(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    build::expand_evt_tokens(build::ExpandEvtTokens {
         level: Some(quote!(emit::Level::Warn)),
         input: item.into(),
     })
@@ -326,12 +334,93 @@ See the [`macro@event`] macro for syntax.
 An `emit::Event`.
 */
 #[proc_macro]
-pub fn error_event(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    event::expand_tokens(event::ExpandTokens {
+pub fn error_evt(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    build::expand_evt_tokens(build::ExpandEvtTokens {
         level: Some(quote!(emit::Level::Error)),
         input: item.into(),
     })
     .unwrap_or_compile_error()
+}
+
+/**
+Get the current timestamp.
+
+If no runtime is specified then the shared runtime will be used. If the shared runtime hasn't been initialized yet then this macro will always return `None`.
+
+# Syntax
+
+```text
+(control_param),*
+```
+
+# Control parameters
+
+This macro accepts the following optional control parameters:
+
+- `rt: impl emit::runtime::Runtime`: The runtime to get the timestamp from.
+
+# Returns
+
+An `Option<emit::Timestamp>`.
+*/
+#[proc_macro]
+pub fn now(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    build::expand_now_tokens(build::ExpandNowTokens { input: item.into() })
+        .unwrap_or_compile_error()
+}
+
+/**
+Generate a new random trace id.
+
+If no runtime is specified then the shared runtime will be used. If the shared runtime hasn't been initialized yet then this macro will always return `None`.
+
+# Syntax
+
+```text
+(control_param),*
+```
+
+# Control parameters
+
+This macro accepts the following optional control parameters:
+
+- `rt: impl emit::runtime::Runtime`: The runtime to generate the trace id from.
+
+# Returns
+
+An `Option<emit::span::TraceId>`.
+*/
+#[proc_macro]
+pub fn new_trace_id(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    build::expand_new_trace_id_tokens(build::ExpandNewTraceIdTokens { input: item.into() })
+        .unwrap_or_compile_error()
+}
+
+/**
+Generate a new random span id.
+
+If no runtime is specified then the shared runtime will be used. If the shared runtime hasn't been initialized yet then this macro will always return `None`.
+
+# Syntax
+
+```text
+(control_param),*
+```
+
+# Control parameters
+
+This macro accepts the following optional control parameters:
+
+- `rt: impl emit::runtime::Runtime`: The runtime to generate the span id from.
+
+# Returns
+
+An `Option<emit::span::SpanId>`.
+*/
+#[proc_macro]
+pub fn new_span_id(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    build::expand_new_span_id_tokens(build::ExpandNewSpanIdTokens { input: item.into() })
+        .unwrap_or_compile_error()
 }
 
 /**
@@ -476,7 +565,7 @@ An `emit::Template`.
 */
 #[proc_macro]
 pub fn tpl(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    build::expand_template_tokens(build::ExpandTemplateTokens {
+    build::expand_tpl_tokens(build::ExpandTplTokens {
         input: TokenStream::from(item),
     })
     .unwrap_or_compile_error()
@@ -495,7 +584,7 @@ An `[emit::template::Part; N]` array.
 */
 #[proc_macro]
 pub fn tpl_parts(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    build::expand_template_parts_tokens(build::ExpandTemplateTokens {
+    build::expand_tpl_parts_tokens(build::ExpandTplTokens {
         input: TokenStream::from(item),
     })
     .unwrap_or_compile_error()

@@ -315,3 +315,136 @@ impl<'a> sval_ref::ValueRef<'a> for EmitValue<'a> {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use prost::Message;
+
+    use crate::data::generated::{common::v1 as common, util::*};
+
+    fn encode<'a>(v: impl Into<emit::Value<'a>>) -> impl bytes::Buf {
+        sval_protobuf::stream_to_protobuf(EmitValue(v.into())).into_cursor()
+    }
+
+    #[test]
+    fn encode_string() {
+        let de = common::AnyValue::decode(encode("string value")).unwrap();
+
+        assert_eq!(string_value("string value"), de);
+    }
+
+    #[test]
+    fn encode_bytes() {
+        let de = common::AnyValue::decode(encode(emit::Value::capture_sval(
+            &sval::BinarySlice::new(b"bytes value"),
+        )))
+        .unwrap();
+
+        assert_eq!(bytes_value(b"bytes value"), de);
+    }
+
+    #[test]
+    fn encode_bool() {
+        let de = common::AnyValue::decode(encode(true)).unwrap();
+
+        assert_eq!(bool_value(true), de);
+    }
+
+    #[test]
+    fn encode_int_i32() {
+        let de = common::AnyValue::decode(encode(42)).unwrap();
+
+        assert_eq!(int_value(42), de);
+    }
+
+    #[test]
+    fn encode_int_i128_oversize() {
+        let de = common::AnyValue::decode(encode(i128::MAX)).unwrap();
+
+        assert_eq!(string_value(i128::MAX.to_string()), de);
+    }
+
+    #[test]
+    fn encode_double() {
+        let de = common::AnyValue::decode(encode(42.1)).unwrap();
+
+        assert_eq!(double_value(42.1), de);
+    }
+
+    #[test]
+    fn encode_array() {
+        let de = common::AnyValue::decode(encode(emit::Value::capture_sval(&[1, 2, 3]))).unwrap();
+
+        assert_eq!(array_value([int_value(1), int_value(2), int_value(3)]), de);
+    }
+
+    #[test]
+    fn encode_array_nested() {
+        let de = common::AnyValue::decode(encode(emit::Value::capture_sval(&[
+            emit::Value::from(1),
+            emit::Value::from(emit::Value::capture_sval(&[1, 2, 3])),
+            emit::Value::from(3),
+        ])))
+        .unwrap();
+
+        assert_eq!(
+            array_value([
+                int_value(1),
+                array_value([int_value(1), int_value(2), int_value(3)]),
+                int_value(3)
+            ]),
+            de
+        );
+    }
+
+    #[test]
+    fn encode_kvlist() {
+        let de =
+            common::AnyValue::decode(encode(emit::Value::capture_sval(&sval::MapSlice::new(&[
+                ("a", 1),
+                ("b", 2),
+                ("c", 3),
+            ]))))
+            .unwrap();
+
+        assert_eq!(
+            kvlist_value([
+                ("a".into(), int_value(1)),
+                ("b".into(), int_value(2)),
+                ("c".into(), int_value(3)),
+            ]),
+            de
+        );
+    }
+
+    #[test]
+    fn encode_kvlist_nested() {
+        let de = common::AnyValue::decode(encode(emit::Value::from_sval(&sval::MapSlice::new(&[
+            ("a", emit::Value::from(1)),
+            (
+                "b",
+                emit::Value::from_sval(&sval::MapSlice::new(&[("a", 1), ("b", 2), ("c", 3)])),
+            ),
+            ("c", emit::Value::from(3)),
+        ]))))
+        .unwrap();
+
+        assert_eq!(
+            kvlist_value([
+                ("a".into(), int_value(1)),
+                (
+                    "b".into(),
+                    kvlist_value([
+                        ("a".into(), int_value(1)),
+                        ("b".into(), int_value(2)),
+                        ("c".into(), int_value(3)),
+                    ])
+                ),
+                ("c".into(), int_value(3)),
+            ]),
+            de
+        );
+    }
+}

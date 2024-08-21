@@ -6,6 +6,7 @@ members = [
     "emitter/file",
     "emitter/otlp",
     "emitter/otlp/gen",
+    "emitter/otlp/test/integration",
     "emitter/opentelemetry",
     "macros",
     "examples/common_patterns",
