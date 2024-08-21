@@ -29,3 +29,19 @@ jobs:
       - name: Minimal versions
         working-directory: ./emitter/otlp
         run: cargo hack test --feature-powerset --lib -Z minimal-versions
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab
+
+      - name: Install Rust toolchain
+        run: rustup default nightly
+
+      - name: Install otelcol
+        run: wget -O otelcol.deb https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.107.0/otelcol_0.107.0_linux_amd64.deb && apt install ./otelcol.deb
+
+      - name: Install otelcol
+        working-directory: ./emitter/otlp/test/integration
+        run: cargo run

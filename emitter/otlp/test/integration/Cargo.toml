@@ -1,0 +1,15 @@
+[package]
+name = "emit_otlp_test_integration"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[dependencies.emit]
+path = "../../../../"
+
+[dependencies.emit_otlp]
+path = "../../"
+
+[dependencies.uuid]
+version = "1"
+features = ["v4"]

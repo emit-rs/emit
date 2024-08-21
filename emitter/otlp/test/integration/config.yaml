@@ -1,0 +1,24 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "localhost:44319"
+      http:
+        endpoint: "localhost:44318"
+
+exporters:
+  debug:
+    verbosity: detailed
+    sampling_initial: 1
+
+service:
+  pipelines:
+    logs:
+      receivers: [otlp]
+      exporters: [debug]
+    traces:
+      receivers: [otlp]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      exporters: [debug]
