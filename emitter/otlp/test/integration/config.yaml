@@ -12,6 +12,9 @@ exporters:
     sampling_initial: 1
 
 service:
+  telemetry:
+    metrics:
+      level: none
   pipelines:
     logs:
       receivers: [otlp]
