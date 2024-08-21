@@ -640,6 +640,16 @@ pub fn clock() -> runtime::AmbientClock<'static> {
 }
 
 /**
+Get the current timestamp.
+
+This method will use the [`Clock`] from [`runtime::shared()`].
+*/
+#[cfg(feature = "implicit_rt")]
+pub fn now() -> Option<Timestamp> {
+    clock().now()
+}
+
+/**
 Get the shared context.
 
 This method will use the [`Ctxt`] from [`runtime::shared()`].
@@ -659,6 +669,26 @@ This method will use the [`Rng`] from [`runtime::shared()`].
 #[cfg(feature = "implicit_rt")]
 pub fn rng() -> runtime::AmbientRng<'static> {
     *runtime::shared().rng()
+}
+
+/**
+Get a new, random trace id.
+
+This method will use the [`Rng`] from [`runtime::shared()`].
+*/
+#[cfg(feature = "implicit_rt")]
+pub fn new_trace_id() -> Option<span::TraceId> {
+    span::TraceId::random(rng())
+}
+
+/**
+Get a new, random span id.
+
+This method will use the [`Rng`] from [`runtime::shared()`].
+*/
+#[cfg(feature = "implicit_rt")]
+pub fn new_span_id() -> Option<span::SpanId> {
+    span::SpanId::random(rng())
 }
 
 #[doc(hidden)]
