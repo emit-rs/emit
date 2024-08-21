@@ -45,6 +45,6 @@ jobs:
       - name: Install otelcol
         run: sudo dpkg -i ./otelcol.deb
 
-      - name: Install otelcol
+      - name: Test
         working-directory: ./emitter/otlp/test/integration
         run: cargo run
