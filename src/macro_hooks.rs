@@ -3,6 +3,7 @@
 use core::{any::Any, fmt, ops::ControlFlow};
 
 use emit_core::{
+    and::And,
     clock::Clock,
     ctxt::Ctxt,
     emitter::Emitter,
@@ -15,6 +16,7 @@ use emit_core::{
     runtime::Runtime,
     str::{Str, ToStr},
     template::{Formatter, Part, Template},
+    timestamp::Timestamp,
     value::{ToValue, Value},
 };
 
@@ -717,18 +719,40 @@ pub fn __private_emit_event<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R:
 }
 
 #[track_caller]
-pub fn __private_event<'a, P: Props + ?Sized>(
+pub fn __private_evt<'a, B: Props + ?Sized, P: Props + ?Sized>(
     mdl: &'a (impl MdlControlParam + ?Sized),
     tpl: &'a (impl TplControlParam + ?Sized),
     extent: &'a (impl ToExtent + ?Sized),
+    base_props: &'a B,
     props: &'a P,
-) -> Event<'a, &'a P> {
+) -> Event<'a, And<&'a P, &'a B>> {
     Event::new(
         mdl.mdl_control_param(),
         tpl.tpl_control_param(),
         extent.to_extent(),
-        props,
+        props.and_props(base_props),
     )
+}
+
+#[track_caller]
+pub fn __private_now<'a, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
+    rt: &'a Runtime<E, F, C, T, R>,
+) -> Option<Timestamp> {
+    rt.clock().now()
+}
+
+#[track_caller]
+pub fn __private_new_trace_id<'a, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
+    rt: &'a Runtime<E, F, C, T, R>,
+) -> Option<TraceId> {
+    TraceId::random(rt.rng())
+}
+
+#[track_caller]
+pub fn __private_new_span_id<'a, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
+    rt: &'a Runtime<E, F, C, T, R>,
+) -> Option<SpanId> {
+    SpanId::random(rt.rng())
 }
 
 #[track_caller]

@@ -102,7 +102,7 @@ mod tests {
 
     #[test]
     fn encode_basic() {
-        encode_event::<LogsEventEncoder>(emit::event!("log for {user}", user: "test"), |buf| {
+        encode_event::<LogsEventEncoder>(emit::evt!("log for {user}", user: "test"), |buf| {
             let de = logs::LogRecord::decode(buf).unwrap();
 
             assert_eq!(Some(string_value("log for test")), de.body);

@@ -1,3 +1,9 @@
+/*!
+Integration tests for `emit`'s macros.
+
+Compile-pass tests live in top-level modules here. Compile-fail tests live under the `compile_fail` module.
+*/
+
 #![cfg(test)]
 
 #[macro_use]

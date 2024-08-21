@@ -119,7 +119,7 @@ mod tests {
     #[test]
     fn encode_basic() {
         encode_event::<TracesEventEncoder>(
-            emit::event!(
+            emit::evt!(
                 extent: ts(1)..ts(13),
                 "greet {user}",
                 user: "test",

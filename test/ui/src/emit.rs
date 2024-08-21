@@ -268,7 +268,7 @@ fn emit_evt() {
 
     emit::emit!(
         rt,
-        evt: emit::event!(
+        evt: emit::evt!(
             "Hello, {user}",
             user: "Rust",
         ),
@@ -281,7 +281,7 @@ fn emit_evt_ref() {
 
     emit::emit!(
         rt,
-        evt: &emit::event!(
+        evt: &emit::evt!(
             "Hello, {user}",
             user: "Rust",
         ),
@@ -293,8 +293,8 @@ fn emit_event_filter() {
     let called = Called::new();
     let rt = simple_runtime(|_| called.record(), |evt| evt.mdl() == "true");
 
-    emit::emit!(rt, evt: emit::event!(mdl: emit::path!("false"), "test"));
-    emit::emit!(rt, evt: emit::event!(mdl: emit::path!("true"), "test"));
+    emit::emit!(rt, evt: emit::evt!(mdl: emit::path!("false"), "test"));
+    emit::emit!(rt, evt: emit::evt!(mdl: emit::path!("true"), "test"));
 
     rt.emitter().blocking_flush(Duration::from_secs(1));
 
@@ -306,7 +306,7 @@ fn emit_event_when() {
     let called = Called::new();
     let rt = simple_runtime(|_| called.record(), |evt| evt.mdl() == "true");
 
-    emit::emit!(rt, when: emit::filter::from_fn(|_| true), evt: emit::event!(mdl: emit::path!("false"), "test"));
+    emit::emit!(rt, when: emit::filter::from_fn(|_| true), evt: emit::evt!(mdl: emit::path!("false"), "test"));
 
     rt.emitter().blocking_flush(Duration::from_secs(1));
 

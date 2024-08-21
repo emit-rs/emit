@@ -1,11 +1,11 @@
 error: unused variable: `rt`
- --> src/compile_fail/std/setup_unflished.rs:4:9
+ --> src/compile_fail/std/setup_unflushed.rs:4:9
   |
 4 |     let rt = emit::setup().init();
   |         ^^ help: if this is intentional, prefix it with an underscore: `_rt`
   |
 note: the lint level is defined here
- --> src/compile_fail/std/setup_unflished.rs:1:9
+ --> src/compile_fail/std/setup_unflushed.rs:1:9
   |
 1 | #![deny(warnings)]
   |         ^^^^^^^^

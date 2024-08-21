@@ -86,7 +86,7 @@ use emit_core::{
     emitter::Emitter,
     empty::Empty,
     filter::Filter,
-    runtime::{InternalCtxt, InternalEmitter, InternalFilter},
+    runtime::{AmbientRuntime, AmbientSlot, InternalCtxt, InternalEmitter, InternalFilter},
 };
 
 use crate::platform::{self, Platform};
@@ -241,7 +241,7 @@ where
     */
     #[must_use = "call `blocking_flush` at the end of `main` to ensure events are flushed."]
     #[cfg(feature = "implicit_rt")]
-    pub fn init(self) -> Init<&'static TEmitter, &'static TCtxt> {
+    pub fn init(self) -> Init<'static, TEmitter, TCtxt> {
         self.init_slot(emit_core::runtime::shared_slot())
     }
 
@@ -249,7 +249,7 @@ where
     Initialize a runtime in the given static `slot`.
     */
     #[must_use = "call `blocking_flush` at the end of `main` to ensure events are flushed."]
-    pub fn init_slot(self, slot: &emit_core::runtime::AmbientSlot) -> Init<&TEmitter, &TCtxt> {
+    pub fn init_slot<'a>(self, slot: &'a AmbientSlot) -> Init<'a, TEmitter, TCtxt> {
         let ambient = slot
             .init(
                 emit_core::runtime::Runtime::new()
@@ -262,6 +262,7 @@ where
             .expect("already initialized");
 
         Init {
+            rt: slot.get(),
             emitter: *ambient.emitter(),
             ctxt: *ambient.ctxt(),
         }
@@ -283,8 +284,10 @@ where
     */
     #[must_use = "call `blocking_flush` at the end of `main` (after flushing the main runtime) to ensure events are flushed."]
     #[cfg(feature = "implicit_internal_rt")]
-    pub fn init_internal(self) -> Init<&'static TEmitter, &'static TCtxt> {
-        let ambient = emit_core::runtime::internal_slot()
+    pub fn init_internal(self) -> Init<'static, TEmitter, TCtxt> {
+        let slot = emit_core::runtime::internal_slot();
+
+        let ambient = slot
             .init(
                 emit_core::runtime::Runtime::new()
                     .with_emitter(self.emitter)
@@ -296,6 +299,7 @@ where
             .expect("already initialized");
 
         Init {
+            rt: slot.get(),
             emitter: *ambient.emitter(),
             ctxt: *ambient.ctxt(),
         }
@@ -307,24 +311,26 @@ The result of calling [`Setup::init`].
 
 This type is a handle to an initialized runtime that can be used to ensure it's fully flushed with a call to [`Init::blocking_flush`] before your application exits.
 */
-pub struct Init<TEmitter: Emitter = DefaultEmitter, TCtxt: Ctxt = DefaultCtxt> {
-    emitter: TEmitter,
-    ctxt: TCtxt,
+pub struct Init<'a, TEmitter: Emitter + ?Sized = DefaultEmitter, TCtxt: Ctxt + ?Sized = DefaultCtxt>
+{
+    rt: &'a AmbientRuntime<'a>,
+    emitter: &'a TEmitter,
+    ctxt: &'a TCtxt,
 }
 
-impl<TEmitter: Emitter, TCtxt: Ctxt> Init<TEmitter, TCtxt> {
+impl<'a, TEmitter: Emitter + ?Sized, TCtxt: Ctxt + ?Sized> Init<'a, TEmitter, TCtxt> {
     /**
     Get a reference to the initialized [`Emitter`].
     */
-    pub fn emitter(&self) -> &TEmitter {
-        &self.emitter
+    pub fn emitter(&self) -> &'a TEmitter {
+        self.emitter
     }
 
     /**
     Get a reference to the initialized [`Ctxt`].
     */
-    pub fn ctxt(&self) -> &TCtxt {
-        &self.ctxt
+    pub fn ctxt(&self) -> &'a TCtxt {
+        self.ctxt
     }
 
     /**
@@ -334,5 +340,12 @@ impl<TEmitter: Emitter, TCtxt: Ctxt> Init<TEmitter, TCtxt> {
     */
     pub fn blocking_flush(&self, timeout: Duration) -> bool {
         self.emitter.blocking_flush(timeout)
+    }
+
+    /**
+    Get the underlying runtime that was initialized.
+    */
+    pub fn get(&self) -> &'a AmbientRuntime<'a> {
+        self.rt
     }
 }
