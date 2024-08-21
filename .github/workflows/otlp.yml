@@ -39,8 +39,11 @@ jobs:
       - name: Install Rust toolchain
         run: rustup default nightly
 
+      - name: Get otelcol
+        run: wget -O otelcol.deb https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.107.0/otelcol_0.107.0_linux_amd64.deb
+
       - name: Install otelcol
-        run: wget -O otelcol.deb https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.107.0/otelcol_0.107.0_linux_amd64.deb && apt install ./otelcol.deb
+        run: sudo dpkg -i ./otelcol.deb
 
       - name: Install otelcol
         working-directory: ./emitter/otlp/test/integration
