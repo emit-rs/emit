@@ -2,6 +2,6 @@
 
 [![batcher](https://github.com/emit-rs/emit/actions/workflows/batcher.yml/badge.svg)](https://github.com/emit-rs/emit/actions/workflows/batcher.yml)
 
-[Current docs](https://docs.rs/emit_batcher/0.11.0-alpha.8/emit_batcher/index.html)
+[Current docs](https://docs.rs/emit_batcher/0.11.0-alpha.9/emit_batcher/index.html)
 
 Infrastructure for emitting diagnostic events in the background.
