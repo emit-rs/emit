@@ -1,6 +1,6 @@
 [package]
 name = "emit_example_common_patterns"
-version = "0.11.0-alpha.8"
+version = "0.11.0-alpha.9"
 authors = ["emit contributors"]
 edition = "2021"
 publish = false
