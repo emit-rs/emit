@@ -97,22 +97,17 @@ mod tests {
 
     use crate::data::{
         generated::{logs::v1 as logs, util::*},
-        Proto,
+        util::*,
     };
 
     #[test]
     fn encode_basic() {
-        let de = logs::LogRecord::decode(
-            LogsEventEncoder::default()
-                .encode_event::<Proto>(&emit::event!("log for {user}", user: "test"))
-                .unwrap()
-                .payload
-                .into_cursor(),
-        )
-        .unwrap();
+        encode_event::<LogsEventEncoder>(emit::event!("log for {user}", user: "test"), |buf| {
+            let de = logs::LogRecord::decode(buf).unwrap();
 
-        assert_eq!(Some(string_value("log for test")), de.body);
+            assert_eq!(Some(string_value("log for test")), de.body);
 
-        assert_eq!(Some(string_value("test")), de.attributes[0].value);
+            assert_eq!(Some(string_value("test")), de.attributes[0].value);
+        });
     }
 }

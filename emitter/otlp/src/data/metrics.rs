@@ -400,7 +400,7 @@ mod tests {
 
     use prost::Message;
 
-    use crate::data::{generated::metrics::v1 as metrics, Proto};
+    use crate::data::{generated::metrics::v1 as metrics, util::*};
 
     fn double_point(v: impl Into<f64>) -> metrics::number_data_point::Value {
         metrics::number_data_point::Value::AsDouble(v.into())
@@ -412,30 +412,28 @@ mod tests {
 
     #[test]
     fn encode_basic() {
-        let de = metrics::Metric::decode(
-            MetricsEventEncoder::default()
-                .encode_event::<Proto>(&emit::event!(
-                    "{metric_agg} of {metric_name} is {metric_value}",
-                    evt_kind: "metric",
-                    metric_name: "test",
-                    metric_agg: "count",
-                    metric_value: 43,
-                ))
-                .unwrap()
-                .payload
-                .into_cursor(),
-        )
-        .unwrap();
+        encode_event::<MetricsEventEncoder>(
+            emit::event!(
+                "{metric_agg} of {metric_name} is {metric_value}",
+                evt_kind: "metric",
+                metric_name: "test",
+                metric_agg: "count",
+                metric_value: 43,
+            ),
+            |buf| {
+                let de = metrics::Metric::decode(buf).unwrap();
 
-        assert_eq!("test", de.name);
+                assert_eq!("test", de.name);
 
-        match de.data {
-            Some(metrics::metric::Data::Sum(sum)) => {
-                assert!(sum.is_monotonic);
+                match de.data {
+                    Some(metrics::metric::Data::Sum(sum)) => {
+                        assert!(sum.is_monotonic);
 
-                assert_eq!(Some(int_point(43)), sum.data_points[0].value);
-            }
-            other => panic!("unexpected {other:?}"),
-        }
+                        assert_eq!(Some(int_point(43)), sum.data_points[0].value);
+                    }
+                    other => panic!("unexpected {other:?}"),
+                }
+            },
+        );
     }
 }

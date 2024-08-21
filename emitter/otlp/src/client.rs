@@ -1,3 +1,9 @@
+/*!
+Configuration and network client for the OTLP emitter.
+
+This module is a consumer of `data`, using it to encode incoming events. These are then sent to a remote collector by the `http` module.
+*/
+
 use crate::{
     data::{
         self, logs::LogsEventEncoder, metrics::MetricsEventEncoder, traces::TracesEventEncoder,

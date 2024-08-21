@@ -112,29 +112,27 @@ mod tests {
     use prost::Message;
 
     use crate::{
-        data::{generated::trace::v1 as trace, Proto},
+        data::{generated::trace::v1 as trace, util::*},
         util::*,
     };
 
     #[test]
     fn encode_basic() {
-        let de = trace::Span::decode(
-            TracesEventEncoder::default()
-                .encode_event::<Proto>(&emit::event!(
-                    extent: ts(1)..ts(13),
-                    "greet {user}",
-                    user: "test",
-                    evt_kind: "span",
-                    span_name: "test",
-                    trace_id: "00000000000000000000000000000001",
-                    span_id: "0000000000000001"
-                ))
-                .unwrap()
-                .payload
-                .into_cursor(),
-        )
-        .unwrap();
+        encode_event::<TracesEventEncoder>(
+            emit::event!(
+                extent: ts(1)..ts(13),
+                "greet {user}",
+                user: "test",
+                evt_kind: "span",
+                span_name: "test",
+                trace_id: "00000000000000000000000000000001",
+                span_id: "0000000000000001"
+            ),
+            |buf| {
+                let de = trace::Span::decode(buf).unwrap();
 
-        assert_eq!("test", de.name);
+                assert_eq!("test", de.name);
+            },
+        );
     }
 }

@@ -1,3 +1,9 @@
+/*!
+Generator for OTLP protos.
+
+The protos are updated manually from https://github.com/open-telemetry/opentelemetry-proto
+*/
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut config = prost_build::Config::new();
 
