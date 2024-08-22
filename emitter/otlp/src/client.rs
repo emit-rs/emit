@@ -184,7 +184,7 @@ impl OtlpBuilder {
                 let (encoder, transport) =
                     builder.build(metrics.clone(), self.resource.as_ref())?;
 
-                let (sender, receiver) = emit_batcher::bounded(1024);
+                let (sender, receiver) = emit_batcher::bounded(10_000);
 
                 (Some((encoder, sender)), Some((transport, receiver)))
             }
@@ -196,7 +196,7 @@ impl OtlpBuilder {
                 let (encoder, transport) =
                     builder.build(metrics.clone(), self.resource.as_ref())?;
 
-                let (sender, receiver) = emit_batcher::bounded(1024);
+                let (sender, receiver) = emit_batcher::bounded(10_000);
 
                 (Some((encoder, sender)), Some((transport, receiver)))
             }
@@ -208,7 +208,7 @@ impl OtlpBuilder {
                 let (encoder, transport) =
                     builder.build(metrics.clone(), self.resource.as_ref())?;
 
-                let (sender, receiver) = emit_batcher::bounded(1024);
+                let (sender, receiver) = emit_batcher::bounded(10_000);
 
                 (Some((encoder, sender)), Some((transport, receiver)))
             }

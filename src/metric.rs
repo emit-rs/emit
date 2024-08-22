@@ -930,19 +930,33 @@ mod alloc_support {
 
             self
         }
-    }
 
-    impl Source for Reporter {
-        fn sample_metrics<S: sampler::Sampler>(&self, sampler: S) {
+        /**
+        Produce a current sample for all metrics.
+        */
+        pub fn sample_metrics<S: sampler::Sampler>(&self, sampler: S) {
             for source in &self.0 {
                 source.sample_metrics(&sampler);
             }
         }
 
-        fn emit_metrics<E: Emitter>(&self, emitter: E) {
+        /**
+        Produce a current sample for all metrics, emitting them as diagnostic events to the given [`Emitter`].
+        */
+        pub fn emit_metrics<E: Emitter>(&self, emitter: E) {
             for source in &self.0 {
                 source.emit_metrics(&emitter);
             }
+        }
+    }
+
+    impl Source for Reporter {
+        fn sample_metrics<S: sampler::Sampler>(&self, sampler: S) {
+            self.sample_metrics(sampler)
+        }
+
+        fn emit_metrics<E: Emitter>(&self, emitter: E) {
+            self.emit_metrics(emitter)
         }
     }
 

@@ -1,0 +1,14 @@
+[package]
+name = "emit_otlp_test_throughput"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[dependencies.emit]
+path = "../../../../"
+
+[dependencies.emit_otlp]
+path = "../../"
+
+[dependencies.emit_term]
+path = "../../../term"
