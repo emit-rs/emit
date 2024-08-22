@@ -333,6 +333,13 @@ impl Timestamp {
     pub fn checked_sub(&self, rhs: Duration) -> Option<Self> {
         Timestamp::from_unix(self.to_unix().checked_sub(rhs)?)
     }
+
+    /**
+    Get the duration between this timestamp and an earlier one.
+    */
+    pub fn checked_duration_since(&self, earlier: Timestamp) -> Option<Duration> {
+        self.to_unix().checked_sub(earlier.to_unix())
+    }
 }
 
 impl Add<Duration> for Timestamp {
@@ -361,6 +368,15 @@ impl Sub<Duration> for Timestamp {
 impl SubAssign<Duration> for Timestamp {
     fn sub_assign(&mut self, rhs: Duration) {
         *self = *self - rhs;
+    }
+}
+
+impl Sub<Timestamp> for Timestamp {
+    type Output = Duration;
+
+    fn sub(self, earlier: Timestamp) -> Self::Output {
+        self.checked_duration_since(earlier)
+            .expect("overflow subtracting from timestamp")
     }
 }
 
@@ -620,6 +636,26 @@ mod tests {
             (Timestamp::MIN, Duration::MAX, None),
         ] {
             assert_eq!(expected, case.checked_sub(sub));
+        }
+    }
+
+    #[test]
+    fn sub_timestamp() {
+        for (case, earlier, expected) in [
+            (Timestamp::MIN, Timestamp::MIN, Some(Duration::from_secs(0))),
+            (
+                Timestamp::from_unix(Duration::from_secs(10)).unwrap(),
+                Timestamp::from_unix(Duration::from_secs(0)).unwrap(),
+                Some(Duration::from_secs(10)),
+            ),
+            (
+                Timestamp::from_unix(Duration::from_secs(0)).unwrap(),
+                Timestamp::from_unix(Duration::from_secs(10)).unwrap(),
+                None,
+            ),
+            (Timestamp::MAX, Timestamp::MIN, Some(MAX)),
+        ] {
+            assert_eq!(expected, case.checked_duration_since(earlier));
         }
     }
 
