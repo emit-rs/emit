@@ -216,15 +216,8 @@ impl OtlpBuilder {
         };
 
         let receive = async move {
-            let processors = FuturesUnordered::<
-                Pin<
-                    Box<
-                        dyn Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>>
-                            + Send
-                            + 'static,
-                    >,
-                >,
-            >::new();
+            let processors =
+                FuturesUnordered::<Pin<Box<dyn Future<Output = ()> + Send + 'static>>>::new();
 
             if let Some((transport, receiver)) = process_otlp_logs {
                 let transport = Arc::new(transport);

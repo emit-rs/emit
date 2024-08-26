@@ -43,8 +43,7 @@ pub fn spawn<
                     .enable_all()
                     .build()
                     .unwrap()
-                    .block_on(receive)
-                    .unwrap();
+                    .block_on(receive);
             });
         }
     }
@@ -72,8 +71,8 @@ Wait for a channel to send a message, blocking if the channel is at capacity.
 */
 pub fn blocking_send<T: Channel>(
     sender: &Sender<T>,
-    timeout: Duration,
     msg: T::Item,
+    timeout: Duration,
 ) -> Result<(), BatchError<T::Item>> {
     crate::blocking_send(sender, timeout, msg, |timeout| {
         tokio::task::block_in_place(|| {

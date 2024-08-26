@@ -20,20 +20,16 @@ use crate::internal_metrics::InternalMetrics;
 use std::{
     any::Any,
     cmp, error, fmt,
-    future::{self, Future},
+    future::Future,
     mem,
     panic::{self, AssertUnwindSafe, UnwindSafe},
-    pin::{pin, Pin},
-    sync::{Arc, Mutex, OnceLock},
-    task,
+    pin::Pin,
+    sync::{Arc, Mutex},
     task::{Context, Poll},
-    thread,
     time::{Duration, Instant},
 };
 
 mod internal_metrics;
-
-type Error = Box<dyn error::Error + Send + Sync + 'static>;
 
 /**
 A channel between a shared [`Sender`] and exclusive [`Receiver`].
@@ -297,47 +293,6 @@ impl<T> Drop for Receiver<T> {
 
 impl<T: Channel> Receiver<T> {
     /**
-    Run the receiver synchronously.
-
-    This method should be called on a dedicated thread. It will return once the [`Sender`] is dropped.
-    */
-    pub fn blocking_exec(
-        self,
-        mut on_batch: impl FnMut(T) -> Result<(), BatchError<T>>,
-    ) -> Result<(), Error> {
-        static WAKER: OnceLock<Arc<NeverWake>> = OnceLock::new();
-
-        // A waker that does nothing; the tasks it runs are fully
-        // synchronous so there's never any notifications to issue
-        struct NeverWake;
-
-        impl task::Wake for NeverWake {
-            fn wake(self: Arc<Self>) {}
-        }
-
-        // The future is polled to completion here, so we can pin
-        // it directly on the stack
-        let mut fut = pin!(self.exec(
-            |delay| future::ready(thread::sleep(delay)),
-            move |batch| future::ready(on_batch(batch)),
-        ));
-
-        // Get a context for our synchronous task
-        let waker = WAKER.get_or_init(|| Arc::new(NeverWake)).clone().into();
-        let mut cx = task::Context::from_waker(&waker);
-
-        // Drive the task to completion; it should complete in one go,
-        // but may eagerly return as soon as it hits an await point, so
-        // just to be sure we continuously poll it
-        loop {
-            match fut.as_mut().poll(&mut cx) {
-                task::Poll::Ready(r) => return r,
-                task::Poll::Pending => continue,
-            }
-        }
-    }
-
-    /**
     Run the receiver asynchronously.
 
     The returned future will resolve once the [`Sender`] is dropped.
@@ -351,7 +306,7 @@ impl<T: Channel> Receiver<T> {
         mut self,
         mut wait: impl FnMut(Duration) -> FWait,
         mut on_batch: impl FnMut(T) -> FBatch,
-    ) -> Result<(), Error> {
+    ) {
         // This variable holds the "next" batch
         // Under the lock all we do is push onto a pre-allocated vec
         // and replace it with another pre-allocated vec
@@ -461,7 +416,7 @@ impl<T: Channel> Receiver<T> {
                 // If the channel is closed then exit the loop and return; this will
                 // drop the receiver
                 if !is_open {
-                    return Ok(());
+                    return;
                 }
 
                 // If we didn't see any events, then sleep for a bit
