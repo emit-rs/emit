@@ -47,7 +47,8 @@ impl Counter {
 }
 
 metrics!(InternalMetrics {
-    queue_overflow: Counter,
+    queue_full_truncated: Counter,
+    queue_full_blocked: Counter,
     queue_batch_processed: Counter,
     queue_batch_failed: Counter,
     queue_batch_panicked: Counter,

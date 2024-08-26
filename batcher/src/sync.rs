@@ -7,7 +7,47 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{Channel, Sender};
+use crate::{BatchError, Channel, Sender};
+
+/**
+Wait for a channel running on a regular OS thread to process all items active at the point this call was made.
+*/
+pub fn blocking_flush<T: Channel>(sender: &Sender<T>, timeout: Duration) -> bool {
+    let notifier = Trigger::new();
+
+    sender.when_flushed({
+        let notifier = notifier.clone();
+
+        move || {
+            notifier.trigger();
+        }
+    });
+
+    notifier.wait_timeout(timeout)
+}
+
+/**
+Wait for a channel to send a message, blocking if the channel is at capacity.
+*/
+pub fn blocking_send<T: Channel>(
+    sender: &Sender<T>,
+    timeout: Duration,
+    msg: T::Item,
+) -> Result<(), BatchError<T::Item>> {
+    crate::blocking_send(sender, timeout, msg, |timeout| {
+        let notifier = Trigger::new();
+
+        sender.when_empty({
+            let notifier = notifier.clone();
+
+            move || {
+                let _ = notifier.trigger();
+            }
+        });
+
+        notifier.wait_timeout(timeout);
+    })
+}
 
 #[derive(Clone)]
 struct Trigger(Arc<(Mutex<bool>, Condvar)>);
@@ -29,6 +69,12 @@ impl Trigger {
             // This condition may already be set before we start waiting
             if *flushed_slot {
                 return true;
+            }
+
+            // If the timeout is 0 then return
+            // There's no point waiting for the condition
+            if timeout == Duration::ZERO {
+                return false;
             }
 
             let now = Instant::now();
@@ -55,21 +101,4 @@ impl Trigger {
             }
         }
     }
-}
-
-/**
-Wait for a channel running on a regular OS thread to process all items active at the point this call was made.
-*/
-pub fn blocking_flush<T: Channel>(sender: &Sender<T>, timeout: Duration) -> bool {
-    let on_flush = Trigger::new();
-
-    sender.on_next_flush({
-        let on_flush = on_flush.clone();
-
-        move || {
-            on_flush.trigger();
-        }
-    });
-
-    on_flush.wait_timeout(timeout)
 }

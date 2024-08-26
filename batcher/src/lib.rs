@@ -19,7 +19,7 @@ This library is still experimental, so its API may change.
 use crate::internal_metrics::InternalMetrics;
 use std::{
     any::Any,
-    cmp,
+    cmp, error, fmt,
     future::{self, Future},
     mem,
     panic::{self, AssertUnwindSafe, UnwindSafe},
@@ -28,12 +28,12 @@ use std::{
     task,
     task::{Context, Poll},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 mod internal_metrics;
 
-type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
+type Error = Box<dyn error::Error + Send + Sync + 'static>;
 
 /**
 A channel between a shared [`Sender`] and exclusive [`Receiver`].
@@ -182,7 +182,7 @@ impl<T: Channel> Sender<T> {
         // in this case because the clearing is opaque to outside observers
         if state.next_batch.channel.len() >= self.max_capacity {
             state.next_batch.channel.clear();
-            self.shared.metrics.queue_overflow.increment();
+            self.shared.metrics.queue_full_truncated.increment();
         }
 
         // If the channel is closed then return without adding the message
@@ -194,11 +194,54 @@ impl<T: Channel> Sender<T> {
     }
 
     /**
-    Set a callback to fire when all items in the active batch are processed by the [`Receiver`].
-    */
-    pub fn on_next_flush(&self, watcher: impl FnOnce() + Send + 'static) {
-        let watcher = Box::new(watcher);
+    Send an item on the channel, blocking if it's currently full.
 
+    The item will be processed at some future point by the [`Receiver`]. If pushing the item would overflow the maximum capacity of the channel then this method will return `Err`.
+    */
+    pub fn try_send<'a>(&self, msg: T::Item) -> Result<(), BatchError<T::Item>> {
+        let mut state = self.shared.state.lock().unwrap();
+
+        if !state.is_open {
+            return Err(BatchError::no_retry(TrySendError("the channel is closed")));
+        }
+
+        // If the channel is not full then push the message and return
+        if state.next_batch.channel.len() < self.max_capacity {
+            state.next_batch.channel.push(msg);
+
+            Ok(())
+        } else {
+            Err(BatchError::retry(TrySendError("the channel is full"), msg))
+        }
+    }
+
+    /**
+    Set a callback to fire when the next batch is taken.
+
+    The watcher is guaranteed to trigger at a point where the current batch is empty.
+    */
+    pub fn when_empty(&self, f: impl FnOnce() + Send + 'static) {
+        let mut state = self.shared.state.lock().unwrap();
+
+        // If:
+        // - The next batch is empty
+        // Then:
+        // - Call the watcher without scheduling it; there's nothing to wait for
+        if state.next_batch.channel.is_empty() {
+            drop(state);
+
+            f();
+        } else {
+            state.next_batch.watchers.push_on_take(Box::new(f));
+        }
+    }
+
+    /**
+    Set a callback to fire when all items in the active batch are processed by the [`Receiver`].
+
+    The watcher is guaranteed to trigger at a point where the batch that was processing at the time this call was made has completed.
+    */
+    pub fn when_flushed(&self, f: impl FnOnce() + Send + 'static) {
         let mut state = self.shared.state.lock().unwrap();
 
         // If:
@@ -206,16 +249,16 @@ impl<T: Channel> Sender<T> {
         //   - the next batch is empty (there's no data) or
         //   - the state is closed
         // Then:
-        // - Call the watcher without scheduling it; there's nothing to wait for
+        // - Call the watcher without scheduling it; there's nothing to flush
         if !state.is_in_batch && (state.next_batch.channel.is_empty() || !state.is_open) {
             // Drop the lock before signalling the watcher
             drop(state);
 
-            watcher();
+            f();
         }
         // If there's active data to flush then schedule the watcher
         else {
-            state.next_batch.watchers.push(watcher);
+            state.next_batch.watchers.push_on_flush(Box::new(f));
         }
     }
 
@@ -350,6 +393,8 @@ impl<T: Channel> Receiver<T> {
             };
 
             // Run outside of the lock
+            current_batch.watchers.notify_on_take();
+
             if current_batch.channel.len() > 0 {
                 self.retry.reset();
                 self.retry_delay.reset();
@@ -406,12 +451,12 @@ impl<T: Channel> Receiver<T> {
                 }
 
                 // After the batch has been emitted, notify any watchers
-                current_batch.watchers.notify();
+                current_batch.watchers.notify_on_flush();
             }
             // If the batch was empty then notify any watchers (there was nothing to flush)
             // and wait before checking again
             else {
-                current_batch.watchers.notify();
+                current_batch.watchers.notify_on_flush();
 
                 // If the channel is closed then exit the loop and return; this will
                 // drop the receiver
@@ -464,6 +509,13 @@ impl<T> BatchError<T> {
     }
 
     /**
+    Try convert the error into a retryable value.
+    */
+    pub fn try_into_retryable(self) -> Result<T, BatchError<T>> {
+        self.retryable.ok_or_else(|| BatchError { retryable: None })
+    }
+
+    /**
     Try get the retryable batch from the error.
 
     If the error is not retryable then this method will return `None`.
@@ -483,6 +535,22 @@ impl<T> BatchError<T> {
         }
     }
 }
+
+struct TrySendError(&'static str);
+
+impl fmt::Debug for TrySendError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(self.0, f)
+    }
+}
+
+impl fmt::Display for TrySendError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(self.0, f)
+    }
+}
+
+impl error::Error for TrySendError {}
 
 struct CatchUnwind<F>(F);
 
@@ -620,7 +688,10 @@ impl<T: Channel> Default for Batch<T> {
     }
 }
 
-struct Watchers(Vec<Watcher>);
+struct Watchers {
+    on_take: Vec<Watcher>,
+    on_flush: Vec<Watcher>,
+}
 
 type Watcher = Box<dyn FnOnce() + Send>;
 
@@ -632,16 +703,62 @@ impl Default for Watchers {
 
 impl Watchers {
     fn new() -> Self {
-        Watchers(Vec::new())
+        Watchers {
+            on_take: Vec::new(),
+            on_flush: Vec::new(),
+        }
     }
 
-    fn push(&mut self, watcher: Watcher) {
-        self.0.push(watcher);
+    fn push_on_flush(&mut self, watcher: Watcher) {
+        self.on_flush.push(watcher);
     }
 
-    fn notify(self) {
-        for watcher in self.0 {
+    fn notify_on_flush(&mut self) {
+        for watcher in mem::take(&mut self.on_flush) {
             let _ = panic::catch_unwind(AssertUnwindSafe(watcher));
+        }
+    }
+
+    fn push_on_take(&mut self, watcher: Watcher) {
+        self.on_take.push(watcher);
+    }
+
+    fn notify_on_take(&mut self) {
+        for watcher in mem::take(&mut self.on_take) {
+            let _ = panic::catch_unwind(AssertUnwindSafe(watcher));
+        }
+    }
+}
+
+fn blocking_send<T: Channel>(
+    sender: &Sender<T>,
+    timeout: Duration,
+    msg: T::Item,
+    mut wait: impl FnMut(Duration),
+) -> Result<(), BatchError<T::Item>> {
+    match sender.try_send(msg) {
+        // If the message was sent then return
+        Ok(()) => Ok(()),
+        // If the message wasn't sent then wait until the next batch is taken then try again
+        Err(mut err) => {
+            sender.shared.metrics.queue_full_blocked.increment();
+
+            let now = Instant::now();
+
+            while now.elapsed() < timeout {
+                wait(timeout.saturating_sub(now.elapsed()));
+
+                // NOTE: Between being triggered and calling, we may have filled up again
+                match sender.try_send(err.try_into_retryable()?) {
+                    Ok(()) => return Ok(()),
+                    Err(retry) => {
+                        err = retry;
+                        continue;
+                    }
+                }
+            }
+
+            Err(err)
         }
     }
 }
