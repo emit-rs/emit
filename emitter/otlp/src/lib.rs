@@ -75,50 +75,7 @@ Once the builder is configured, call [`OtlpBuilder::spawn`] and pass the resulti
 
 # Where the background worker is spawned
 
-The [`Otlp`] emitter doesn't do any work directly. That's all handled by a background worker created through [`OtlpBuilder::spawn`]. Where [`OtlpBuilder::spawn`] actually spawns that background worker depends on where it's called.
-
-If [`OtlpBuilder::spawn`] is called within a `tokio` runtime, then the worker will spawn into that runtime:
-
-```
-// This will spawn in the active tokio runtime because of #[tokio::main]
-
-#[tokio::main]
-async fn main() {
-    let rt = emit::setup()
-        .emit_to(emit_otlp::new()
-            .resource(emit::props! {
-                #[emit::key("service.name")]
-                service_name: emit::pkg!(),
-            })
-            .logs(emit_otlp::logs_grpc_proto("http://localhost:4319"))
-            .spawn()
-            .unwrap())
-        .init();
-
-    rt.blocking_flush(std::time::Duration::from_secs(30));
-}
-```
-
-If [`OtlpBuilder::spawn`] is called outside a `tokio` runtime, then the worker will spawn on a background thread with a single-threaded executor on it:
-
-```
-// This will spawn on a background thread because there's no active tokio runtime
-
-fn main() {
-    let rt = emit::setup()
-        .emit_to(emit_otlp::new()
-            .resource(emit::props! {
-                #[emit::key("service.name")]
-                service_name: emit::pkg!(),
-            })
-            .logs(emit_otlp::logs_grpc_proto("http://localhost:4319"))
-            .spawn()
-            .unwrap())
-        .init();
-
-    rt.blocking_flush(std::time::Duration::from_secs(30));
-}
-```
+The [`Otlp`] emitter doesn't do any work directly. That's all handled by a background worker created through [`OtlpBuilder::spawn`]. The worker will spawn on a background thread with a single-threaded `tokio` executor on it.
 
 ## Configuring for gRPC+protobuf
 
