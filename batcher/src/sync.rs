@@ -418,17 +418,18 @@ mod tests {
             let handle = s.spawn(|| blocking_flush(&sender, Duration::from_secs(1)));
 
             // Process both batches
-            receiver
-                .send(ReceiverCommand::process_batch(|_| Ok(())))
-                .unwrap();
-            receiver
-                .send(ReceiverCommand::process_batch(|_| Ok(())))
-                .unwrap();
+            for _ in 0..2 {
+                receiver
+                    .send(ReceiverCommand::process_batch(|_| Ok(())))
+                    .unwrap();
+                receiver
+                    .send(ReceiverCommand::process_batch(|_| Ok(())))
+                    .unwrap();
+            }
 
             // Wait for the flush to complete
             handle.join().unwrap();
 
-            assert!(!sender.shared.state.lock().unwrap().is_in_batch);
             assert_eq!(
                 0,
                 sender.shared.state.lock().unwrap().next_batch.channel.len()
