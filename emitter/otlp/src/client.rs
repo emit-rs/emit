@@ -19,6 +19,7 @@ use std::{
     future::Future,
     pin::Pin,
     sync::Arc,
+    thread,
     time::{Duration, Instant},
 };
 
@@ -52,6 +53,7 @@ pub struct Otlp {
         emit_batcher::Sender<EncodedScopeItems>,
     )>,
     metrics: Arc<InternalMetrics>,
+    _handle: thread::JoinHandle<()>,
 }
 
 impl Otlp {
@@ -216,15 +218,8 @@ impl OtlpBuilder {
         };
 
         let receive = async move {
-            let processors = FuturesUnordered::<
-                Pin<
-                    Box<
-                        dyn Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>>
-                            + Send
-                            + 'static,
-                    >,
-                >,
-            >::new();
+            let processors =
+                FuturesUnordered::<Pin<Box<dyn Future<Output = ()> + Send + 'static>>>::new();
 
             if let Some((transport, receiver)) = process_otlp_logs {
                 let transport = Arc::new(transport);
@@ -271,29 +266,23 @@ impl OtlpBuilder {
             let _ = processors.into_future().await;
         };
 
-        match tokio::runtime::Handle::try_current() {
-            // If we're on a `tokio` thread then spawn on it
-            Ok(handle) => {
-                handle.spawn(receive);
-            }
-            // If we're not on a `tokio` thread then spawn a
-            // background thread and run the work there
-            Err(_) => {
-                std::thread::spawn(move || {
-                    tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
-                        .unwrap()
-                        .block_on(receive);
-                });
-            }
-        }
+        // Spawn a background thread to process batches
+        // This is a safe way to ensure users of `Otlp` can never
+        // deadlock waiting on the processing of batches
+        let _handle = std::thread::spawn(move || {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(receive);
+        });
 
         Ok(Otlp {
             otlp_logs,
             otlp_traces,
             otlp_metrics,
             metrics,
+            _handle,
         })
     }
 }
