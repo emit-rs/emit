@@ -167,8 +167,34 @@ mod tests {
         Stop,
     }
 
-    enum ReciverCommand<T> {
+    impl<T> SenderCommand<T> {
+        fn send(msg: T) -> Self {
+            SenderCommand::Send(msg)
+        }
+
+        fn blocking_send(msg: T, timeout: Duration) -> Self {
+            SenderCommand::BlockingSend(msg, timeout)
+        }
+
+        fn blocking_flush(timeout: Duration) -> Self {
+            SenderCommand::BlockingFlush(timeout)
+        }
+
+        fn stop() -> Self {
+            SenderCommand::Stop
+        }
+    }
+
+    enum ReceiverCommand<T> {
         ProcessBatch(Box<dyn FnOnce(Vec<T>) -> Result<(), BatchError<Vec<T>>> + Send>),
+    }
+
+    impl<T> ReceiverCommand<T> {
+        fn process_batch(
+            f: impl FnOnce(Vec<T>) -> Result<(), BatchError<Vec<T>>> + Send + 'static,
+        ) -> Self {
+            ReceiverCommand::ProcessBatch(Box::new(f))
+        }
     }
 
     fn spawn_sender<T: Send + 'static>(
@@ -182,10 +208,10 @@ mod tests {
                     sender.send(msg);
                 }
                 SenderCommand::BlockingSend(msg, timeout) => {
-                    blocking_send(&sender, msg, timeout);
+                    let _ = blocking_send(&sender, msg, timeout);
                 }
                 SenderCommand::BlockingFlush(timeout) => {
-                    todo!()
+                    blocking_flush(&sender, timeout);
                 }
                 SenderCommand::Stop => return,
             }
@@ -196,19 +222,51 @@ mod tests {
 
     fn spawn_receiver<T: Send + 'static>(
         receiver: Receiver<Vec<T>>,
-    ) -> mpsc::Sender<ReciverCommand<T>> {
+    ) -> (mpsc::Sender<ReceiverCommand<T>>, thread::JoinHandle<()>) {
         let (tx, rx) = mpsc::channel();
 
-        spawn(receiver, move |batch| match rx.recv().unwrap() {
-            ReciverCommand::ProcessBatch(p) => p(batch),
+        let handle = spawn(receiver, move |batch| match rx.recv().unwrap() {
+            ReceiverCommand::ProcessBatch(p) => p(batch),
         });
 
-        tx
+        (tx, handle)
     }
 
     #[test]
     fn send_recv() {
-        todo!()
+        let received = Arc::new(Mutex::new(0));
+
+        let (sender, receiver) = crate::bounded(10);
+
+        let (sender, sender_handle) = spawn_sender(sender);
+        let (receiver, receiver_handle) = spawn_receiver(receiver);
+
+        // Send some messages
+        for _ in 0..10 {
+            sender.send(SenderCommand::send(())).unwrap();
+        }
+
+        // Everything should be processed in a single batch
+        receiver
+            .send(ReceiverCommand::process_batch({
+                let received = received.clone();
+
+                move |batch| {
+                    *received.lock().unwrap() += batch.len();
+
+                    Ok(())
+                }
+            }))
+            .unwrap();
+
+        // Wait for the receiver to process the batch
+        while { *received.lock().unwrap() } == 0 {}
+        assert_eq!(10, *received.lock().unwrap());
+
+        // Shutdown
+        sender.send(SenderCommand::stop()).unwrap();
+        sender_handle.join().unwrap();
+        receiver_handle.join().unwrap();
     }
 
     #[test]
@@ -223,12 +281,42 @@ mod tests {
 
     #[test]
     fn blocking_send_recv() {
-        todo!()
-    }
+        let received = Arc::new(Mutex::new(0));
 
-    #[test]
-    fn blocking_send_full_capacity() {
-        todo!()
+        let (sender, receiver) = crate::bounded(5);
+
+        let (sender, sender_handle) = spawn_sender(sender);
+        let (receiver, receiver_handle) = spawn_receiver(receiver);
+
+        // Send some messages
+        for _ in 0..10 {
+            sender
+                .send(SenderCommand::blocking_send((), Duration::from_secs(1)))
+                .unwrap();
+        }
+
+        // The receiver may process in (up to) 10 batches
+        for _ in 0..10 {
+            receiver
+                .send(ReceiverCommand::process_batch({
+                    let received = received.clone();
+
+                    move |batch| {
+                        *received.lock().unwrap() += batch.len();
+
+                        Ok(())
+                    }
+                }))
+                .unwrap();
+        }
+
+        // Wait for the receiver to process the batches
+        while { *received.lock().unwrap() } != 10 {}
+
+        // Shutdown
+        sender.send(SenderCommand::stop()).unwrap();
+        sender_handle.join().unwrap();
+        receiver_handle.join().unwrap();
     }
 
     #[test]
