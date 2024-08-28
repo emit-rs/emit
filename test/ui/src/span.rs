@@ -384,16 +384,16 @@ fn span_ok_lvl() {
     );
 
     #[emit::span(rt: OK_RT, ok_lvl: emit::Level::Info, "test")]
-    fn exec_ok() -> Result<(), io::Error> {
-        Ok(())
+    fn exec_ok() -> Result<bool, io::Error> {
+        Ok(true)
     }
 
     #[emit::span(rt: ERR_RT, ok_lvl: emit::Level::Info, "test")]
-    fn exec_err() -> Result<(), io::Error> {
+    fn exec_err() -> Result<bool, io::Error> {
         Err(io::Error::new(io::ErrorKind::Other, "failed"))
     }
 
-    exec_ok().unwrap();
+    assert!(exec_ok().unwrap());
     exec_err().unwrap_err();
 }
 
@@ -463,12 +463,12 @@ fn span_err_lvl_explicit_return() {
     );
 
     #[emit::span(rt: RT, err_lvl: emit::Level::Warn, "test")]
-    fn exec(fail: bool) -> Result<(), io::Error> {
+    fn exec(fail: bool) -> Result<bool, io::Error> {
         if fail {
             return Err(io::Error::new(io::ErrorKind::Other, "failed"));
         }
 
-        Ok(())
+        Ok(true)
     }
 
     exec(true).unwrap_err();
@@ -497,12 +497,12 @@ async fn span_err_lvl_explicit_return_async() {
     );
 
     #[emit::span(rt: RT, err_lvl: emit::Level::Warn, "test")]
-    async fn exec(fail: bool) -> Result<(), io::Error> {
+    async fn exec(fail: bool) -> Result<bool, io::Error> {
         if fail {
             return Err(io::Error::new(io::ErrorKind::Other, "failed"));
         }
 
-        Ok(())
+        Ok(true)
     }
 
     exec(true).await.unwrap_err();

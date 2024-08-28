@@ -350,7 +350,7 @@ fn completion(
                         )
                     });
 
-                    Ok(())
+                    Ok(ok)
                 }
             )
         };
