@@ -210,13 +210,18 @@ fn inject_sync(
     let template_tokens = template.template_tokens().to_ref_tokens();
     let template_literal_tokens = template.template_literal_tokens();
 
+    // Capture control flow statements within the body
+    let body_tokens = quote!((|| {
+        let __r: #body_ret_ty_tokens = #body_tokens;
+        __r
+    })());
+
     let Completion {
         body_tokens,
         span_evt_props_tokens,
         default_completion_tokens,
     } = completion(
         body_tokens,
-        body_ret_ty_tokens,
         default_lvl_tokens,
         ok_lvl_tokens,
         err_lvl_tokens,
@@ -261,13 +266,17 @@ fn inject_async(
     let template_tokens = template.template_tokens().to_ref_tokens();
     let template_literal_tokens = template.template_literal_tokens();
 
+    let body_tokens = quote!(async {
+        let __r: #body_ret_ty_tokens = #body_tokens;
+        __r
+    }.await);
+
     let Completion {
         body_tokens,
         span_evt_props_tokens,
         default_completion_tokens,
     } = completion(
-        quote!(async #body_tokens.await),
-        body_ret_ty_tokens,
+        body_tokens,
         default_lvl_tokens,
         ok_lvl_tokens,
         err_lvl_tokens,
@@ -311,7 +320,6 @@ struct Completion {
 
 fn completion(
     body_tokens: TokenStream,
-    body_ret_ty_tokens: TokenStream,
     default_lvl_tokens: Option<TokenStream>,
     ok_lvl_tokens: Option<TokenStream>,
     err_lvl_tokens: Option<TokenStream>,
@@ -332,7 +340,7 @@ fn completion(
             let span_evt_props_tokens = evt_props.props_tokens();
 
             quote!(
-                Ok(_) => {
+                Ok(ok) => {
                     #span_guard.complete_with(|span| {
                         emit::__private::__private_complete_span(
                             #rt_tokens,
@@ -341,6 +349,8 @@ fn completion(
                             #span_evt_props_tokens,
                         )
                     });
+
+                    Ok(ok)
                 }
             )
         };
@@ -357,7 +367,7 @@ fn completion(
             let span_evt_props_tokens = evt_props.props_tokens();
 
             quote!(
-                Err(ref #err_ident) => {
+                Err(#err_ident) => {
                     #span_guard.complete_with(|span| {
                         emit::__private::__private_complete_span(
                             #rt_tokens,
@@ -366,19 +376,15 @@ fn completion(
                             #span_evt_props_tokens,
                         )
                     });
+
+                    Err(#err_ident)
                 }
             )
         };
 
-        quote!({
-            let __r: #body_ret_ty_tokens = #body_tokens;
-
-            match __r {
-                #ok_branch,
-                #err_branch,
-            }
-
-            __r
+        quote!(match #body_tokens {
+            #ok_branch,
+            #err_branch,
         })
     } else {
         body_tokens

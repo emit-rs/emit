@@ -384,16 +384,16 @@ fn span_ok_lvl() {
     );
 
     #[emit::span(rt: OK_RT, ok_lvl: emit::Level::Info, "test")]
-    fn exec_ok() -> Result<(), io::Error> {
-        Ok(())
+    fn exec_ok() -> Result<bool, io::Error> {
+        Ok(true)
     }
 
     #[emit::span(rt: ERR_RT, ok_lvl: emit::Level::Info, "test")]
-    fn exec_err() -> Result<(), io::Error> {
+    fn exec_err() -> Result<bool, io::Error> {
         Err(io::Error::new(io::ErrorKind::Other, "failed"))
     }
 
-    exec_ok().unwrap();
+    assert!(exec_ok().unwrap());
     exec_err().unwrap_err();
 }
 
@@ -438,6 +438,74 @@ fn span_err_lvl() {
 
     exec_ok().unwrap();
     exec_err().unwrap_err();
+}
+
+#[test]
+#[cfg(feature = "std")]
+fn span_err_lvl_explicit_return() {
+    use std::io;
+
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!(
+                "failed",
+                evt.props()
+                    .pull::<&(dyn std::error::Error + 'static), _>("err")
+                    .unwrap()
+                    .to_string()
+            );
+            assert_eq!(
+                emit::Level::Warn,
+                evt.props().pull::<emit::Level, _>("lvl").unwrap()
+            );
+        },
+        |_| true,
+    );
+
+    #[emit::span(rt: RT, err_lvl: emit::Level::Warn, "test")]
+    fn exec(fail: bool) -> Result<bool, io::Error> {
+        if fail {
+            return Err(io::Error::new(io::ErrorKind::Other, "failed"));
+        }
+
+        Ok(true)
+    }
+
+    exec(true).unwrap_err();
+}
+
+#[tokio::test]
+#[cfg(feature = "std")]
+async fn span_err_lvl_explicit_return_async() {
+    use std::io;
+
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!(
+                "failed",
+                evt.props()
+                    .pull::<&(dyn std::error::Error + 'static), _>("err")
+                    .unwrap()
+                    .to_string()
+            );
+            assert_eq!(
+                emit::Level::Warn,
+                evt.props().pull::<emit::Level, _>("lvl").unwrap()
+            );
+        },
+        |_| true,
+    );
+
+    #[emit::span(rt: RT, err_lvl: emit::Level::Warn, "test")]
+    async fn exec(fail: bool) -> Result<bool, io::Error> {
+        if fail {
+            return Err(io::Error::new(io::ErrorKind::Other, "failed"));
+        }
+
+        Ok(true)
+    }
+
+    exec(true).await.unwrap_err();
 }
 
 #[test]
