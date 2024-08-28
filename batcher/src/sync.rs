@@ -167,16 +167,11 @@ mod tests {
     use std::{sync::mpsc, thread};
 
     enum SenderCommand<T> {
-        Send(T),
         BlockingSend(T, Duration),
         Stop,
     }
 
     impl<T> SenderCommand<T> {
-        fn send(msg: T) -> Self {
-            SenderCommand::Send(msg)
-        }
-
         fn blocking_send(msg: T, timeout: Duration) -> Self {
             SenderCommand::BlockingSend(msg, timeout)
         }
@@ -205,9 +200,6 @@ mod tests {
 
         let handle = thread::spawn(move || loop {
             match rx.recv().unwrap() {
-                SenderCommand::Send(msg) => {
-                    sender.send(msg);
-                }
                 SenderCommand::BlockingSend(msg, timeout) => {
                     let _ = blocking_send(&sender, msg, timeout);
                 }
@@ -237,12 +229,11 @@ mod tests {
 
         let (sender, receiver) = crate::bounded(10);
 
-        let (sender, sender_handle) = spawn_sender(sender);
         let (receiver, receiver_handle) = spawn_receiver(receiver);
 
         // Send some messages
         for _ in 0..10 {
-            sender.send(SenderCommand::send(())).unwrap();
+            sender.send(());
         }
 
         // Process the messages
@@ -265,8 +256,7 @@ mod tests {
         while { *received.lock().unwrap() } != 10 {}
 
         // Shutdown
-        sender.send(SenderCommand::stop()).unwrap();
-        sender_handle.join().unwrap();
+        drop(sender);
         receiver_handle.join().unwrap();
     }
 
@@ -276,13 +266,13 @@ mod tests {
 
         let (sender, receiver) = crate::bounded(5);
 
-        let (sender, sender_handle) = spawn_sender(sender);
-        let (receiver, receiver_handle) = spawn_receiver(receiver);
-
         // Send some messages
         for i in 0..10 {
-            sender.send(SenderCommand::send(i)).unwrap();
+            sender.send(i);
         }
+
+        // Spawn the receiver after attempting to send all messages
+        let (receiver, receiver_handle) = spawn_receiver(receiver);
 
         // Everything should be processed in a single batch
         receiver
@@ -299,12 +289,11 @@ mod tests {
 
         // Only the last 5 messages should be processed
         // The others were truncated
-        while { received.lock().unwrap().len() } != 5 {}
+        while { received.lock().unwrap().len() } == 0 {}
         assert_eq!(vec![5, 6, 7, 8, 9], *received.lock().unwrap());
 
         // Shutdown
-        sender.send(SenderCommand::stop()).unwrap();
-        sender_handle.join().unwrap();
+        drop(sender);
         receiver_handle.join().unwrap();
     }
 
