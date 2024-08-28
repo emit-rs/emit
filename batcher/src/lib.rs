@@ -211,6 +211,39 @@ impl<T: Channel> Sender<T> {
         }
     }
 
+    async fn send_or_wait<'a, FWait: Future<Output = ()> + 'a>(
+        &'a self,
+        msg: T::Item,
+        timeout: Duration,
+        mut wait_until_empty: impl FnMut(&'a Self, Duration) -> FWait,
+    ) -> Result<(), BatchError<T::Item>> {
+        match self.try_send(msg) {
+            // If the message was sent then return
+            Ok(()) => Ok(()),
+            // If the message wasn't sent then wait until the next batch is taken then try again
+            Err(mut err) => {
+                self.shared.metrics.queue_full_blocked.increment();
+
+                let now = Instant::now();
+
+                while now.elapsed() < timeout {
+                    wait_until_empty(self, timeout.saturating_sub(now.elapsed())).await;
+
+                    // NOTE: Between being triggered and calling, we may have filled up again
+                    match self.try_send(err.try_into_retryable()?) {
+                        Ok(()) => return Ok(()),
+                        Err(retry) => {
+                            err = retry;
+                            continue;
+                        }
+                    }
+                }
+
+                Err(err)
+            }
+        }
+    }
+
     /**
     Set a callback to fire when the next batch is taken.
 
@@ -681,39 +714,6 @@ impl Watchers {
     fn notify_on_take(&mut self) {
         for watcher in mem::take(&mut self.on_take) {
             let _ = panic::catch_unwind(AssertUnwindSafe(watcher));
-        }
-    }
-}
-
-fn blocking_send<T: Channel>(
-    sender: &Sender<T>,
-    timeout: Duration,
-    msg: T::Item,
-    mut wait: impl FnMut(Duration),
-) -> Result<(), BatchError<T::Item>> {
-    match sender.try_send(msg) {
-        // If the message was sent then return
-        Ok(()) => Ok(()),
-        // If the message wasn't sent then wait until the next batch is taken then try again
-        Err(mut err) => {
-            sender.shared.metrics.queue_full_blocked.increment();
-
-            let now = Instant::now();
-
-            while now.elapsed() < timeout {
-                wait(timeout.saturating_sub(now.elapsed()));
-
-                // NOTE: Between being triggered and calling, we may have filled up again
-                match sender.try_send(err.try_into_retryable()?) {
-                    Ok(()) => return Ok(()),
-                    Err(retry) => {
-                        err = retry;
-                        continue;
-                    }
-                }
-            }
-
-            Err(err)
         }
     }
 }

@@ -20,3 +20,7 @@ default-features = false
 version = "1"
 features = ["rt-multi-thread", "sync", "time"]
 optional = true
+
+[dev-dependencies.tokio]
+version = "1"
+features = ["full"]

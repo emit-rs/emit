@@ -24,37 +24,11 @@ pub fn spawn<T: Channel + Send + 'static>(
 where
     T::Item: Send + 'static,
 {
-    static WAKER: OnceLock<Arc<NeverWake>> = OnceLock::new();
-
-    // A waker that does nothing; the tasks it runs are fully
-    // synchronous so there's never any notifications to issue
-    struct NeverWake;
-
-    impl task::Wake for NeverWake {
-        fn wake(self: Arc<Self>) {}
-    }
-
     thread::spawn(move || {
-        // The future is polled to completion here, so we can pin
-        // it directly on the stack
-        let mut fut = pin!(receiver.exec(
+        block_on(receiver.exec(
             |delay| future::ready(thread::sleep(delay)),
             move |batch| future::ready(on_batch(batch)),
-        ));
-
-        // Get a context for our synchronous task
-        let waker = WAKER.get_or_init(|| Arc::new(NeverWake)).clone().into();
-        let mut cx = task::Context::from_waker(&waker);
-
-        // Drive the task to completion; it should complete in one go,
-        // but may eagerly return as soon as it hits an await point, so
-        // just to be sure we continuously poll it
-        loop {
-            match fut.as_mut().poll(&mut cx) {
-                task::Poll::Ready(r) => return r,
-                task::Poll::Pending => continue,
-            }
-        }
+        ))
     })
 }
 
@@ -83,7 +57,7 @@ pub fn blocking_send<T: Channel>(
     msg: T::Item,
     timeout: Duration,
 ) -> Result<(), BatchError<T::Item>> {
-    crate::blocking_send(sender, timeout, msg, |timeout| {
+    block_on(sender.send_or_wait(msg, timeout, |sender, timeout| {
         let notifier = Trigger::new();
 
         sender.when_empty({
@@ -95,7 +69,9 @@ pub fn blocking_send<T: Channel>(
         });
 
         notifier.wait_timeout(timeout);
-    })
+
+        future::ready(())
+    }))
 }
 
 #[derive(Clone)]
@@ -148,6 +124,36 @@ impl Trigger {
                     return *flushed;
                 }
             }
+        }
+    }
+}
+
+fn block_on<R>(fut: impl Future<Output = R>) -> R {
+    static WAKER: OnceLock<Arc<NeverWake>> = OnceLock::new();
+
+    // A waker that does nothing; the tasks it runs are fully
+    // synchronous so there's never any notifications to issue
+    struct NeverWake;
+
+    impl task::Wake for NeverWake {
+        fn wake(self: Arc<Self>) {}
+    }
+
+    // The future is polled to completion here, so we can pin
+    // it directly on the stack
+    let mut fut = pin!(fut);
+
+    // Get a context for our synchronous task
+    let waker = WAKER.get_or_init(|| Arc::new(NeverWake)).clone().into();
+    let mut cx = task::Context::from_waker(&waker);
+
+    // Drive the task to completion; it should complete in one go,
+    // but may eagerly return as soon as it hits an await point, so
+    // just to be sure we continuously poll it
+    loop {
+        match fut.as_mut().poll(&mut cx) {
+            task::Poll::Ready(r) => return r,
+            task::Poll::Pending => continue,
         }
     }
 }
