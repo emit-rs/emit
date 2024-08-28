@@ -134,3 +134,42 @@ async fn wait(mut notified: tokio::sync::oneshot::Receiver<()>, timeout: Duratio
         Err(_) => false,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::sync::{Arc, Mutex};
+
+    #[tokio::test]
+    async fn async_send_recv_flush() {
+        let received = Arc::new(Mutex::new(0));
+
+        let (sender, receiver) = crate::bounded::<Vec<()>>(10);
+
+        spawn(receiver, {
+            let received = received.clone();
+
+            move |batch| {
+                let received = received.clone();
+
+                async move {
+                    *received.lock().unwrap() += batch.len();
+
+                    Ok(())
+                }
+            }
+        });
+
+        for _ in 0..100 {
+            send(&sender, (), Duration::from_secs(1))
+                .await
+                .map_err(|_| "failed to send")
+                .unwrap();
+        }
+
+        flush(&sender, Duration::from_secs(1)).await;
+
+        assert_eq!(100, *received.lock().unwrap());
+    }
+}
