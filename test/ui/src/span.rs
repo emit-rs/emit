@@ -250,6 +250,38 @@ fn span_rt_ref() {
 }
 
 #[test]
+fn span_by_value_arg() {
+    static RT: StaticRuntime = static_runtime(|_| {}, |_| true);
+
+    fn take_string(_: String) {}
+
+    #[emit::span(rt: &RT, "test")]
+    fn exec(arg: String) {
+        take_string(arg);
+    }
+
+    exec("Owned".to_owned());
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+}
+
+#[tokio::test]
+async fn async_span_by_value_arg() {
+    static RT: StaticRuntime = static_runtime(|_| {}, |_| true);
+
+    fn take_string(_: String) {}
+
+    #[emit::span(rt: &RT, "test")]
+    async fn exec(arg: String) {
+        take_string(arg);
+    }
+
+    exec("Owned".to_owned()).await;
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+}
+
+#[test]
 fn span_guard() {
     static RT: StaticRuntime = static_runtime(|_| {}, |_| true);
 

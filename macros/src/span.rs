@@ -211,7 +211,7 @@ fn inject_sync(
     let template_literal_tokens = template.template_literal_tokens();
 
     // Capture control flow statements within the body
-    let body_tokens = quote!((|| {
+    let body_tokens = quote!((move || {
         let __r: #body_ret_ty_tokens = #body_tokens;
         __r
     })());
@@ -266,7 +266,7 @@ fn inject_async(
     let template_tokens = template.template_tokens().to_ref_tokens();
     let template_literal_tokens = template.template_literal_tokens();
 
-    let body_tokens = quote!(async {
+    let body_tokens = quote!(async move {
         let __r: #body_ret_ty_tokens = #body_tokens;
         __r
     }.await);
