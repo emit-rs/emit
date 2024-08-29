@@ -98,23 +98,24 @@ impl<
                 stream_attributes(stream, &self.0, |k, v| match k.get() {
                     emit::well_known::KEY_LVL => {
                         level = v.by_ref().cast::<emit::Level>().unwrap_or_default();
-                        true
+                        None
                     }
                     emit::well_known::KEY_SPAN_ID => {
                         span_id = v
                             .by_ref()
                             .cast::<emit::span::SpanId>()
                             .map(|span_id| SP::from(span_id));
-                        true
+                        None
                     }
                     emit::well_known::KEY_TRACE_ID => {
                         trace_id = v
                             .by_ref()
                             .cast::<emit::span::TraceId>()
                             .map(|trace_id| TR::from(trace_id));
-                        true
+                        None
                     }
-                    _ => false,
+                    emit::well_known::KEY_ERR => Some((emit::Str::new("exception.message"), v)),
+                    _ => Some((k, v)),
                 })
             },
         )?;

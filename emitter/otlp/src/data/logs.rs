@@ -110,4 +110,58 @@ mod tests {
             assert_eq!(Some(string_value("test")), de.attributes[0].value);
         });
     }
+
+    #[test]
+    fn encode_lvl() {
+        for (case, expected) in [
+            (emit::Level::Debug, logs::SeverityNumber::Debug),
+            (emit::Level::Info, logs::SeverityNumber::Info),
+            (emit::Level::Warn, logs::SeverityNumber::Warn),
+            (emit::Level::Error, logs::SeverityNumber::Error),
+        ] {
+            encode_event::<LogsEventEncoder>(emit::evt!("event", lvl: case), |buf| {
+                let de = logs::LogRecord::decode(buf).unwrap();
+
+                assert_eq!(0, de.attributes.len());
+                assert_eq!(expected as i32, de.severity_number);
+                assert_eq!(case.to_string(), de.severity_text);
+            });
+        }
+    }
+
+    #[test]
+    fn encode_trace_id() {
+        encode_event::<LogsEventEncoder>(
+            emit::evt!("event", trace_id: "4bf92f3577b34da6a3ce929d0e0e4736"),
+            |buf| {
+                let de = logs::LogRecord::decode(buf).unwrap();
+
+                assert_eq!(0, de.attributes.len());
+                assert_eq!(
+                    vec![75u8, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54],
+                    de.trace_id
+                );
+            },
+        );
+    }
+
+    #[test]
+    fn encode_span_id() {
+        encode_event::<LogsEventEncoder>(emit::evt!("event", span_id: "00f067aa0ba902b7"), |buf| {
+            let de = logs::LogRecord::decode(buf).unwrap();
+
+            assert_eq!(0, de.attributes.len());
+            assert_eq!(vec![0u8, 240, 103, 170, 11, 169, 2, 183], de.span_id);
+        });
+    }
+
+    #[test]
+    fn encode_err() {
+        encode_event::<LogsEventEncoder>(emit::evt!("failed: {err}", err: "test"), |buf| {
+            let de = logs::LogRecord::decode(buf).unwrap();
+
+            assert_eq!("exception.message", de.attributes[0].key);
+            assert_eq!(Some(string_value("test")), de.attributes[0].value);
+        });
+    }
 }
