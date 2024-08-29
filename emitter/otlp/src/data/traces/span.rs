@@ -120,38 +120,38 @@ impl<
             &SPAN_ATTRIBUTES_INDEX,
             |stream| {
                 stream_attributes(stream, &self.props, |k, v| match k.get() {
-                    emit::well_known::KEY_EVT_KIND => true,
-                    emit::well_known::KEY_SPAN_NAME => true,
+                    emit::well_known::KEY_EVT_KIND => None,
+                    emit::well_known::KEY_SPAN_NAME => None,
                     emit::well_known::KEY_LVL => {
                         level = v.by_ref().cast().unwrap_or_default();
-                        true
+                        None
                     }
                     emit::well_known::KEY_SPAN_ID => {
                         span_id = v
                             .by_ref()
                             .cast::<emit::span::SpanId>()
                             .map(|span_id| SP::from(span_id));
-                        true
+                        None
                     }
                     emit::well_known::KEY_SPAN_PARENT => {
                         parent_span_id = v
                             .by_ref()
                             .cast::<emit::span::SpanId>()
                             .map(|parent_span_id| SP::from(parent_span_id));
-                        true
+                        None
                     }
                     emit::well_known::KEY_TRACE_ID => {
                         trace_id = v
                             .by_ref()
                             .cast::<emit::span::TraceId>()
                             .map(|trace_id| TR::from(trace_id));
-                        true
+                        None
                     }
                     emit::well_known::KEY_ERR => {
                         has_err = true;
-                        true
+                        None
                     }
-                    _ => false,
+                    _ => Some((k, v)),
                 })
             },
         )?;
@@ -286,7 +286,7 @@ impl<P: emit::props::Props> sval::Value for PropsEventAttributes<P> {
             &mut *stream,
             &EVENT_ATTRIBUTES_LABEL,
             &EVENT_ATTRIBUTES_INDEX,
-            |stream| stream_attributes(stream, &self.0, |_, _| false),
+            |stream| stream_attributes(stream, &self.0, |k, v| Some((k, v))),
         )?;
 
         stream.record_tuple_end(None, None, None)

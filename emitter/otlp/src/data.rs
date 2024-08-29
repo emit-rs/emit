@@ -284,12 +284,15 @@ pub(crate) fn stream_field<'sval, S: sval::Stream<'sval> + ?Sized>(
 pub(crate) fn stream_attributes<'sval>(
     stream: &mut (impl sval::Stream<'sval> + ?Sized),
     props: &'sval impl emit::props::Props,
-    mut for_each: impl FnMut(&emit::str::Str, &emit::value::Value) -> bool,
+    mut for_each: impl FnMut(
+        emit::str::Str<'sval>,
+        emit::value::Value<'sval>,
+    ) -> Option<(emit::str::Str<'sval>, emit::value::Value<'sval>)>,
 ) -> sval::Result {
     stream.seq_begin(None)?;
 
     props.dedup().for_each(|k, v| {
-        if !for_each(&k, &v) {
+        if let Some((k, v)) = for_each(k, v) {
             stream
                 .seq_value_begin()
                 .map(|_| ControlFlow::Continue(()))
