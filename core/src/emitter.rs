@@ -365,19 +365,58 @@ pub mod wrapping {
     mod tests {
         use super::*;
 
-        #[test]
-        fn erased_wrapping() {
-            todo!()
+        use crate::{path::Path, template::Template};
+
+        use std::cell::Cell;
+
+        struct MyWrapping(Cell<usize>);
+
+        impl Wrapping for MyWrapping {
+            fn wrap<O: Emitter, E: ToEvent>(&self, _: O, _: E) {
+                self.0.set(self.0.get() + 1);
+            }
         }
 
         #[test]
-        fn option_wrapping() {
-            todo!()
+        fn erased_wrapping() {
+            let wrapping = MyWrapping(Cell::new(0));
+
+            {
+                let wrapping = &wrapping as &dyn ErasedWrapping;
+
+                wrapping.wrap(
+                    Empty,
+                    Event::new(
+                        Path::new_unchecked("a"),
+                        Template::literal("test"),
+                        Empty,
+                        Empty,
+                    ),
+                );
+            }
+
+            assert_eq!(1, wrapping.0.get());
         }
 
         #[test]
         fn from_fn_wrapping() {
-            todo!()
+            let calls = Cell::new(0);
+
+            let wrapping = from_fn(|_, _| {
+                calls.set(calls.get() + 1);
+            });
+
+            wrapping.wrap(
+                Empty,
+                Event::new(
+                    Path::new_unchecked("a"),
+                    Template::literal("test"),
+                    Empty,
+                    Empty,
+                ),
+            );
+
+            assert_eq!(1, calls.get());
         }
     }
 }
