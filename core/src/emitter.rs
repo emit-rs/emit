@@ -44,6 +44,21 @@ pub trait Emitter {
     {
         And::new(self, other)
     }
+
+    /**
+    Wrap the emitter, transforming or filtering [`Event`]s before it receives them.
+
+    Flushing defers to the wrapped emitter.
+    */
+    fn wrap_emitter<W: wrapping::Wrapping>(self, wrapping: W) -> Wrap<Self, W>
+    where
+        Self: Sized,
+    {
+        Wrap {
+            emitter: self,
+            wrapping,
+        }
+    }
 }
 
 impl<'a, T: Emitter + ?Sized> Emitter for &'a T {
@@ -96,6 +111,7 @@ impl<T: Emitter> Emitter for Option<T> {
 
 impl Emitter for Empty {
     fn emit<E: ToEvent>(&self, _: E) {}
+
     fn blocking_flush(&self, _: Duration) -> bool {
         true
     }
@@ -139,9 +155,11 @@ impl<F: Fn(&Event<&dyn ErasedProps>)> Emitter for FromFn<F> {
 
 /**
 Create an [`Emitter`] from a function.
+
+The input function is assumed not to perform any background work that needs flushing.
 */
 pub fn from_fn<F: Fn(&Event<&dyn ErasedProps>)>(f: F) -> FromFn<F> {
-    FromFn(f)
+    FromFn::new(f)
 }
 
 impl<T: Emitter, U: Emitter> Emitter for And<T, U> {
@@ -163,6 +181,204 @@ impl<T: Emitter, U: Emitter> Emitter for And<T, U> {
         let rhs = self.right().blocking_flush(timeout);
 
         lhs && rhs
+    }
+}
+
+/**
+An [`Emitter`] that can transform or filter events before forwarding them through.
+
+This type is returned by [`Emitter::wrap_emitter`].
+*/
+pub struct Wrap<E, W> {
+    emitter: E,
+    wrapping: W,
+}
+
+impl<E, W> Wrap<E, W> {
+    /**
+    Get a reference to the underlying [`Emitter`].
+    */
+    pub const fn emitter(&self) -> &E {
+        &self.emitter
+    }
+
+    /**
+    Get a reference to the underlying [`Wrapping`].
+    */
+    pub const fn wrapping(&self) -> &W {
+        &self.wrapping
+    }
+}
+
+impl<E: Emitter, W: wrapping::Wrapping> Emitter for Wrap<E, W> {
+    fn emit<T: ToEvent>(&self, evt: T) {
+        self.wrapping.wrap(&self.emitter, evt.to_event())
+    }
+
+    fn blocking_flush(&self, timeout: Duration) -> bool {
+        self.emitter.blocking_flush(timeout)
+    }
+}
+
+/**
+Wrap the [`Emitter`] in a [`Wrapping`], transforming or filtering [`Event`]s before it receives them.
+
+Flushing defers to the wrapped emitter.
+*/
+pub fn wrap<E: Emitter, W: wrapping::Wrapping>(emitter: E, wrapping: W) -> Wrap<E, W> {
+    emitter.wrap_emitter(wrapping)
+}
+
+pub mod wrapping {
+    /*!
+    The [`Wrapping`] type.
+    */
+
+    use super::*;
+
+    use crate::filter::Filter;
+
+    /**
+    A transformation or filter applied to an [`Event`] before emitting it through an [`Emitter`].
+    */
+    pub trait Wrapping {
+        /**
+        Wrap the given emitter.
+        */
+        fn wrap<O: Emitter, E: ToEvent>(&self, output: O, evt: E);
+    }
+
+    impl<'a, T: Wrapping + ?Sized> Wrapping for &'a T {
+        fn wrap<O: Emitter, E: ToEvent>(&self, output: O, evt: E) {
+            (**self).wrap(output, evt)
+        }
+    }
+
+    /**
+    A [`Wrapping`] from a function.
+
+    This type can be created directly, or via [`from_fn`].
+    */
+    pub struct FromFn<F = fn(&dyn ErasedEmitter, Event<&dyn ErasedProps>)>(F);
+
+    impl<F> FromFn<F> {
+        /**
+        Wrap the given function.
+        */
+        pub const fn new(wrapping: F) -> FromFn<F> {
+            FromFn(wrapping)
+        }
+    }
+
+    impl<F: Fn(&dyn ErasedEmitter, Event<&dyn ErasedProps>)> Wrapping for FromFn<F> {
+        fn wrap<O: Emitter, E: ToEvent>(&self, output: O, evt: E) {
+            (self.0)(&output, evt.to_event().erase())
+        }
+    }
+
+    /**
+    Create a [`Wrapping`] from a function.
+    */
+    pub fn from_fn<F: Fn(&dyn ErasedEmitter, Event<&dyn ErasedProps>)>(f: F) -> FromFn<F> {
+        FromFn::new(f)
+    }
+
+    /**
+    A [`Wrapping`] from a filter.
+
+    The filter will be applied to incoming [`Event`]s and only passed to the output [`Emitter`] when they match.
+    */
+    pub struct FromFilter<F>(F);
+
+    impl<F> FromFilter<F> {
+        /**
+        Wrap the given filter.
+        */
+        pub const fn new(filter: F) -> FromFilter<F> {
+            FromFilter(filter)
+        }
+    }
+
+    impl<F: Filter> Wrapping for FromFilter<F> {
+        fn wrap<O: Emitter, E: ToEvent>(&self, output: O, evt: E) {
+            if self.0.matches(&evt) {
+                output.emit(evt);
+            }
+        }
+    }
+
+    /**
+    Create a [`Wrapping`] from a filter.
+    */
+    pub fn from_filter<F: Filter>(filter: F) -> FromFilter<F> {
+        FromFilter::new(filter)
+    }
+
+    mod internal {
+        use crate::{emitter::ErasedEmitter, event::Event, props::ErasedProps};
+
+        pub trait DispatchWrapping {
+            fn dispatch_wrap(&self, emitter: &dyn ErasedEmitter, evt: Event<&dyn ErasedProps>);
+        }
+
+        pub trait SealedWrapping {
+            fn erase_wrapping(&self) -> crate::internal::Erased<&dyn DispatchWrapping>;
+        }
+    }
+
+    /**
+    An object-safe [`Wrapping`].
+
+    A `dyn ErasedWrapping` can be treated as `impl Wrapping`.
+    */
+    pub trait ErasedWrapping: internal::SealedWrapping {}
+
+    impl<T: Wrapping> ErasedWrapping for T {}
+
+    impl<T: Wrapping> internal::SealedWrapping for T {
+        fn erase_wrapping(&self) -> crate::internal::Erased<&dyn internal::DispatchWrapping> {
+            crate::internal::Erased(self)
+        }
+    }
+
+    impl<T: Wrapping> internal::DispatchWrapping for T {
+        fn dispatch_wrap(&self, emitter: &dyn ErasedEmitter, evt: Event<&dyn ErasedProps>) {
+            self.wrap(emitter, evt)
+        }
+    }
+
+    impl<'a> Wrapping for dyn ErasedWrapping + 'a {
+        fn wrap<O: Emitter, E: ToEvent>(&self, output: O, evt: E) {
+            self.erase_wrapping()
+                .0
+                .dispatch_wrap(&output, evt.to_event().erase())
+        }
+    }
+
+    impl<'a> Wrapping for dyn ErasedWrapping + Send + Sync + 'a {
+        fn wrap<O: Emitter, E: ToEvent>(&self, output: O, evt: E) {
+            (self as &(dyn ErasedWrapping + 'a)).wrap(output, evt)
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn erased_wrapping() {
+            todo!()
+        }
+
+        #[test]
+        fn option_wrapping() {
+            todo!()
+        }
+
+        #[test]
+        fn from_fn_wrapping() {
+            todo!()
+        }
     }
 }
 
@@ -230,7 +446,7 @@ impl<'a> Emitter for dyn ErasedEmitter + Send + Sync + 'a {
 
 #[cfg(test)]
 mod tests {
-    use crate::{path::Path, template::Template};
+    use crate::{path::Path, props::Props, template::Template};
 
     use super::*;
 
@@ -343,5 +559,27 @@ mod tests {
 
         assert_eq!(vec![String::from("event 1")], emitter.left().emitted());
         assert_eq!(vec![String::from("event 1")], emitter.right().emitted());
+    }
+
+    #[test]
+    fn wrap_emitter() {
+        let count = Cell::new(0);
+        let emitter = from_fn(|evt| {
+            assert_eq!(1, evt.props().pull::<i32, _>("appended").unwrap());
+
+            count.set(count.get() + 1);
+        })
+        .wrap_emitter(wrapping::from_fn(|output, evt| {
+            output.emit(evt.map_props(|props| props.and_props(("appended", 1))));
+        }));
+
+        emitter.emit(Event::new(
+            Path::new_unchecked("a"),
+            Template::literal("event 1"),
+            Empty,
+            Empty,
+        ));
+
+        assert_eq!(1, count.get());
     }
 }

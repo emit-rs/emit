@@ -51,16 +51,6 @@ pub trait Filter {
     {
         Or::new(self, other)
     }
-
-    /**
-    Wrap an [`Emitter`], only emitting events if they pass the filter.
-    */
-    fn wrap_emitter<E>(self, emitter: E) -> FilteredEmitter<Self, E>
-    where
-        Self: Sized,
-    {
-        FilteredEmitter::new(self, emitter)
-    }
 }
 
 impl<'a, F: Filter + ?Sized> Filter for &'a F {
@@ -162,15 +152,6 @@ impl<F: Filter, E: Emitter> Emitter for FilteredEmitter<F, E> {
     fn blocking_flush(&self, timeout: Duration) -> bool {
         self.emitter.blocking_flush(timeout)
     }
-}
-
-/**
-Wrap an [`Emitter`] in a [`Filter`].
-
-Only events that pass [`Filter::matches`] will be emitted through [`Emitter::emit`].
-*/
-pub fn wrap<F: Filter, E: Emitter>(filter: F, emitter: E) -> FilteredEmitter<F, E> {
-    filter.wrap_emitter(emitter)
 }
 
 impl<T: Filter, U: Filter> Filter for And<T, U> {

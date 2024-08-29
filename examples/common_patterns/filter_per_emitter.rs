@@ -7,9 +7,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // This is different from the global filter you set in `setup.emit_when`,
     // which is applied to all emitted events, but can be bypassed.
     let rt = emit::setup()
-        .emit_to(emit::filter::wrap(
-            emit::level::min_filter(emit::Level::Warn),
+        .emit_to(emit::emitter::wrap(
             emit_term::stdout(),
+            emit::emitter::wrapping::from_filter(emit::level::min_filter(emit::Level::Warn)),
         ))
         .and_emit_to(emit_file::set("./target/logs/filter_per_emitter.log").spawn()?)
         .init();
