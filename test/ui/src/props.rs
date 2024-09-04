@@ -35,6 +35,17 @@ fn props_duplicate_defined_external() {
 }
 
 #[test]
+fn props_event_meta() {
+    let _ = emit::props!(
+        ts_start: "2024-01-01T00:00:00.000Z",
+        ts: "2024-01-01T00:00:01.000Z",
+        tpl: "template",
+        msg: "message",
+        mdl: "module",
+    );
+}
+
+#[test]
 fn props_cfg() {
     match emit::props! {
         #[cfg(not(emit_disabled))]

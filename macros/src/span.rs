@@ -6,8 +6,7 @@ use syn::{
 
 use crate::{
     args::{self, Arg},
-    props::push_evt_props,
-    props::Props,
+    props::{Props, check_evt_props, push_evt_props},
     template::{self, Template},
     util::{ToOptionTokens, ToRefTokens},
 };
@@ -86,6 +85,8 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
 
     let template =
         template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;
+
+    check_evt_props(&ctxt_props)?;
 
     let span_guard = args
         .guard
