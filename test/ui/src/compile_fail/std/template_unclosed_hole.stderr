@@ -1,0 +1,5 @@
+error: parsing failed: unexpected end of input, expected `}`
+ --> src/compile_fail/std/template_unclosed_hole.rs:2:27
+  |
+2 |     emit::emit!("template {");
+  |                           ^

@@ -3,7 +3,7 @@ use syn::{parse::Parse, spanned::Spanned, FieldValue};
 
 use crate::{
     args::{self, Arg},
-    props::push_evt_props,
+    props::{push_evt_props, check_evt_props},
     template,
     util::{ToOptionTokens, ToRefTokens},
 };
@@ -89,6 +89,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
 
     let (args, template, mut props) = template::parse2::<Args>(opts.input, true)?;
 
+    check_evt_props(&props)?;
     push_evt_props(&mut props, opts.level)?;
 
     let props_match_input_tokens = props.match_input_tokens();

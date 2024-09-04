@@ -33,7 +33,7 @@ use crate::{
 };
 
 #[diagnostic::on_unimplemented(
-    message = "capturing requires `Display + Any` by default. If this value does implement `Display`, then dereference or annotate it with `#[emit::as_display]`. If it doesn't, then use one of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
+    message = "capturing requires `{Self}: Display + Any` by default. If this value does implement `Display`, then dereference or annotate it with `#[emit::as_display]`. If it doesn't, then use one of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
 )]
 pub trait CaptureWithDefault {
     fn capture(&self) -> Option<Value>;
@@ -55,7 +55,7 @@ impl CaptureWithDefault for str {
 }
 
 #[diagnostic::on_unimplemented(
-    message = "capturing with `#[emit::as_display(inspect: true)]` requires `Display + 'static`. If this value does implement `Display`, then dereference or remove the `inspect` argument. If it doesn't, then use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
+    message = "capturing with `#[emit::as_display(inspect: true)]` requires `{Self}: Display + 'static`. If this value does implement `Display`, then dereference or remove the `inspect` argument. If it doesn't, then use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
 )]
 pub trait CaptureAsDisplay {
     fn capture(&self) -> Option<Value>;
@@ -83,7 +83,7 @@ impl CaptureAsDisplay for str {
 }
 
 #[diagnostic::on_unimplemented(
-    message = "capturing with `#[emit::as_display]` requires `Display`. Use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
+    message = "capturing with `#[emit::as_display]` requires `{Self}: Display`. Use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
 )]
 pub trait CaptureAsAnonDisplay {
     fn capture(&self) -> Option<Value>;
@@ -105,7 +105,7 @@ impl CaptureAsAnonDisplay for str {
 }
 
 #[diagnostic::on_unimplemented(
-    message = "capturing with `#[emit::as_debug(inspect: true)]` requires `Debug + 'static`. If this value does implement `Debug`, then dereference or remove the `inspect` argument. If it doesn't, then use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
+    message = "capturing with `#[emit::as_debug(inspect: true)]` requires `{Self}: Debug + 'static`. If this value does implement `Debug`, then dereference or remove the `inspect` argument. If it doesn't, then use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
 )]
 pub trait CaptureAsDebug {
     fn capture(&self) -> Option<Value>;
@@ -133,7 +133,7 @@ impl CaptureAsDebug for str {
 }
 
 #[diagnostic::on_unimplemented(
-    message = "capturing with `#[emit::as_debug]` requires `Debug`. Use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
+    message = "capturing with `#[emit::as_debug]` requires `{Self}: Debug`. Use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
 )]
 pub trait CaptureAsAnonDebug {
     fn capture(&self) -> Option<Value>;
@@ -155,7 +155,7 @@ impl CaptureAsAnonDebug for str {
 }
 
 #[diagnostic::on_unimplemented(
-    message = "capturing with `#[emit::as_value(inspect: true)]` requires `ToValue + 'static`. If this value does implement `ToValue`, then dereference or remove the `inspect` argument. If it doesn't, then use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
+    message = "capturing with `#[emit::as_value(inspect: true)]` requires `{Self}: ToValue + 'static`. If this value does implement `ToValue`, then dereference or remove the `inspect` argument. If it doesn't, then use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
 )]
 pub trait CaptureAsValue {
     fn capture(&self) -> Option<Value>;
@@ -177,7 +177,7 @@ impl CaptureAsValue for str {
 }
 
 #[diagnostic::on_unimplemented(
-    message = "capturing with `#[emit::as_value]` requires `ToValue`. Use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
+    message = "capturing with `#[emit::as_value]` requires `{Self}: ToValue`. Use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
 )]
 pub trait CaptureAsAnonValue {
     fn capture(&self) -> Option<Value>;
@@ -199,7 +199,7 @@ impl CaptureAsAnonValue for str {
 }
 
 #[diagnostic::on_unimplemented(
-    message = "capturing with `#[emit::as_sval(inspect: true)]` requires `Value + 'static`. If this value does implement `Value`, then dereference or remove the `inspect` argument. If it doesn't, then use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
+    message = "capturing with `#[emit::as_sval(inspect: true)]` requires `{Self}: Value + 'static`. If this value does implement `Value`, then dereference or remove the `inspect` argument. If it doesn't, then use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
 )]
 pub trait CaptureAsSval {
     fn capture(&self) -> Option<Value>;
@@ -222,7 +222,7 @@ impl CaptureAsSval for str {
 }
 
 #[diagnostic::on_unimplemented(
-    message = "capturing with `#[emit::as_sval]` requires `Value`. Use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
+    message = "capturing with `#[emit::as_sval]` requires `{Self}: Value`. Use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
 )]
 pub trait CaptureAsAnonSval {
     fn capture(&self) -> Option<Value>;
@@ -245,7 +245,7 @@ impl CaptureAsAnonSval for str {
 }
 
 #[diagnostic::on_unimplemented(
-    message = "capturing with `#[emit::as_serde(inspect: true)]` requires `Serialize + 'static`. If this value does implement `Serialize`, then dereference or remove the `inspect` argument. If it doesn't, then use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
+    message = "capturing with `#[emit::as_serde(inspect: true)]` requires `{Self}: Serialize + 'static`. If this value does implement `Serialize`, then dereference or remove the `inspect` argument. If it doesn't, then use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
 )]
 pub trait CaptureAsSerde {
     fn capture(&self) -> Option<Value>;
@@ -268,7 +268,7 @@ impl CaptureAsSerde for str {
 }
 
 #[diagnostic::on_unimplemented(
-    message = "capturing with `#[emit::as_serde]` requires `Serialize`. Use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
+    message = "capturing with `#[emit::as_serde]` requires `{Self}: Serialize`. Use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
 )]
 pub trait CaptureAsAnonSerde {
     fn capture(&self) -> Option<Value>;
@@ -291,7 +291,7 @@ impl CaptureAsAnonSerde for str {
 }
 
 #[diagnostic::on_unimplemented(
-    message = "capturing an error requires a `str` or `Error + 'static`."
+    message = "capturing an error requires a `str` or `{Self}: Error + 'static`."
 )]
 pub trait CaptureAsError {
     fn capture(&self) -> Option<Value>;

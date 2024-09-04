@@ -1,0 +1,5 @@
+error[E0425]: cannot find value `x` in this scope
+ --> src/compile_fail/std/emit_props_missing.rs:2:29
+  |
+2 |     emit::emit!("template", x);
+  |                             ^ not found in this scope

@@ -1,0 +1,5 @@
+error: keys that exist in the template and extra pairs can only use identifiers
+ --> src/compile_fail/std/emit_props_duplicate_interpolated_defined.rs:2:37
+  |
+2 |     emit::emit!("template {x: 42}", x);
+  |                                     ^

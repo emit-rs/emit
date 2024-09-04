@@ -26,7 +26,7 @@ mod tpl;
 mod format;
 
 #[test]
-#[cfg(all(feature = "implicit_rt", feature = "std"))]
+#[cfg(feature = "compile_fail")]
 fn compile_fail_std() {
     let t = trybuild::TestCases::new();
     t.compile_fail("src/compile_fail/std/*.rs");

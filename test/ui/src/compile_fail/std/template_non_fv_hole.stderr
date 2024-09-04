@@ -1,0 +1,5 @@
+error: parsing failed: failed to parse `true` as a field-value expression
+ --> src/compile_fail/std/template_non_fv_hole.rs:2:28
+  |
+2 |     emit::emit!("template {true}");
+  |                            ^^^^

@@ -181,6 +181,47 @@ impl Props {
 }
 
 /**
+Check properties for reserved keys used by event metadata.
+*/
+pub fn check_evt_props(props: &Props) -> Result<(), syn::Error> {
+    for (k, v) in &props.key_values {
+        match &**k {
+            emit_core::well_known::KEY_MDL => {
+                return Err(syn::Error::new(
+                    v.span(),
+                    "specify the module using the `mdl` control parameter before the template",
+                ))
+            }
+            emit_core::well_known::KEY_TPL => {
+                return Err(syn::Error::new(
+                    v.span(),
+                    "the template is specified as a string literal before properties",
+                ))
+            }
+            emit_core::well_known::KEY_MSG => {
+                return Err(syn::Error::new(
+                    v.span(),
+                    "the message is specified as a string literal template before properties",
+                ))
+            }
+            emit_core::well_known::KEY_TS => {
+                return Err(syn::Error::new(
+                    v.span(),
+                    "specify the timestamp using the `extent` control parameter before the template",
+                ))
+            }
+            emit_core::well_known::KEY_TS_START => return Err(syn::Error::new(
+                v.span(),
+                "specify the start timestamp using the `extent` control parameter before the template",
+            )),
+            _ => (),
+        }
+    }
+
+    Ok(())
+}
+
+/**
 Push common properties for events.
 */
 pub fn push_evt_props(props: &mut Props, level: Option<TokenStream>) -> Result<(), syn::Error> {

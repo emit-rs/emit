@@ -237,13 +237,13 @@ pub trait ToEvent {
     /**
     Perform the conversion.
     */
-    fn to_event<'a>(&'a self) -> Event<Self::Props<'a>>;
+    fn to_event<'a>(&'a self) -> Event<'a, Self::Props<'a>>;
 }
 
 impl<'a, T: ToEvent + ?Sized> ToEvent for &'a T {
     type Props<'b> = T::Props<'b> where Self: 'b;
 
-    fn to_event<'b>(&'b self) -> Event<Self::Props<'b>> {
+    fn to_event<'b>(&'b self) -> Event<'b, Self::Props<'b>> {
         (**self).to_event()
     }
 }
@@ -251,7 +251,7 @@ impl<'a, T: ToEvent + ?Sized> ToEvent for &'a T {
 impl<'a, P: Props> ToEvent for Event<'a, P> {
     type Props<'b> = &'b P where Self: 'b;
 
-    fn to_event<'b>(&'b self) -> Event<Self::Props<'b>> {
+    fn to_event<'b>(&'b self) -> Event<'b, Self::Props<'b>> {
         self.by_ref()
     }
 }

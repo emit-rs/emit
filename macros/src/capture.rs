@@ -37,6 +37,7 @@ pub fn key_value_with_hook(
     captured: bool,
 ) -> syn::Result<TokenStream> {
     let fn_name = match &*fv.key_name() {
+        // Well-known properties
         emit_core::well_known::KEY_LVL => quote_spanned!(fv.span()=> __private_capture_as_level),
         emit_core::well_known::KEY_ERR => quote_spanned!(fv.span()=> __private_capture_as_error),
         emit_core::well_known::KEY_SPAN_ID => {

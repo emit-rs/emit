@@ -73,6 +73,21 @@ fn emit_interpolation() {
 }
 
 #[test]
+fn emit_empty() {
+    let rt = simple_runtime(
+        |evt| {
+            assert_eq!("Rust", evt.props().get("user").unwrap().to_string());
+            assert_eq!("", evt.msg().to_string());
+        },
+        |_| true,
+    );
+
+    let user = "Rust";
+
+    emit::emit!(rt, "", user);
+}
+
+#[test]
 fn emit_rt_ref() {
     let called = Called::new();
     let rt = simple_runtime(|_| called.record(), |_| true);

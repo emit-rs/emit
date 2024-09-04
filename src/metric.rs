@@ -480,7 +480,7 @@ impl<'a, P> Metric<'a, P> {
 impl<'a, P: Props> ToEvent for Metric<'a, P> {
     type Props<'b> = &'b Self where Self: 'b;
 
-    fn to_event<'b>(&'b self) -> Event<Self::Props<'b>> {
+    fn to_event<'b>(&'b self) -> Event<'b, Self::Props<'b>> {
         // "{metric_agg} of {metric_name} is {metric_value}"
         const TEMPLATE: &'static [template::Part<'static>] = &[
             template::Part::hole("metric_agg"),
