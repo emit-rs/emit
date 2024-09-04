@@ -38,4 +38,4 @@ version = "0.11.0-alpha.13"
 path = "../core"
 
 [dependencies.fv-template]
-version = "0.5"
+version = "0.5.1"

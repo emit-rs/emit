@@ -1,0 +1,5 @@
+error: specify the module using the `mdl` control parameter before the template
+ --> src/compile_fail/std/emit_props_mdl.rs:2:29
+  |
+2 |     emit::emit!("template", mdl: "test");
+  |                             ^^^^^^^^^^^

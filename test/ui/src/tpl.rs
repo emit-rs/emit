@@ -11,6 +11,11 @@ fn tpl_basic() {
 }
 
 #[test]
+fn tpl_event_meta() {
+    let _ = emit::tpl!("{ts_start}..{ts} {mdl} {tpl} {msg}");
+}
+
+#[test]
 fn tpl_parts() {
     let parts = emit::tpl_parts!("Hello, {user}");
 

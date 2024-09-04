@@ -1,0 +1,5 @@
+error: the message is specified as a string literal template before properties
+ --> src/compile_fail/std/emit_props_msg.rs:2:29
+  |
+2 |     emit::emit!("template", msg: "template");
+  |                             ^^^^^^^^^^^^^^^

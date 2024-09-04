@@ -5,6 +5,7 @@ publish = false
 edition = "2021"
 
 [features]
+compile_fail = ["std", "implicit_rt"]
 std = ["emit/std"]
 sval = ["emit/sval"]
 serde = ["emit/serde"]

@@ -37,6 +37,36 @@ pub fn key_value_with_hook(
     captured: bool,
 ) -> syn::Result<TokenStream> {
     let fn_name = match &*fv.key_name() {
+        // Event metadata
+        emit_core::well_known::KEY_MDL if captured => {
+            return Err(syn::Error::new(
+                fv.span(),
+                "specify the module using the `mdl` control parameter before the template",
+            ))
+        }
+        emit_core::well_known::KEY_TPL if captured => {
+            return Err(syn::Error::new(
+                fv.span(),
+                "the template is specified as a string literal before properties",
+            ))
+        }
+        emit_core::well_known::KEY_MSG if captured => {
+            return Err(syn::Error::new(
+                fv.span(),
+                "the message is specified as a string literal template before properties",
+            ))
+        }
+        emit_core::well_known::KEY_TS if captured => {
+            return Err(syn::Error::new(
+                fv.span(),
+                "specify the timestamp using the `extent` control parameter before the template",
+            ))
+        }
+        emit_core::well_known::KEY_TS_START if captured => return Err(syn::Error::new(
+            fv.span(),
+            "specify the start timestamp using the `extent` control parameter before the template",
+        )),
+        // Well-known properties
         emit_core::well_known::KEY_LVL => quote_spanned!(fv.span()=> __private_capture_as_level),
         emit_core::well_known::KEY_ERR => quote_spanned!(fv.span()=> __private_capture_as_error),
         emit_core::well_known::KEY_SPAN_ID => {

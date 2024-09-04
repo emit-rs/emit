@@ -1,0 +1,5 @@
+error: keys that exist in the template and extra pairs can only use attributes on the extra pair
+ --> src/compile_fail/std/emit_props_duplicate_interpolated_attr.rs:2:28
+  |
+2 |     emit::emit!("template {#[emit::optional] x}", x: 42);
+  |                            ^^^^^^^^^^^^^^^^^^^

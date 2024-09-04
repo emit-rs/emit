@@ -22,6 +22,19 @@ fn props_basic() {
 }
 
 #[test]
+fn props_duplicate_defined_external() {
+    let x = 42;
+
+    match emit::props! {
+        x,
+    } {
+        props => {
+            assert_eq!(42, props.pull::<i32, _>("x").unwrap());
+        }
+    }
+}
+
+#[test]
 fn props_cfg() {
     match emit::props! {
         #[cfg(not(emit_disabled))]

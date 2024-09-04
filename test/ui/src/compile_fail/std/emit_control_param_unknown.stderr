@@ -1,0 +1,5 @@
+error: unknown argument `x`; available arguments are `mdl`, `extent`, `props`, `rt`, `when`, `evt`
+ --> src/compile_fail/std/emit_control_param_unknown.rs:2:17
+  |
+2 |     emit::emit!(x, "template");
+  |                 ^

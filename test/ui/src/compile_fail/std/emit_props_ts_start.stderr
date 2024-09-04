@@ -1,0 +1,5 @@
+error: specify the start timestamp using the `extent` control parameter before the template
+ --> src/compile_fail/std/emit_props_ts_start.rs:2:29
+  |
+2 |     emit::emit!("template", ts_start: "2024-01-01T00:00:00.000Z");
+  |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

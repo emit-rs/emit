@@ -1,0 +1,5 @@
+error: the template is specified as a string literal before properties
+ --> src/compile_fail/std/emit_props_tpl.rs:2:29
+  |
+2 |     emit::emit!("template", tpl: "template");
+  |                             ^^^^^^^^^^^^^^^
