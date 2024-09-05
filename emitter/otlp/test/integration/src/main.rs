@@ -143,7 +143,7 @@ impl OtelCol {
     fn spawn(config: &str) -> Self {
         OtelCol(
             Command::new("otelcol")
-                .args(["--config", "./{config}.yaml"])
+                .args(["--config", &format!("./{config}.yaml")])
                 .stderr(Stdio::piped())
                 .stdout(Stdio::piped())
                 .spawn()
