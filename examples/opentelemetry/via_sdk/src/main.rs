@@ -29,7 +29,7 @@ async fn main() {
         .await
         .unwrap();
 
-    opentelemetry_otlp::new_pipeline()
+    let tracer_provider = opentelemetry_otlp::new_pipeline()
         .tracing()
         .with_exporter(
             opentelemetry_otlp::new_exporter()
@@ -39,7 +39,7 @@ async fn main() {
         .install_batch(opentelemetry_sdk::runtime::Tokio)
         .unwrap();
 
-    opentelemetry_otlp::new_pipeline()
+    let logger_provider = opentelemetry_otlp::new_pipeline()
         .logging()
         .with_exporter(
             opentelemetry_otlp::new_exporter()
@@ -50,10 +50,10 @@ async fn main() {
         .unwrap();
 
     // Configure `emit` to point to `opentelemetry`
-    let _ = emit_opentelemetry::setup().init();
+    let _ = emit_opentelemetry::setup(logger_provider.clone(), tracer_provider.clone()).init();
 
     run();
 
-    opentelemetry::global::shutdown_logger_provider();
-    opentelemetry::global::shutdown_tracer_provider();
+    let _ = logger_provider.shutdown();
+    let _ = tracer_provider.shutdown();
 }

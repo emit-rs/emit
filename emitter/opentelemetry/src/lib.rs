@@ -86,7 +86,7 @@ Also see the [`opentelemetry`] docs for any details on getting diagnostics out o
 #![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]
 #![deny(missing_docs)]
 
-use std::{cell::RefCell, fmt, ops::ControlFlow, sync::Arc};
+use std::{borrow::Cow, cell::RefCell, fmt, ops::ControlFlow, sync::Arc};
 
 use emit::{
     str::ToStr,
@@ -99,11 +99,8 @@ use emit::{
 };
 
 use opentelemetry::{
-    global::{self, BoxedTracer, GlobalLoggerProvider},
     logs::{AnyValue, LogRecord, Logger, LoggerProvider, Severity},
-    trace::{
-        SpanContext, SpanId, Status, TraceContextExt, TraceFlags, TraceId, TraceState, Tracer,
-    },
+    trace::{SpanId, Status, TraceContextExt, TraceId, Tracer, TracerProvider},
     Context, ContextGuard, Key, KeyValue, Value,
 };
 
@@ -149,17 +146,28 @@ fn main() {
 }
 ```
 */
-pub fn setup() -> emit::Setup<
-    OpenTelemetryEmitter,
+pub fn setup<L: Logger + Send + Sync + 'static, T: Tracer + Send + Sync + 'static>(
+    logger_provider: impl LoggerProvider<Logger = L>,
+    tracer_provider: impl TracerProvider<Tracer = T>,
+) -> emit::Setup<
+    OpenTelemetryEmitter<L>,
     emit::setup::DefaultFilter,
-    OpenTelemetryCtxt<emit::setup::DefaultCtxt>,
-> {
+    OpenTelemetryCtxt<emit::setup::DefaultCtxt, T>,
+>
+where
+    T::Span: Send + Sync + 'static,
+{
     let name = "emit";
     let metrics = Arc::new(InternalMetrics::default());
 
     emit::setup()
-        .emit_to(OpenTelemetryEmitter::new(metrics.clone(), name))
-        .map_ctxt(|ctxt| OpenTelemetryCtxt::wrap(metrics.clone(), name, ctxt))
+        .emit_to(OpenTelemetryEmitter::new(
+            metrics.clone(),
+            logger_provider.logger_builder(name).build(),
+        ))
+        .map_ctxt(|ctxt| {
+            OpenTelemetryCtxt::wrap(metrics.clone(), tracer_provider.tracer(name), ctxt)
+        })
 }
 
 /**
@@ -169,8 +177,8 @@ This type is responsible for intercepting calls that push span state to `emit`'s
 
 When [`macro@emit::span`] is called, an [`opentelemetry::trace::Span`] is started using the given trace and span ids. The span doesn't carry any other ambient properties until it's completed either through [`emit::span::SpanGuard::complete`], or at the end of the scope the [`macro@emit::span`] macro covers.
 */
-pub struct OpenTelemetryCtxt<C> {
-    tracer: BoxedTracer,
+pub struct OpenTelemetryCtxt<C, T> {
+    tracer: T,
     metrics: Arc<InternalMetrics>,
     inner: C,
 }
@@ -205,10 +213,10 @@ pub struct OpenTelemetryProps<P: ?Sized> {
     inner: *const P,
 }
 
-impl<C> OpenTelemetryCtxt<C> {
-    fn wrap(metrics: Arc<InternalMetrics>, name: &'static str, ctxt: C) -> Self {
+impl<C, T> OpenTelemetryCtxt<C, T> {
+    fn wrap(metrics: Arc<InternalMetrics>, tracer: T, ctxt: C) -> Self {
         OpenTelemetryCtxt {
-            tracer: global::tracer(name),
+            tracer,
             inner: ctxt,
             metrics,
         }
@@ -279,7 +287,10 @@ fn with_current(f: impl FnOnce(&mut ActiveFrame)) {
     })
 }
 
-impl<C: emit::Ctxt> emit::Ctxt for OpenTelemetryCtxt<C> {
+impl<C: emit::Ctxt, T: Tracer> emit::Ctxt for OpenTelemetryCtxt<C, T>
+where
+    T::Span: Send + Sync + 'static,
+{
     type Current = OpenTelemetryProps<C::Current>;
 
     type Frame = OpenTelemetryFrame<C::Frame>;
@@ -395,8 +406,8 @@ An [`emit::Emitter`] creating during [`setup`] for integrating `emit` with the O
 
 This type is responsible for emitting diagnostic events as log records through the OpenTelemetry SDK and completing spans created through the integration.
 */
-pub struct OpenTelemetryEmitter {
-    inner: <GlobalLoggerProvider as LoggerProvider>::Logger,
+pub struct OpenTelemetryEmitter<L> {
+    logger: L,
     span_name: Box<MessageFormatter>,
     log_body: Box<MessageFormatter>,
     metrics: Arc<InternalMetrics>,
@@ -431,10 +442,10 @@ impl<'a, P: emit::props::Props> fmt::Display for MessageRenderer<'a, P> {
     }
 }
 
-impl OpenTelemetryEmitter {
-    fn new(metrics: Arc<InternalMetrics>, name: &'static str) -> Self {
+impl<L> OpenTelemetryEmitter<L> {
+    fn new(metrics: Arc<InternalMetrics>, logger: L) -> Self {
         OpenTelemetryEmitter {
-            inner: global::logger_provider().logger(name),
+            logger,
             span_name: default_span_name(),
             log_body: default_log_body(),
             metrics,
@@ -493,7 +504,7 @@ impl OpenTelemetryEmitter {
     }
 }
 
-impl emit::Emitter for OpenTelemetryEmitter {
+impl<L: Logger> emit::Emitter for OpenTelemetryEmitter<L> {
     fn emit<E: emit::event::ToEvent>(&self, evt: E) {
         let evt = evt.to_event();
 
@@ -581,7 +592,7 @@ impl emit::Emitter for OpenTelemetryEmitter {
         }
 
         // If the event wasn't emitted as a span then emit it as a log record
-        let mut record = LogRecord::builder();
+        let mut record = self.logger.create_log_record();
 
         let body = format!(
             "{}",
@@ -590,50 +601,34 @@ impl emit::Emitter for OpenTelemetryEmitter {
                 evt: &evt,
             }
         );
-        record = record.with_body(body);
+
+        record.set_body(AnyValue::String(body.into()));
 
         let mut trace_id = None;
         let mut span_id = None;
         let mut attributes = Vec::new();
         {
-            let mut slot = Some(record);
             evt.props().for_each(|k, v| {
                 if k == KEY_LVL {
                     match v.by_ref().cast::<emit::Level>() {
                         Some(emit::Level::Debug) => {
-                            slot = Some(
-                                slot.take()
-                                    .unwrap()
-                                    .with_severity_number(Severity::Debug)
-                                    .with_severity_text(LVL_DEBUG),
-                            );
+                            record.set_severity_number(Severity::Debug);
+                            record.set_severity_text(Cow::Borrowed(LVL_DEBUG));
                         }
                         Some(emit::Level::Info) => {
-                            slot = Some(
-                                slot.take()
-                                    .unwrap()
-                                    .with_severity_number(Severity::Info)
-                                    .with_severity_text(LVL_INFO),
-                            );
+                            record.set_severity_number(Severity::Info);
+                            record.set_severity_text(Cow::Borrowed(LVL_INFO));
                         }
                         Some(emit::Level::Warn) => {
-                            slot = Some(
-                                slot.take()
-                                    .unwrap()
-                                    .with_severity_number(Severity::Warn)
-                                    .with_severity_text(LVL_WARN),
-                            );
+                            record.set_severity_number(Severity::Warn);
+                            record.set_severity_text(Cow::Borrowed(LVL_WARN));
                         }
                         Some(emit::Level::Error) => {
-                            slot = Some(
-                                slot.take()
-                                    .unwrap()
-                                    .with_severity_number(Severity::Error)
-                                    .with_severity_text(LVL_ERROR),
-                            );
+                            record.set_severity_number(Severity::Error);
+                            record.set_severity_text(Cow::Borrowed(LVL_ERROR));
                         }
                         None => {
-                            slot = Some(slot.take().unwrap().with_severity_text(v.to_string()));
+                            record.set_severity_text(Cow::Owned(v.to_string()));
                         }
                     }
 
@@ -668,27 +663,19 @@ impl emit::Emitter for OpenTelemetryEmitter {
 
                 ControlFlow::Continue(())
             });
-
-            record = slot.unwrap();
         }
 
-        record = record.with_attributes(attributes);
+        record.add_attributes(attributes);
 
-        if let (Some(trace_id), Some(span_id)) = (trace_id, span_id) {
-            record = record.with_span_context(&SpanContext::new(
-                trace_id,
-                span_id,
-                TraceFlags::SAMPLED,
-                false,
-                TraceState::NONE,
-            ))
-        }
+        // TODO: If we end up emitting a record outside of a span then it won't
+        // have any context
+        let _ = (trace_id, span_id);
 
         if let Some(extent) = evt.extent() {
-            record = record.with_timestamp(extent.as_point().to_system_time());
+            record.set_timestamp(extent.as_point().to_system_time());
         }
 
-        self.inner.emit(record.build());
+        self.logger.emit(record);
     }
 
     fn blocking_flush(&self, _: std::time::Duration) -> bool {
