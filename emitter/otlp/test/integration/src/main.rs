@@ -79,9 +79,9 @@ fn main() {
                     #[emit::key("service.name")]
                     service_name: emit::pkg!(),
                 })
-                .logs(emit_otlp::logs_grpc_proto("http://localhost:44319"))
-                .traces(emit_otlp::traces_grpc_proto("http://localhost:44319"))
-                .metrics(emit_otlp::metrics_grpc_proto("http://localhost:44319"))
+                .logs(emit_otlp::logs_grpc_proto("https://localhost:44319"))
+                .traces(emit_otlp::traces_grpc_proto("https://localhost:44319"))
+                .metrics(emit_otlp::metrics_grpc_proto("https://localhost:44319"))
                 .spawn()
                 .unwrap(),
         );
@@ -94,18 +94,22 @@ fn main() {
                     #[emit::key("service.name")]
                     service_name: emit::pkg!(),
                 })
-                .logs(emit_otlp::logs_http_proto("http://localhost:44318/v1/logs"))
+                .logs(emit_otlp::logs_http_proto(
+                    "https://localhost:44318/v1/logs",
+                ))
                 .traces(emit_otlp::traces_http_proto(
-                    "http://localhost:44318/v1/traces",
+                    "https://localhost:44318/v1/traces",
                 ))
                 .metrics(emit_otlp::metrics_http_proto(
-                    "http://localhost:44318/v1/metrics",
+                    "https://localhost:44318/v1/metrics",
                 ))
                 .spawn()
                 .unwrap(),
         );
     } else {
-        emit::warn!("not running TLS tests because the local certificate file {cert_path} doesn't exist");
+        emit::warn!(
+            "not running TLS tests because the local certificate file {cert_path} doesn't exist"
+        );
     }
 }
 
