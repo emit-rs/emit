@@ -10,6 +10,8 @@ use std::{
 };
 
 fn main() {
+    let _ = emit::setup().emit_to(emit_term::stdout()).init_internal();
+    
     // So ambient methods for generating ids and timestamps will work
     let _ = emit::setup().init();
 
