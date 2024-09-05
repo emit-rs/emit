@@ -45,6 +45,14 @@ jobs:
       - name: Install otelcol
         run: sudo dpkg -i ./otelcol.deb
 
+      - name: Get mkcert
+        working-directory: ./emitter/otlp/test/integration
+        run: wget -O mkcert https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-linux-amd64 && chmod +x mkcert
+
+      - name: Configure mkcert
+        working-directory: ./emitter/otlp/test/integration
+        run: mkcert -install && mkcert 127.0.0.1 localhost && ls
+
       - name: Integration Test
         working-directory: ./emitter/otlp/test/integration
         run: cargo run
