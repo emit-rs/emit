@@ -12,9 +12,7 @@ use std::{
 
 fn main() {
     let _ = emit::setup().emit_to(emit_term::stdout()).init_internal();
-
-    // So ambient methods for generating ids and timestamps will work
-    let _ = emit::setup().init();
+    let _ = emit::setup().emit_to(emit_term::stdout()).init();
 
     assert_emitter(
         "gRPC proto",
@@ -69,7 +67,10 @@ fn main() {
             .unwrap(),
     );
 
-    if Path::new("./127.0.0.1+1.pem").exists() {
+    let cert_path = "./127.0.0.1+1.pem";
+    if Path::new(cert_path).exists() {
+        emit::info!("checking TLS configurations");
+
         assert_emitter(
             "gRPC proto (TLS)",
             OtelCol::spawn("config.tls"),
@@ -84,17 +85,37 @@ fn main() {
                 .spawn()
                 .unwrap(),
         );
+
+        assert_emitter(
+            "HTTP proto (TLS)",
+            OtelCol::spawn("config.tls"),
+            emit_otlp::new()
+                .resource(emit::props! {
+                    #[emit::key("service.name")]
+                    service_name: emit::pkg!(),
+                })
+                .logs(emit_otlp::logs_http_proto("https://localhost:44318/v1/logs"))
+                .traces(emit_otlp::traces_http_proto(
+                    "https://localhost:44318/v1/traces",
+                ))
+                .metrics(emit_otlp::metrics_http_proto(
+                    "https://localhost:44318/v1/metrics",
+                ))
+                .spawn()
+                .unwrap(),
+        );
     } else {
-        println!("not running TLS tests because the local certificate file doesn't exist");
+        emit::warn!("not running TLS tests because the local certificate file {cert_path} doesn't exist");
     }
 }
 
+#[emit::span("integration test {name}")]
 fn assert_emitter(
     name: &str,
     otelcol: OtelCol,
     emitter: impl emit::Emitter + Send + Sync + 'static,
 ) {
-    println!("checking {name}");
+    emit::info!("checking {name}");
 
     let rt = emit::runtime::Runtime::new().with_emitter(emitter);
 
