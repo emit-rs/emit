@@ -20,8 +20,17 @@ Initialize `emit` to send diagnostics to the OpenTelemetry SDK using [`setup`]:
 ```
 fn main() {
     // Configure the OpenTelemetry SDK
+    // See the OpenTelemetry SDK docs for details on configuration
+    let logger_provider = opentelemetry_sdk::logs::LoggerProvider::builder()
+        .with_simple_exporter(opentelemetry_stdout::LogExporter::default())
+        .build();
 
-    let rt = emit_opentelemetry::setup().init();
+    let tracer_provider = opentelemetry_sdk::trace::TracerProvider::builder()
+        .with_simple_exporter(opentelemetry_stdout::SpanExporter::default())
+        .build();
+
+    // Configure `emit` to point to the OpenTelemetry SDK
+    let rt = emit_opentelemetry::setup(logger_provider, tracer_provider).init();
 
     // Your app code goes here
 
@@ -52,6 +61,14 @@ If you're not seeing `emit` diagnostics flow as expected through the OpenTelemet
 use emit::metric::Source;
 
 fn main() {
+    let logger_provider = opentelemetry_sdk::logs::LoggerProvider::builder()
+        .with_simple_exporter(opentelemetry_stdout::LogExporter::default())
+        .build();
+
+    let tracer_provider = opentelemetry_sdk::trace::TracerProvider::builder()
+        .with_simple_exporter(opentelemetry_stdout::SpanExporter::default())
+        .build();
+
     // 1. Initialize the internal logger
     //    Diagnostics produced by `emit_opentelemetry` itself will go here
     let internal = emit::setup()
@@ -60,7 +77,7 @@ fn main() {
 
     let mut reporter = emit::metric::Reporter::new();
 
-    let rt = emit_opentelemetry::setup()
+    let rt = emit_opentelemetry::setup(logger_provider, tracer_provider)
         .map_emitter(|emitter| {
             // 2. Add `emit_opentelemetry`'s metrics to a reporter so we can see what it's up to
             //    You can do this independently of the internal emitter
@@ -114,8 +131,16 @@ Start a builder for the `emit` to OpenTelemetry SDK integration.
 ```
 fn main() {
     // Configure the OpenTelemetry SDK
+    // See the OpenTelemetry SDK docs for details on configuration
+    let logger_provider = opentelemetry_sdk::logs::LoggerProvider::builder()
+        .with_simple_exporter(opentelemetry_stdout::LogExporter::default())
+        .build();
 
-    let rt = emit_opentelemetry::setup().init();
+    let tracer_provider = opentelemetry_sdk::trace::TracerProvider::builder()
+        .with_simple_exporter(opentelemetry_stdout::SpanExporter::default())
+        .build();
+
+    let rt = emit_opentelemetry::setup(logger_provider, tracer_provider).init();
 
     // Your app code goes here
 
@@ -130,8 +155,16 @@ Use [`emit::Setup::map_emitter`] and [`emit::Setup::map_ctxt`] on the returned v
 ```
 fn main() {
     // Configure the OpenTelemetry SDK
+    // See the OpenTelemetry SDK docs for details on configuration
+    let logger_provider = opentelemetry_sdk::logs::LoggerProvider::builder()
+        .with_simple_exporter(opentelemetry_stdout::LogExporter::default())
+        .build();
 
-    let rt = emit_opentelemetry::setup()
+    let tracer_provider = opentelemetry_sdk::trace::TracerProvider::builder()
+        .with_simple_exporter(opentelemetry_stdout::SpanExporter::default())
+        .build();
+
+    let rt = emit_opentelemetry::setup(logger_provider, tracer_provider)
         .map_emitter(|emitter| emitter
             .with_log_body(|evt, f| write!(f, "{}", evt.tpl()))
             .with_span_name(|evt, f| write!(f, "{}", evt.tpl()))
@@ -667,13 +700,14 @@ impl<L: Logger> emit::Emitter for OpenTelemetryEmitter<L> {
 
         record.add_attributes(attributes);
 
-        // TODO: If we end up emitting a record outside of a span then it won't
-        // have any context
-        let _ = (trace_id, span_id);
-
         if let Some(extent) = evt.extent() {
             record.set_timestamp(extent.as_point().to_system_time());
         }
+
+        // NOTE: We don't currently have a way to set these on a generic `impl LogRecord`
+        // The record will use whatever is on the OpenTelemetry context stack.
+        // We should possibly enter a span just for the sake of logging here
+        let _ = (trace_id, span_id);
 
         self.logger.emit(record);
     }
