@@ -15,6 +15,7 @@ fn main() {
 
     assert_emitter(
         "gRPC proto",
+        OtelCol::spawn("config"),
         emit_otlp::new()
             .resource(emit::props! {
                 #[emit::key("service.name")]
@@ -29,6 +30,7 @@ fn main() {
 
     assert_emitter(
         "HTTP proto",
+        OtelCol::spawn("config"),
         emit_otlp::new()
             .resource(emit::props! {
                 #[emit::key("service.name")]
@@ -47,6 +49,7 @@ fn main() {
 
     assert_emitter(
         "HTTP JSON",
+        OtelCol::spawn("config"),
         emit_otlp::new()
             .resource(emit::props! {
                 #[emit::key("service.name")]
@@ -62,15 +65,35 @@ fn main() {
             .spawn()
             .unwrap(),
     );
+
+    if Path::new("./127.0.0.1+1.pem").exists() {
+        assert_emitter(
+            "gRPC proto (TLS)",
+            OtelCol::spawn("config.tls"),
+            emit_otlp::new()
+                .resource(emit::props! {
+                    #[emit::key("service.name")]
+                    service_name: emit::pkg!(),
+                })
+                .logs(emit_otlp::logs_grpc_proto("https://localhost:44319"))
+                .traces(emit_otlp::traces_grpc_proto("https://localhost:44319"))
+                .metrics(emit_otlp::metrics_grpc_proto("https://localhost:44319"))
+                .spawn()
+                .unwrap(),
+        );
+    } else {
+        println!("not running TLS tests because the local certificate file doesn't exist");
+    }
 }
 
-fn assert_emitter(name: &str, emitter: impl emit::Emitter + Send + Sync + 'static) {
+fn assert_emitter(
+    name: &str,
+    otelcol: OtelCol,
+    emitter: impl emit::Emitter + Send + Sync + 'static,
+) {
     println!("checking {name}");
 
     let rt = emit::runtime::Runtime::new().with_emitter(emitter);
-
-    // Start the collector
-    let otelcol = OtelCol::spawn();
 
     // Generate some random ids
     // These are used to assert the collector received our events
@@ -114,10 +137,10 @@ impl Drop for OtelCol {
 }
 
 impl OtelCol {
-    fn spawn() -> Self {
+    fn spawn(config: &str) -> Self {
         OtelCol(
             Command::new("otelcol")
-                .args(["--config", "./config.yaml"])
+                .args(["--config", "./{config}.yaml"])
                 .stderr(Stdio::piped())
                 .stdout(Stdio::piped())
                 .spawn()

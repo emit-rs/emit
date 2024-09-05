@@ -54,7 +54,7 @@ jobs:
 
       - name: Configure mkcert
         working-directory: ./emitter/otlp/test/integration
-        run: ./mkcert -install && ./mkcert 127.0.0.1 localhost && ls
+        run: ./mkcert -install && ./mkcert 127.0.0.1 localhost
 
       - name: Integration Test
         working-directory: ./emitter/otlp/test/integration
