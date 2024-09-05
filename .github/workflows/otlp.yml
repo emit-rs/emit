@@ -39,6 +39,9 @@ jobs:
       - name: Install Rust toolchain
         run: rustup default nightly
 
+      - name: Install certutil
+        run: apt-get update && apt-get install -y libnss3-tools
+
       - name: Get otelcol
         run: wget -O otelcol.deb https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.107.0/otelcol_0.107.0_linux_amd64.deb
 
