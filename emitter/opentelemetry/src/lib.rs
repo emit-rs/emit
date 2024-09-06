@@ -1206,3 +1206,48 @@ mod any_value {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn emit_log() {
+        todo!()
+    }
+
+    #[test]
+    fn emit_span() {
+        todo!()
+    }
+
+    #[test]
+    fn emit_span_direct() {
+        todo!()
+    }
+
+    #[test]
+    fn otel_span_emit_span() {
+        todo!()
+    }
+
+    #[test]
+    fn emit_span_otel_span() {
+        todo!()
+    }
+
+    #[test]
+    fn otel_span_emit_log() {
+        todo!()
+    }
+
+    #[test]
+    fn emit_span_otel_log() {
+        todo!()
+    }
+
+    #[test]
+    fn emit_value_to_otel_attribute() {
+        todo!()
+    }
+}
