@@ -17,11 +17,11 @@ features = ["std", "serde", "implicit_internal_rt"]
 default-features = false
 
 [dependencies.opentelemetry_sdk]
-version = "0.22"
+version = "0.24"
 features = ["logs", "trace"]
 
 [dependencies.opentelemetry]
-version = "0.22"
+version = "0.24"
 features = ["logs", "trace"]
 
 [dependencies.serde]
@@ -31,3 +31,11 @@ version = "1"
 version = "0.11.0-alpha.13"
 path = "../../"
 features = ["implicit_rt"]
+
+[dev-dependencies.opentelemetry_sdk]
+version = "0.24"
+features = ["logs", "trace", "testing"]
+
+[dev-dependencies.opentelemetry-stdout]
+version = "0.5"
+features = ["logs", "trace"]

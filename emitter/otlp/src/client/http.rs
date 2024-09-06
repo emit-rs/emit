@@ -70,10 +70,17 @@ async fn tls_handshake(
     let tls = {
         let mut root_store = rustls::RootCertStore::empty();
 
-        for cert in rustls_native_certs::load_native_certs().map_err(|e| {
+        let certs = rustls_native_certs::load_native_certs();
+
+        if !certs.errors.is_empty() {
             metrics.transport_conn_tls_failed.increment();
-            Error::new("failed to load native certificates", e)
-        })? {
+
+            for err in certs.errors {
+                emit::warn!("failed to load native certificate: {err}");
+            }
+        }
+
+        for cert in certs.certs {
             let _ = root_store.add(cert);
         }
 

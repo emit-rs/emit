@@ -20,8 +20,17 @@ Initialize `emit` to send diagnostics to the OpenTelemetry SDK using [`setup`]:
 ```
 fn main() {
     // Configure the OpenTelemetry SDK
+    // See the OpenTelemetry SDK docs for details on configuration
+    let logger_provider = opentelemetry_sdk::logs::LoggerProvider::builder()
+        .with_simple_exporter(opentelemetry_stdout::LogExporter::default())
+        .build();
 
-    let rt = emit_opentelemetry::setup().init();
+    let tracer_provider = opentelemetry_sdk::trace::TracerProvider::builder()
+        .with_simple_exporter(opentelemetry_stdout::SpanExporter::default())
+        .build();
+
+    // Configure `emit` to point to the OpenTelemetry SDK
+    let rt = emit_opentelemetry::setup(logger_provider, tracer_provider).init();
 
     // Your app code goes here
 
@@ -52,6 +61,14 @@ If you're not seeing `emit` diagnostics flow as expected through the OpenTelemet
 use emit::metric::Source;
 
 fn main() {
+    let logger_provider = opentelemetry_sdk::logs::LoggerProvider::builder()
+        .with_simple_exporter(opentelemetry_stdout::LogExporter::default())
+        .build();
+
+    let tracer_provider = opentelemetry_sdk::trace::TracerProvider::builder()
+        .with_simple_exporter(opentelemetry_stdout::SpanExporter::default())
+        .build();
+
     // 1. Initialize the internal logger
     //    Diagnostics produced by `emit_opentelemetry` itself will go here
     let internal = emit::setup()
@@ -60,7 +77,7 @@ fn main() {
 
     let mut reporter = emit::metric::Reporter::new();
 
-    let rt = emit_opentelemetry::setup()
+    let rt = emit_opentelemetry::setup(logger_provider, tracer_provider)
         .map_emitter(|emitter| {
             // 2. Add `emit_opentelemetry`'s metrics to a reporter so we can see what it's up to
             //    You can do this independently of the internal emitter
@@ -86,7 +103,7 @@ Also see the [`opentelemetry`] docs for any details on getting diagnostics out o
 #![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]
 #![deny(missing_docs)]
 
-use std::{cell::RefCell, fmt, ops::ControlFlow, sync::Arc};
+use std::{borrow::Cow, cell::RefCell, fmt, ops::ControlFlow, sync::Arc};
 
 use emit::{
     str::ToStr,
@@ -99,11 +116,8 @@ use emit::{
 };
 
 use opentelemetry::{
-    global::{self, BoxedTracer, GlobalLoggerProvider},
     logs::{AnyValue, LogRecord, Logger, LoggerProvider, Severity},
-    trace::{
-        SpanContext, SpanId, Status, TraceContextExt, TraceFlags, TraceId, TraceState, Tracer,
-    },
+    trace::{SpanId, Status, TraceContextExt, TraceId, Tracer, TracerProvider},
     Context, ContextGuard, Key, KeyValue, Value,
 };
 
@@ -117,8 +131,16 @@ Start a builder for the `emit` to OpenTelemetry SDK integration.
 ```
 fn main() {
     // Configure the OpenTelemetry SDK
+    // See the OpenTelemetry SDK docs for details on configuration
+    let logger_provider = opentelemetry_sdk::logs::LoggerProvider::builder()
+        .with_simple_exporter(opentelemetry_stdout::LogExporter::default())
+        .build();
 
-    let rt = emit_opentelemetry::setup().init();
+    let tracer_provider = opentelemetry_sdk::trace::TracerProvider::builder()
+        .with_simple_exporter(opentelemetry_stdout::SpanExporter::default())
+        .build();
+
+    let rt = emit_opentelemetry::setup(logger_provider, tracer_provider).init();
 
     // Your app code goes here
 
@@ -133,8 +155,16 @@ Use [`emit::Setup::map_emitter`] and [`emit::Setup::map_ctxt`] on the returned v
 ```
 fn main() {
     // Configure the OpenTelemetry SDK
+    // See the OpenTelemetry SDK docs for details on configuration
+    let logger_provider = opentelemetry_sdk::logs::LoggerProvider::builder()
+        .with_simple_exporter(opentelemetry_stdout::LogExporter::default())
+        .build();
 
-    let rt = emit_opentelemetry::setup()
+    let tracer_provider = opentelemetry_sdk::trace::TracerProvider::builder()
+        .with_simple_exporter(opentelemetry_stdout::SpanExporter::default())
+        .build();
+
+    let rt = emit_opentelemetry::setup(logger_provider, tracer_provider)
         .map_emitter(|emitter| emitter
             .with_log_body(|evt, f| write!(f, "{}", evt.tpl()))
             .with_span_name(|evt, f| write!(f, "{}", evt.tpl()))
@@ -149,17 +179,28 @@ fn main() {
 }
 ```
 */
-pub fn setup() -> emit::Setup<
-    OpenTelemetryEmitter,
+pub fn setup<L: Logger + Send + Sync + 'static, T: Tracer + Send + Sync + 'static>(
+    logger_provider: impl LoggerProvider<Logger = L>,
+    tracer_provider: impl TracerProvider<Tracer = T>,
+) -> emit::Setup<
+    OpenTelemetryEmitter<L>,
     emit::setup::DefaultFilter,
-    OpenTelemetryCtxt<emit::setup::DefaultCtxt>,
-> {
+    OpenTelemetryCtxt<emit::setup::DefaultCtxt, T>,
+>
+where
+    T::Span: Send + Sync + 'static,
+{
     let name = "emit";
     let metrics = Arc::new(InternalMetrics::default());
 
     emit::setup()
-        .emit_to(OpenTelemetryEmitter::new(metrics.clone(), name))
-        .map_ctxt(|ctxt| OpenTelemetryCtxt::wrap(metrics.clone(), name, ctxt))
+        .emit_to(OpenTelemetryEmitter::new(
+            metrics.clone(),
+            logger_provider.logger_builder(name).build(),
+        ))
+        .map_ctxt(|ctxt| {
+            OpenTelemetryCtxt::wrap(metrics.clone(), tracer_provider.tracer(name), ctxt)
+        })
 }
 
 /**
@@ -169,8 +210,8 @@ This type is responsible for intercepting calls that push span state to `emit`'s
 
 When [`macro@emit::span`] is called, an [`opentelemetry::trace::Span`] is started using the given trace and span ids. The span doesn't carry any other ambient properties until it's completed either through [`emit::span::SpanGuard::complete`], or at the end of the scope the [`macro@emit::span`] macro covers.
 */
-pub struct OpenTelemetryCtxt<C> {
-    tracer: BoxedTracer,
+pub struct OpenTelemetryCtxt<C, T> {
+    tracer: T,
     metrics: Arc<InternalMetrics>,
     inner: C,
 }
@@ -205,10 +246,10 @@ pub struct OpenTelemetryProps<P: ?Sized> {
     inner: *const P,
 }
 
-impl<C> OpenTelemetryCtxt<C> {
-    fn wrap(metrics: Arc<InternalMetrics>, name: &'static str, ctxt: C) -> Self {
+impl<C, T> OpenTelemetryCtxt<C, T> {
+    fn wrap(metrics: Arc<InternalMetrics>, tracer: T, ctxt: C) -> Self {
         OpenTelemetryCtxt {
-            tracer: global::tracer(name),
+            tracer,
             inner: ctxt,
             metrics,
         }
@@ -279,7 +320,10 @@ fn with_current(f: impl FnOnce(&mut ActiveFrame)) {
     })
 }
 
-impl<C: emit::Ctxt> emit::Ctxt for OpenTelemetryCtxt<C> {
+impl<C: emit::Ctxt, T: Tracer> emit::Ctxt for OpenTelemetryCtxt<C, T>
+where
+    T::Span: Send + Sync + 'static,
+{
     type Current = OpenTelemetryProps<C::Current>;
 
     type Frame = OpenTelemetryFrame<C::Frame>;
@@ -395,8 +439,8 @@ An [`emit::Emitter`] creating during [`setup`] for integrating `emit` with the O
 
 This type is responsible for emitting diagnostic events as log records through the OpenTelemetry SDK and completing spans created through the integration.
 */
-pub struct OpenTelemetryEmitter {
-    inner: <GlobalLoggerProvider as LoggerProvider>::Logger,
+pub struct OpenTelemetryEmitter<L> {
+    logger: L,
     span_name: Box<MessageFormatter>,
     log_body: Box<MessageFormatter>,
     metrics: Arc<InternalMetrics>,
@@ -431,10 +475,10 @@ impl<'a, P: emit::props::Props> fmt::Display for MessageRenderer<'a, P> {
     }
 }
 
-impl OpenTelemetryEmitter {
-    fn new(metrics: Arc<InternalMetrics>, name: &'static str) -> Self {
+impl<L> OpenTelemetryEmitter<L> {
+    fn new(metrics: Arc<InternalMetrics>, logger: L) -> Self {
         OpenTelemetryEmitter {
-            inner: global::logger_provider().logger(name),
+            logger,
             span_name: default_span_name(),
             log_body: default_log_body(),
             metrics,
@@ -493,7 +537,7 @@ impl OpenTelemetryEmitter {
     }
 }
 
-impl emit::Emitter for OpenTelemetryEmitter {
+impl<L: Logger> emit::Emitter for OpenTelemetryEmitter<L> {
     fn emit<E: emit::event::ToEvent>(&self, evt: E) {
         let evt = evt.to_event();
 
@@ -581,7 +625,7 @@ impl emit::Emitter for OpenTelemetryEmitter {
         }
 
         // If the event wasn't emitted as a span then emit it as a log record
-        let mut record = LogRecord::builder();
+        let mut record = self.logger.create_log_record();
 
         let body = format!(
             "{}",
@@ -590,50 +634,34 @@ impl emit::Emitter for OpenTelemetryEmitter {
                 evt: &evt,
             }
         );
-        record = record.with_body(body);
+
+        record.set_body(AnyValue::String(body.into()));
 
         let mut trace_id = None;
         let mut span_id = None;
         let mut attributes = Vec::new();
         {
-            let mut slot = Some(record);
             evt.props().for_each(|k, v| {
                 if k == KEY_LVL {
                     match v.by_ref().cast::<emit::Level>() {
                         Some(emit::Level::Debug) => {
-                            slot = Some(
-                                slot.take()
-                                    .unwrap()
-                                    .with_severity_number(Severity::Debug)
-                                    .with_severity_text(LVL_DEBUG),
-                            );
+                            record.set_severity_number(Severity::Debug);
+                            record.set_severity_text(Cow::Borrowed(LVL_DEBUG));
                         }
                         Some(emit::Level::Info) => {
-                            slot = Some(
-                                slot.take()
-                                    .unwrap()
-                                    .with_severity_number(Severity::Info)
-                                    .with_severity_text(LVL_INFO),
-                            );
+                            record.set_severity_number(Severity::Info);
+                            record.set_severity_text(Cow::Borrowed(LVL_INFO));
                         }
                         Some(emit::Level::Warn) => {
-                            slot = Some(
-                                slot.take()
-                                    .unwrap()
-                                    .with_severity_number(Severity::Warn)
-                                    .with_severity_text(LVL_WARN),
-                            );
+                            record.set_severity_number(Severity::Warn);
+                            record.set_severity_text(Cow::Borrowed(LVL_WARN));
                         }
                         Some(emit::Level::Error) => {
-                            slot = Some(
-                                slot.take()
-                                    .unwrap()
-                                    .with_severity_number(Severity::Error)
-                                    .with_severity_text(LVL_ERROR),
-                            );
+                            record.set_severity_number(Severity::Error);
+                            record.set_severity_text(Cow::Borrowed(LVL_ERROR));
                         }
                         None => {
-                            slot = Some(slot.take().unwrap().with_severity_text(v.to_string()));
+                            record.set_severity_text(Cow::Owned(v.to_string()));
                         }
                     }
 
@@ -668,27 +696,20 @@ impl emit::Emitter for OpenTelemetryEmitter {
 
                 ControlFlow::Continue(())
             });
-
-            record = slot.unwrap();
         }
 
-        record = record.with_attributes(attributes);
-
-        if let (Some(trace_id), Some(span_id)) = (trace_id, span_id) {
-            record = record.with_span_context(&SpanContext::new(
-                trace_id,
-                span_id,
-                TraceFlags::SAMPLED,
-                false,
-                TraceState::NONE,
-            ))
-        }
+        record.add_attributes(attributes);
 
         if let Some(extent) = evt.extent() {
-            record = record.with_timestamp(extent.as_point().to_system_time());
+            record.set_timestamp(extent.as_point().to_system_time());
         }
 
-        self.inner.emit(record.build());
+        // NOTE: We don't currently have a way to set these on a generic `impl LogRecord`
+        // The record will use whatever is on the OpenTelemetry context stack.
+        // We should possibly enter a span just for the sake of logging here
+        let _ = (trace_id, span_id);
+
+        self.logger.emit(record);
     }
 
     fn blocking_flush(&self, _: std::time::Duration) -> bool {
@@ -1183,5 +1204,568 @@ mod any_value {
                 variant
             })))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use emit::runtime::AmbientSlot;
+
+    use opentelemetry_sdk::{
+        logs::LoggerProvider,
+        testing::{logs::InMemoryLogsExporter, trace::InMemorySpanExporter},
+        trace::TracerProvider,
+    };
+
+    fn build(
+        slot: &AmbientSlot,
+    ) -> (
+        InMemoryLogsExporter,
+        InMemorySpanExporter,
+        LoggerProvider,
+        TracerProvider,
+    ) {
+        let logger_exporter = InMemoryLogsExporter::default();
+
+        let logger_provider = LoggerProvider::builder()
+            .with_simple_exporter(logger_exporter.clone())
+            .build();
+
+        let tracer_exporter = InMemorySpanExporter::default();
+
+        let tracer_provider = TracerProvider::builder()
+            .with_simple_exporter(tracer_exporter.clone())
+            .build();
+
+        let _ = setup(logger_provider.clone(), tracer_provider.clone()).init_slot(slot);
+
+        (
+            logger_exporter,
+            tracer_exporter,
+            logger_provider,
+            tracer_provider,
+        )
+    }
+
+    #[test]
+    fn emit_log() {
+        let slot = AmbientSlot::new();
+        let (logs, _, _, _) = build(&slot);
+
+        emit::emit!(rt: slot.get(), "test {attr}", attr: "log");
+
+        let logs = logs.get_emitted_logs().unwrap();
+
+        assert_eq!(1, logs.len());
+
+        let Some(AnyValue::String(ref body)) = logs[0].record.body else {
+            panic!("unexpected log body value");
+        };
+
+        assert_eq!("test log", body.as_str());
+    }
+
+    #[test]
+    fn emit_span() {
+        static SLOT: AmbientSlot = AmbientSlot::new();
+        let (_, spans, _, _) = build(&SLOT);
+
+        #[emit::span(rt: SLOT.get(), "emit {attr}", attr: "span")]
+        fn emit_span() -> emit::span::SpanCtxt {
+            emit::span::SpanCtxt::current(SLOT.get().ctxt())
+        }
+
+        let ctxt = emit_span();
+
+        let spans = spans.get_finished_spans().unwrap();
+
+        assert_eq!(1, spans.len());
+
+        assert_eq!("emit {attr}", spans[0].name);
+
+        assert_eq!(
+            ctxt.trace_id().unwrap().to_bytes(),
+            spans[0].span_context.trace_id().to_bytes()
+        );
+        assert_eq!(
+            ctxt.span_id().unwrap().to_bytes(),
+            spans[0].span_context.span_id().to_bytes()
+        );
+        assert!(ctxt.span_parent().is_none());
+        assert_eq!(
+            opentelemetry::trace::SpanId::INVALID,
+            spans[0].parent_span_id
+        );
+    }
+
+    #[test]
+    fn emit_span_direct() {
+        let slot = AmbientSlot::new();
+        let (logs, spans, _, _) = build(&slot);
+
+        emit::emit!(
+            rt: slot.get(),
+            evt: emit::Span::new(
+                emit::mdl!(),
+                "test",
+                "2024-01-01T00:00:00.000Z".parse::<emit::Timestamp>().unwrap().."2024-01-01T00:00:01.000Z".parse::<emit::Timestamp>().unwrap(),
+                emit::span::SpanCtxt::new_root(slot.get().rng()),
+            ),
+        );
+
+        let logs = logs.get_emitted_logs().unwrap();
+        let spans = spans.get_finished_spans().unwrap();
+
+        assert_eq!(1, logs.len());
+        assert_eq!(0, spans.len());
+    }
+
+    #[test]
+    fn otel_span_emit_span() {
+        static SLOT: AmbientSlot = AmbientSlot::new();
+        let (_, spans, _, tracer_provider) = build(&SLOT);
+
+        fn otel_span(
+            tracer_provider: &TracerProvider,
+        ) -> (opentelemetry::trace::SpanContext, emit::span::SpanCtxt) {
+            use opentelemetry::trace::TracerProvider;
+
+            #[emit::span(rt: SLOT.get(), "emit span")]
+            fn emit_span() -> emit::span::SpanCtxt {
+                emit::span::SpanCtxt::current(SLOT.get().ctxt())
+            }
+
+            tracer_provider
+                .tracer("otel_span")
+                .in_span("otel span", |cx| {
+                    (cx.span().span_context().clone(), emit_span())
+                })
+        }
+
+        let (otel_ctxt, emit_ctxt) = otel_span(&tracer_provider);
+
+        let spans = spans.get_finished_spans().unwrap();
+
+        assert_eq!(2, spans.len());
+
+        assert_eq!(
+            otel_ctxt.trace_id().to_bytes(),
+            emit_ctxt.trace_id().unwrap().to_bytes()
+        );
+
+        assert_eq!("emit span", spans[0].name);
+
+        assert_eq!(
+            emit_ctxt.trace_id().unwrap().to_bytes(),
+            spans[0].span_context.trace_id().to_bytes()
+        );
+        assert_eq!(
+            emit_ctxt.span_id().unwrap().to_bytes(),
+            spans[0].span_context.span_id().to_bytes()
+        );
+        assert_eq!(
+            emit_ctxt.span_parent().unwrap().to_bytes(),
+            spans[0].parent_span_id.to_bytes()
+        );
+        assert_eq!(
+            emit_ctxt.span_parent().unwrap().to_bytes(),
+            spans[1].span_context.span_id().to_bytes()
+        );
+
+        assert_eq!("otel span", spans[1].name);
+
+        assert_eq!(
+            otel_ctxt.trace_id().to_bytes(),
+            spans[1].span_context.trace_id().to_bytes()
+        );
+        assert_eq!(
+            otel_ctxt.span_id().to_bytes(),
+            spans[1].span_context.span_id().to_bytes()
+        );
+        assert_eq!(
+            opentelemetry::trace::SpanId::INVALID,
+            spans[1].parent_span_id
+        );
+    }
+
+    #[test]
+    fn emit_span_otel_span() {
+        static SLOT: AmbientSlot = AmbientSlot::new();
+        let (_, spans, _, tracer_provider) = build(&SLOT);
+
+        #[emit::span(rt: SLOT.get(), "emit span")]
+        fn emit_span(
+            tracer_provider: &TracerProvider,
+        ) -> (opentelemetry::trace::SpanContext, emit::span::SpanCtxt) {
+            fn otel_span(tracer_provider: &TracerProvider) -> opentelemetry::trace::SpanContext {
+                use opentelemetry::trace::TracerProvider;
+
+                tracer_provider
+                    .tracer("otel_span")
+                    .in_span("otel span", |cx| cx.span().span_context().clone())
+            }
+
+            (
+                otel_span(&tracer_provider),
+                emit::span::SpanCtxt::current(SLOT.get().ctxt()),
+            )
+        }
+
+        let (otel_ctxt, emit_ctxt) = emit_span(&tracer_provider);
+
+        let spans = spans.get_finished_spans().unwrap();
+
+        assert_eq!(2, spans.len());
+
+        assert_eq!(
+            otel_ctxt.trace_id().to_bytes(),
+            emit_ctxt.trace_id().unwrap().to_bytes()
+        );
+
+        assert_eq!("otel span", spans[0].name);
+
+        assert_eq!(
+            otel_ctxt.trace_id().to_bytes(),
+            spans[0].span_context.trace_id().to_bytes()
+        );
+        assert_eq!(
+            otel_ctxt.span_id().to_bytes(),
+            spans[0].span_context.span_id().to_bytes()
+        );
+        assert_eq!(
+            emit_ctxt.span_id().unwrap().to_bytes(),
+            spans[0].parent_span_id.to_bytes()
+        );
+
+        assert_eq!("emit span", spans[1].name);
+
+        assert_eq!(
+            emit_ctxt.trace_id().unwrap().to_bytes(),
+            spans[1].span_context.trace_id().to_bytes()
+        );
+        assert_eq!(
+            emit_ctxt.span_id().unwrap().to_bytes(),
+            spans[1].span_context.span_id().to_bytes()
+        );
+        assert!(emit_ctxt.span_parent().is_none());
+    }
+
+    #[test]
+    fn otel_span_emit_log() {
+        static SLOT: AmbientSlot = AmbientSlot::new();
+        let (logs, _, _, tracer_provider) = build(&SLOT);
+
+        fn otel_span(tracer_provider: &TracerProvider) -> opentelemetry::trace::SpanContext {
+            use opentelemetry::trace::TracerProvider;
+
+            tracer_provider
+                .tracer("otel_span")
+                .in_span("otel span", |cx| {
+                    emit::emit!(rt: SLOT.get(), "emit event");
+
+                    cx.span().span_context().clone()
+                })
+        }
+
+        let ctxt = otel_span(&tracer_provider);
+
+        let logs = logs.get_emitted_logs().unwrap();
+
+        assert_eq!(1, logs.len());
+
+        assert_eq!(
+            ctxt.trace_id(),
+            logs[0].record.trace_context.as_ref().unwrap().trace_id
+        );
+        assert_eq!(
+            ctxt.span_id(),
+            logs[0].record.trace_context.as_ref().unwrap().span_id
+        );
+    }
+
+    #[test]
+    fn emit_span_otel_log() {
+        static SLOT: AmbientSlot = AmbientSlot::new();
+        let (logs, _, logger_provider, _) = build(&SLOT);
+
+        #[emit::span(rt: SLOT.get(), "emit span")]
+        fn emit_span(logger_provider: &LoggerProvider) -> emit::span::SpanCtxt {
+            use opentelemetry::logs::LoggerProvider;
+
+            let logger = logger_provider.logger("otel_logger");
+
+            let mut log = logger.create_log_record();
+
+            log.set_body(AnyValue::String("test log".into()));
+
+            logger.emit(log);
+
+            emit::span::SpanCtxt::current(SLOT.get().ctxt())
+        }
+
+        let ctxt = emit_span(&logger_provider);
+
+        let logs = logs.get_emitted_logs().unwrap();
+
+        assert_eq!(1, logs.len());
+
+        assert_eq!(
+            ctxt.trace_id().unwrap().to_bytes(),
+            logs[0]
+                .record
+                .trace_context
+                .as_ref()
+                .unwrap()
+                .trace_id
+                .to_bytes()
+        );
+        assert_eq!(
+            ctxt.span_id().unwrap().to_bytes(),
+            logs[0]
+                .record
+                .trace_context
+                .as_ref()
+                .unwrap()
+                .span_id
+                .to_bytes()
+        );
+    }
+
+    #[test]
+    fn emit_value_to_otel_attribute() {
+        use opentelemetry::Key;
+        use std::collections::HashMap;
+
+        #[derive(serde::Serialize)]
+        struct Struct {
+            a: i32,
+            b: i32,
+            c: i32,
+        }
+
+        #[derive(serde::Serialize)]
+        struct Newtype(i32);
+
+        #[derive(serde::Serialize)]
+        enum Enum {
+            Unit,
+            Newtype(i32),
+            Struct { a: i32, b: i32, c: i32 },
+            Tuple(i32, i32, i32),
+        }
+
+        struct Bytes<B>(B);
+
+        impl<B: AsRef<[u8]>> serde::Serialize for Bytes<B> {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                serializer.serialize_bytes(self.0.as_ref())
+            }
+        }
+
+        struct Map {
+            a: i32,
+            b: i32,
+            c: i32,
+        }
+
+        impl serde::Serialize for Map {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                use serde::ser::SerializeMap;
+
+                let mut map = serializer.serialize_map(Some(3))?;
+
+                map.serialize_entry(&"a", &self.a)?;
+                map.serialize_entry(&"b", &self.b)?;
+                map.serialize_entry(&"c", &self.c)?;
+
+                map.end()
+            }
+        }
+
+        let slot = AmbientSlot::new();
+        let (logs, _, _, _) = build(&slot);
+
+        emit::emit!(
+            rt: slot.get(),
+            "test log",
+            str_value: "a string",
+            u8_value: 1u8,
+            u16_value: 2u16,
+            u32_value: 42u32,
+            u64_value: 2147483660u64,
+            u128_small_value: 2147483660u128,
+            u128_big_value: 9223372036854775820u128,
+            i8_value: 1i8,
+            i16_value: 2i16,
+            i32_value: 42i32,
+            i64_value: 2147483660i64,
+            i128_small_value: 2147483660i128,
+            i128_big_value: 9223372036854775820i128,
+            f64_value: 4.2,
+            bool_value: true,
+            #[emit::as_serde]
+            bytes_value: Bytes([1, 1, 1]),
+            #[emit::as_serde]
+            unit_value: (),
+            #[emit::as_serde]
+            some_value: Some(42),
+            #[emit::as_serde]
+            none_value: None::<i32>,
+            #[emit::as_serde]
+            slice_value: [1, 1, 1] as [i32; 3],
+            #[emit::as_serde]
+            map_value: Map { a: 1, b: 1, c: 1 },
+            #[emit::as_serde]
+            struct_value: Struct { a: 1, b: 1, c: 1 },
+            #[emit::as_serde]
+            tuple_value: (1, 1, 1),
+            #[emit::as_serde]
+            newtype_value: Newtype(42),
+            #[emit::as_serde]
+            unit_variant_value: Enum::Unit,
+            #[emit::as_serde]
+            unit_variant_value: Enum::Unit,
+            #[emit::as_serde]
+            newtype_variant_value: Enum::Newtype(42),
+            #[emit::as_serde]
+            struct_variant_value: Enum::Struct { a: 1, b: 1, c: 1 },
+            #[emit::as_serde]
+            tuple_variant_value: Enum::Tuple(1, 1, 1),
+        );
+
+        let logs = logs.get_emitted_logs().unwrap();
+
+        let get = |needle: &str| -> Option<AnyValue> {
+            logs[0]
+                .record
+                .attributes
+                .as_ref()
+                .unwrap()
+                .iter()
+                .find_map(|(k, v)| {
+                    if k.as_str() == needle {
+                        Some(v.clone())
+                    } else {
+                        None
+                    }
+                })
+        };
+
+        assert_eq!(
+            AnyValue::String("a string".into()),
+            get("str_value").unwrap()
+        );
+
+        assert_eq!(AnyValue::Int(1), get("i8_value").unwrap());
+        assert_eq!(AnyValue::Int(2), get("i16_value").unwrap());
+        assert_eq!(AnyValue::Int(42), get("i32_value").unwrap());
+        assert_eq!(AnyValue::Int(2147483660), get("i64_value").unwrap());
+        assert_eq!(AnyValue::Int(2147483660), get("i128_small_value").unwrap());
+        assert_eq!(
+            AnyValue::String("9223372036854775820".into()),
+            get("i128_big_value").unwrap()
+        );
+
+        assert_eq!(AnyValue::Double(4.2), get("f64_value").unwrap());
+
+        assert_eq!(AnyValue::Boolean(true), get("bool_value").unwrap());
+
+        assert_eq!(None, get("unit_value"));
+        assert_eq!(None, get("none_value"));
+        assert_eq!(AnyValue::Int(42), get("some_value").unwrap());
+
+        assert_eq!(
+            AnyValue::ListAny(vec![AnyValue::Int(1), AnyValue::Int(1), AnyValue::Int(1)]),
+            get("slice_value").unwrap()
+        );
+
+        assert_eq!(
+            AnyValue::Map({
+                let mut map = HashMap::<Key, AnyValue>::default();
+
+                map.insert(Key::from("a"), AnyValue::Int(1));
+                map.insert(Key::from("b"), AnyValue::Int(1));
+                map.insert(Key::from("c"), AnyValue::Int(1));
+
+                map
+            }),
+            get("map_value").unwrap()
+        );
+
+        assert_eq!(
+            AnyValue::Map({
+                let mut map = HashMap::<Key, AnyValue>::default();
+
+                map.insert(Key::from("a"), AnyValue::Int(1));
+                map.insert(Key::from("b"), AnyValue::Int(1));
+                map.insert(Key::from("c"), AnyValue::Int(1));
+
+                map
+            }),
+            get("struct_value").unwrap()
+        );
+
+        assert_eq!(
+            AnyValue::ListAny(vec![AnyValue::Int(1), AnyValue::Int(1), AnyValue::Int(1)]),
+            get("tuple_value").unwrap()
+        );
+
+        assert_eq!(
+            AnyValue::String("Unit".into()),
+            get("unit_variant_value").unwrap()
+        );
+
+        assert_eq!(
+            AnyValue::Map({
+                let mut map = HashMap::new();
+
+                map.insert(Key::from("Newtype"), AnyValue::Int(42));
+
+                map
+            }),
+            get("newtype_variant_value").unwrap()
+        );
+
+        assert_eq!(
+            AnyValue::Map({
+                let mut map = HashMap::new();
+
+                map.insert(
+                    Key::from("Struct"),
+                    AnyValue::Map({
+                        let mut map = HashMap::new();
+                        map.insert(Key::from("a"), AnyValue::Int(1));
+                        map.insert(Key::from("b"), AnyValue::Int(1));
+                        map.insert(Key::from("c"), AnyValue::Int(1));
+                        map
+                    }),
+                );
+
+                map
+            }),
+            get("struct_variant_value").unwrap()
+        );
+
+        assert_eq!(
+            AnyValue::Map({
+                let mut map = HashMap::new();
+
+                map.insert(
+                    Key::from("Tuple"),
+                    AnyValue::ListAny(vec![AnyValue::Int(1), AnyValue::Int(1), AnyValue::Int(1)]),
+                );
+
+                map
+            }),
+            get("tuple_variant_value").unwrap()
+        );
     }
 }

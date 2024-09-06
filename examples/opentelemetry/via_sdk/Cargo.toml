@@ -12,19 +12,19 @@ path = "../../../"
 path = "../../../emitter/opentelemetry"
 
 [dependencies.opentelemetry_sdk]
-version = "0.22"
+version = "0.24"
 features = ["rt-tokio", "trace", "logs"]
 
 [dependencies.opentelemetry]
-version = "0.22"
+version = "0.24"
 features = ["trace", "logs"]
 
 [dependencies.opentelemetry-otlp]
-version = "0.15"
+version = "0.17"
 features = ["trace", "logs", "grpc-tonic", "gzip-tonic"]
 
 [dependencies.tonic]
-version = "0.11"
+version = "0.12"
 
 [dependencies.tokio]
 version = "1"

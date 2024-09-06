@@ -6,7 +6,7 @@ use syn::{
 
 use crate::{
     args::{self, Arg},
-    props::{Props, check_evt_props, push_evt_props},
+    props::{check_evt_props, push_evt_props, Props},
     template::{self, Template},
     util::{ToOptionTokens, ToRefTokens},
 };

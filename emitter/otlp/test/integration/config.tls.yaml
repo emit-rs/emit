@@ -1,0 +1,33 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "localhost:44319"
+        tls:
+          cert_file: 127.0.0.1+1.pem
+          key_file: 127.0.0.1+1-key.pem
+      http:
+        endpoint: "localhost:44318"
+        tls:
+          cert_file: 127.0.0.1+1.pem
+          key_file: 127.0.0.1+1-key.pem
+
+exporters:
+  debug:
+    verbosity: detailed
+    sampling_initial: 1
+
+service:
+  telemetry:
+    metrics:
+      level: none
+  pipelines:
+    logs:
+      receivers: [otlp]
+      exporters: [debug]
+    traces:
+      receivers: [otlp]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      exporters: [debug]

@@ -1,6 +1,6 @@
 // Emit a span
-#[emit::span("Running")]
-fn run() {
+#[emit::span("Running emit")]
+fn run_emit() {
     let mut counter = 1;
 
     for _ in 0..100 {
@@ -21,6 +21,21 @@ fn run() {
     ));
 }
 
+fn run_opentelemetry<T: opentelemetry::trace::TracerProvider>(tracer_provider: T)
+where
+    <T::Tracer as opentelemetry::trace::Tracer>::Span: Send + Sync + 'static,
+{
+    use opentelemetry::trace::Tracer;
+
+    tracer_provider
+        .tracer("run_opentelemetry")
+        .in_span("Running OTel", |_| {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+
+            run_emit();
+        })
+}
+
 #[tokio::main]
 async fn main() {
     // Configure the OpenTelemetry SDK
@@ -29,7 +44,7 @@ async fn main() {
         .await
         .unwrap();
 
-    opentelemetry_otlp::new_pipeline()
+    let tracer_provider = opentelemetry_otlp::new_pipeline()
         .tracing()
         .with_exporter(
             opentelemetry_otlp::new_exporter()
@@ -39,7 +54,7 @@ async fn main() {
         .install_batch(opentelemetry_sdk::runtime::Tokio)
         .unwrap();
 
-    opentelemetry_otlp::new_pipeline()
+    let logger_provider = opentelemetry_otlp::new_pipeline()
         .logging()
         .with_exporter(
             opentelemetry_otlp::new_exporter()
@@ -50,10 +65,12 @@ async fn main() {
         .unwrap();
 
     // Configure `emit` to point to `opentelemetry`
-    let _ = emit_opentelemetry::setup().init();
+    let _ = emit_opentelemetry::setup(logger_provider.clone(), tracer_provider.clone()).init();
 
-    run();
+    // Run our example program
+    run_opentelemetry(tracer_provider.clone());
 
-    opentelemetry::global::shutdown_logger_provider();
-    opentelemetry::global::shutdown_tracer_provider();
+    // Shutdown the SDK
+    let _ = logger_provider.shutdown();
+    let _ = tracer_provider.shutdown();
 }
