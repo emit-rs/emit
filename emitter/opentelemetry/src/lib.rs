@@ -1211,43 +1211,561 @@ mod any_value {
 mod tests {
     use super::*;
 
+    use emit::runtime::AmbientSlot;
+
+    use opentelemetry_sdk::{
+        logs::LoggerProvider,
+        testing::{logs::InMemoryLogsExporter, trace::InMemorySpanExporter},
+        trace::TracerProvider,
+    };
+
+    fn build(
+        slot: &AmbientSlot,
+    ) -> (
+        InMemoryLogsExporter,
+        InMemorySpanExporter,
+        LoggerProvider,
+        TracerProvider,
+    ) {
+        let logger_exporter = InMemoryLogsExporter::default();
+
+        let logger_provider = LoggerProvider::builder()
+            .with_simple_exporter(logger_exporter.clone())
+            .build();
+
+        let tracer_exporter = InMemorySpanExporter::default();
+
+        let tracer_provider = TracerProvider::builder()
+            .with_simple_exporter(tracer_exporter.clone())
+            .build();
+
+        let _ = setup(logger_provider.clone(), tracer_provider.clone()).init_slot(slot);
+
+        (
+            logger_exporter,
+            tracer_exporter,
+            logger_provider,
+            tracer_provider,
+        )
+    }
+
     #[test]
     fn emit_log() {
-        todo!()
+        let slot = AmbientSlot::new();
+        let (logs, _, _, _) = build(&slot);
+
+        emit::emit!(rt: slot.get(), "test {attr}", attr: "log");
+
+        let logs = logs.get_emitted_logs().unwrap();
+
+        assert_eq!(1, logs.len());
+
+        let Some(AnyValue::String(ref body)) = logs[0].record.body else {
+            panic!("unexpected log body value");
+        };
+
+        assert_eq!("test log", body.as_str());
     }
 
     #[test]
     fn emit_span() {
-        todo!()
+        static SLOT: AmbientSlot = AmbientSlot::new();
+        let (_, spans, _, _) = build(&SLOT);
+
+        #[emit::span(rt: SLOT.get(), "emit {attr}", attr: "span")]
+        fn emit_span() -> emit::span::SpanCtxt {
+            emit::span::SpanCtxt::current(SLOT.get().ctxt())
+        }
+
+        let ctxt = emit_span();
+
+        let spans = spans.get_finished_spans().unwrap();
+
+        assert_eq!(1, spans.len());
+
+        assert_eq!("emit {attr}", spans[0].name);
+
+        assert_eq!(
+            ctxt.trace_id().unwrap().to_bytes(),
+            spans[0].span_context.trace_id().to_bytes()
+        );
+        assert_eq!(
+            ctxt.span_id().unwrap().to_bytes(),
+            spans[0].span_context.span_id().to_bytes()
+        );
+        assert!(ctxt.span_parent().is_none());
+        assert_eq!(
+            opentelemetry::trace::SpanId::INVALID,
+            spans[0].parent_span_id
+        );
     }
 
     #[test]
     fn emit_span_direct() {
-        todo!()
+        let slot = AmbientSlot::new();
+        let (logs, spans, _, _) = build(&slot);
+
+        emit::emit!(
+            rt: slot.get(),
+            evt: emit::Span::new(
+                emit::mdl!(),
+                "test",
+                "2024-01-01T00:00:00.000Z".parse::<emit::Timestamp>().unwrap().."2024-01-01T00:00:01.000Z".parse::<emit::Timestamp>().unwrap(),
+                emit::span::SpanCtxt::new_root(slot.get().rng()),
+            ),
+        );
+
+        let logs = logs.get_emitted_logs().unwrap();
+        let spans = spans.get_finished_spans().unwrap();
+
+        assert_eq!(1, logs.len());
+        assert_eq!(0, spans.len());
     }
 
     #[test]
     fn otel_span_emit_span() {
-        todo!()
+        static SLOT: AmbientSlot = AmbientSlot::new();
+        let (_, spans, _, tracer_provider) = build(&SLOT);
+
+        fn otel_span(
+            tracer_provider: &TracerProvider,
+        ) -> (opentelemetry::trace::SpanContext, emit::span::SpanCtxt) {
+            use opentelemetry::trace::TracerProvider;
+
+            #[emit::span(rt: SLOT.get(), "emit span")]
+            fn emit_span() -> emit::span::SpanCtxt {
+                emit::span::SpanCtxt::current(SLOT.get().ctxt())
+            }
+
+            tracer_provider
+                .tracer("otel_span")
+                .in_span("otel span", |cx| {
+                    (cx.span().span_context().clone(), emit_span())
+                })
+        }
+
+        let (otel_ctxt, emit_ctxt) = otel_span(&tracer_provider);
+
+        let spans = spans.get_finished_spans().unwrap();
+
+        assert_eq!(2, spans.len());
+
+        assert_eq!(
+            otel_ctxt.trace_id().to_bytes(),
+            emit_ctxt.trace_id().unwrap().to_bytes()
+        );
+
+        assert_eq!("emit span", spans[0].name);
+
+        assert_eq!(
+            emit_ctxt.trace_id().unwrap().to_bytes(),
+            spans[0].span_context.trace_id().to_bytes()
+        );
+        assert_eq!(
+            emit_ctxt.span_id().unwrap().to_bytes(),
+            spans[0].span_context.span_id().to_bytes()
+        );
+        assert_eq!(
+            emit_ctxt.span_parent().unwrap().to_bytes(),
+            spans[0].parent_span_id.to_bytes()
+        );
+        assert_eq!(
+            emit_ctxt.span_parent().unwrap().to_bytes(),
+            spans[1].span_context.span_id().to_bytes()
+        );
+
+        assert_eq!("otel span", spans[1].name);
+
+        assert_eq!(
+            otel_ctxt.trace_id().to_bytes(),
+            spans[1].span_context.trace_id().to_bytes()
+        );
+        assert_eq!(
+            otel_ctxt.span_id().to_bytes(),
+            spans[1].span_context.span_id().to_bytes()
+        );
+        assert_eq!(
+            opentelemetry::trace::SpanId::INVALID,
+            spans[1].parent_span_id
+        );
     }
 
     #[test]
     fn emit_span_otel_span() {
-        todo!()
+        static SLOT: AmbientSlot = AmbientSlot::new();
+        let (_, spans, _, tracer_provider) = build(&SLOT);
+
+        #[emit::span(rt: SLOT.get(), "emit span")]
+        fn emit_span(
+            tracer_provider: &TracerProvider,
+        ) -> (opentelemetry::trace::SpanContext, emit::span::SpanCtxt) {
+            fn otel_span(tracer_provider: &TracerProvider) -> opentelemetry::trace::SpanContext {
+                use opentelemetry::trace::TracerProvider;
+
+                tracer_provider
+                    .tracer("otel_span")
+                    .in_span("otel span", |cx| cx.span().span_context().clone())
+            }
+
+            (
+                otel_span(&tracer_provider),
+                emit::span::SpanCtxt::current(SLOT.get().ctxt()),
+            )
+        }
+
+        let (otel_ctxt, emit_ctxt) = emit_span(&tracer_provider);
+
+        let spans = spans.get_finished_spans().unwrap();
+
+        assert_eq!(2, spans.len());
+
+        assert_eq!(
+            otel_ctxt.trace_id().to_bytes(),
+            emit_ctxt.trace_id().unwrap().to_bytes()
+        );
+
+        assert_eq!("otel span", spans[0].name);
+
+        assert_eq!(
+            otel_ctxt.trace_id().to_bytes(),
+            spans[0].span_context.trace_id().to_bytes()
+        );
+        assert_eq!(
+            otel_ctxt.span_id().to_bytes(),
+            spans[0].span_context.span_id().to_bytes()
+        );
+        assert_eq!(
+            emit_ctxt.span_id().unwrap().to_bytes(),
+            spans[0].parent_span_id.to_bytes()
+        );
+
+        assert_eq!("emit span", spans[1].name);
+
+        assert_eq!(
+            emit_ctxt.trace_id().unwrap().to_bytes(),
+            spans[1].span_context.trace_id().to_bytes()
+        );
+        assert_eq!(
+            emit_ctxt.span_id().unwrap().to_bytes(),
+            spans[1].span_context.span_id().to_bytes()
+        );
+        assert!(emit_ctxt.span_parent().is_none());
     }
 
     #[test]
     fn otel_span_emit_log() {
-        todo!()
+        static SLOT: AmbientSlot = AmbientSlot::new();
+        let (logs, _, _, tracer_provider) = build(&SLOT);
+
+        fn otel_span(tracer_provider: &TracerProvider) -> opentelemetry::trace::SpanContext {
+            use opentelemetry::trace::TracerProvider;
+
+            tracer_provider
+                .tracer("otel_span")
+                .in_span("otel span", |cx| {
+                    emit::emit!(rt: SLOT.get(), "emit event");
+
+                    cx.span().span_context().clone()
+                })
+        }
+
+        let ctxt = otel_span(&tracer_provider);
+
+        let logs = logs.get_emitted_logs().unwrap();
+
+        assert_eq!(1, logs.len());
+
+        assert_eq!(
+            ctxt.trace_id(),
+            logs[0].record.trace_context.as_ref().unwrap().trace_id
+        );
+        assert_eq!(
+            ctxt.span_id(),
+            logs[0].record.trace_context.as_ref().unwrap().span_id
+        );
     }
 
     #[test]
     fn emit_span_otel_log() {
-        todo!()
+        static SLOT: AmbientSlot = AmbientSlot::new();
+        let (logs, _, logger_provider, _) = build(&SLOT);
+
+        #[emit::span(rt: SLOT.get(), "emit span")]
+        fn emit_span(logger_provider: &LoggerProvider) -> emit::span::SpanCtxt {
+            use opentelemetry::logs::LoggerProvider;
+
+            let logger = logger_provider.logger("otel_logger");
+
+            let mut log = logger.create_log_record();
+
+            log.set_body(AnyValue::String("test log".into()));
+
+            logger.emit(log);
+
+            emit::span::SpanCtxt::current(SLOT.get().ctxt())
+        }
+
+        let ctxt = emit_span(&logger_provider);
+
+        let logs = logs.get_emitted_logs().unwrap();
+
+        assert_eq!(1, logs.len());
+
+        assert_eq!(
+            ctxt.trace_id().unwrap().to_bytes(),
+            logs[0]
+                .record
+                .trace_context
+                .as_ref()
+                .unwrap()
+                .trace_id
+                .to_bytes()
+        );
+        assert_eq!(
+            ctxt.span_id().unwrap().to_bytes(),
+            logs[0]
+                .record
+                .trace_context
+                .as_ref()
+                .unwrap()
+                .span_id
+                .to_bytes()
+        );
     }
 
     #[test]
     fn emit_value_to_otel_attribute() {
-        todo!()
+        use opentelemetry::Key;
+        use std::collections::HashMap;
+
+        #[derive(serde::Serialize)]
+        struct Struct {
+            a: i32,
+            b: i32,
+            c: i32,
+        }
+
+        #[derive(serde::Serialize)]
+        struct Newtype(i32);
+
+        #[derive(serde::Serialize)]
+        enum Enum {
+            Unit,
+            Newtype(i32),
+            Struct { a: i32, b: i32, c: i32 },
+            Tuple(i32, i32, i32),
+        }
+
+        struct Bytes<B>(B);
+
+        impl<B: AsRef<[u8]>> serde::Serialize for Bytes<B> {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                serializer.serialize_bytes(self.0.as_ref())
+            }
+        }
+
+        struct Map {
+            a: i32,
+            b: i32,
+            c: i32,
+        }
+
+        impl serde::Serialize for Map {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                use serde::ser::SerializeMap;
+
+                let mut map = serializer.serialize_map(Some(3))?;
+
+                map.serialize_entry(&"a", &self.a)?;
+                map.serialize_entry(&"b", &self.b)?;
+                map.serialize_entry(&"c", &self.c)?;
+
+                map.end()
+            }
+        }
+
+        let slot = AmbientSlot::new();
+        let (logs, _, _, _) = build(&slot);
+
+        emit::emit!(
+            rt: slot.get(),
+            "test log",
+            str_value: "a string",
+            u8_value: 1u8,
+            u16_value: 2u16,
+            u32_value: 42u32,
+            u64_value: 2147483660u64,
+            u128_small_value: 2147483660u128,
+            u128_big_value: 9223372036854775820u128,
+            i8_value: 1i8,
+            i16_value: 2i16,
+            i32_value: 42i32,
+            i64_value: 2147483660i64,
+            i128_small_value: 2147483660i128,
+            i128_big_value: 9223372036854775820i128,
+            f64_value: 4.2,
+            bool_value: true,
+            #[emit::as_serde]
+            bytes_value: Bytes([1, 1, 1]),
+            #[emit::as_serde]
+            unit_value: (),
+            #[emit::as_serde]
+            some_value: Some(42),
+            #[emit::as_serde]
+            none_value: None::<i32>,
+            #[emit::as_serde]
+            slice_value: [1, 1, 1] as [i32; 3],
+            #[emit::as_serde]
+            map_value: Map { a: 1, b: 1, c: 1 },
+            #[emit::as_serde]
+            struct_value: Struct { a: 1, b: 1, c: 1 },
+            #[emit::as_serde]
+            tuple_value: (1, 1, 1),
+            #[emit::as_serde]
+            newtype_value: Newtype(42),
+            #[emit::as_serde]
+            unit_variant_value: Enum::Unit,
+            #[emit::as_serde]
+            unit_variant_value: Enum::Unit,
+            #[emit::as_serde]
+            newtype_variant_value: Enum::Newtype(42),
+            #[emit::as_serde]
+            struct_variant_value: Enum::Struct { a: 1, b: 1, c: 1 },
+            #[emit::as_serde]
+            tuple_variant_value: Enum::Tuple(1, 1, 1),
+        );
+
+        let logs = logs.get_emitted_logs().unwrap();
+
+        let get = |needle: &str| -> Option<AnyValue> {
+            logs[0]
+                .record
+                .attributes
+                .as_ref()
+                .unwrap()
+                .iter()
+                .find_map(|(k, v)| {
+                    if k.as_str() == needle {
+                        Some(v.clone())
+                    } else {
+                        None
+                    }
+                })
+        };
+
+        assert_eq!(
+            AnyValue::String("a string".into()),
+            get("str_value").unwrap()
+        );
+
+        assert_eq!(AnyValue::Int(1), get("i8_value").unwrap());
+        assert_eq!(AnyValue::Int(2), get("i16_value").unwrap());
+        assert_eq!(AnyValue::Int(42), get("i32_value").unwrap());
+        assert_eq!(AnyValue::Int(2147483660), get("i64_value").unwrap());
+        assert_eq!(AnyValue::Int(2147483660), get("i128_small_value").unwrap());
+        assert_eq!(
+            AnyValue::String("9223372036854775820".into()),
+            get("i128_big_value").unwrap()
+        );
+
+        assert_eq!(AnyValue::Double(4.2), get("f64_value").unwrap());
+
+        assert_eq!(AnyValue::Boolean(true), get("bool_value").unwrap());
+
+        assert_eq!(None, get("unit_value"));
+        assert_eq!(None, get("none_value"));
+        assert_eq!(AnyValue::Int(42), get("some_value").unwrap());
+
+        assert_eq!(
+            AnyValue::ListAny(vec![AnyValue::Int(1), AnyValue::Int(1), AnyValue::Int(1)]),
+            get("slice_value").unwrap()
+        );
+
+        assert_eq!(
+            AnyValue::Map({
+                let mut map = HashMap::<Key, AnyValue>::default();
+
+                map.insert(Key::from("a"), AnyValue::Int(1));
+                map.insert(Key::from("b"), AnyValue::Int(1));
+                map.insert(Key::from("c"), AnyValue::Int(1));
+
+                map
+            }),
+            get("map_value").unwrap()
+        );
+
+        assert_eq!(
+            AnyValue::Map({
+                let mut map = HashMap::<Key, AnyValue>::default();
+
+                map.insert(Key::from("a"), AnyValue::Int(1));
+                map.insert(Key::from("b"), AnyValue::Int(1));
+                map.insert(Key::from("c"), AnyValue::Int(1));
+
+                map
+            }),
+            get("struct_value").unwrap()
+        );
+
+        assert_eq!(
+            AnyValue::ListAny(vec![AnyValue::Int(1), AnyValue::Int(1), AnyValue::Int(1)]),
+            get("tuple_value").unwrap()
+        );
+
+        assert_eq!(
+            AnyValue::String("Unit".into()),
+            get("unit_variant_value").unwrap()
+        );
+
+        assert_eq!(
+            AnyValue::Map({
+                let mut map = HashMap::new();
+
+                map.insert(Key::from("Newtype"), AnyValue::Int(42));
+
+                map
+            }),
+            get("newtype_variant_value").unwrap()
+        );
+
+        assert_eq!(
+            AnyValue::Map({
+                let mut map = HashMap::new();
+
+                map.insert(
+                    Key::from("Struct"),
+                    AnyValue::Map({
+                        let mut map = HashMap::new();
+                        map.insert(Key::from("a"), AnyValue::Int(1));
+                        map.insert(Key::from("b"), AnyValue::Int(1));
+                        map.insert(Key::from("c"), AnyValue::Int(1));
+                        map
+                    }),
+                );
+
+                map
+            }),
+            get("struct_variant_value").unwrap()
+        );
+
+        assert_eq!(
+            AnyValue::Map({
+                let mut map = HashMap::new();
+
+                map.insert(
+                    Key::from("Tuple"),
+                    AnyValue::ListAny(vec![AnyValue::Int(1), AnyValue::Int(1), AnyValue::Int(1)]),
+                );
+
+                map
+            }),
+            get("tuple_variant_value").unwrap()
+        );
     }
 }
