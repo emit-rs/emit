@@ -73,6 +73,40 @@ fn emit_interpolation() {
 }
 
 #[test]
+fn emit_cfg() {
+    let rt = simple_runtime(
+        |evt| {
+            assert_eq!("Hello, , true", evt.msg().to_string());
+        },
+        |_| true,
+    );
+
+    emit::emit!(
+        rt,
+        "Hello, {disabled}, {enabled}",
+        #[cfg(emit_disabled)] disabled: false,
+        #[cfg(not(emit_disabled))] enabled: true,
+    );
+}
+
+#[test]
+fn emit_key() {
+    let rt = simple_runtime(
+        |evt| {
+            assert_eq!("Hello, {user.name}", evt.tpl().to_string());
+            assert_eq!("Hello, Rust", evt.msg().to_string());
+        },
+        |_| true,
+    );
+
+    emit::emit!(
+        rt,
+        "Hello, {user}",
+        #[emit::key("user.name")] user: "Rust",
+    );
+}
+
+#[test]
 fn emit_empty() {
     let rt = simple_runtime(
         |evt| {
