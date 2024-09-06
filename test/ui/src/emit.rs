@@ -107,6 +107,23 @@ fn emit_key() {
 }
 
 #[test]
+fn emit_key_exotic() {
+    let rt = simple_runtime(
+        |evt| {
+            assert_eq!("Hello, {{user}}", evt.tpl().to_string());
+            assert_eq!("Hello, Rust", evt.msg().to_string());
+        },
+        |_| true,
+    );
+
+    emit::emit!(
+        rt,
+        "Hello, {user}",
+        #[emit::key("{user}")] user: "Rust",
+    );
+}
+
+#[test]
 fn emit_empty() {
     let rt = simple_runtime(
         |evt| {

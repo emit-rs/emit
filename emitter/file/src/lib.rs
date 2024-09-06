@@ -137,7 +137,6 @@ mod internal_metrics;
 
 use std::{
     fmt,
-    fs::{self, File},
     io::{self, Write},
     mem,
     path::{Path, PathBuf},
@@ -145,6 +144,10 @@ use std::{
     thread,
 };
 
+use emit::{
+    clock::{Clock, ErasedClock},
+    platform::system_clock::SystemClock,
+};
 use emit_batcher::BatchError;
 use internal_metrics::InternalMetrics;
 
@@ -391,6 +394,8 @@ impl FileSetBuilder {
 
         let mut worker = Worker::new(
             metrics.clone(),
+            StdFilesystem::new(),
+            SystemClock::new(),
             dir,
             file_prefix,
             file_ext,
@@ -635,6 +640,8 @@ impl EventBatch {
 
 struct Worker {
     metrics: Arc<InternalMetrics>,
+    clock: Box<dyn ErasedClock + Send + Sync>,
+    fs: Box<dyn Filesystem + Send + Sync>,
     active_file: Option<ActiveFile>,
     roll_by: RollBy,
     max_files: usize,
@@ -649,6 +656,8 @@ struct Worker {
 impl Worker {
     fn new(
         metrics: Arc<InternalMetrics>,
+        fs: impl Filesystem + Send + Sync + 'static,
+        clock: impl Clock + Send + Sync + 'static,
         dir: String,
         file_prefix: String,
         file_ext: String,
@@ -660,6 +669,8 @@ impl Worker {
     ) -> Self {
         Worker {
             metrics,
+            fs: Box::new(fs),
+            clock: Box::new(clock),
             active_file: None,
             roll_by,
             max_files,
@@ -674,8 +685,7 @@ impl Worker {
 
     #[emit::span(rt: emit::runtime::internal(), guard: span, "write file batch")]
     fn on_batch(&mut self, mut batch: EventBatch) -> Result<(), BatchError<EventBatch>> {
-        let now = std::time::UNIX_EPOCH.elapsed().unwrap();
-        let ts = emit::Timestamp::from_unix(now).unwrap();
+        let ts = self.clock.now().unwrap();
         let parts = ts.to_parts();
 
         let file_ts = file_ts(self.roll_by, parts);
@@ -684,7 +694,7 @@ impl Worker {
         let mut file_set = ActiveFileSet::empty(&self.metrics, &self.dir);
 
         if file.is_none() {
-            if let Err(err) = fs::create_dir_all(&self.dir) {
+            if let Err(err) = self.fs.create_dir_all(Path::new(&self.dir)) {
                 span.complete_with(|span| {
                     emit::warn!(
                         rt: emit::runtime::internal(),
@@ -701,7 +711,7 @@ impl Worker {
             }
 
             let _ = file_set
-                .read(&self.file_prefix, &self.file_ext)
+                .read(&self.fs, &self.file_prefix, &self.file_ext)
                 .map_err(|err| {
                     self.metrics.file_set_read_failed.increment();
 
@@ -721,7 +731,7 @@ impl Worker {
                     let mut path = PathBuf::from(&self.dir);
                     path.push(file_name);
 
-                    file = ActiveFile::try_open_reuse(&path)
+                    file = ActiveFile::try_open_reuse(&self.fs, &path)
                         .map_err(|err| {
                             self.metrics.file_open_failed.increment();
 
@@ -749,7 +759,7 @@ impl Worker {
             file
         } else {
             // Leave room for the file we're about to create
-            file_set.apply_retention(self.max_files.saturating_sub(1));
+            file_set.apply_retention(&self.fs, self.max_files.saturating_sub(1));
 
             let mut path = PathBuf::from(self.dir.clone());
 
@@ -762,7 +772,7 @@ impl Worker {
                 &file_id,
             ));
 
-            match ActiveFile::try_open_create(&path) {
+            match ActiveFile::try_open_create(&self.fs, &path) {
                 Ok(file) => {
                     self.metrics.file_create.increment();
 
@@ -857,14 +867,20 @@ impl<'a> ActiveFileSet<'a> {
         }
     }
 
-    fn read(&mut self, file_prefix: &str, file_ext: &str) -> Result<(), io::Error> {
+    fn read(
+        &mut self,
+        fs: impl Filesystem,
+        file_prefix: &str,
+        file_ext: &str,
+    ) -> Result<(), io::Error> {
         self.file_set = Vec::new();
 
-        let read_dir = fs::read_dir(&self.dir)?;
+        let read_dir = fs.read_dir_files(Path::new(&self.dir))?;
 
         let mut file_set = Vec::new();
 
-        for entry in read_dir {
+        for file_name in read_dir {
+            /*
             let Ok(entry) = entry else {
                 continue;
             };
@@ -876,6 +892,8 @@ impl<'a> ActiveFileSet<'a> {
             }
 
             let file_name = entry.file_name();
+            */
+
             let Some(file_name) = file_name.to_str() else {
                 continue;
             };
@@ -900,12 +918,12 @@ impl<'a> ActiveFileSet<'a> {
         self.file_set.first().map(|file_name| &**file_name)
     }
 
-    fn apply_retention(&mut self, max_files: usize) {
+    fn apply_retention(&mut self, fs: impl Filesystem, max_files: usize) {
         while self.file_set.len() >= max_files {
             let mut path = PathBuf::from(self.dir);
             path.push(self.file_set.pop().unwrap());
 
-            if let Err(err) = fs::remove_file(&path) {
+            if let Err(err) = fs.remove_file(&path) {
                 self.metrics.file_delete_failed.increment();
 
                 emit::warn!(
@@ -930,7 +948,7 @@ impl<'a> ActiveFileSet<'a> {
 }
 
 struct ActiveFile {
-    file: File,
+    file: Box<dyn File + Send + Sync>,
     file_path: PathBuf,
     file_ts: String,
     file_needs_recovery: bool,
@@ -938,17 +956,24 @@ struct ActiveFile {
 }
 
 impl ActiveFile {
-    fn try_open_reuse(file_path: impl AsRef<Path>) -> Result<ActiveFile, io::Error> {
+    fn try_open_reuse(
+        fs: impl Filesystem,
+        file_path: impl AsRef<Path>,
+    ) -> Result<ActiveFile, io::Error> {
         let file_path = file_path.as_ref();
 
         let file_ts = read_file_path_ts(file_path)?.to_owned();
 
+        /*
         let file = fs::OpenOptions::new()
             .read(false)
             .append(true)
             .open(file_path)?;
+        */
 
-        let file_size_bytes = file.metadata()?.len() as usize;
+        let file = fs.open_existing(file_path)?;
+
+        let file_size_bytes = file.len()?;
 
         Ok(ActiveFile {
             file,
@@ -961,16 +986,23 @@ impl ActiveFile {
         })
     }
 
-    fn try_open_create(file_path: impl AsRef<Path>) -> Result<ActiveFile, io::Error> {
+    fn try_open_create(
+        fs: impl Filesystem,
+        file_path: impl AsRef<Path>,
+    ) -> Result<ActiveFile, io::Error> {
         let file_path = file_path.as_ref();
 
         let file_ts = read_file_path_ts(file_path)?.to_owned();
 
+        /*
         let file = fs::OpenOptions::new()
             .create_new(true)
             .read(false)
             .append(true)
             .open(file_path)?;
+        */
+
+        let file = fs.open_new(file_path)?;
 
         Ok(ActiveFile {
             file,
@@ -1113,4 +1145,183 @@ fn read_file_path_ts(path: &Path) -> Result<&str, io::Error> {
 
 fn file_name(file_prefix: &str, file_ext: &str, ts: &str, id: &str) -> String {
     format!("{}.{}.{}.{}", file_prefix, ts, id, file_ext)
+}
+
+trait Filesystem {
+    fn create_dir_all(&self, path: &Path) -> io::Result<()>;
+
+    fn read_dir_files(&self, path: &Path) -> io::Result<Box<dyn Iterator<Item = PathBuf>>>;
+
+    fn remove_file(&self, path: &Path) -> io::Result<()>;
+
+    fn open_new(&self, path: &Path) -> io::Result<Box<dyn File + Send + Sync>>;
+
+    fn open_existing(&self, path: &Path) -> io::Result<Box<dyn File + Send + Sync>>;
+}
+
+impl<'a, F: Filesystem + ?Sized> Filesystem for &'a F {
+    fn create_dir_all(&self, path: &Path) -> io::Result<()> {
+        (**self).create_dir_all(path)
+    }
+
+    fn read_dir_files(&self, path: &Path) -> io::Result<Box<dyn Iterator<Item = PathBuf>>> {
+        (**self).read_dir_files(path)
+    }
+
+    fn remove_file(&self, path: &Path) -> io::Result<()> {
+        (**self).remove_file(path)
+    }
+
+    fn open_new(&self, path: &Path) -> io::Result<Box<dyn File + Send + Sync>> {
+        (**self).open_new(path)
+    }
+
+    fn open_existing(&self, path: &Path) -> io::Result<Box<dyn File + Send + Sync>> {
+        (**self).open_existing(path)
+    }
+}
+
+impl<F: Filesystem + ?Sized> Filesystem for Box<F> {
+    fn create_dir_all(&self, path: &Path) -> io::Result<()> {
+        (**self).create_dir_all(path)
+    }
+
+    fn read_dir_files(&self, path: &Path) -> io::Result<Box<dyn Iterator<Item = PathBuf>>> {
+        (**self).read_dir_files(path)
+    }
+
+    fn remove_file(&self, path: &Path) -> io::Result<()> {
+        (**self).remove_file(path)
+    }
+
+    fn open_new(&self, path: &Path) -> io::Result<Box<dyn File + Send + Sync>> {
+        (**self).open_new(path)
+    }
+
+    fn open_existing(&self, path: &Path) -> io::Result<Box<dyn File + Send + Sync>> {
+        (**self).open_existing(path)
+    }
+}
+
+struct StdFilesystem;
+
+impl StdFilesystem {
+    fn new() -> Self {
+        StdFilesystem
+    }
+}
+
+impl Filesystem for StdFilesystem {
+    fn create_dir_all(&self, path: &Path) -> io::Result<()> {
+        todo!()
+    }
+
+    fn read_dir_files(&self, path: &Path) -> io::Result<Box<dyn Iterator<Item = PathBuf>>> {
+        todo!()
+    }
+
+    fn remove_file(&self, path: &Path) -> io::Result<()> {
+        todo!()
+    }
+
+    fn open_new(&self, path: &Path) -> io::Result<Box<dyn File + Send + Sync>> {
+        todo!()
+    }
+
+    fn open_existing(&self, path: &Path) -> io::Result<Box<dyn File + Send + Sync>> {
+        todo!()
+    }
+}
+
+trait File: Write {
+    fn len(&self) -> io::Result<usize>;
+
+    fn sync_all(&mut self) -> io::Result<()>;
+}
+
+impl<'a, F: File + ?Sized> File for &'a mut F {
+    fn len(&self) -> io::Result<usize> {
+        (**self).len()
+    }
+
+    fn sync_all(&mut self) -> io::Result<()> {
+        (**self).sync_all()
+    }
+}
+
+impl<F: File + ?Sized> File for Box<F> {
+    fn len(&self) -> io::Result<usize> {
+        (**self).len()
+    }
+
+    fn sync_all(&mut self) -> io::Result<()> {
+        (**self).sync_all()
+    }
+}
+
+struct StdFile;
+
+impl File for StdFile {
+    fn len(&self) -> io::Result<usize> {
+        todo!()
+    }
+
+    fn sync_all(&mut self) -> io::Result<()> {
+        todo!()
+    }
+}
+
+impl Write for StdFile {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        todo!()
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        todo!()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dir_prefix_ext() {
+        todo!()
+    }
+
+    #[test]
+    fn test_rolling_millis() {
+        todo!()
+    }
+
+    #[test]
+    fn test_file_ts() {
+        todo!()
+    }
+
+    #[test]
+    fn test_file_id() {
+        todo!()
+    }
+
+    #[test]
+    fn test_default_writer() {
+        todo!()
+    }
+
+    #[test]
+    fn test_write_no_reuse() {
+        todo!()
+    }
+
+    #[test]
+    fn test_write_fail() {
+        todo!()
+    }
+
+    #[test]
+    fn test_write_reuse() {
+        todo!()
+    }
 }
