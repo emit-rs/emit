@@ -2,14 +2,14 @@
 Run channels in a `tokio` runtime.
 */
 
-use std::{future::Future, time::Duration};
+use std::{future::Future, thread, time::Duration};
 
 use crate::{sync, BatchError, Channel, Receiver, Sender};
 
 /**
-Spawn a worker to run the [`Receiver`] on a `tokio` runtime.
+Run [`Receiver::exec`] on a `tokio` runtime in a dedicated background thread.
 
-If the current thread is a `tokio` thread, then the worker will be spawned onto its runtime. If the current thread is not a `tokio` thread, then a single-threaded `tokio` runtime will be set up in a dedicated thread to run it.
+This function will create a single-threaded `tokio` runtime on a dedicated thread.
 */
 pub fn spawn<
     T: Channel + Send + 'static,
@@ -17,7 +17,8 @@ pub fn spawn<
 >(
     receiver: Receiver<T>,
     on_batch: impl FnMut(T) -> F + Send + 'static,
-) where
+) -> thread::JoinHandle<()>
+where
     T::Item: Send + 'static,
 {
     let receive = async move {
@@ -26,23 +27,13 @@ pub fn spawn<
             .await
     };
 
-    match tokio::runtime::Handle::try_current() {
-        // If we're on a `tokio` thread then spawn on it
-        Ok(handle) => {
-            handle.spawn(receive);
-        }
-        // If we're not on a `tokio` thread then spawn a
-        // background thread and run the work there
-        Err(_) => {
-            std::thread::spawn(move || {
-                tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .unwrap()
-                    .block_on(receive);
-            });
-        }
-    }
+    thread::spawn(move || {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(receive);
+    })
 }
 
 /**
@@ -147,7 +138,7 @@ mod tests {
 
         let (sender, receiver) = crate::bounded::<Vec<()>>(10);
 
-        spawn(receiver, {
+        let _ = spawn(receiver, {
             let received = received.clone();
 
             move |batch| {
