@@ -26,7 +26,7 @@ Initialize `emit` using a rolling file set:
 ```
 fn main() {
     let rt = emit::setup()
-        .emit_to(emit_file::set("./target/logs/my_app.txt").spawn().unwrap())
+        .emit_to(emit_file::set("./target/logs/my_app.txt").spawn())
         .init();
 
     // Your app code goes here
@@ -107,7 +107,7 @@ fn main() {
 
     let rt = emit::setup()
         .emit_to({
-            let files = emit_file::set("./target/logs/my_app.txt").spawn().unwrap();
+            let files = emit_file::set("./target/logs/my_app.txt").spawn();
 
             // 2. Add `emit_file`'s metrics to a reporter so we can see what it's up to
             //    You can do this independently of the internal emitter
@@ -387,10 +387,29 @@ impl FileSetBuilder {
     /**
     Complete the builder, returning a [`FileSet`] to pass to [`emit::Setup::emit_to`].
     */
-    pub fn spawn(self) -> Result<FileSet, Error> {
-        let (dir, file_prefix, file_ext) = dir_prefix_ext(self.file_set).map_err(Error::new)?;
-
+    pub fn spawn(self) -> FileSet {
         let metrics = Arc::new(InternalMetrics::default());
+
+        let inner = match self.spawn_inner(metrics.clone()) {
+            Ok(inner) => Some(inner),
+            Err(err) => {
+                emit::warn!(
+                    rt: emit::runtime::internal(),
+                    "failed to configure file set emitter; no events will be written",
+                    err
+                );
+
+                metrics.configuration_failed.increment();
+
+                None
+            }
+        };
+
+        FileSet { metrics, inner }
+    }
+
+    fn spawn_inner(self, metrics: Arc<InternalMetrics>) -> Result<FileSetInner, Error> {
+        let (dir, file_prefix, file_ext) = dir_prefix_ext(self.file_set).map_err(Error::new)?;
 
         let mut worker = Worker::new(
             metrics.clone(),
@@ -410,7 +429,7 @@ impl FileSetBuilder {
 
         let handle = emit_batcher::sync::spawn(receiver, move |batch| worker.on_batch(batch));
 
-        Ok(FileSet {
+        Ok(FileSetInner {
             sender,
             metrics,
             writer: self.writer,
@@ -426,6 +445,11 @@ A handle to an asynchronous, background, rolling file writer.
 Create a file set through the [`set`] function, calling [`FileSetBuilder::spawn`] to complete configuration. Pass the resulting [`FileSet`] to [`emit::Setup::emit_to`] to configure `emit` to write diagnostic events through it.
 */
 pub struct FileSet {
+    inner: Option<FileSetInner>,
+    metrics: Arc<InternalMetrics>,
+}
+
+struct FileSetInner {
     sender: emit_batcher::Sender<EventBatch>,
     metrics: Arc<InternalMetrics>,
     writer: Box<
@@ -438,6 +462,16 @@ pub struct FileSet {
 }
 
 impl emit::Emitter for FileSet {
+    fn emit<E: emit::event::ToEvent>(&self, evt: E) {
+        self.inner.emit(evt)
+    }
+
+    fn blocking_flush(&self, timeout: std::time::Duration) -> bool {
+        self.inner.blocking_flush(timeout)
+    }
+}
+
+impl emit::Emitter for FileSetInner {
     fn emit<E: emit::event::ToEvent>(&self, evt: E) {
         let evt = evt.to_event();
 
@@ -475,7 +509,10 @@ impl FileSet {
     */
     pub fn metric_source(&self) -> FileSetMetrics {
         FileSetMetrics {
-            channel_metrics: self.sender.metric_source(),
+            channel_metrics: self
+                .inner
+                .as_ref()
+                .map(|inner| inner.sender.metric_source()),
             metrics: self.metrics.clone(),
         }
     }

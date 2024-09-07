@@ -107,6 +107,12 @@ metrics!(
             This happens before the event is written to any log files.
             */
             event_format_failed: Counter -> usize,
+            /**
+            Attempting to configure the emitter failed.
+
+            This happens when file paths or other configuration properties are malformed. The emitter won't write any events until configuration is fixed and the process is restarted.
+            */
+            configuration_failed: Counter -> usize,
         }
     }
 );
@@ -117,7 +123,7 @@ Metrics produced by the file writer.
 You can enumerate the metrics using the [`emit::metric::Source`] implementation. See [`emit::metric`] for details.
 */
 pub struct FileSetMetrics {
-    pub(crate) channel_metrics: emit_batcher::ChannelMetrics<crate::EventBatch>,
+    pub(crate) channel_metrics: Option<emit_batcher::ChannelMetrics<crate::EventBatch>>,
     pub(crate) metrics: Arc<InternalMetrics>,
 }
 

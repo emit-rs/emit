@@ -11,7 +11,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             emit_term::stdout(),
             emit::emitter::wrapping::from_filter(emit::level::min_filter(emit::Level::Warn)),
         ))
-        .and_emit_to(emit_file::set("./target/logs/filter_per_emitter.log").spawn()?)
+        .and_emit_to(emit_file::set("./target/logs/filter_per_emitter.log").spawn())
         .init();
 
     emit::info!("Hello, {user}", user: "Rust");

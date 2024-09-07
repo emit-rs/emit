@@ -5,7 +5,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Use `and_emit_to` to append another emitter
     let rt = emit::setup()
         .emit_to(emit_term::stdout())
-        .and_emit_to(emit_file::set("./target/logs/emit_multiple_emitters.log").spawn()?)
+        .and_emit_to(emit_file::set("./target/logs/emit_multiple_emitters.log").spawn())
         .init();
 
     emit::info!("Hello, {user}", user: "Rust");
