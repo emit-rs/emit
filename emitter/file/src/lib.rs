@@ -146,7 +146,8 @@ use std::{
 
 use emit::{
     clock::{Clock, ErasedClock},
-    platform::system_clock::SystemClock,
+    platform::{rand_rng::RandRng, system_clock::SystemClock},
+    rng::{ErasedRng, Rng},
 };
 use emit_batcher::BatchError;
 use internal_metrics::InternalMetrics;
@@ -369,6 +370,8 @@ impl FileSetBuilder {
 
     The `writer` is used to format incoming [`emit::Event`]s into their on-disk format. If formatting fails then the event will be discarded.
 
+    The writer _should not_ include the separator at the end. This will be appended automatically later.
+
     The `separator` is written between individual events.
     */
     pub fn writer(
@@ -416,6 +419,7 @@ impl FileSetBuilder {
             metrics.clone(),
             StdFilesystem::new(),
             SystemClock::new(),
+            RandRng::new(),
             dir,
             file_prefix,
             file_ext,
@@ -638,9 +642,7 @@ struct EventBatch {
     index: usize,
 }
 
-impl emit_batcher::Channel for EventBatch {
-    type Item = Box<[u8]>;
-
+impl EventBatch {
     fn new() -> Self {
         EventBatch {
             bufs: Vec::new(),
@@ -649,9 +651,23 @@ impl emit_batcher::Channel for EventBatch {
         }
     }
 
-    fn push<'a>(&mut self, item: Self::Item) {
+    fn push(&mut self, buf: impl Into<Box<[u8]>>) {
+        let item = buf.into();
+
         self.remaining_bytes += item.len();
         self.bufs.push(item);
+    }
+}
+
+impl emit_batcher::Channel for EventBatch {
+    type Item = Box<[u8]>;
+
+    fn new() -> Self {
+        EventBatch::new()
+    }
+
+    fn push<'a>(&mut self, item: Self::Item) {
+        self.push(item)
     }
 
     fn len(&self) -> usize {
@@ -679,6 +695,7 @@ impl EventBatch {
 struct Worker {
     metrics: Arc<InternalMetrics>,
     clock: Box<dyn ErasedClock + Send + Sync>,
+    rng: Box<dyn ErasedRng + Send + Sync>,
     fs: Box<dyn Filesystem + Send + Sync>,
     active_file: Option<ActiveFile>,
     roll_by: RollBy,
@@ -696,6 +713,7 @@ impl Worker {
         metrics: Arc<InternalMetrics>,
         fs: impl Filesystem + Send + Sync + 'static,
         clock: impl Clock + Send + Sync + 'static,
+        rng: impl Rng + Send + Sync + 'static,
         dir: String,
         file_prefix: String,
         file_ext: String,
@@ -709,6 +727,7 @@ impl Worker {
             metrics,
             fs: Box::new(fs),
             clock: Box::new(clock),
+            rng: Box::new(rng),
             active_file: None,
             roll_by,
             max_files,
@@ -801,7 +820,10 @@ impl Worker {
 
             let mut path = PathBuf::from(self.dir.clone());
 
-            let file_id = file_id(rolling_millis(self.roll_by, ts, parts), rolling_id());
+            let file_id = file_id(
+                rolling_millis(self.roll_by, ts, parts),
+                rolling_id(&self.rng),
+            );
 
             path.push(file_name(
                 &self.file_prefix,
@@ -918,20 +940,6 @@ impl<'a> ActiveFileSet<'a> {
         let mut file_set = Vec::new();
 
         for file_name in read_dir {
-            /*
-            let Ok(entry) = entry else {
-                continue;
-            };
-
-            if let Ok(file_type) = entry.file_type() {
-                if !file_type.is_file() {
-                    continue;
-                }
-            }
-
-            let file_name = entry.file_name();
-            */
-
             let Some(file_name) = file_name.to_str() else {
                 continue;
             };
@@ -1002,13 +1010,6 @@ impl ActiveFile {
 
         let file_ts = read_file_path_ts(file_path)?.to_owned();
 
-        /*
-        let file = fs::OpenOptions::new()
-            .read(false)
-            .append(true)
-            .open(file_path)?;
-        */
-
         let file = fs.open_existing(file_path)?;
 
         let file_size_bytes = file.len()?;
@@ -1032,15 +1033,11 @@ impl ActiveFile {
 
         let file_ts = read_file_path_ts(file_path)?.to_owned();
 
-        /*
-        let file = fs::OpenOptions::new()
-            .create_new(true)
-            .read(false)
-            .append(true)
-            .open(file_path)?;
-        */
-
         let file = fs.open_new(file_path)?;
+
+        // Sync the existence of this new file to the parent directory
+        // This is only important on some platforms and filesystems
+        fs.sync_parent(file_path)?;
 
         Ok(ActiveFile {
             file,
@@ -1137,8 +1134,8 @@ fn rolling_millis(roll_by: RollBy, ts: emit::Timestamp, parts: emit::timestamp::
     ts.duration_since(truncated).unwrap().as_millis() as u32
 }
 
-fn rolling_id() -> u32 {
-    rand::random()
+fn rolling_id(rng: impl emit::Rng) -> u32 {
+    rng.gen_u64().unwrap() as u32
 }
 
 fn file_ts(roll_by: RollBy, parts: emit::timestamp::Parts) -> String {
@@ -1188,6 +1185,8 @@ fn file_name(file_prefix: &str, file_ext: &str, ts: &str, id: &str) -> String {
 trait Filesystem {
     fn create_dir_all(&self, path: &Path) -> io::Result<()>;
 
+    fn sync_parent(&self, path: &Path) -> io::Result<()>;
+
     fn read_dir_files(&self, path: &Path) -> io::Result<Box<dyn Iterator<Item = PathBuf>>>;
 
     fn remove_file(&self, path: &Path) -> io::Result<()>;
@@ -1200,6 +1199,10 @@ trait Filesystem {
 impl<'a, F: Filesystem + ?Sized> Filesystem for &'a F {
     fn create_dir_all(&self, path: &Path) -> io::Result<()> {
         (**self).create_dir_all(path)
+    }
+
+    fn sync_parent(&self, path: &Path) -> io::Result<()> {
+        (**self).sync_parent(path)
     }
 
     fn read_dir_files(&self, path: &Path) -> io::Result<Box<dyn Iterator<Item = PathBuf>>> {
@@ -1222,6 +1225,10 @@ impl<'a, F: Filesystem + ?Sized> Filesystem for &'a F {
 impl<F: Filesystem + ?Sized> Filesystem for Box<F> {
     fn create_dir_all(&self, path: &Path) -> io::Result<()> {
         (**self).create_dir_all(path)
+    }
+
+    fn sync_parent(&self, path: &Path) -> io::Result<()> {
+        (**self).sync_parent(path)
     }
 
     fn read_dir_files(&self, path: &Path) -> io::Result<Box<dyn Iterator<Item = PathBuf>>> {
@@ -1251,23 +1258,65 @@ impl StdFilesystem {
 
 impl Filesystem for StdFilesystem {
     fn create_dir_all(&self, path: &Path) -> io::Result<()> {
-        todo!()
+        std::fs::create_dir_all(path)
+    }
+
+    fn sync_parent(&self, path: &Path) -> io::Result<()> {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::OpenOptions::new()
+                    .read(true)
+                    .open(parent)?
+                    .sync_all();
+            }
+
+            Ok(())
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let _ = path;
+
+            Ok(())
+        }
     }
 
     fn read_dir_files(&self, path: &Path) -> io::Result<Box<dyn Iterator<Item = PathBuf>>> {
-        todo!()
+        let iter = std::fs::read_dir(path)?.filter_map(|entry| {
+            let entry = entry.ok()?;
+
+            if entry.metadata().ok()?.is_file() {
+                Some(entry.path())
+            } else {
+                None
+            }
+        });
+
+        Ok(Box::new(iter))
     }
 
     fn remove_file(&self, path: &Path) -> io::Result<()> {
-        todo!()
+        std::fs::remove_file(path)
     }
 
     fn open_new(&self, path: &Path) -> io::Result<Box<dyn File + Send + Sync>> {
-        todo!()
+        let file = std::fs::OpenOptions::new()
+            .create_new(true)
+            .read(false)
+            .append(true)
+            .open(path)?;
+
+        Ok(Box::new(StdFile::new(file)))
     }
 
     fn open_existing(&self, path: &Path) -> io::Result<Box<dyn File + Send + Sync>> {
-        todo!()
+        let file = std::fs::OpenOptions::new()
+            .read(false)
+            .append(true)
+            .open(path)?;
+
+        Ok(Box::new(StdFile::new(file)))
     }
 }
 
@@ -1297,25 +1346,31 @@ impl<F: File + ?Sized> File for Box<F> {
     }
 }
 
-struct StdFile;
+struct StdFile(std::fs::File);
+
+impl StdFile {
+    fn new(file: std::fs::File) -> Self {
+        StdFile(file)
+    }
+}
 
 impl File for StdFile {
     fn len(&self) -> io::Result<usize> {
-        todo!()
+        Ok(self.0.metadata()?.len() as usize)
     }
 
     fn sync_all(&mut self) -> io::Result<()> {
-        todo!()
+        self.0.sync_all()
     }
 }
 
 impl Write for StdFile {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        todo!()
+        self.0.write(buf)
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        todo!()
+        self.0.flush()
     }
 }
 
@@ -1323,43 +1378,172 @@ impl Write for StdFile {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_dir_prefix_ext() {
-        todo!()
+    use std::{cmp, collections::HashMap, sync::Mutex};
+
+    #[derive(Clone)]
+    struct InMemoryFilesystem {
+        incoming: Arc<Mutex<HashMap<String, InMemoryFile>>>,
+        outgoing: Arc<Mutex<HashMap<String, InMemoryFile>>>,
+        committed: Arc<Mutex<HashMap<String, InMemoryFile>>>,
+    }
+
+    impl InMemoryFilesystem {
+        fn new() -> Self {
+            InMemoryFilesystem {
+                incoming: Arc::new(Mutex::new(HashMap::new())),
+                outgoing: Arc::new(Mutex::new(HashMap::new())),
+                committed: Arc::new(Mutex::new(HashMap::new())),
+            }
+        }
+
+        fn iter(&self) -> impl Iterator<Item = (String, InMemoryFile)> {
+            self.committed
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|(path, file)| (path.to_owned(), file.clone()))
+                .collect::<Vec<_>>()
+                .into_iter()
+        }
+    }
+
+    #[derive(Clone)]
+    struct InMemoryFile {
+        incoming: Arc<Mutex<Vec<u8>>>,
+        committed: Arc<Mutex<Vec<u8>>>,
+    }
+
+    impl InMemoryFile {
+        fn new() -> Self {
+            InMemoryFile {
+                incoming: Arc::new(Mutex::new(Vec::new())),
+                committed: Arc::new(Mutex::new(Vec::new())),
+            }
+        }
+
+        fn contents(&self) -> Vec<u8> {
+            self.committed.lock().unwrap().clone()
+        }
+    }
+
+    impl Filesystem for InMemoryFilesystem {
+        fn create_dir_all(&self, path: &Path) -> io::Result<()> {
+            todo!()
+        }
+
+        fn sync_parent(&self, path: &Path) -> io::Result<()> {
+            todo!()
+        }
+
+        fn read_dir_files(&self, path: &Path) -> io::Result<Box<dyn Iterator<Item = PathBuf>>> {
+            todo!()
+        }
+
+        fn remove_file(&self, path: &Path) -> io::Result<()> {
+            todo!()
+        }
+
+        fn open_new(&self, path: &Path) -> io::Result<Box<dyn File + Send + Sync>> {
+            todo!()
+        }
+
+        fn open_existing(&self, path: &Path) -> io::Result<Box<dyn File + Send + Sync>> {
+            todo!()
+        }
+    }
+
+    impl File for InMemoryFile {
+        fn len(&self) -> io::Result<usize> {
+            todo!()
+        }
+
+        fn sync_all(&mut self) -> io::Result<()> {
+            todo!()
+        }
+    }
+
+    impl Write for InMemoryFile {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            todo!()
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            todo!()
+        }
+    }
+
+    #[derive(Clone)]
+    struct TestClock(Arc<Mutex<emit::Timestamp>>);
+
+    impl TestClock {
+        fn new() -> Self {
+            TestClock(Arc::new(Mutex::new(emit::Timestamp::MIN)))
+        }
+    }
+
+    impl emit::Clock for TestClock {
+        fn now(&self) -> Option<emit::Timestamp> {
+            Some(*self.0.lock().unwrap())
+        }
+    }
+
+    #[derive(Clone)]
+    struct TestRng(Arc<Mutex<u128>>);
+
+    impl TestRng {
+        fn new() -> Self {
+            TestRng(Arc::new(Mutex::new(0)))
+        }
+    }
+
+    impl emit::Rng for TestRng {
+        fn fill<A: AsMut<[u8]>>(&self, mut arr: A) -> Option<A> {
+            let fill = self.0.lock().unwrap().to_be_bytes();
+
+            let mut buf = arr.as_mut();
+
+            while buf.len() > 0 {
+                let copy = cmp::min(fill.len(), buf.len());
+
+                buf.copy_from_slice(&fill[..copy]);
+
+                buf = &mut buf[copy..];
+            }
+
+            Some(arr)
+        }
     }
 
     #[test]
-    fn test_rolling_millis() {
-        todo!()
-    }
+    fn worker_no_reuse() {
+        let fs = InMemoryFilesystem::new();
+        let clock = TestClock::new();
+        let rng = TestRng::new();
+        let metrics = Arc::new(InternalMetrics::default());
 
-    #[test]
-    fn test_file_ts() {
-        todo!()
-    }
+        let mut worker = Worker::new(
+            metrics.clone(),
+            fs.clone(),
+            clock.clone(),
+            rng.clone(),
+            "logs".to_string(),
+            "test".to_string(),
+            "log".to_string(),
+            RollBy::Minute,
+            false,
+            10,
+            1024,
+            b"\n",
+        );
 
-    #[test]
-    fn test_file_id() {
-        todo!()
-    }
+        let mut batch = EventBatch::new();
 
-    #[test]
-    fn test_default_writer() {
-        todo!()
-    }
+        batch.push(*b"1");
 
-    #[test]
-    fn test_write_no_reuse() {
-        todo!()
-    }
+        let Ok(()) = worker.on_batch(batch) else {
+            panic!("failed to write batch");
+        };
 
-    #[test]
-    fn test_write_fail() {
-        todo!()
-    }
-
-    #[test]
-    fn test_write_reuse() {
-        todo!()
+        assert_eq!(1, fs.iter().count());
     }
 }

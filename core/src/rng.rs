@@ -21,14 +21,14 @@ pub trait Rng {
     Get a random 64bit number.
     */
     fn gen_u64(&self) -> Option<u64> {
-        self.fill([0; 8]).map(u64::from_le_bytes)
+        self.fill([0; 8]).map(u64::from_be_bytes)
     }
 
     /**
     Get a random 128bit number.
     */
     fn gen_u128(&self) -> Option<u128> {
-        self.fill([0; 16]).map(u128::from_le_bytes)
+        self.fill([0; 16]).map(u128::from_be_bytes)
     }
 }
 
