@@ -4,6 +4,7 @@ members = [
     "batcher",
     "emitter/term",
     "emitter/file",
+    "emitter/file/test/integration",
     "emitter/otlp",
     "emitter/otlp/gen",
     "emitter/otlp/test/integration",

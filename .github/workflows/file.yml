@@ -36,3 +36,23 @@ jobs:
       - name: Minimal versions
         working-directory: ./emitter/file
         run: cargo hack test --feature-powerset --lib -Z minimal-versions
+
+  integration:
+    name: "integration ${{ matrix.os }}"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+        - macos-latest
+        - ubuntu-latest
+        - windows-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab
+
+      - name: Install Rust toolchain
+        run: rustup default nightly
+
+      - name: Integration Test
+        working-directory: ./emitter/file/test/integration
+        run: cargo run
