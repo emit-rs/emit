@@ -210,7 +210,7 @@ The builder will use `file_set` as its template for naming log files. See the cr
 
 The `writer` is used to format incoming [`emit::Event`]s into their on-disk format. If formatting fails then the event will be discarded.
 
-The `separator` is written between individual events.
+The `separator` is expected to be written between individual events.
 */
 pub fn set_with_writer(
     file_set: impl AsRef<Path>,
@@ -282,7 +282,7 @@ impl FileSetBuilder {
 
     The `writer` is used to format incoming [`emit::Event`]s into their on-disk format. If formatting fails then the event will be discarded.
 
-    The `separator` is written between individual events.
+    The `separator` is expected written between individual events.
 
     It will use the other following defaults:
 
@@ -370,9 +370,7 @@ impl FileSetBuilder {
 
     The `writer` is used to format incoming [`emit::Event`]s into their on-disk format. If formatting fails then the event will be discarded.
 
-    The writer _should not_ include the separator at the end. This will be appended automatically later.
-
-    The `separator` is written between individual events.
+    The writer needs to include the separator itself while writing events. The separator won't be added automatically.
     */
     pub fn writer(
         mut self,
@@ -1378,7 +1376,12 @@ impl Write for StdFile {
 mod tests {
     use super::*;
 
-    use std::{cmp, collections::HashMap, sync::Mutex};
+    use std::{
+        cmp,
+        collections::{HashMap, HashSet},
+        mem,
+        sync::Mutex,
+    };
 
     #[derive(Clone)]
     struct InMemoryFilesystem {
@@ -1394,6 +1397,15 @@ mod tests {
                 outgoing: Arc::new(Mutex::new(HashMap::new())),
                 committed: Arc::new(Mutex::new(HashMap::new())),
             }
+        }
+
+        fn get(&self, path: impl AsRef<str>) -> InMemoryFile {
+            self.committed
+                .lock()
+                .unwrap()
+                .get(path.as_ref())
+                .unwrap()
+                .clone()
         }
 
         fn iter(&self) -> impl Iterator<Item = (String, InMemoryFile)> {
@@ -1426,49 +1438,128 @@ mod tests {
         }
     }
 
+    fn pathstr(path: &Path) -> String {
+        path.to_str().unwrap().replace('\\', "/")
+    }
+
     impl Filesystem for InMemoryFilesystem {
-        fn create_dir_all(&self, path: &Path) -> io::Result<()> {
-            todo!()
+        fn create_dir_all(&self, _: &Path) -> io::Result<()> {
+            Ok(())
         }
 
         fn sync_parent(&self, path: &Path) -> io::Result<()> {
-            todo!()
+            let parent = pathstr(path.parent().unwrap());
+
+            let mut incoming = self.incoming.lock().unwrap();
+            let mut outgoing = self.outgoing.lock().unwrap();
+            let mut committed = self.committed.lock().unwrap();
+
+            // Add incoming entries to the committed set
+            let mut retain_incoming = HashSet::new();
+            for (path, file) in incoming.iter() {
+                if path.starts_with(&*parent) {
+                    assert!(
+                        committed.insert(path.to_owned(), file.clone()).is_none(),
+                        "duplicate file {path}"
+                    );
+                } else {
+                    assert!(retain_incoming.insert(path.to_owned()));
+                }
+            }
+
+            // Clean up incoming and outgoing sets
+            incoming.retain(|path, _| retain_incoming.contains(&*path));
+            outgoing.retain(|path, _| !path.starts_with(&*parent));
+
+            Ok(())
         }
 
         fn read_dir_files(&self, path: &Path) -> io::Result<Box<dyn Iterator<Item = PathBuf>>> {
-            todo!()
+            let parent = pathstr(path);
+
+            let iter = self
+                .committed
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|(path, _)| path)
+                .filter(|path| path.starts_with(&*parent))
+                .map(|path| PathBuf::from(path))
+                .collect::<Vec<_>>()
+                .into_iter();
+
+            Ok(Box::new(iter))
         }
 
         fn remove_file(&self, path: &Path) -> io::Result<()> {
-            todo!()
+            let path = pathstr(path);
+
+            let mut outgoing = self.outgoing.lock().unwrap();
+            let mut committed = self.committed.lock().unwrap();
+
+            let file = committed.remove(&*path).unwrap();
+
+            assert!(
+                outgoing.insert(path.clone(), file).is_none(),
+                "already deleted file {path}"
+            );
+
+            Ok(())
         }
 
         fn open_new(&self, path: &Path) -> io::Result<Box<dyn File + Send + Sync>> {
-            todo!()
+            let path = pathstr(path);
+
+            let file = InMemoryFile::new();
+
+            let mut incoming = self.incoming.lock().unwrap();
+            let committed = self.committed.lock().unwrap();
+
+            assert!(
+                !committed.contains_key(&*path),
+                "file {path} already exists"
+            );
+            assert!(
+                incoming.insert(path.clone(), file.clone()).is_none(),
+                "file {path} already exists"
+            );
+
+            Ok(Box::new(file))
         }
 
         fn open_existing(&self, path: &Path) -> io::Result<Box<dyn File + Send + Sync>> {
-            todo!()
+            let path = pathstr(path);
+
+            let committed = self.committed.lock().unwrap();
+
+            Ok(Box::new(committed.get(&*path).unwrap().clone()))
         }
     }
 
     impl File for InMemoryFile {
         fn len(&self) -> io::Result<usize> {
-            todo!()
+            Ok(self.committed.lock().unwrap().len())
         }
 
         fn sync_all(&mut self) -> io::Result<()> {
-            todo!()
+            let incoming = mem::take(&mut *self.incoming.lock().unwrap());
+            let mut committed = self.committed.lock().unwrap();
+
+            committed.extend(incoming);
+
+            Ok(())
         }
     }
 
     impl Write for InMemoryFile {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-            todo!()
+            self.incoming.lock().unwrap().extend_from_slice(buf);
+
+            Ok(buf.len())
         }
 
         fn flush(&mut self) -> io::Result<()> {
-            todo!()
+            Ok(())
         }
     }
 
@@ -1538,12 +1629,16 @@ mod tests {
 
         let mut batch = EventBatch::new();
 
-        batch.push(*b"1");
+        batch.push(*b"1\n");
 
         let Ok(()) = worker.on_batch(batch) else {
             panic!("failed to write batch");
         };
 
         assert_eq!(1, fs.iter().count());
+
+        let file = fs.get("logs/test.1970-01-01-00-00.00000000.00000000.log");
+
+        assert_eq!(*b"1\n", *file.contents());
     }
 }
