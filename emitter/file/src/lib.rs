@@ -386,6 +386,8 @@ impl FileSetBuilder {
 
     /**
     Complete the builder, returning a [`FileSet`] to pass to [`emit::Setup::emit_to`].
+
+    If the file set configuration is invalid this method won't fail or panic, it will discard any events emitted to it. In these cases it will log to [`emit::runtime::internal`] and increment the `configuration_failed` metric on [`FileSet::metric_source`]. See the _Troubleshooting_ section of the crate root docs for more details.
     */
     pub fn spawn(self) -> FileSet {
         let metrics = Arc::new(InternalMetrics::default());
@@ -393,10 +395,9 @@ impl FileSetBuilder {
         let inner = match self.spawn_inner(metrics.clone()) {
             Ok(inner) => Some(inner),
             Err(err) => {
-                emit::warn!(
+                emit::error!(
                     rt: emit::runtime::internal(),
-                    "failed to configure file set emitter; no events will be written",
-                    err
+                    "file set configuration is invalid; no events will be written: {err}"
                 );
 
                 metrics.configuration_failed.increment();

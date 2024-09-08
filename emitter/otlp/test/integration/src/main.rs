@@ -25,8 +25,7 @@ fn main() {
             .logs(emit_otlp::logs_grpc_proto("http://localhost:44319"))
             .traces(emit_otlp::traces_grpc_proto("http://localhost:44319"))
             .metrics(emit_otlp::metrics_grpc_proto("http://localhost:44319"))
-            .spawn()
-            .unwrap(),
+            .spawn(),
     );
 
     assert_emitter(
@@ -44,8 +43,7 @@ fn main() {
             .metrics(emit_otlp::metrics_http_proto(
                 "http://localhost:44318/v1/metrics",
             ))
-            .spawn()
-            .unwrap(),
+            .spawn(),
     );
 
     assert_emitter(
@@ -63,8 +61,7 @@ fn main() {
             .metrics(emit_otlp::metrics_http_json(
                 "http://localhost:44318/v1/metrics",
             ))
-            .spawn()
-            .unwrap(),
+            .spawn(),
     );
 
     let cert_path = "./127.0.0.1+1.pem";
@@ -82,8 +79,7 @@ fn main() {
                 .logs(emit_otlp::logs_grpc_proto("https://localhost:44319"))
                 .traces(emit_otlp::traces_grpc_proto("https://localhost:44319"))
                 .metrics(emit_otlp::metrics_grpc_proto("https://localhost:44319"))
-                .spawn()
-                .unwrap(),
+                .spawn(),
         );
 
         assert_emitter(
@@ -103,8 +99,7 @@ fn main() {
                 .metrics(emit_otlp::metrics_http_proto(
                     "https://localhost:44318/v1/metrics",
                 ))
-                .spawn()
-                .unwrap(),
+                .spawn(),
         );
     } else {
         emit::warn!(

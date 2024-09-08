@@ -19,8 +19,7 @@ fn main() {
         .emit_to({
             let emitter = emit_otlp::new()
                 .logs(emit_otlp::logs_grpc_proto("http://localhost:44319"))
-                .spawn()
-                .unwrap();
+                .spawn();
 
             reporter.add_source(emitter.metric_source());
 
