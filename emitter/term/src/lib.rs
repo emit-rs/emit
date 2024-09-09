@@ -51,8 +51,7 @@ fn main() {
 #![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]
 #![deny(missing_docs)]
 
-use core::{fmt, str, time::Duration};
-use std::{cell::RefCell, cmp, io::Write, iter};
+use std::{cell::RefCell, cmp, fmt, io::Write, iter, str, time::Duration};
 
 use emit::well_known::{
     KEY_ERR, KEY_EVT_KIND, KEY_LVL, KEY_METRIC_VALUE, KEY_SPAN_ID, KEY_TRACE_ID,
@@ -121,7 +120,11 @@ impl emit::emitter::Emitter for Stdout {
     fn emit<E: emit::event::ToEvent>(&self, evt: E) {
         let evt = evt.to_event();
 
-        with_shared_buf(&self.writer, |writer, buf| print_event(writer, buf, &evt));
+        with_shared_buf(&self.writer, |writer, buf| {
+            write_event(buf, evt);
+
+            let _ = writer.print(buf);
+        });
     }
 
     fn blocking_flush(&self, _: Duration) -> bool {
@@ -131,11 +134,7 @@ impl emit::emitter::Emitter for Stdout {
 
 impl emit::runtime::InternalEmitter for Stdout {}
 
-fn print_event(
-    out: &BufferWriter,
-    buf: &mut Buffer,
-    evt: &emit::event::Event<impl emit::props::Props>,
-) {
+fn write_event(buf: &mut Buffer, evt: emit::event::Event<impl emit::props::Props>) {
     if let Some(span_id) = evt.props().pull::<emit::span::SpanId, _>(KEY_SPAN_ID) {
         if let Some(trace_id) = evt.props().pull::<emit::span::TraceId, _>(KEY_TRACE_ID) {
             let trace_id_color = trace_id_color(&trace_id);
@@ -211,8 +210,6 @@ fn print_event(
             write_timeseries(buf, &buckets);
         }
     }
-
-    let _ = out.print(&buf);
 }
 
 fn write_timeseries(buf: &mut Buffer, buckets: &[f64]) {
@@ -284,20 +281,30 @@ struct LocalTime {
 }
 
 fn local_ts(ts: emit::Timestamp) -> Option<LocalTime> {
-    // See: https://github.com/rust-lang/rust/issues/27970
-    //
-    // On Linux and OSX, this will fail to get the local offset in
-    // any multi-threaded program. It needs to be fixed in the standard
-    // library and propagated through libraries like `time`. Until then,
-    // you probably won't get local timestamps outside of Windows.
-    let local =
-        time::OffsetDateTime::from_unix_timestamp_nanos(ts.to_unix().as_nanos().try_into().ok()?)
-            .ok()?;
-    let local = local.checked_to_offset(time::UtcOffset::local_offset_at(local).ok()?)?;
+    #[cfg(test)]
+    {
+        let _ = ts;
 
-    let (h, m, s, ms) = local.time().as_hms_milli();
+        None
+    }
+    #[cfg(not(test))]
+    {
+        // See: https://github.com/rust-lang/rust/issues/27970
+        //
+        // On Linux and OSX, this will fail to get the local offset in
+        // any multi-threaded program. It needs to be fixed in the standard
+        // library and propagated through libraries like `time`. Until then,
+        // you probably won't get local timestamps outside of Windows.
+        let local = time::OffsetDateTime::from_unix_timestamp_nanos(
+            ts.to_unix().as_nanos().try_into().ok()?,
+        )
+        .ok()?;
+        let local = local.checked_to_offset(time::UtcOffset::local_offset_at(local).ok()?)?;
 
-    Some(LocalTime { h, m, s, ms })
+        let (h, m, s, ms) = local.time().as_hms_milli();
+
+        Some(LocalTime { h, m, s, ms })
+    }
 }
 
 fn write_timestamp(buf: &mut Buffer, ts: emit::Timestamp) {
@@ -491,4 +498,134 @@ fn with_shared_buf(writer: &BufferWriter, with_buf: impl FnOnce(&BufferWriter, &
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::str;
+
+    #[test]
+    fn write_log() {
+        let mut buf = Buffer::no_color();
+
+        write_event(
+            &mut buf,
+            emit::evt!(
+                extent: emit::Timestamp::from_str("2024-01-01T01:02:03.000Z").unwrap(),
+                "Hello, {user}",
+                user: "Rust",
+                extra: true,
+            ),
+        );
+
+        assert_eq!(
+            "2024-01-01T01:02:03Z Hello, Rust\n",
+            str::from_utf8(buf.as_slice()).unwrap()
+        );
+    }
+
+    #[test]
+    fn write_log_err() {
+        let mut buf = Buffer::no_color();
+
+        write_event(
+            &mut buf,
+            emit::evt!(
+                extent: emit::Timestamp::from_str("2024-01-01T01:02:03.000Z").unwrap(),
+                "An error",
+                lvl: "error",
+                err: std::io::Error::new(std::io::ErrorKind::Other, "Something went wrong"),
+            ),
+        );
+
+        assert_eq!(
+            "2024-01-01T01:02:03Z error An error\n  err: Something went wrong\n",
+            str::from_utf8(buf.as_slice()).unwrap()
+        );
+    }
+
+    #[test]
+    fn write_span() {
+        let mut buf = Buffer::no_color();
+
+        write_event(
+            &mut buf,
+            emit::evt!(
+                extent:
+                    emit::Timestamp::from_str("2024-01-01T01:02:03.000Z").unwrap()..
+                    emit::Timestamp::from_str("2024-01-01T01:02:04.000Z").unwrap(),
+                "Hello, {user}",
+                user: "Rust",
+                evt_kind: "span",
+                trace_id: "4bf92f3577b34da6a3ce929d0e0e4736",
+                span_id: "00f067aa0ba902b7",
+                extra: true,
+            ),
+        );
+
+        assert_eq!(
+            "▓ 4bf92f ▓ 00f0 2024-01-01T01:02:04Z 1000ms span Hello, Rust\n",
+            str::from_utf8(buf.as_slice()).unwrap()
+        );
+    }
+
+    #[test]
+    fn write_metric() {
+        let mut buf = Buffer::no_color();
+
+        write_event(
+            &mut buf,
+            emit::evt!(
+                extent: emit::Timestamp::from_str("2024-01-01T01:02:03.000Z").unwrap(),
+                "{metric_agg} of {metric_name} is {metric_value}",
+                user: "Rust",
+                evt_kind: "metric",
+                metric_name: "test",
+                metric_agg: "count",
+                metric_value: 42,
+            ),
+        );
+
+        assert_eq!(
+            "2024-01-01T01:02:03Z metric count of test is 42\n",
+            str::from_utf8(buf.as_slice()).unwrap()
+        );
+    }
+
+    #[test]
+    fn write_metric_timeseries() {
+        let mut buf = Buffer::no_color();
+
+        write_event(
+            &mut buf,
+            emit::evt!(
+                extent:
+                    emit::Timestamp::from_str("2024-01-01T01:02:00.000Z").unwrap()..
+                    emit::Timestamp::from_str("2024-01-01T01:02:10.000Z").unwrap(),
+                "{metric_agg} of {metric_name} is {metric_value}",
+                user: "Rust",
+                evt_kind: "metric",
+                metric_name: "test",
+                metric_agg: "count",
+                #[emit::as_value]
+                metric_value: [
+                    0,
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                ],
+            ),
+        );
+
+        assert_eq!("2024-01-01T01:02:10Z 10s metric count of test is [0, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5]\n▁▃▄▅▆▇▃▄▅▆▇\n", str::from_utf8(buf.as_slice()).unwrap());
+    }
 }

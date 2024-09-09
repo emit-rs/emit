@@ -2,6 +2,8 @@
 Generator for OTLP protos.
 
 The protos are updated manually from https://github.com/open-telemetry/opentelemetry-proto
+
+NOTE: Generated code is only used in tests. Actual types used by `emit_otlp` are manually defined in the `data` module.
 */
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
