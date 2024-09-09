@@ -70,6 +70,15 @@ pub enum Level {
     Error,
 }
 
+impl Level {
+    /**
+    Try parse a level from a formatted representation.
+    */
+    pub fn try_from_str(s: &str) -> Result<Self, ParseLevelError> {
+        s.parse()
+    }
+}
+
 impl Default for Level {
     fn default() -> Self {
         Level::Info

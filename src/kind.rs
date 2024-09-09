@@ -55,6 +55,15 @@ pub enum Kind {
     Metric,
 }
 
+impl Kind {
+    /**
+    Try parse a kind from a formatted representation.
+    */
+    pub fn try_from_str(s: &str) -> Result<Self, ParseKindError> {
+        s.parse()
+    }
+}
+
 impl fmt::Debug for Kind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "\"{}\"", self)

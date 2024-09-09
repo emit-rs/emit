@@ -724,3 +724,11 @@ pub mod sync;
 
 #[cfg(feature = "tokio")]
 pub mod tokio;
+
+// Re-export an appropriate implementation of blocking functions based on crate features
+
+#[cfg(feature = "tokio")]
+pub use tokio::{blocking_flush, blocking_send};
+
+#[cfg(not(feature = "tokio"))]
+pub use sync::{blocking_flush, blocking_send};

@@ -503,7 +503,7 @@ impl emit::Emitter for FileSetInner {
     }
 
     fn blocking_flush(&self, timeout: std::time::Duration) -> bool {
-        emit_batcher::sync::blocking_flush(&self.sender, timeout)
+        emit_batcher::blocking_flush(&self.sender, timeout)
     }
 }
 

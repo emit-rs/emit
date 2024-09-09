@@ -636,22 +636,19 @@ impl emit::Emitter for OtlpInner {
         let start = Instant::now();
 
         if let Some((_, ref sender)) = self.otlp_logs {
-            if !emit_batcher::tokio::blocking_flush(sender, timeout.saturating_sub(start.elapsed()))
-            {
+            if !emit_batcher::blocking_flush(sender, timeout.saturating_sub(start.elapsed())) {
                 return false;
             }
         }
 
         if let Some((_, ref sender)) = self.otlp_traces {
-            if !emit_batcher::tokio::blocking_flush(sender, timeout.saturating_sub(start.elapsed()))
-            {
+            if !emit_batcher::blocking_flush(sender, timeout.saturating_sub(start.elapsed())) {
                 return false;
             }
         }
 
         if let Some((_, ref sender)) = self.otlp_metrics {
-            if !emit_batcher::tokio::blocking_flush(sender, timeout.saturating_sub(start.elapsed()))
-            {
+            if !emit_batcher::blocking_flush(sender, timeout.saturating_sub(start.elapsed())) {
                 return false;
             }
         }
