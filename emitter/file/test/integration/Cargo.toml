@@ -12,3 +12,6 @@ path = "../../../term"
 
 [dependencies.emit_file]
 path = "../../"
+
+[dependencies.serde_json]
+version = "1"
