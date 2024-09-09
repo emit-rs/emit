@@ -153,6 +153,7 @@ impl emit::metric::Source for OtlpMetrics {
                 sampler.metric(
                     metric
                         .by_ref()
+                        .with_name(&format!("otlp_logs_{}", metric.name()))
                         .with_mdl(emit::pkg!().append(emit::path!("logs_channel"))),
                 );
             }));
@@ -163,6 +164,7 @@ impl emit::metric::Source for OtlpMetrics {
                 sampler.metric(
                     metric
                         .by_ref()
+                        .with_name(&format!("otlp_traces_{}", metric.name()))
                         .with_mdl(emit::pkg!().append(emit::path!("traces_channel"))),
                 );
             }));
@@ -173,6 +175,7 @@ impl emit::metric::Source for OtlpMetrics {
                 sampler.metric(
                     metric
                         .by_ref()
+                        .with_name(&format!("otlp_metrics_{}", metric.name()))
                         .with_mdl(emit::pkg!().append(emit::path!("metrics_channel"))),
                 );
             }));

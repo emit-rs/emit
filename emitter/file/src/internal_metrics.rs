@@ -131,7 +131,7 @@ impl emit::metric::Source for FileSetMetrics {
     fn sample_metrics<S: emit::metric::sampler::Sampler>(&self, sampler: S) {
         self.channel_metrics
             .sample_metrics(emit::metric::sampler::from_fn(|metric| {
-                sampler.metric(metric.by_ref().with_mdl(emit::pkg!()));
+                sampler.metric(metric.by_ref().with_name(&format!("file_{}", metric.name())).with_mdl(emit::pkg!()));
             }));
 
         for metric in self.metrics.sample() {
