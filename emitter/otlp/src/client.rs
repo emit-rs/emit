@@ -40,6 +40,11 @@ Use [`crate::new`] to start an [`OtlpBuilder`] for configuring an [`Otlp`] insta
 See the crate root documentation for more details.
 */
 pub struct Otlp {
+    inner: Option<OtlpInner>,
+    metrics: Arc<InternalMetrics>,
+}
+
+struct OtlpInner {
     otlp_logs: Option<(
         ClientEventEncoder<LogsEventEncoder>,
         emit_batcher::Sender<EncodedScopeItems>,
@@ -74,16 +79,19 @@ impl Otlp {
     pub fn metric_source(&self) -> OtlpMetrics {
         OtlpMetrics {
             logs_channel_metrics: self
-                .otlp_logs
+                .inner
                 .as_ref()
+                .and_then(|otlp| otlp.otlp_logs.as_ref())
                 .map(|(_, sender)| sender.metric_source()),
             traces_channel_metrics: self
-                .otlp_traces
+                .inner
                 .as_ref()
+                .and_then(|otlp| otlp.otlp_traces.as_ref())
                 .map(|(_, sender)| sender.metric_source()),
             metrics_channel_metrics: self
-                .otlp_metrics
+                .inner
                 .as_ref()
+                .and_then(|otlp| otlp.otlp_metrics.as_ref())
                 .map(|(_, sender)| sender.metric_source()),
             metrics: self.metrics.clone(),
         }
@@ -174,13 +182,29 @@ impl OtlpBuilder {
     /**
     Try spawn an [`Otlp`] instance which can be used to send diagnostic events via OTLP.
 
-    This method will fail if any previously configured values are invalid, such as malformed URIs.
-
-    See the crate root documentation for more details.
+    If any configured values are invalid, such as malformed URIs, this method won't fail or panic. It will discard any events emitted to it. In these cases it will log to [`emit::runtime::internal`] and increment the `configuration_failed` metric on [`Otlp::metric_source`]. See the _Troubleshooting_ section of the crate root docs for more details.
     */
-    pub fn spawn(self) -> Result<Otlp, Error> {
+    pub fn spawn(self) -> Otlp {
         let metrics = Arc::new(InternalMetrics::default());
 
+        let inner = match self.spawn_inner(metrics.clone()) {
+            Ok(inner) => Some(inner),
+            Err(err) => {
+                emit::error!(
+                    rt: emit::runtime::internal(),
+                    "OTLP configuration is invalid; no events will be written: {err}"
+                );
+
+                metrics.configuration_failed.increment();
+
+                None
+            }
+        };
+
+        Otlp { metrics, inner }
+    }
+
+    fn spawn_inner(self, metrics: Arc<InternalMetrics>) -> Result<OtlpInner, Error> {
         let (otlp_logs, process_otlp_logs) = match self.otlp_logs {
             Some(builder) => {
                 let (encoder, transport) =
@@ -277,7 +301,7 @@ impl OtlpBuilder {
                 .block_on(receive);
         });
 
-        Ok(Otlp {
+        Ok(OtlpInner {
             otlp_logs,
             otlp_traces,
             otlp_metrics,
@@ -570,7 +594,17 @@ impl<R: data::RequestEncoder> OtlpTransport<R> {
     }
 }
 
-impl emit::emitter::Emitter for Otlp {
+impl emit::Emitter for Otlp {
+    fn emit<E: emit::event::ToEvent>(&self, evt: E) {
+        self.inner.emit(evt)
+    }
+
+    fn blocking_flush(&self, timeout: Duration) -> bool {
+        self.inner.blocking_flush(timeout)
+    }
+}
+
+impl emit::Emitter for OtlpInner {
     fn emit<E: emit::event::ToEvent>(&self, evt: E) {
         let evt = evt.to_event();
 

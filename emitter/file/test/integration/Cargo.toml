@@ -1,0 +1,17 @@
+[package]
+name = "emit_file_test_integration"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[dependencies.emit]
+path = "../../../../"
+
+[dependencies.emit_term]
+path = "../../../term"
+
+[dependencies.emit_file]
+path = "../../"
+
+[dependencies.serde_json]
+version = "1"

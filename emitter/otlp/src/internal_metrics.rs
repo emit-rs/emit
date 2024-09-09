@@ -122,6 +122,12 @@ metrics!(
             A HTTP export request was sent but responded with a failed status code.
             */
             grpc_batch_failed: Counter -> usize,
+            /**
+            Attempting to configure the emitter failed.
+
+            This happens when URIs or other configuration properties are malformed. The emitter won't write any events until configuration is fixed and the process is restarted.
+            */
+            configuration_failed: Counter -> usize,
         }
     }
 );
