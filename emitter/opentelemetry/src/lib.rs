@@ -40,13 +40,17 @@ fn main() {
 }
 ```
 
-Both the `emitter` and `ctxt` values must be set in order for `emit` to integrate with the OpenTelemetry SDK properly.
-
 Diagnostic events produced by the [`macro@emit::span`] macro are sent to an [`opentelemetry::global::tracer`] as an [`opentelemetry::trace::Span`] on completion. All other emitted events are sent to an [`opentelemetry::global::logger`] as [`opentelemetry::logs::LogRecord`]s.
+
+# Sampling
+
+By default, `emit` events will be excluded if they are inside an unsampled OpenTelemetry trace, even if that trace is marked as recorded. You can change this behavior by overriding the filter using [`emit::Setup::emit_when`] on the value returned by [`setup`].
 
 # Limitations
 
 This library doesn't support `emit`'s metrics as OpenTelemetry metrics. Any metric samples produced by `emit` will be emitted as log records.
+
+Spans produced manually (without adding their trace ids and span ids to the shared [`emit::Ctxt`]) will be emitted as log events instead of as spans.
 
 # Troubleshooting
 
@@ -117,7 +121,7 @@ use emit::{
 
 use opentelemetry::{
     logs::{AnyValue, LogRecord, Logger, LoggerProvider, Severity},
-    trace::{SpanId, Status, TraceContextExt, TraceId, Tracer, TracerProvider},
+    trace::{SpanContext, SpanId, Status, TraceContextExt, TraceId, Tracer, TracerProvider},
     Context, ContextGuard, Key, KeyValue, Value,
 };
 
@@ -184,7 +188,7 @@ pub fn setup<L: Logger + Send + Sync + 'static, T: Tracer + Send + Sync + 'stati
     tracer_provider: impl TracerProvider<Tracer = T>,
 ) -> emit::Setup<
     OpenTelemetryEmitter<L>,
-    emit::setup::DefaultFilter,
+    OpenTelemetryIsSampledFilter,
     OpenTelemetryCtxt<emit::setup::DefaultCtxt, T>,
 >
 where
@@ -198,6 +202,7 @@ where
             metrics.clone(),
             logger_provider.logger_builder(name).build(),
         ))
+        .emit_when(OpenTelemetryIsSampledFilter {})
         .map_ctxt(|ctxt| {
             OpenTelemetryCtxt::wrap(metrics.clone(), tracer_provider.tracer(name), ctxt)
         })
@@ -717,6 +722,21 @@ impl<L: Logger> emit::Emitter for OpenTelemetryEmitter<L> {
     }
 }
 
+/**
+A filter that excludes events inside an unsampled trace.
+*/
+pub struct OpenTelemetryIsSampledFilter {}
+
+impl emit::Filter for OpenTelemetryIsSampledFilter {
+    fn matches<E: emit::event::ToEvent>(&self, _: E) -> bool {
+        let ctxt = Context::current();
+        let span = ctxt.span();
+        let span_ctxt = span.span_context();
+
+        span_ctxt == &SpanContext::NONE || span_ctxt.is_sampled()
+    }
+}
+
 fn otel_trace_id(trace_id: emit::span::TraceId) -> TraceId {
     TraceId::from_bytes(trace_id.to_bytes())
 }
@@ -1213,6 +1233,8 @@ mod tests {
 
     use emit::runtime::AmbientSlot;
 
+    use opentelemetry::trace::{SamplingDecision, SamplingResult, TraceState};
+
     use opentelemetry_sdk::{
         logs::LoggerProvider,
         testing::{logs::InMemoryLogsExporter, trace::InMemorySpanExporter},
@@ -1483,6 +1505,47 @@ mod tests {
             ctxt.span_id(),
             logs[0].record.trace_context.as_ref().unwrap().span_id
         );
+    }
+
+    #[test]
+    fn otel_span_unsampled() {
+        static SLOT: AmbientSlot = AmbientSlot::new();
+        let (logs, spans, _, tracer_provider) = build(&SLOT);
+
+        #[emit::span(rt: SLOT.get(), guard: span, "emit {attr}", attr: "span")]
+        fn emit_span() {
+            assert!(!span.is_enabled());
+
+            emit::emit!(rt: SLOT.get(), "emit event");
+        }
+
+        fn otel_span(tracer_provider: &TracerProvider) {
+            use opentelemetry::trace::TracerProvider;
+
+            let tracer = tracer_provider.tracer("otel_span");
+
+            let span = tracer
+                .span_builder("otel span")
+                .with_sampling_result(SamplingResult {
+                    decision: SamplingDecision::RecordOnly,
+                    attributes: Vec::new(),
+                    trace_state: TraceState::NONE,
+                });
+
+            let span = span.start(&tracer);
+            let cx = Context::current_with_span(span);
+            let _guard = cx.attach();
+
+            emit_span();
+        }
+
+        otel_span(&tracer_provider);
+
+        let logs = logs.get_emitted_logs().unwrap();
+        let spans = spans.get_finished_spans().unwrap();
+
+        assert_eq!(0, logs.len());
+        assert_eq!(0, spans.len());
     }
 
     #[test]
