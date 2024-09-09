@@ -320,7 +320,9 @@ impl<T> Drop for Receiver<T> {
     fn drop(&mut self) {
         self.shared.state.lock().unwrap().is_open = false;
 
-        // TODO: Trigger callback for the current batch?
+        // NOTE: If the sender is waiting for a flush it may time out
+        // This is more accurate than triggering it on drop here even if
+        // the queue is non-empty
     }
 }
 

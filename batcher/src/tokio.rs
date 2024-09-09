@@ -2,7 +2,7 @@
 Run channels in a `tokio` runtime.
 */
 
-use std::{future::Future, thread, time::Duration};
+use std::{future::Future, io, thread, time::Duration};
 
 use crate::{sync, BatchError, Channel, Receiver, Sender};
 
@@ -15,9 +15,10 @@ pub fn spawn<
     T: Channel + Send + 'static,
     F: Future<Output = Result<(), BatchError<T>>> + Send + 'static,
 >(
+    thread_name: impl Into<String>,
     receiver: Receiver<T>,
     on_batch: impl FnMut(T) -> F + Send + 'static,
-) -> thread::JoinHandle<()>
+) -> io::Result<thread::JoinHandle<()>>
 where
     T::Item: Send + 'static,
 {
@@ -27,13 +28,15 @@ where
             .await
     };
 
-    thread::spawn(move || {
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap()
-            .block_on(receive);
-    })
+    thread::Builder::new()
+        .name(thread_name.into())
+        .spawn(move || {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(receive);
+        })
 }
 
 /**
@@ -138,7 +141,7 @@ mod tests {
 
         let (sender, receiver) = crate::bounded::<Vec<()>>(10);
 
-        let _ = spawn(receiver, {
+        let _ = spawn("test_receiver", receiver, {
             let received = received.clone();
 
             move |batch| {
@@ -150,7 +153,8 @@ mod tests {
                     Ok(())
                 }
             }
-        });
+        })
+        .unwrap();
 
         for _ in 0..100 {
             send(&sender, (), Duration::from_secs(1))

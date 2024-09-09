@@ -430,7 +430,10 @@ impl FileSetBuilder {
 
         let (sender, receiver) = emit_batcher::bounded(10_000);
 
-        let handle = emit_batcher::sync::spawn(receiver, move |batch| worker.on_batch(batch));
+        let handle = emit_batcher::sync::spawn("emit_file_worker", receiver, move |batch| {
+            worker.on_batch(batch)
+        })
+        .map_err(Error::new)?;
 
         Ok(FileSetInner {
             sender,
