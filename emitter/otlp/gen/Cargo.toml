@@ -9,7 +9,7 @@ name = "gen"
 path = "main.rs"
 
 [dependencies.prost]
-version = "0.12"
+version = "0.13"
 
 [dependencies.prost-build]
-version = "0.12"
+version = "0.13"
