@@ -4,6 +4,7 @@ Run channels on regular OS threads.
 
 use std::{
     future::{self, Future},
+    io,
     pin::pin,
     sync::{Arc, Condvar, Mutex, OnceLock},
     task, thread,
@@ -18,18 +19,21 @@ Run the receiver synchronously.
 This method spawns a background thread and runs [`Receiver::exec`] on it. The handle will join when the [`Sender`] is dropped.
 */
 pub fn spawn<T: Channel + Send + 'static>(
+    thread_name: impl Into<String>,
     receiver: Receiver<T>,
     mut on_batch: impl FnMut(T) -> Result<(), BatchError<T>> + Send + 'static,
-) -> thread::JoinHandle<()>
+) -> io::Result<thread::JoinHandle<()>>
 where
     T::Item: Send + 'static,
 {
-    thread::spawn(move || {
-        block_on(receiver.exec(
-            |delay| future::ready(thread::sleep(delay)),
-            move |batch| future::ready(on_batch(batch)),
-        ))
-    })
+    thread::Builder::new()
+        .name(thread_name.into())
+        .spawn(move || {
+            block_on(receiver.exec(
+                |delay| future::ready(thread::sleep(delay)),
+                move |batch| future::ready(on_batch(batch)),
+            ))
+        })
 }
 
 /**
@@ -215,10 +219,11 @@ mod tests {
     ) -> (mpsc::Sender<ReceiverCommand<T>>, thread::JoinHandle<()>) {
         let (tx, rx) = mpsc::channel();
 
-        let handle = spawn(receiver, move |batch| match rx.recv() {
+        let handle = spawn("test_receiver", receiver, move |batch| match rx.recv() {
             Ok(ReceiverCommand::ProcessBatch(p)) => p(batch),
             _ => Ok(()),
-        });
+        })
+        .unwrap();
 
         (tx, handle)
     }

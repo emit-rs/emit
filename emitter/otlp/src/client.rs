@@ -293,13 +293,16 @@ impl OtlpBuilder {
         // Spawn a background thread to process batches
         // This is a safe way to ensure users of `Otlp` can never
         // deadlock waiting on the processing of batches
-        let _handle = std::thread::spawn(move || {
-            tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .unwrap()
-                .block_on(receive);
-        });
+        let _handle = std::thread::Builder::new()
+            .name("emit_otlp_worker".into())
+            .spawn(move || {
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .unwrap()
+                    .block_on(receive);
+            })
+            .map_err(|e| Error::new("failed to spawn background worker", e))?;
 
         Ok(OtlpInner {
             otlp_logs,
