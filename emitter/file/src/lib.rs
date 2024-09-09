@@ -937,7 +937,11 @@ impl<'a> ActiveFileSet<'a> {
 
         let mut file_set = Vec::new();
 
-        for file_name in read_dir {
+        for path in read_dir {
+            let Some(file_name) = path.file_name() else {
+                continue;
+            };
+
             let Some(file_name) = file_name.to_str() else {
                 continue;
             };
@@ -1381,6 +1385,7 @@ mod tests {
         collections::{HashMap, HashSet},
         mem,
         sync::Mutex,
+        time::Duration,
     };
 
     #[derive(Clone)]
@@ -1570,6 +1575,10 @@ mod tests {
         fn new() -> Self {
             TestClock(Arc::new(Mutex::new(emit::Timestamp::MIN)))
         }
+
+        fn advance(&self, by: Duration) {
+            *self.0.lock().unwrap() += by;
+        }
     }
 
     impl emit::Clock for TestClock {
@@ -1585,11 +1594,15 @@ mod tests {
         fn new() -> Self {
             TestRng(Arc::new(Mutex::new(0)))
         }
+
+        fn increment(&self) {
+            *self.0.lock().unwrap() += 1;
+        }
     }
 
     impl emit::Rng for TestRng {
         fn fill<A: AsMut<[u8]>>(&self, mut arr: A) -> Option<A> {
-            let fill = self.0.lock().unwrap().to_be_bytes();
+            let fill = self.0.lock().unwrap().to_le_bytes();
 
             let mut buf = arr.as_mut();
 
@@ -1603,6 +1616,66 @@ mod tests {
 
             Some(arr)
         }
+    }
+
+    #[test]
+    fn worker_basic() {
+        let fs = InMemoryFilesystem::new();
+        let clock = TestClock::new();
+        let rng = TestRng::new();
+        let metrics = Arc::new(InternalMetrics::default());
+
+        let mut worker = Worker::new(
+            metrics.clone(),
+            fs.clone(),
+            clock.clone(),
+            rng.clone(),
+            "logs".to_string(),
+            "test".to_string(),
+            "log".to_string(),
+            RollBy::Minute,
+            false,
+            10,
+            1024,
+            b"\n",
+        );
+
+        let mut batch = EventBatch::new();
+        batch.push(*b"1\n");
+        let Ok(()) = worker.on_batch(batch) else {
+            panic!("failed to write batch");
+        };
+
+        let mut batch = EventBatch::new();
+        batch.push(*b"2\n");
+        batch.push(*b"3\n");
+        let Ok(()) = worker.on_batch(batch) else {
+            panic!("failed to write batch");
+        };
+
+        assert_eq!(1, fs.iter().count());
+
+        // Advance the clock; this will produce a new file
+        clock.advance(Duration::from_secs(120));
+
+        let mut batch = EventBatch::new();
+        batch.push(*b"1\n");
+        let Ok(()) = worker.on_batch(batch) else {
+            panic!("failed to write batch");
+        };
+
+        assert_eq!(2, fs.iter().count());
+
+        assert_eq!(
+            *b"1\n2\n3\n",
+            *fs.get("logs/test.1970-01-01-00-00.00000000.00000000.log")
+                .contents()
+        );
+        assert_eq!(
+            *b"1\n",
+            *fs.get("logs/test.1970-01-01-00-02.00000000.00000000.log")
+                .contents()
+        );
     }
 
     #[test]
@@ -1628,17 +1701,113 @@ mod tests {
         );
 
         let mut batch = EventBatch::new();
-
         batch.push(*b"1\n");
+        let Ok(()) = worker.on_batch(batch) else {
+            panic!("failed to write batch");
+        };
 
+        drop(worker);
+
+        rng.increment();
+
+        // Re-open the worker
+        // This should result in a new file
+        let mut worker = Worker::new(
+            metrics.clone(),
+            fs.clone(),
+            clock.clone(),
+            rng.clone(),
+            "logs".to_string(),
+            "test".to_string(),
+            "log".to_string(),
+            RollBy::Minute,
+            false,
+            10,
+            1024,
+            b"\n",
+        );
+
+        let mut batch = EventBatch::new();
+        batch.push(*b"2\n");
+        let Ok(()) = worker.on_batch(batch) else {
+            panic!("failed to write batch");
+        };
+
+        assert_eq!(2, fs.iter().count());
+
+        assert_eq!(
+            *b"1\n",
+            *fs.get("logs/test.1970-01-01-00-00.00000000.00000000.log")
+                .contents()
+        );
+        assert_eq!(
+            *b"2\n",
+            *fs.get("logs/test.1970-01-01-00-00.00000000.00000001.log")
+                .contents()
+        );
+    }
+
+    #[test]
+    fn worker_reuse() {
+        let fs = InMemoryFilesystem::new();
+        let clock = TestClock::new();
+        let rng = TestRng::new();
+        let metrics = Arc::new(InternalMetrics::default());
+
+        let mut worker = Worker::new(
+            metrics.clone(),
+            fs.clone(),
+            clock.clone(),
+            rng.clone(),
+            "logs".to_string(),
+            "test".to_string(),
+            "log".to_string(),
+            RollBy::Minute,
+            true,
+            10,
+            1024,
+            b"\n",
+        );
+
+        let mut batch = EventBatch::new();
+        batch.push(*b"1\n");
+        let Ok(()) = worker.on_batch(batch) else {
+            panic!("failed to write batch");
+        };
+
+        drop(worker);
+
+        // Re-open the worker
+        // This should re-use the existing file
+        let mut worker = Worker::new(
+            metrics.clone(),
+            fs.clone(),
+            clock.clone(),
+            rng.clone(),
+            "logs".to_string(),
+            "test".to_string(),
+            "log".to_string(),
+            RollBy::Minute,
+            true,
+            10,
+            1024,
+            b"\n",
+        );
+
+        let mut batch = EventBatch::new();
+        batch.push(*b"2\n");
         let Ok(()) = worker.on_batch(batch) else {
             panic!("failed to write batch");
         };
 
         assert_eq!(1, fs.iter().count());
 
-        let file = fs.get("logs/test.1970-01-01-00-00.00000000.00000000.log");
-
-        assert_eq!(*b"1\n", *file.contents());
+        // We currently always append a newline on each iteration
+        // This could be optimized away in the future if we want
+        assert_eq!(
+            *b"1\n\n2\n",
+            *fs.get("logs/test.1970-01-01-00-00.00000000.00000000.log")
+                .contents()
+        );
     }
 }
