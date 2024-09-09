@@ -186,6 +186,17 @@ fn write_event(buf: &mut Buffer, evt: emit::event::Event<impl emit::props::Props
         write_plain(buf, " ");
     }
 
+    let mut mdl = evt.mdl().segments();
+    if let (Some(first), last) = (mdl.next(), mdl.last()) {
+        write_fg(buf, first, MDL_FIRST);
+        write_plain(buf, " ");
+
+        if let Some(last) = last {
+            write_fg(buf, last, MDL_LAST);
+            write_plain(buf, " ");
+        }
+    }
+
     let _ = evt.msg().write(Writer { buf });
     write_plain(buf, "\n");
 
@@ -232,35 +243,6 @@ fn write_timeseries(buf: &mut Buffer, buckets: &[f64]) {
     let _ = buf.write(b"\n");
 }
 
-fn trace_id_color(trace_id: &emit::span::TraceId) -> u8 {
-    let mut hash = 0;
-
-    for b in trace_id.to_u128().to_le_bytes() {
-        hash ^= b;
-    }
-
-    hash
-}
-
-fn span_id_color(span_id: &emit::span::SpanId) -> u8 {
-    let mut hash = 0;
-
-    for b in span_id.to_u64().to_le_bytes() {
-        hash ^= b;
-    }
-
-    hash
-}
-
-fn level_color(level: &emit::Level) -> Option<u8> {
-    match level {
-        emit::Level::Debug => Some(244),
-        emit::Level::Info => None,
-        emit::Level::Warn => Some(202),
-        emit::Level::Error => Some(124),
-    }
-}
-
 fn hex_slice<'a>(hex: &'a [u8], len: usize) -> impl fmt::Display + 'a {
     struct HexSlice<'a>(&'a [u8], usize);
 
@@ -283,6 +265,8 @@ struct LocalTime {
 fn local_ts(ts: emit::Timestamp) -> Option<LocalTime> {
     #[cfg(test)]
     {
+        // In tests it's easier just to use full RFC3339 timestamps
+        // since we don't know exactly what platforms `time` supports
         let _ = ts;
 
         None
@@ -435,12 +419,43 @@ impl<'a> emit::template::Write for Writer<'a> {
 }
 
 const KIND: Color = Color::Ansi256(174);
+const MDL_FIRST: Color = Color::Ansi256(248);
+const MDL_LAST: Color = Color::Ansi256(244);
 
 const TEXT: Color = Color::Ansi256(69);
 const NUMBER: Color = Color::Ansi256(135);
 const ATOM: Color = Color::Ansi256(168);
 const IDENT: Color = Color::Ansi256(170);
 const FIELD: Color = Color::Ansi256(174);
+
+fn trace_id_color(trace_id: &emit::span::TraceId) -> u8 {
+    let mut hash = 0;
+
+    for b in trace_id.to_u128().to_le_bytes() {
+        hash ^= b;
+    }
+
+    hash
+}
+
+fn span_id_color(span_id: &emit::span::SpanId) -> u8 {
+    let mut hash = 0;
+
+    for b in span_id.to_u64().to_le_bytes() {
+        hash ^= b;
+    }
+
+    hash
+}
+
+fn level_color(level: &emit::Level) -> Option<u8> {
+    match level {
+        emit::Level::Debug => Some(244),
+        emit::Level::Info => None,
+        emit::Level::Warn => Some(202),
+        emit::Level::Error => Some(124),
+    }
+}
 
 fn write_fg(buf: &mut Buffer, v: impl fmt::Display, color: Color) {
     let _ = buf.set_color(ColorSpec::new().set_fg(Some(color)));
@@ -513,7 +528,7 @@ mod tests {
         write_event(
             &mut buf,
             emit::evt!(
-                extent: emit::Timestamp::from_str("2024-01-01T01:02:03.000Z").unwrap(),
+                extent: emit::Timestamp::try_from_str("2024-01-01T01:02:03.000Z").unwrap(),
                 "Hello, {user}",
                 user: "Rust",
                 extra: true,
@@ -521,7 +536,7 @@ mod tests {
         );
 
         assert_eq!(
-            "2024-01-01T01:02:03Z Hello, Rust\n",
+            "2024-01-01T01:02:03Z emit_term tests Hello, Rust\n",
             str::from_utf8(buf.as_slice()).unwrap()
         );
     }
@@ -533,7 +548,7 @@ mod tests {
         write_event(
             &mut buf,
             emit::evt!(
-                extent: emit::Timestamp::from_str("2024-01-01T01:02:03.000Z").unwrap(),
+                extent: emit::Timestamp::try_from_str("2024-01-01T01:02:03.000Z").unwrap(),
                 "An error",
                 lvl: "error",
                 err: std::io::Error::new(std::io::ErrorKind::Other, "Something went wrong"),
@@ -541,7 +556,7 @@ mod tests {
         );
 
         assert_eq!(
-            "2024-01-01T01:02:03Z error An error\n  err: Something went wrong\n",
+            "2024-01-01T01:02:03Z error emit_term tests An error\n  err: Something went wrong\n",
             str::from_utf8(buf.as_slice()).unwrap()
         );
     }
@@ -554,8 +569,8 @@ mod tests {
             &mut buf,
             emit::evt!(
                 extent:
-                    emit::Timestamp::from_str("2024-01-01T01:02:03.000Z").unwrap()..
-                    emit::Timestamp::from_str("2024-01-01T01:02:04.000Z").unwrap(),
+                    emit::Timestamp::try_from_str("2024-01-01T01:02:03.000Z").unwrap()..
+                    emit::Timestamp::try_from_str("2024-01-01T01:02:04.000Z").unwrap(),
                 "Hello, {user}",
                 user: "Rust",
                 evt_kind: "span",
@@ -566,7 +581,7 @@ mod tests {
         );
 
         assert_eq!(
-            "▓ 4bf92f ▓ 00f0 2024-01-01T01:02:04Z 1000ms span Hello, Rust\n",
+            "▓ 4bf92f ▓ 00f0 2024-01-01T01:02:04Z 1000ms span emit_term tests Hello, Rust\n",
             str::from_utf8(buf.as_slice()).unwrap()
         );
     }
@@ -578,7 +593,7 @@ mod tests {
         write_event(
             &mut buf,
             emit::evt!(
-                extent: emit::Timestamp::from_str("2024-01-01T01:02:03.000Z").unwrap(),
+                extent: emit::Timestamp::try_from_str("2024-01-01T01:02:03.000Z").unwrap(),
                 "{metric_agg} of {metric_name} is {metric_value}",
                 user: "Rust",
                 evt_kind: "metric",
@@ -589,7 +604,7 @@ mod tests {
         );
 
         assert_eq!(
-            "2024-01-01T01:02:03Z metric count of test is 42\n",
+            "2024-01-01T01:02:03Z metric emit_term tests count of test is 42\n",
             str::from_utf8(buf.as_slice()).unwrap()
         );
     }
@@ -602,8 +617,8 @@ mod tests {
             &mut buf,
             emit::evt!(
                 extent:
-                    emit::Timestamp::from_str("2024-01-01T01:02:00.000Z").unwrap()..
-                    emit::Timestamp::from_str("2024-01-01T01:02:10.000Z").unwrap(),
+                    emit::Timestamp::try_from_str("2024-01-01T01:02:00.000Z").unwrap()..
+                    emit::Timestamp::try_from_str("2024-01-01T01:02:10.000Z").unwrap(),
                 "{metric_agg} of {metric_name} is {metric_value}",
                 user: "Rust",
                 evt_kind: "metric",
@@ -626,6 +641,6 @@ mod tests {
             ),
         );
 
-        assert_eq!("2024-01-01T01:02:10Z 10s metric count of test is [0, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5]\n▁▃▄▅▆▇▃▄▅▆▇\n", str::from_utf8(buf.as_slice()).unwrap());
+        assert_eq!("2024-01-01T01:02:10Z 10s metric emit_term tests count of test is [0, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5]\n▁▃▄▅▆▇▃▄▅▆▇\n", str::from_utf8(buf.as_slice()).unwrap());
     }
 }

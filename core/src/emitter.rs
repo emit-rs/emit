@@ -221,7 +221,7 @@ impl<E: Emitter, W: wrapping::Wrapping> Emitter for Wrap<E, W> {
 }
 
 /**
-Wrap the [`Emitter`] in a [`Wrapping`], transforming or filtering [`Event`]s before it receives them.
+Wrap an [`Emitter`] in a [`Wrapping`], transforming or filtering [`Event`]s before it receives them.
 
 Flushing defers to the wrapped emitter.
 */
@@ -232,6 +232,8 @@ pub fn wrap<E: Emitter, W: wrapping::Wrapping>(emitter: E, wrapping: W) -> Wrap<
 pub mod wrapping {
     /*!
     The [`Wrapping`] type.
+
+    This module defines a middleware API for [`Emitter`]s. An [`Emitter`] can be wrapped through [`Emitter::wrap_emitter`] in a [`Wrapping`] that can manipulate an [`Event`] before forwarding it to the wrapped emitter.
     */
 
     use super::*;

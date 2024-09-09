@@ -119,7 +119,7 @@ impl Timestamp {
     /**
     Try parse a timestamp from an RFC3339 formatted representation.
     */
-    pub fn from_str(ts: &str) -> Result<Self, ParseTimestampError> {
+    pub fn try_from_str(ts: &str) -> Result<Self, ParseTimestampError> {
         ts.parse()
     }
 
