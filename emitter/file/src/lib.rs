@@ -210,7 +210,7 @@ The builder will use `file_set` as its template for naming log files. See the cr
 
 The `writer` is used to format incoming [`emit::Event`]s into their on-disk format. If formatting fails then the event will be discarded.
 
-The `separator` is expected to be written between individual events.
+The `separator` is expected to be written by `writer` at the end of each event. The separator isn't added automatically.
 */
 pub fn set_with_writer(
     file_set: impl AsRef<Path>,
@@ -282,7 +282,7 @@ impl FileSetBuilder {
 
     The `writer` is used to format incoming [`emit::Event`]s into their on-disk format. If formatting fails then the event will be discarded.
 
-    The `separator` is expected written between individual events.
+    The `separator` is expected to be written by `writer` at the end of each event. The separator isn't added automatically.
 
     It will use the other following defaults:
 
@@ -370,7 +370,7 @@ impl FileSetBuilder {
 
     The `writer` is used to format incoming [`emit::Event`]s into their on-disk format. If formatting fails then the event will be discarded.
 
-    The writer needs to include the separator itself while writing events. The separator won't be added automatically.
+    The `separator` is expected to be written by `writer` at the end of each event. The separator isn't added automatically.
     */
     pub fn writer(
         mut self,
