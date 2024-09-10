@@ -21,7 +21,13 @@ jobs:
       - name: All
         run: cargo test --all-features
 
-      - name: Powerset
+      - name: Docs
+        run: cargo doc --all-features
+
+      - name: Build powerset
+        run: cargo hack build --feature-powerset --lib
+
+      - name: Test powerset
         run: cargo hack test --feature-powerset --lib
 
       - name: Minimal versions

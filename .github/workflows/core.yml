@@ -22,7 +22,15 @@ jobs:
         working-directory: ./core
         run: cargo test --all-features
 
-      - name: Powerset
+      - name: Docs
+        working-directory: ./core
+        run: cargo doc --all-features
+
+      - name: Build powerset
+        working-directory: ./core
+        run: cargo hack build --feature-powerset --lib
+
+      - name: Test powerset
         working-directory: ./core
         run: cargo hack test --feature-powerset --lib
 

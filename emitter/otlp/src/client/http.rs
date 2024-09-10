@@ -76,7 +76,7 @@ async fn tls_handshake(
             metrics.transport_conn_tls_failed.increment();
 
             for err in certs.errors {
-                emit::warn!("failed to load native certificate: {err}");
+                emit::warn!(rt: emit::runtime::internal(), "failed to load native certificate: {err}");
             }
         }
 
