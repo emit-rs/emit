@@ -211,25 +211,32 @@ fn inject_sync(
     let template_tokens = template.template_tokens().to_ref_tokens();
     let template_literal_tokens = template.template_literal_tokens();
 
-    // Capture control flow statements within the body
-    let body_tokens = quote!((move || {
-        let __r: #body_ret_ty_tokens = #body_tokens;
-        __r
-    })());
-
     let Completion {
         body_tokens,
         span_evt_props_tokens,
         default_completion_tokens,
-    } = completion(
-        body_tokens,
-        default_lvl_tokens,
-        ok_lvl_tokens,
-        err_lvl_tokens,
-        span_guard,
-        rt_tokens,
-        &template_tokens,
-    )?;
+    } = if ok_lvl_tokens.is_some() || err_lvl_tokens.is_some() {
+        let body_tokens = quote!((move || {
+            let __r: #body_ret_ty_tokens = #body_tokens;
+            __r
+        })());
+
+        result_completion(
+            body_tokens,
+            default_lvl_tokens,
+            ok_lvl_tokens,
+            err_lvl_tokens,
+            span_guard,
+            rt_tokens,
+            &template_tokens,
+        )?
+    } else {
+        let body_tokens = quote!((move || {
+            #body_tokens
+        })());
+
+        completion(body_tokens, default_lvl_tokens, rt_tokens, &template_tokens)?
+    };
 
     Ok(quote!({
         let (mut __ctxt, __span_guard) = emit::__private::__private_begin_span(
@@ -267,24 +274,28 @@ fn inject_async(
     let template_tokens = template.template_tokens().to_ref_tokens();
     let template_literal_tokens = template.template_literal_tokens();
 
-    let body_tokens = quote!(async move {
-        let __r: #body_ret_ty_tokens = #body_tokens;
-        __r
-    }.await);
-
     let Completion {
         body_tokens,
         span_evt_props_tokens,
         default_completion_tokens,
-    } = completion(
-        body_tokens,
-        default_lvl_tokens,
-        ok_lvl_tokens,
-        err_lvl_tokens,
-        span_guard,
-        rt_tokens,
-        &template_tokens,
-    )?;
+    } = if ok_lvl_tokens.is_some() || err_lvl_tokens.is_some() {
+        let body_tokens = quote!(async move {
+            let __r: #body_ret_ty_tokens = #body_tokens;
+            __r
+        }.await);
+
+        result_completion(
+            body_tokens,
+            default_lvl_tokens,
+            ok_lvl_tokens,
+            err_lvl_tokens,
+            span_guard,
+            rt_tokens,
+            &template_tokens,
+        )?
+    } else {
+        completion(body_tokens, default_lvl_tokens, rt_tokens, &template_tokens)?
+    };
 
     Ok(quote!({
         let (__ctxt, __span_guard) = emit::__private::__private_begin_span(
@@ -319,7 +330,7 @@ struct Completion {
     default_completion_tokens: TokenStream,
 }
 
-fn completion(
+fn result_completion(
     body_tokens: TokenStream,
     default_lvl_tokens: Option<TokenStream>,
     ok_lvl_tokens: Option<TokenStream>,
@@ -328,69 +339,74 @@ fn completion(
     rt_tokens: &TokenStream,
     template_tokens: &TokenStream,
 ) -> Result<Completion, syn::Error> {
-    let body_tokens = if ok_lvl_tokens.is_some() || err_lvl_tokens.is_some() {
-        // If the span is applied to a Result-returning function then wrap the body
-        // We'll attach the error to the span if the call fails and set the appropriate level
+    // If the span is applied to a Result-returning function then wrap the body
+    // We'll attach the error to the span if the call fails and set the appropriate level
 
-        let ok_branch = {
-            let mut evt_props = Props::new();
-            push_evt_props(
-                &mut evt_props,
-                ok_lvl_tokens.or_else(|| default_lvl_tokens.clone()),
-            )?;
-            let span_evt_props_tokens = evt_props.props_tokens();
+    let ok_branch = {
+        let mut evt_props = Props::new();
+        push_evt_props(
+            &mut evt_props,
+            ok_lvl_tokens.or_else(|| default_lvl_tokens.clone()),
+        )?;
+        let span_evt_props_tokens = evt_props.props_tokens();
 
-            quote!(
-                Ok(ok) => {
-                    #span_guard.complete_with(|span| {
-                        emit::__private::__private_complete_span(
-                            #rt_tokens,
-                            span,
-                            #template_tokens,
-                            #span_evt_props_tokens,
-                        )
-                    });
+        quote!(
+            Ok(ok) => {
+                #span_guard.complete_with(|span| {
+                    emit::__private::__private_complete_span(
+                        #rt_tokens,
+                        span,
+                        #template_tokens,
+                        #span_evt_props_tokens,
+                    )
+                });
 
-                    Ok(ok)
-                }
-            )
-        };
-
-        let err_branch = {
-            let err_ident = Ident::new(emit_core::well_known::KEY_ERR, Span::call_site());
-
-            let mut evt_props = Props::new();
-            push_evt_props(
-                &mut evt_props,
-                err_lvl_tokens.or_else(|| default_lvl_tokens.clone()),
-            )?;
-            evt_props.push(&syn::parse2::<FieldValue>(quote!(#err_ident))?, false, true)?;
-            let span_evt_props_tokens = evt_props.props_tokens();
-
-            quote!(
-                Err(#err_ident) => {
-                    #span_guard.complete_with(|span| {
-                        emit::__private::__private_complete_span(
-                            #rt_tokens,
-                            span,
-                            #template_tokens,
-                            #span_evt_props_tokens,
-                        )
-                    });
-
-                    Err(#err_ident)
-                }
-            )
-        };
-
-        quote!(match #body_tokens {
-            #ok_branch,
-            #err_branch,
-        })
-    } else {
-        body_tokens
+                Ok(ok)
+            }
+        )
     };
 
+    let err_branch = {
+        let err_ident = Ident::new(emit_core::well_known::KEY_ERR, Span::call_site());
+
+        let mut evt_props = Props::new();
+        push_evt_props(
+            &mut evt_props,
+            err_lvl_tokens.or_else(|| default_lvl_tokens.clone()),
+        )?;
+        evt_props.push(&syn::parse2::<FieldValue>(quote!(#err_ident))?, false, true)?;
+        let span_evt_props_tokens = evt_props.props_tokens();
+
+        quote!(
+            Err(#err_ident) => {
+                #span_guard.complete_with(|span| {
+                    emit::__private::__private_complete_span(
+                        #rt_tokens,
+                        span,
+                        #template_tokens,
+                        #span_evt_props_tokens,
+                    )
+                });
+
+                Err(#err_ident)
+            }
+        )
+    };
+
+    let body_tokens = quote!(match #body_tokens {
+        #ok_branch,
+        #err_branch,
+    });
+
+    completion(body_tokens, default_lvl_tokens, rt_tokens, template_tokens)
+}
+
+fn completion(
+    body_tokens: TokenStream,
+    default_lvl_tokens: Option<TokenStream>,
+    rt_tokens: &TokenStream,
+    template_tokens: &TokenStream,
+) -> Result<Completion, syn::Error> {
     let mut evt_props = Props::new();
     push_evt_props(&mut evt_props, default_lvl_tokens)?;
     let span_evt_props_tokens = evt_props.props_tokens();
