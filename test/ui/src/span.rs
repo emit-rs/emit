@@ -750,3 +750,51 @@ fn span_props_precedence() {
         let _ = exec();
     });
 }
+
+#[test]
+fn span_impl_trait_return() {
+    static CALLED: StaticCalled = StaticCalled::new();
+    static RT: StaticRuntime = static_runtime(
+        |_| {
+            CALLED.record();
+        },
+        |_| true,
+    );
+
+    #[emit::span(rt: RT, "greet {user}")]
+    fn exec(user: &str) -> impl std::fmt::Display {
+        let _ = user;
+
+        "done"
+    }
+
+    let _ = exec("Rust");
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+
+    assert!(CALLED.was_called());
+}
+
+#[tokio::test]
+async fn span_impl_trait_return_async() {
+    static CALLED: StaticCalled = StaticCalled::new();
+    static RT: StaticRuntime = static_runtime(
+        |_| {
+            CALLED.record();
+        },
+        |_| true,
+    );
+
+    #[emit::span(rt: RT, "greet {user}")]
+    async fn exec(user: &str) -> impl std::fmt::Display {
+        let _ = user;
+
+        "done"
+    }
+
+    let _ = exec("Rust").await;
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+
+    assert!(CALLED.was_called());
+}

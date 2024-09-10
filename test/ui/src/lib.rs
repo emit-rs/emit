@@ -27,6 +27,7 @@ mod format;
 
 #[test]
 #[cfg(feature = "compile_fail")]
+#[rustversion::nightly]
 fn compile_fail_std() {
     let t = trybuild::TestCases::new();
     t.compile_fail("src/compile_fail/std/*.rs");
