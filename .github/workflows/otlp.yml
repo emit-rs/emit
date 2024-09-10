@@ -22,7 +22,15 @@ jobs:
         working-directory: ./emitter/otlp
         run: cargo test --all-features
 
-      - name: Powerset
+      - name: Docs
+        working-directory: ./emitter/otlp
+        run: cargo doc --all-features
+
+      - name: Build powerset
+        working-directory: ./emitter/otlp
+        run: cargo hack build --feature-powerset --lib
+
+      - name: Test powerset
         working-directory: ./emitter/otlp
         run: cargo hack test --feature-powerset --lib
 
