@@ -107,7 +107,7 @@ Also see the [`opentelemetry`] docs for any details on getting diagnostics out o
 #![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]
 #![deny(missing_docs)]
 
-use std::{borrow::Cow, cell::RefCell, fmt, ops::ControlFlow, sync::Arc};
+use std::{cell::RefCell, fmt, ops::ControlFlow, sync::Arc};
 
 use emit::{
     str::ToStr,
@@ -651,22 +651,22 @@ impl<L: Logger> emit::Emitter for OpenTelemetryEmitter<L> {
                     match v.by_ref().cast::<emit::Level>() {
                         Some(emit::Level::Debug) => {
                             record.set_severity_number(Severity::Debug);
-                            record.set_severity_text(Cow::Borrowed(LVL_DEBUG));
+                            record.set_severity_text(LVL_DEBUG);
                         }
                         Some(emit::Level::Info) => {
                             record.set_severity_number(Severity::Info);
-                            record.set_severity_text(Cow::Borrowed(LVL_INFO));
+                            record.set_severity_text(LVL_INFO);
                         }
                         Some(emit::Level::Warn) => {
                             record.set_severity_number(Severity::Warn);
-                            record.set_severity_text(Cow::Borrowed(LVL_WARN));
+                            record.set_severity_text(LVL_WARN);
                         }
                         Some(emit::Level::Error) => {
                             record.set_severity_number(Severity::Error);
-                            record.set_severity_text(Cow::Borrowed(LVL_ERROR));
+                            record.set_severity_text(LVL_ERROR);
                         }
                         None => {
-                            record.set_severity_text(Cow::Owned(v.to_string()));
+                            record.set_severity_text("unknown");
                         }
                     }
 
@@ -935,7 +935,7 @@ mod any_value {
         }
 
         fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
-            Ok(Some(AnyValue::Bytes(v.to_owned())))
+            Ok(Some(AnyValue::Bytes(Box::new(v.to_owned()))))
         }
 
         fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
@@ -1063,7 +1063,7 @@ mod any_value {
         }
 
         fn end(self) -> Result<Self::Ok, Self::Error> {
-            Ok(Some(AnyValue::ListAny(self.value)))
+            Ok(Some(AnyValue::ListAny(Box::new(self.value))))
         }
     }
 
@@ -1084,7 +1084,7 @@ mod any_value {
         }
 
         fn end(self) -> Result<Self::Ok, Self::Error> {
-            Ok(Some(AnyValue::ListAny(self.value)))
+            Ok(Some(AnyValue::ListAny(Box::new(self.value))))
         }
     }
 
@@ -1105,7 +1105,7 @@ mod any_value {
         }
 
         fn end(self) -> Result<Self::Ok, Self::Error> {
-            Ok(Some(AnyValue::ListAny(self.value)))
+            Ok(Some(AnyValue::ListAny(Box::new(self.value))))
         }
     }
 
@@ -1128,8 +1128,11 @@ mod any_value {
         fn end(self) -> Result<Self::Ok, Self::Error> {
             Ok(Some(AnyValue::Map({
                 let mut variant = HashMap::new();
-                variant.insert(Key::from(self.variant), AnyValue::ListAny(self.value));
-                variant
+                variant.insert(
+                    Key::from(self.variant),
+                    AnyValue::ListAny(Box::new(self.value)),
+                );
+                Box::new(variant)
             })))
         }
     }
@@ -1170,7 +1173,7 @@ mod any_value {
         }
 
         fn end(self) -> Result<Self::Ok, Self::Error> {
-            Ok(Some(AnyValue::Map(self.value)))
+            Ok(Some(AnyValue::Map(Box::new(self.value))))
         }
     }
 
@@ -1194,7 +1197,7 @@ mod any_value {
         }
 
         fn end(self) -> Result<Self::Ok, Self::Error> {
-            Ok(Some(AnyValue::Map(self.value)))
+            Ok(Some(AnyValue::Map(Box::new(self.value))))
         }
     }
 
@@ -1220,8 +1223,8 @@ mod any_value {
         fn end(self) -> Result<Self::Ok, Self::Error> {
             Ok(Some(AnyValue::Map({
                 let mut variant = HashMap::new();
-                variant.insert(Key::from(self.variant), AnyValue::Map(self.value));
-                variant
+                variant.insert(Key::from(self.variant), AnyValue::Map(Box::new(self.value)));
+                Box::new(variant)
             })))
         }
     }
@@ -1707,19 +1710,13 @@ mod tests {
         let logs = logs.get_emitted_logs().unwrap();
 
         let get = |needle: &str| -> Option<AnyValue> {
-            logs[0]
-                .record
-                .attributes
-                .as_ref()
-                .unwrap()
-                .iter()
-                .find_map(|(k, v)| {
-                    if k.as_str() == needle {
-                        Some(v.clone())
-                    } else {
-                        None
-                    }
-                })
+            logs[0].record.attributes_iter().find_map(|(k, v)| {
+                if k.as_str() == needle {
+                    Some(v.clone())
+                } else {
+                    None
+                }
+            })
         };
 
         assert_eq!(
@@ -1746,7 +1743,11 @@ mod tests {
         assert_eq!(AnyValue::Int(42), get("some_value").unwrap());
 
         assert_eq!(
-            AnyValue::ListAny(vec![AnyValue::Int(1), AnyValue::Int(1), AnyValue::Int(1)]),
+            AnyValue::ListAny(Box::new(vec![
+                AnyValue::Int(1),
+                AnyValue::Int(1),
+                AnyValue::Int(1)
+            ])),
             get("slice_value").unwrap()
         );
 
@@ -1758,7 +1759,7 @@ mod tests {
                 map.insert(Key::from("b"), AnyValue::Int(1));
                 map.insert(Key::from("c"), AnyValue::Int(1));
 
-                map
+                Box::new(map)
             }),
             get("map_value").unwrap()
         );
@@ -1771,13 +1772,17 @@ mod tests {
                 map.insert(Key::from("b"), AnyValue::Int(1));
                 map.insert(Key::from("c"), AnyValue::Int(1));
 
-                map
+                Box::new(map)
             }),
             get("struct_value").unwrap()
         );
 
         assert_eq!(
-            AnyValue::ListAny(vec![AnyValue::Int(1), AnyValue::Int(1), AnyValue::Int(1)]),
+            AnyValue::ListAny(Box::new(vec![
+                AnyValue::Int(1),
+                AnyValue::Int(1),
+                AnyValue::Int(1)
+            ])),
             get("tuple_value").unwrap()
         );
 
@@ -1792,7 +1797,7 @@ mod tests {
 
                 map.insert(Key::from("Newtype"), AnyValue::Int(42));
 
-                map
+                Box::new(map)
             }),
             get("newtype_variant_value").unwrap()
         );
@@ -1808,11 +1813,11 @@ mod tests {
                         map.insert(Key::from("a"), AnyValue::Int(1));
                         map.insert(Key::from("b"), AnyValue::Int(1));
                         map.insert(Key::from("c"), AnyValue::Int(1));
-                        map
+                        Box::new(map)
                     }),
                 );
 
-                map
+                Box::new(map)
             }),
             get("struct_variant_value").unwrap()
         );
@@ -1823,10 +1828,14 @@ mod tests {
 
                 map.insert(
                     Key::from("Tuple"),
-                    AnyValue::ListAny(vec![AnyValue::Int(1), AnyValue::Int(1), AnyValue::Int(1)]),
+                    AnyValue::ListAny(Box::new(vec![
+                        AnyValue::Int(1),
+                        AnyValue::Int(1),
+                        AnyValue::Int(1),
+                    ])),
                 );
 
-                map
+                Box::new(map)
             }),
             get("tuple_variant_value").unwrap()
         );
