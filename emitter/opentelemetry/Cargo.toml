@@ -37,5 +37,5 @@ version = "0.25"
 features = ["logs", "trace", "testing"]
 
 [dev-dependencies.opentelemetry-stdout]
-version = "0.5"
+version = "0.25"
 features = ["logs", "trace"]
