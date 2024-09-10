@@ -216,6 +216,13 @@ fn inject_sync(
         span_evt_props_tokens,
         default_completion_tokens,
     } = if ok_lvl_tokens.is_some() || err_lvl_tokens.is_some() {
+        // Wrap the body in a closure so we can rely on code running afterwards
+        // without control flow statements like `return` getting in the way
+        //
+        // We can't use a drop guard here because we need to match on the result
+        //
+        // We also need to specify the return type, otherwise inference seems to fail.
+        // We might be able to avoid this in the future
         let body_tokens = quote!((move || {
             let __r: #body_ret_ty_tokens = #body_tokens;
             __r
@@ -231,10 +238,6 @@ fn inject_sync(
             &template_tokens,
         )?
     } else {
-        let body_tokens = quote!((move || {
-            #body_tokens
-        })());
-
         completion(body_tokens, default_lvl_tokens, rt_tokens, &template_tokens)?
     };
 
@@ -279,6 +282,9 @@ fn inject_async(
         span_evt_props_tokens,
         default_completion_tokens,
     } = if ok_lvl_tokens.is_some() || err_lvl_tokens.is_some() {
+        // Like the sync case, ensure control flow doesn't interrupt
+        // our matching of the result, and provide a concrete type
+        // for inference
         let body_tokens = quote!(async move {
             let __r: #body_ret_ty_tokens = #body_tokens;
             __r
