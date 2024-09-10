@@ -4,7 +4,7 @@
 
 [![all](https://github.com/emit-rs/emit/actions/workflows/all.yml/badge.svg)](https://github.com/emit-rs/emit/actions/workflows/all.yml)
 
-[Current docs](https://docs.rs/emit/0.11.0-alpha.15/emit/index.html)
+[Current docs](https://docs.rs/emit/0.11.0-alpha.16/emit/index.html)
 
 ## Developer-first diagnostics
 
@@ -18,10 +18,10 @@
 
 ```toml
 [dependencies.emit]
-version = "0.11.0-alpha.15"
+version = "0.11.0-alpha.16"
 
 [dependencies.emit_term]
-version = "0.11.0-alpha.15"
+version = "0.11.0-alpha.16"
 ```
 
 ```rust
@@ -56,13 +56,13 @@ This is alpha-level software. It implements a complete framework but has almost 
 
 ## Getting started
 
-See the `examples` directory and [`emit` documentation](https://docs.rs/emit/0.11.0-alpha.15/emit/index.html) to get started with `emit`.
+See the `examples` directory and [`emit` documentation](https://docs.rs/emit/0.11.0-alpha.16/emit/index.html) to get started with `emit`.
 
 ## Where can I send my diagnostics?
 
 Diagnostics produced by `emit` are sent to an _emitter_. This repository currently implements the following emitters:
 
-- [`emit_term`](https://docs.rs/emit_term/0.11.0-alpha.15/emit_term/index.html) for writing human-readable output to the console.
-- [`emit_file`](https://docs.rs/emit_file/0.11.0-alpha.15/emit_file/index.html) for writing JSON or another machine-readable format to rolling files.
-- [`emit_otlp`](https://docs.rs/emit_otlp/0.11.0-alpha.15/emit_otlp/index.html) for sending diagnostics to an OpenTelemetry compatible collector.
-- [`emit_opentelemetry`](https://docs.rs/emit_opentelemetry/0.11.0-alpha.15/emit_opentelemetry/index.html) for integrating `emit` into an application using the OpenTelemetry SDK for its diagnostics.
+- [`emit_term`](https://docs.rs/emit_term/0.11.0-alpha.16/emit_term/index.html) for writing human-readable output to the console.
+- [`emit_file`](https://docs.rs/emit_file/0.11.0-alpha.16/emit_file/index.html) for writing JSON or another machine-readable format to rolling files.
+- [`emit_otlp`](https://docs.rs/emit_otlp/0.11.0-alpha.16/emit_otlp/index.html) for sending diagnostics to an OpenTelemetry compatible collector.
+- [`emit_opentelemetry`](https://docs.rs/emit_opentelemetry/0.11.0-alpha.16/emit_opentelemetry/index.html) for integrating `emit` into an application using the OpenTelemetry SDK for its diagnostics.
