@@ -215,7 +215,7 @@ Ambient span properties are not shared across threads by default. This context n
 # use std::thread;
 # fn my_operation() {}
 thread::spawn({
-    let ctxt = emit::Frame::current(emit::runtime::shared().ctxt());
+    let ctxt = emit::Frame::current(emit::ctxt());
 
     move || ctxt.call(|| {
         // Your code goes here
@@ -231,7 +231,7 @@ This same process is also needed for async code that involves thread spawning:
 # #[cfg(not(feature = "std"))] fn main() {}
 # #[cfg(feature = "std")] fn main() {
 tokio::spawn(
-    emit::Frame::current(emit::runtime::shared().ctxt()).in_future(async {
+    emit::Frame::current(emit::ctxt()).in_future(async {
         // Your code goes here
     }),
 );
@@ -253,7 +253,7 @@ When an incoming request arrives, you can parse the trace and span ids from its 
 let trace_id = "12b2fde225aebfa6758ede9cac81bf4d";
 let span_id = "23995f85b4610391";
 
-let frame = emit::Frame::push(emit::runtime::shared().ctxt(), emit::props! {
+let frame = emit::Frame::push(emit::ctxt(), emit::props! {
     trace_id,
     span_id,
 });
@@ -293,7 +293,7 @@ When making outbound requests, you can pull the current trace and span ids from 
 # #[cfg(feature = "std")] fn main() {
 use emit::{well_known::{KEY_SPAN_ID, KEY_TRACE_ID}, Ctxt, Props};
 
-let (trace_id, span_id) = emit::runtime::shared().ctxt().with_current(|props| {
+let (trace_id, span_id) = emit::ctxt().with_current(|props| {
     (
         props.pull::<emit::span::TraceId, _>(KEY_TRACE_ID),
         props.pull::<emit::span::SpanId, _>(KEY_SPAN_ID),

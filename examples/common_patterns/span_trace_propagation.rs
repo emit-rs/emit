@@ -135,7 +135,7 @@ pub mod http {
         //    This ensures any spans created in the request use the same
         //    trace id, and set their parent span ids appropriately
         emit::Frame::push(
-            emit::runtime::shared().ctxt(),
+            emit::ctxt(),
             emit::props! {
                 trace_id,
                 span_id,
@@ -152,7 +152,7 @@ pub mod http {
 
         // 1. Pull the trace and span ids from the current context
         let (trace_id, span_id) =
-            emit::Frame::current(emit::runtime::shared().ctxt()).with(|current| {
+            emit::Frame::current(emit::ctxt()).with(|current| {
                 (
                     current.pull(emit::well_known::KEY_TRACE_ID),
                     current.pull(emit::well_known::KEY_SPAN_ID),
