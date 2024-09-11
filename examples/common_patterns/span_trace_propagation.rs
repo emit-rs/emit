@@ -60,8 +60,7 @@ fn routes(method: &str, path: &str) {
 pub mod traceparent {
     pub fn parse(
         traceparent: &str,
-    ) -> Result<(emit::span::TraceId, emit::span::SpanId), Box<dyn std::error::Error + Send + Sync>>
-    {
+    ) -> Result<(emit::TraceId, emit::SpanId), Box<dyn std::error::Error + Send + Sync>> {
         let mut parts = traceparent.split('-');
 
         let version = parts.next().ok_or("missing version")?;
@@ -91,8 +90,8 @@ pub mod traceparent {
     }
 
     pub fn format(
-        trace_id: Option<emit::span::TraceId>,
-        span_id: Option<emit::span::SpanId>,
+        trace_id: Option<emit::TraceId>,
+        span_id: Option<emit::SpanId>,
     ) -> Option<String> {
         let (Some(trace_id), Some(span_id)) = (trace_id, span_id) else {
             return None;

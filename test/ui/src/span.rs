@@ -23,14 +23,8 @@ fn span_basic() {
             evt.props().pull::<emit::Kind, _>("evt_kind").unwrap()
         );
 
-        assert!(evt
-            .props()
-            .pull::<emit::span::TraceId, _>("trace_id")
-            .is_some());
-        assert!(evt
-            .props()
-            .pull::<emit::span::SpanId, _>("span_id")
-            .is_some());
+        assert!(evt.props().pull::<emit::TraceId, _>("trace_id").is_some());
+        assert!(evt.props().pull::<emit::SpanId, _>("span_id").is_some());
     }
 
     fn assert_event(evt: &emit::Event<impl Props>) {
@@ -203,14 +197,8 @@ async fn span_basic_async() {
             assert_eq!(module_path!(), evt.mdl());
 
             assert!(evt.extent().unwrap().is_span());
-            assert!(evt
-                .props()
-                .pull::<emit::span::TraceId, _>("trace_id")
-                .is_some());
-            assert!(evt
-                .props()
-                .pull::<emit::span::SpanId, _>("span_id")
-                .is_some());
+            assert!(evt.props().pull::<emit::TraceId, _>("trace_id").is_some());
+            assert!(evt.props().pull::<emit::SpanId, _>("span_id").is_some());
 
             CALLED.record();
         },

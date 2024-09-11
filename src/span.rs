@@ -295,8 +295,8 @@ use emit::{well_known::{KEY_SPAN_ID, KEY_TRACE_ID}, Ctxt, Props};
 
 let (trace_id, span_id) = emit::ctxt().with_current(|props| {
     (
-        props.pull::<emit::span::TraceId, _>(KEY_TRACE_ID),
-        props.pull::<emit::span::SpanId, _>(KEY_SPAN_ID),
+        props.pull::<emit::TraceId, _>(KEY_TRACE_ID),
+        props.pull::<emit::SpanId, _>(KEY_SPAN_ID),
     )
 });
 

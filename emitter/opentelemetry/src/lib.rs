@@ -245,8 +245,8 @@ pub struct OpenTelemetryFrame<F> {
 The [`emit::Ctxt::Current`] used by [`OpenTelemetryCtxt`].
 */
 pub struct OpenTelemetryProps<P: ?Sized> {
-    trace_id: Option<emit::span::TraceId>,
-    span_id: Option<emit::span::SpanId>,
+    trace_id: Option<emit::TraceId>,
+    span_id: Option<emit::SpanId>,
     // Props from the wrapped `Ctxt`
     inner: *const P,
 }
@@ -334,8 +334,8 @@ where
     type Frame = OpenTelemetryFrame<C::Frame>;
 
     fn open_root<P: emit::Props>(&self, props: P) -> Self::Frame {
-        let trace_id = props.pull::<emit::span::TraceId, _>(emit::well_known::KEY_TRACE_ID);
-        let span_id = props.pull::<emit::span::SpanId, _>(emit::well_known::KEY_SPAN_ID);
+        let trace_id = props.pull::<emit::TraceId, _>(emit::well_known::KEY_TRACE_ID);
+        let span_id = props.pull::<emit::SpanId, _>(emit::well_known::KEY_SPAN_ID);
 
         // Only open a span if the props include a span id
         if let Some(span_id) = span_id {
@@ -402,8 +402,8 @@ where
 
         self.inner.with_current(|props| {
             let props = OpenTelemetryProps {
-                trace_id: emit::span::TraceId::from_bytes(trace_id),
-                span_id: emit::span::SpanId::from_bytes(span_id),
+                trace_id: emit::TraceId::from_bytes(trace_id),
+                span_id: emit::SpanId::from_bytes(span_id),
                 inner: props as *const C::Current,
             };
 
@@ -561,7 +561,7 @@ impl<L: Logger> emit::Emitter for OpenTelemetryEmitter<L> {
 
                     let evt_span_id = evt
                         .props()
-                        .pull::<emit::span::SpanId, _>(KEY_SPAN_ID)
+                        .pull::<emit::SpanId, _>(KEY_SPAN_ID)
                         .map(otel_span_id);
 
                     // If the event is for the current span then complete it
@@ -674,7 +674,7 @@ impl<L: Logger> emit::Emitter for OpenTelemetryEmitter<L> {
                 }
 
                 if k == KEY_TRACE_ID {
-                    if let Some(id) = v.by_ref().cast::<emit::span::TraceId>() {
+                    if let Some(id) = v.by_ref().cast::<emit::TraceId>() {
                         trace_id = Some(otel_trace_id(id));
 
                         return ControlFlow::Continue(());
@@ -682,7 +682,7 @@ impl<L: Logger> emit::Emitter for OpenTelemetryEmitter<L> {
                 }
 
                 if k == KEY_SPAN_ID {
-                    if let Some(id) = v.by_ref().cast::<emit::span::SpanId>() {
+                    if let Some(id) = v.by_ref().cast::<emit::SpanId>() {
                         span_id = Some(otel_span_id(id));
 
                         return ControlFlow::Continue(());
@@ -690,7 +690,7 @@ impl<L: Logger> emit::Emitter for OpenTelemetryEmitter<L> {
                 }
 
                 if k == KEY_SPAN_PARENT {
-                    if v.by_ref().cast::<emit::span::SpanId>().is_some() {
+                    if v.by_ref().cast::<emit::SpanId>().is_some() {
                         return ControlFlow::Continue(());
                     }
                 }
@@ -737,11 +737,11 @@ impl emit::Filter for OpenTelemetryIsSampledFilter {
     }
 }
 
-fn otel_trace_id(trace_id: emit::span::TraceId) -> TraceId {
+fn otel_trace_id(trace_id: emit::TraceId) -> TraceId {
     TraceId::from_bytes(trace_id.to_bytes())
 }
 
-fn otel_span_id(span_id: emit::span::SpanId) -> SpanId {
+fn otel_span_id(span_id: emit::SpanId) -> SpanId {
     SpanId::from_bytes(span_id.to_bytes())
 }
 
