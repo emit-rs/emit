@@ -640,16 +640,6 @@ pub fn clock() -> runtime::AmbientClock<'static> {
 }
 
 /**
-Get the current timestamp.
-
-This method will use the [`Clock`] from [`runtime::shared()`].
-*/
-#[cfg(feature = "implicit_rt")]
-pub fn now() -> Option<Timestamp> {
-    clock().now()
-}
-
-/**
 Get the shared context.
 
 This method will use the [`Ctxt`] from [`runtime::shared()`].

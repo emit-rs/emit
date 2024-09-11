@@ -95,7 +95,25 @@ impl<'a> Clock for dyn ErasedClock + 'a {
 
 impl<'a> Clock for dyn ErasedClock + Send + Sync + 'a {
     fn now(&self) -> Option<Timestamp> {
-        (self as &(dyn ErasedClock + 'a)).now()
+        self.erase_clock().0.dispatch_now()
+    }
+}
+
+impl<'a> dyn ErasedClock + 'a {
+    /**
+    Get the current timestamp.
+    */
+    pub fn now(&self) -> Option<Timestamp> {
+        Clock::now(self)
+    }
+}
+
+impl<'a> dyn ErasedClock + Send + Sync + 'a {
+    /**
+    Get the current timestamp.
+    */
+    pub fn now(&self) -> Option<Timestamp> {
+        Clock::now(self)
     }
 }
 
