@@ -151,13 +151,12 @@ pub mod http {
         // Adding the traceparent from the current context onto a HTTP request
 
         // 1. Pull the trace and span ids from the current context
-        let (trace_id, span_id) =
-            emit::Frame::current(emit::ctxt()).with(|current| {
-                (
-                    current.pull(emit::well_known::KEY_TRACE_ID),
-                    current.pull(emit::well_known::KEY_SPAN_ID),
-                )
-            });
+        let (trace_id, span_id) = emit::Frame::current(emit::ctxt()).with(|current| {
+            (
+                current.pull(emit::well_known::KEY_TRACE_ID),
+                current.pull(emit::well_known::KEY_SPAN_ID),
+            )
+        });
 
         // 2. Format them as a traceparent header
         if let Some(traceparent) = crate::traceparent::format(trace_id, span_id) {

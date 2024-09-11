@@ -32,7 +32,7 @@ fn main() {
 
     // Emit our events
     let count = 10_000;
-    let start = emit::now!().unwrap();
+    let start = emit::now().unwrap();
 
     for i in 0..count {
         emit::info!("test event {i}");
@@ -40,7 +40,7 @@ fn main() {
 
     rt.blocking_flush(Duration::from_secs(30));
 
-    let end = emit::now!().unwrap();
+    let end = emit::now().unwrap();
 
     // Write the results
     let per_event = (end - start).as_nanos() as f64 / count as f64;

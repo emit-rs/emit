@@ -128,7 +128,7 @@ fn assert_emitter(
     emit::info!(rt, "A log message {log_uuid}");
 
     // Emit a span in a trace
-    emit::emit!(rt, extent: emit::now!()..emit::now!(), "A span {span_uuid}", evt_kind: "span", span_name: "emit_otlp_test", trace_id: emit::new_trace_id!(), span_id: emit::new_span_id!());
+    emit::emit!(rt, extent: emit::now()..emit::now(), "A span {span_uuid}", evt_kind: "span", span_name: "emit_otlp_test", trace_id: emit::TraceId::random(emit::rng()), span_id: emit::SpanId::random(emit::rng()));
 
     // Emit a metric
     emit::emit!(rt, "A metric {metric_uuid}", evt_kind: "metric", metric_name: "emit_otlp_test", metric_agg: "count", metric_value: 1);

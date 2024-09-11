@@ -614,7 +614,7 @@ pub use self::{
     path::Path,
     props::Props,
     rng::Rng,
-    span::{Span, SpanCtxt},
+    span::{Span, SpanCtxt, SpanId, TraceId},
     str::Str,
     template::Template,
     timer::Timer,
@@ -637,6 +637,16 @@ This method will use the [`Clock`] from [`runtime::shared()`].
 #[cfg(feature = "implicit_rt")]
 pub fn clock() -> runtime::AmbientClock<'static> {
     *runtime::shared().clock()
+}
+
+/**
+Get the current timestamp.
+
+This method will use the [`Clock`] from [`runtime::shared()`].
+*/
+#[cfg(feature = "implicit_rt")]
+pub fn now() -> Option<Timestamp> {
+    clock().now()
 }
 
 /**
