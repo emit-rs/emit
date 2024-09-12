@@ -60,8 +60,7 @@ fn routes(method: &str, path: &str) {
 pub mod traceparent {
     pub fn parse(
         traceparent: &str,
-    ) -> Result<(emit::span::TraceId, emit::span::SpanId), Box<dyn std::error::Error + Send + Sync>>
-    {
+    ) -> Result<(emit::TraceId, emit::SpanId), Box<dyn std::error::Error + Send + Sync>> {
         let mut parts = traceparent.split('-');
 
         let version = parts.next().ok_or("missing version")?;
@@ -91,8 +90,8 @@ pub mod traceparent {
     }
 
     pub fn format(
-        trace_id: Option<emit::span::TraceId>,
-        span_id: Option<emit::span::SpanId>,
+        trace_id: Option<emit::TraceId>,
+        span_id: Option<emit::SpanId>,
     ) -> Option<String> {
         let (Some(trace_id), Some(span_id)) = (trace_id, span_id) else {
             return None;
@@ -135,7 +134,7 @@ pub mod http {
         //    This ensures any spans created in the request use the same
         //    trace id, and set their parent span ids appropriately
         emit::Frame::push(
-            emit::runtime::shared().ctxt(),
+            emit::ctxt(),
             emit::props! {
                 trace_id,
                 span_id,
@@ -151,13 +150,12 @@ pub mod http {
         // Adding the traceparent from the current context onto a HTTP request
 
         // 1. Pull the trace and span ids from the current context
-        let (trace_id, span_id) =
-            emit::Frame::current(emit::runtime::shared().ctxt()).with(|current| {
-                (
-                    current.pull(emit::well_known::KEY_TRACE_ID),
-                    current.pull(emit::well_known::KEY_SPAN_ID),
-                )
-            });
+        let (trace_id, span_id) = emit::Frame::current(emit::ctxt()).with(|current| {
+            (
+                current.pull(emit::well_known::KEY_TRACE_ID),
+                current.pull(emit::well_known::KEY_SPAN_ID),
+            )
+        });
 
         // 2. Format them as a traceparent header
         if let Some(traceparent) = crate::traceparent::format(trace_id, span_id) {

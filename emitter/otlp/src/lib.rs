@@ -471,7 +471,7 @@ http://localhost:4318/v1/logs
 
 When the traces signal is configured, [`emit::Event`]s can be represented as OTLP spans so long as they satisfy the following conditions:
 
-- They have a valid [`emit::span::TraceId`] in the [`emit::well_known::KEY_TRACE_ID`] property and [`emit::span::SpanId`] in the [`emit::well_known::KEY_SPAN_ID`] property.
+- They have a valid [`emit::TraceId`] in the [`emit::well_known::KEY_TRACE_ID`] property and [`emit::SpanId`] in the [`emit::well_known::KEY_SPAN_ID`] property.
 - Their [`emit::Event::extent`] is a span. That is, [`emit::Extent::is_span`] is `true`.
 - They have an [`emit::Kind::Span`] in the [`emit::well_known::KEY_EVT_KIND`] property.
 

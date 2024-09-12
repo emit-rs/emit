@@ -7,11 +7,11 @@ A clock is a service that returns a [`Timestamp`] representing the current point
 use crate::{empty::Empty, timestamp::Timestamp};
 
 /**
-A service to measure the current time.
+A service to get the current [`Timestamp`].
 */
 pub trait Clock {
     /**
-    Read the current time.
+    Read the current [`Timestamp`].
 
     This method may return `None` if the clock couldn't be read for any reason. That may involve the clock not actually supporting reading now, time moving backwards, or any other reason that could result in an inaccurate reading.
     */
@@ -95,7 +95,25 @@ impl<'a> Clock for dyn ErasedClock + 'a {
 
 impl<'a> Clock for dyn ErasedClock + Send + Sync + 'a {
     fn now(&self) -> Option<Timestamp> {
-        (self as &(dyn ErasedClock + 'a)).now()
+        self.erase_clock().0.dispatch_now()
+    }
+}
+
+impl<'a> dyn ErasedClock + 'a {
+    /**
+    Get the current timestamp.
+    */
+    pub fn now(&self) -> Option<Timestamp> {
+        Clock::now(self)
+    }
+}
+
+impl<'a> dyn ErasedClock + Send + Sync + 'a {
+    /**
+    Get the current timestamp.
+    */
+    pub fn now(&self) -> Option<Timestamp> {
+        Clock::now(self)
     }
 }
 

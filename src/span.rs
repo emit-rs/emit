@@ -215,7 +215,7 @@ Ambient span properties are not shared across threads by default. This context n
 # use std::thread;
 # fn my_operation() {}
 thread::spawn({
-    let ctxt = emit::Frame::current(emit::runtime::shared().ctxt());
+    let ctxt = emit::Frame::current(emit::ctxt());
 
     move || ctxt.call(|| {
         // Your code goes here
@@ -231,7 +231,7 @@ This same process is also needed for async code that involves thread spawning:
 # #[cfg(not(feature = "std"))] fn main() {}
 # #[cfg(feature = "std")] fn main() {
 tokio::spawn(
-    emit::Frame::current(emit::runtime::shared().ctxt()).in_future(async {
+    emit::Frame::current(emit::ctxt()).in_future(async {
         // Your code goes here
     }),
 );
@@ -253,7 +253,7 @@ When an incoming request arrives, you can parse the trace and span ids from its 
 let trace_id = "12b2fde225aebfa6758ede9cac81bf4d";
 let span_id = "23995f85b4610391";
 
-let frame = emit::Frame::push(emit::runtime::shared().ctxt(), emit::props! {
+let frame = emit::Frame::push(emit::ctxt(), emit::props! {
     trace_id,
     span_id,
 });
@@ -293,10 +293,10 @@ When making outbound requests, you can pull the current trace and span ids from 
 # #[cfg(feature = "std")] fn main() {
 use emit::{well_known::{KEY_SPAN_ID, KEY_TRACE_ID}, Ctxt, Props};
 
-let (trace_id, span_id) = emit::runtime::shared().ctxt().with_current(|props| {
+let (trace_id, span_id) = emit::ctxt().with_current(|props| {
     (
-        props.pull::<emit::span::TraceId, _>(KEY_TRACE_ID),
-        props.pull::<emit::span::SpanId, _>(KEY_SPAN_ID),
+        props.pull::<emit::TraceId, _>(KEY_TRACE_ID),
+        props.pull::<emit::SpanId, _>(KEY_SPAN_ID),
     )
 });
 
@@ -835,26 +835,26 @@ impl fmt::Display for ParseIdError {
 impl std::error::Error for ParseIdError {}
 
 struct Buffer<const N: usize> {
-    hex: [u8; N],
+    value: [u8; N],
     idx: usize,
 }
 
 impl<const N: usize> Buffer<N> {
     fn new() -> Self {
         Buffer {
-            hex: [0; N],
+            value: [0; N],
             idx: 0,
         }
     }
 
-    fn buffer(&mut self, hex: impl fmt::Display) -> Result<&[u8], ParseIdError> {
+    fn buffer(&mut self, value: impl fmt::Display) -> Result<&[u8], ParseIdError> {
         use fmt::Write as _;
 
         self.idx = 0;
 
-        write!(self, "{}", hex).map_err(|_| ParseIdError {})?;
+        write!(self, "{}", value).map_err(|_| ParseIdError {})?;
 
-        Ok(&self.hex[..self.idx])
+        Ok(&self.value[..self.idx])
     }
 }
 
@@ -863,8 +863,8 @@ impl<const N: usize> fmt::Write for Buffer<N> {
         let s = s.as_bytes();
         let next_idx = self.idx + s.len();
 
-        if next_idx <= self.hex.len() {
-            self.hex[self.idx..next_idx].copy_from_slice(s);
+        if next_idx <= self.value.len() {
+            self.value[self.idx..next_idx].copy_from_slice(s);
             self.idx = next_idx;
 
             Ok(())
@@ -877,7 +877,7 @@ impl<const N: usize> fmt::Write for Buffer<N> {
 /**
 An active span in a distributed trace.
 
-This type is created by the [`crate::span!`] macro with the `guard` control parameter. See the [`mod@crate::span`] module for details on creating spans.
+This type is created by the [`macro@crate::span!`] macro with the `guard` control parameter. See the [`mod@crate::span`] module for details on creating spans.
 
 Call [`SpanGuard::complete_with`], or just drop the guard to complete it, emitting a [`Span`] for its execution.
 */

@@ -9,7 +9,7 @@ Context is modeled like a stack. Pushing properties returns a frame which can be
 use crate::{empty::Empty, props::Props};
 
 /**
-Storage for ambient properties.
+Storage for ambient [`Props`].
 */
 pub trait Ctxt {
     /**

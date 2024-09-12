@@ -146,12 +146,12 @@ fn props_capture_lvl_as_non_lvl() {
 #[test]
 fn props_capture_trace_id() {
     match emit::props! {
-        trace_id: emit::span::TraceId::from_u128(1),
+        trace_id: emit::TraceId::from_u128(1),
     } {
         props => {
             assert_eq!(
-                emit::span::TraceId::from_u128(1).unwrap(),
-                props.pull::<emit::span::TraceId, _>("trace_id").unwrap()
+                emit::TraceId::from_u128(1).unwrap(),
+                props.pull::<emit::TraceId, _>("trace_id").unwrap()
             );
         }
     }
@@ -164,8 +164,8 @@ fn props_capture_trace_id_string() {
     } {
         props => {
             assert_eq!(
-                emit::span::TraceId::from_u128(1).unwrap(),
-                props.pull::<emit::span::TraceId, _>("trace_id").unwrap()
+                emit::TraceId::from_u128(1).unwrap(),
+                props.pull::<emit::TraceId, _>("trace_id").unwrap()
             );
         }
     }
@@ -185,12 +185,12 @@ fn props_capture_trace_id_as_non_trace_id() {
 #[test]
 fn props_capture_span_id() {
     match emit::props! {
-        span_id: emit::span::SpanId::from_u64(1),
+        span_id: emit::SpanId::from_u64(1),
     } {
         props => {
             assert_eq!(
-                emit::span::SpanId::from_u64(1).unwrap(),
-                props.pull::<emit::span::SpanId, _>("span_id").unwrap()
+                emit::SpanId::from_u64(1).unwrap(),
+                props.pull::<emit::SpanId, _>("span_id").unwrap()
             );
         }
     }
@@ -203,8 +203,8 @@ fn props_capture_span_id_string() {
     } {
         props => {
             assert_eq!(
-                emit::span::SpanId::from_u64(1).unwrap(),
-                props.pull::<emit::span::SpanId, _>("span_id").unwrap()
+                emit::SpanId::from_u64(1).unwrap(),
+                props.pull::<emit::SpanId, _>("span_id").unwrap()
             );
         }
     }
@@ -224,12 +224,12 @@ fn props_capture_span_id_as_non_span_id() {
 #[test]
 fn props_capture_span_parent() {
     match emit::props! {
-        span_parent: emit::span::SpanId::from_u64(1),
+        span_parent: emit::SpanId::from_u64(1),
     } {
         props => {
             assert_eq!(
-                emit::span::SpanId::from_u64(1).unwrap(),
-                props.pull::<emit::span::SpanId, _>("span_parent").unwrap()
+                emit::SpanId::from_u64(1).unwrap(),
+                props.pull::<emit::SpanId, _>("span_parent").unwrap()
             );
         }
     }
@@ -242,8 +242,8 @@ fn props_capture_span_parent_string() {
     } {
         props => {
             assert_eq!(
-                emit::span::SpanId::from_u64(1).unwrap(),
-                props.pull::<emit::span::SpanId, _>("span_parent").unwrap()
+                emit::SpanId::from_u64(1).unwrap(),
+                props.pull::<emit::SpanId, _>("span_parent").unwrap()
             );
         }
     }

@@ -123,7 +123,7 @@ If the channel exceeds `max_capacity` then it will be cleared.
 
 Use [`Sender::send`] to push items onto the channel.
 
-Pass the receiver to [`tokio::spawn`] to spawn a background task that processes batches of items. You can also create a thread manually and call [`Receiver::blocking_exec`] on it.
+Use [`tokio::spawn`] or [`sync::spawn`] to run the receiver-side of the channel.
 */
 pub fn bounded<T: Channel>(max_capacity: usize) -> (Sender<T>, Receiver<T>) {
     let shared = Arc::new(Shared {
@@ -306,7 +306,7 @@ impl<T: Channel> Sender<T> {
 /**
 The receiving half of a channel.
 
-Use [`crate::tokio::spawn`], or [`Receiver::exec`] or [`Receiver::blocking_exec`] in a dedicated thread to run the receiver as a background worker.
+Use [`Receiver::exec`], [`crate::tokio::spawn`], or [`crate::sync::spawn`] to run the receiver as a background worker.
 */
 pub struct Receiver<T> {
     idle_delay: Delay,

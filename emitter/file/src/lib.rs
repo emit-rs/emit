@@ -152,6 +152,11 @@ use emit::{
 use emit_batcher::BatchError;
 use internal_metrics::InternalMetrics;
 
+const DEFAULT_ROLL_BY: RollBy = RollBy::Hour;
+const DEFAULT_MAX_FILES: usize = 32;
+const DEFAULT_MAX_FILE_SIZE_BYTES: usize = 1024 * 1024 * 1024; // 1GiB
+const DEFAULT_REUSE_FILES: bool = false;
+
 pub use internal_metrics::*;
 
 /**
@@ -210,7 +215,7 @@ The builder will use `file_set` as its template for naming log files. See the cr
 
 The `writer` is used to format incoming [`emit::Event`]s into their on-disk format. If formatting fails then the event will be discarded.
 
-The `separator` is expected to be written by `writer` at the end of each event. The separator isn't added automatically.
+The `writer` may finish each event with the separator. If it doesn't, then it will be added automatically.
 */
 pub fn set_with_writer(
     file_set: impl AsRef<Path>,
@@ -253,11 +258,6 @@ enum RollBy {
     Minute,
 }
 
-const DEFAULT_ROLL_BY: RollBy = RollBy::Hour;
-const DEFAULT_MAX_FILES: usize = 32;
-const DEFAULT_MAX_FILE_SIZE_BYTES: usize = 1024 * 1024 * 1024; // 1GiB
-const DEFAULT_REUSE_FILES: bool = false;
-
 impl FileSetBuilder {
     /**
     Create a new [`FileSetBuilder`] using the default newline-delimited JSON format.
@@ -282,7 +282,7 @@ impl FileSetBuilder {
 
     The `writer` is used to format incoming [`emit::Event`]s into their on-disk format. If formatting fails then the event will be discarded.
 
-    The `separator` is expected to be written by `writer` at the end of each event. The separator isn't added automatically.
+    The `writer` may finish each event with the separator. If it doesn't, then it will be added automatically.
 
     It will use the other following defaults:
 
@@ -370,7 +370,7 @@ impl FileSetBuilder {
 
     The `writer` is used to format incoming [`emit::Event`]s into their on-disk format. If formatting fails then the event will be discarded.
 
-    The `separator` is expected to be written by `writer` at the end of each event. The separator isn't added automatically.
+    The `writer` may finish each event with the separator. If it doesn't, then it will be added automatically.
     */
     pub fn writer(
         mut self,
@@ -481,10 +481,13 @@ impl emit::Emitter for FileSetInner {
     fn emit<E: emit::event::ToEvent>(&self, evt: E) {
         let evt = evt.to_event();
 
+        // NOTE: We could use a rolling capacity to pre-allocate this if we want
         let mut buf = FileBuf::new();
 
         match (self.writer)(&mut buf, &evt.erase()) {
             Ok(()) => {
+                // If the buffer didn't finish with the configured separator
+                // then write it now
                 if !buf.0.ends_with(self.separator) {
                     buf.extend_from_slice(self.separator);
                 }

@@ -53,8 +53,8 @@ pub(crate) trait RequestEncoder {
 }
 
 pub(crate) trait RawEncoder {
-    type TraceId: From<emit::span::TraceId> + sval::Value;
-    type SpanId: From<emit::span::SpanId> + sval::Value;
+    type TraceId: From<emit::TraceId> + sval::Value;
+    type SpanId: From<emit::SpanId> + sval::Value;
 
     fn encode<V: sval::Value>(value: V) -> EncodedPayload;
 }
@@ -111,10 +111,10 @@ fn stream_encoded_scope_items<'sval, S: sval::Stream<'sval> + ?Sized>(
 
 pub(crate) struct Proto;
 
-pub(crate) struct BinaryTraceId(emit::span::TraceId);
+pub(crate) struct BinaryTraceId(emit::TraceId);
 
-impl From<emit::span::TraceId> for BinaryTraceId {
-    fn from(id: emit::span::TraceId) -> BinaryTraceId {
+impl From<emit::TraceId> for BinaryTraceId {
+    fn from(id: emit::TraceId) -> BinaryTraceId {
         BinaryTraceId(id)
     }
 }
@@ -125,10 +125,10 @@ impl sval::Value for BinaryTraceId {
     }
 }
 
-pub(crate) struct BinarySpanId(emit::span::SpanId);
+pub(crate) struct BinarySpanId(emit::SpanId);
 
-impl From<emit::span::SpanId> for BinarySpanId {
-    fn from(id: emit::span::SpanId) -> BinarySpanId {
+impl From<emit::SpanId> for BinarySpanId {
+    fn from(id: emit::SpanId) -> BinarySpanId {
         BinarySpanId(id)
     }
 }
@@ -150,10 +150,10 @@ impl RawEncoder for Proto {
 
 pub(crate) struct Json;
 
-pub(crate) struct TextTraceId(emit::span::TraceId);
+pub(crate) struct TextTraceId(emit::TraceId);
 
-impl From<emit::span::TraceId> for TextTraceId {
-    fn from(id: emit::span::TraceId) -> TextTraceId {
+impl From<emit::TraceId> for TextTraceId {
+    fn from(id: emit::TraceId) -> TextTraceId {
         TextTraceId(id)
     }
 }
@@ -164,10 +164,10 @@ impl sval::Value for TextTraceId {
     }
 }
 
-pub(crate) struct TextSpanId(emit::span::SpanId);
+pub(crate) struct TextSpanId(emit::SpanId);
 
-impl From<emit::span::SpanId> for TextSpanId {
-    fn from(id: emit::span::SpanId) -> TextSpanId {
+impl From<emit::SpanId> for TextSpanId {
+    fn from(id: emit::SpanId) -> TextSpanId {
         TextSpanId(id)
     }
 }

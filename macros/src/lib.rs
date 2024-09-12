@@ -267,7 +267,7 @@ Construct a debug event.
 
 # Syntax
 
-See the [`macro@event`] macro for syntax.
+See the [`macro@evt`] macro for syntax.
 
 # Returns
 
@@ -287,7 +287,7 @@ Construct an info event.
 
 # Syntax
 
-See the [`macro@event`] macro for syntax.
+See the [`macro@evt`] macro for syntax.
 
 # Returns
 
@@ -307,7 +307,7 @@ Construct a warn event.
 
 # Syntax
 
-See the [`macro@event`] macro for syntax.
+See the [`macro@evt`] macro for syntax.
 
 # Returns
 
@@ -327,7 +327,7 @@ Construct an error event.
 
 # Syntax
 
-See the [`macro@event`] macro for syntax.
+See the [`macro@evt`] macro for syntax.
 
 # Returns
 
@@ -340,87 +340,6 @@ pub fn error_evt(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
         input: item.into(),
     })
     .unwrap_or_compile_error()
-}
-
-/**
-Get the current timestamp.
-
-If no runtime is specified then the shared runtime will be used. If the shared runtime hasn't been initialized yet then this macro will always return `None`.
-
-# Syntax
-
-```text
-(control_param),*
-```
-
-# Control parameters
-
-This macro accepts the following optional control parameters:
-
-- `rt: impl emit::runtime::Runtime`: The runtime to get the timestamp from.
-
-# Returns
-
-An `Option<emit::Timestamp>`.
-*/
-#[proc_macro]
-pub fn now(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    build::expand_now_tokens(build::ExpandNowTokens { input: item.into() })
-        .unwrap_or_compile_error()
-}
-
-/**
-Generate a new random trace id.
-
-If no runtime is specified then the shared runtime will be used. If the shared runtime hasn't been initialized yet then this macro will always return `None`.
-
-# Syntax
-
-```text
-(control_param),*
-```
-
-# Control parameters
-
-This macro accepts the following optional control parameters:
-
-- `rt: impl emit::runtime::Runtime`: The runtime to generate the trace id from.
-
-# Returns
-
-An `Option<emit::span::TraceId>`.
-*/
-#[proc_macro]
-pub fn new_trace_id(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    build::expand_new_trace_id_tokens(build::ExpandNewTraceIdTokens { input: item.into() })
-        .unwrap_or_compile_error()
-}
-
-/**
-Generate a new random span id.
-
-If no runtime is specified then the shared runtime will be used. If the shared runtime hasn't been initialized yet then this macro will always return `None`.
-
-# Syntax
-
-```text
-(control_param),*
-```
-
-# Control parameters
-
-This macro accepts the following optional control parameters:
-
-- `rt: impl emit::runtime::Runtime`: The runtime to generate the span id from.
-
-# Returns
-
-An `Option<emit::span::SpanId>`.
-*/
-#[proc_macro]
-pub fn new_span_id(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    build::expand_new_span_id_tokens(build::ExpandNewSpanIdTokens { input: item.into() })
-        .unwrap_or_compile_error()
 }
 
 /**
