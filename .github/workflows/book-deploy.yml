@@ -1,4 +1,4 @@
-name: Deploy Book
+name: book deploy
 
 on:
   push:
@@ -24,15 +24,13 @@ jobs:
           curl -sSL $url | tar -xz --directory=./mdbook
           echo `pwd`/mdbook >> $GITHUB_PATH
       - name: Build Book
-        run: |
-          cd book
-          mdbook build
+        run: mdbook build book
       - name: Setup Pages
         uses: actions/configure-pages@v4
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: 'book'
+          path: 'book/dist'
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

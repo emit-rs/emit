@@ -1,4 +1,4 @@
-name: Book Tests
+name: book tests
 
 on: [push, pull_request]
 
@@ -20,6 +20,4 @@ jobs:
         curl -sSL $url | tar -xz --directory=bin
         echo "$(pwd)/bin" >> $GITHUB_PATH
     - name: Run tests
-      run: |
-        cd book
-        mdbook test
+      run: mdbook test book
