@@ -22,6 +22,8 @@ extern crate alloc;
 
 extern crate core;
 
+mod buf;
+
 pub mod and;
 pub mod clock;
 pub mod ctxt;

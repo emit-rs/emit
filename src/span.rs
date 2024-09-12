@@ -835,26 +835,26 @@ impl fmt::Display for ParseIdError {
 impl std::error::Error for ParseIdError {}
 
 struct Buffer<const N: usize> {
-    hex: [u8; N],
+    value: [u8; N],
     idx: usize,
 }
 
 impl<const N: usize> Buffer<N> {
     fn new() -> Self {
         Buffer {
-            hex: [0; N],
+            value: [0; N],
             idx: 0,
         }
     }
 
-    fn buffer(&mut self, hex: impl fmt::Display) -> Result<&[u8], ParseIdError> {
+    fn buffer(&mut self, value: impl fmt::Display) -> Result<&[u8], ParseIdError> {
         use fmt::Write as _;
 
         self.idx = 0;
 
-        write!(self, "{}", hex).map_err(|_| ParseIdError {})?;
+        write!(self, "{}", value).map_err(|_| ParseIdError {})?;
 
-        Ok(&self.hex[..self.idx])
+        Ok(&self.value[..self.idx])
     }
 }
 
@@ -863,8 +863,8 @@ impl<const N: usize> fmt::Write for Buffer<N> {
         let s = s.as_bytes();
         let next_idx = self.idx + s.len();
 
-        if next_idx <= self.hex.len() {
-            self.hex[self.idx..next_idx].copy_from_slice(s);
+        if next_idx <= self.value.len() {
+            self.value[self.idx..next_idx].copy_from_slice(s);
             self.idx = next_idx;
 
             Ok(())
@@ -877,7 +877,7 @@ impl<const N: usize> fmt::Write for Buffer<N> {
 /**
 An active span in a distributed trace.
 
-This type is created by the [`crate::span!`] macro with the `guard` control parameter. See the [`mod@crate::span`] module for details on creating spans.
+This type is created by the [`macro@crate::span!`] macro with the `guard` control parameter. See the [`mod@crate::span`] module for details on creating spans.
 
 Call [`SpanGuard::complete_with`], or just drop the guard to complete it, emitting a [`Span`] for its execution.
 */

@@ -267,7 +267,7 @@ Construct a debug event.
 
 # Syntax
 
-See the [`macro@event`] macro for syntax.
+See the [`macro@evt`] macro for syntax.
 
 # Returns
 
@@ -287,7 +287,7 @@ Construct an info event.
 
 # Syntax
 
-See the [`macro@event`] macro for syntax.
+See the [`macro@evt`] macro for syntax.
 
 # Returns
 
@@ -307,7 +307,7 @@ Construct a warn event.
 
 # Syntax
 
-See the [`macro@event`] macro for syntax.
+See the [`macro@evt`] macro for syntax.
 
 # Returns
 
@@ -327,7 +327,7 @@ Construct an error event.
 
 # Syntax
 
-See the [`macro@event`] macro for syntax.
+See the [`macro@evt`] macro for syntax.
 
 # Returns
 

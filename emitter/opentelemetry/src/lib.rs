@@ -1,11 +1,11 @@
 /*!
 Integrate `emit` with the OpenTelemetry SDK.
 
-This library forwards diagnostic events from emit through the OpenTelemetry SDK as log records and spans. This library is for applications that already use the OpenTelemetry SDK. It's also intended for applications that need to unify multiple instrumentation libraries, like `emit`, `log`, and `tracing`, into a shared pipeline. If you'd just like to send `emit` diagnostics via OTLP to the OpenTelemetry Collector or other compatible service, then consider [`emit_otlp`](https://docs.rs/emit_otlp/0.11.0-alpha.16/emit_otlp/index.html).
+This library forwards diagnostic events from `emit` through the OpenTelemetry SDK as log records and spans. This library is for applications that already use the OpenTelemetry SDK. It's also intended for applications that need to unify multiple instrumentation libraries, like `emit`, `log`, and `tracing`, into a shared pipeline. If you'd just like to send `emit` diagnostics via OTLP to the OpenTelemetry Collector or other compatible service, then consider [`emit_otlp`](https://docs.rs/emit_otlp/0.11.0-alpha.16/emit_otlp/index.html).
 
 # Getting started
 
-Configure OpenTelemetry as per its documentation, then add `emit` and `emit_opentelemetry` to your Cargo.toml:
+Configure the OpenTelemetry SDK as per its documentation, then add `emit` and `emit_opentelemetry` to your Cargo.toml:
 
 ```toml
 [dependencies.emit]
@@ -40,7 +40,7 @@ fn main() {
 }
 ```
 
-Diagnostic events produced by the [`macro@emit::span`] macro are sent to an [`opentelemetry::global::tracer`] as an [`opentelemetry::trace::Span`] on completion. All other emitted events are sent to an [`opentelemetry::global::logger`] as [`opentelemetry::logs::LogRecord`]s.
+Diagnostic events produced by the [`macro@emit::span`] macro are sent to an [`opentelemetry::trace::Tracer`] as an [`opentelemetry::trace::Span`] on completion. All other emitted events are sent to an [`opentelemetry::logs::Logger`] as [`opentelemetry::logs::LogRecord`]s.
 
 # Sampling
 

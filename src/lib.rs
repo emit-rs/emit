@@ -574,7 +574,7 @@ macro_rules! mdl {
 }
 
 /**
-Get a [`Path`] of the package name for use in [`Event::module`].
+Get a [`Path`] of the package name for use in [`Event::mdl`].
 
 This macro uses the build-time `CARGO_PKG_NAME` environment variable.
 */

@@ -203,7 +203,7 @@ impl<E, W> Wrap<E, W> {
     }
 
     /**
-    Get a reference to the underlying [`Wrapping`].
+    Get a reference to the underlying [`wrapping::Wrapping`].
     */
     pub const fn wrapping(&self) -> &W {
         &self.wrapping
@@ -221,7 +221,7 @@ impl<E: Emitter, W: wrapping::Wrapping> Emitter for Wrap<E, W> {
 }
 
 /**
-Wrap an [`Emitter`] in a [`Wrapping`], transforming or filtering [`Event`]s before it receives them.
+Wrap an [`Emitter`] in a [`wrapping::Wrapping`], transforming or filtering [`Event`]s before it receives them.
 
 Flushing defers to the wrapped emitter.
 */

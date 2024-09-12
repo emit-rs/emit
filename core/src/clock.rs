@@ -7,11 +7,11 @@ A clock is a service that returns a [`Timestamp`] representing the current point
 use crate::{empty::Empty, timestamp::Timestamp};
 
 /**
-A service to measure the current time.
+A service to get the current [`Timestamp`].
 */
 pub trait Clock {
     /**
-    Read the current time.
+    Read the current [`Timestamp`].
 
     This method may return `None` if the clock couldn't be read for any reason. That may involve the clock not actually supporting reading now, time moving backwards, or any other reason that could result in an inaccurate reading.
     */

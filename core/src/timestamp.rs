@@ -27,7 +27,10 @@ use core::{
     time::Duration,
 };
 
-use crate::value::{FromValue, ToValue, Value};
+use crate::{
+    buf::Buffer,
+    value::{FromValue, ToValue, Value},
+};
 
 /**
 A Unix timestamp with nanosecond precision.
@@ -121,6 +124,18 @@ impl Timestamp {
     */
     pub fn try_from_str(ts: &str) -> Result<Self, ParseTimestampError> {
         ts.parse()
+    }
+
+    /**
+    Try parse a timestamp from an RFC3339 formatted value.
+    */
+    pub fn parse(ts: impl fmt::Display) -> Result<Self, ParseTimestampError> {
+        let mut buf = Buffer::<30>::new();
+
+        Self::try_from_str(
+            str::from_utf8(buf.buffer(ts).ok_or_else(|| ParseTimestampError {})?)
+                .map_err(|_| ParseTimestampError {})?,
+        )
     }
 
     /**
@@ -552,9 +567,29 @@ mod tests {
 
         let fmt = ts.to_string();
 
-        let parsed: Timestamp = fmt.parse().unwrap();
+        for parsed in [
+            Timestamp::try_from_str(&fmt),
+            Timestamp::parse(&fmt),
+            fmt.parse(),
+        ] {
+            let parsed = parsed.unwrap();
 
-        assert_eq!(ts, parsed, "{}", fmt);
+            assert_eq!(ts, parsed, "{}", fmt);
+        }
+    }
+
+    #[test]
+    fn parse_invalid() {
+        for case in [
+            "",
+            "0",
+            "2024-01-01T00:00:00.00000000000000000000000000Z",
+            "2024-01-01T00:00:00.000+10",
+            "Thursday, September 12, 2024",
+        ] {
+            assert!(Timestamp::try_from_str(case).is_err());
+            assert!(Timestamp::parse(case).is_err());
+        }
     }
 
     #[test]
