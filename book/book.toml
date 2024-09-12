@@ -1,0 +1,6 @@
+[book]
+authors = ["KodrAus"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Emit"
