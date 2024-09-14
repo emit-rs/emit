@@ -1,3 +1,7 @@
+/*!
+This example demonstrates how to emit complex values using `serde`.
+*/
+
 use std::time::Duration;
 
 fn example() {

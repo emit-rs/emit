@@ -1,3 +1,9 @@
+/*!
+This example demonstrates how to complete a span manually.
+
+This can be useful to include extra properties that weren't available when the span was created.
+*/
+
 use std::time::Duration;
 
 // The `guard` control parameter binds an `emit::Span` that you can use

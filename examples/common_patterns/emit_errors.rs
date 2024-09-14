@@ -1,3 +1,7 @@
+/*!
+This examples demonstrates how to emit a event with an error.
+*/
+
 use std::{io, time::Duration};
 
 fn example() {

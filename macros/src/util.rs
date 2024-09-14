@@ -5,6 +5,7 @@ use syn::{
     parse::{self, Parse, ParseStream},
     punctuated::Punctuated,
     Attribute, ExprLit, FieldValue, Lit, LitStr, MacroDelimiter, Member, Meta, MetaList,
+    ext::IdentExt,
 };
 
 pub trait FieldValueKey {
@@ -23,7 +24,7 @@ impl FieldValueKey for FieldValue {
         ExprLit {
             attrs: vec![],
             lit: Lit::Str(match self.member {
-                Member::Named(ref member) => LitStr::new(&member.to_string(), member.span()),
+                Member::Named(ref member) => LitStr::new(&member.unraw().to_string(), member.span()),
                 Member::Unnamed(ref member) => LitStr::new(&member.index.to_string(), member.span),
             }),
         }

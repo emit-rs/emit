@@ -22,7 +22,18 @@ fn props_basic() {
 }
 
 #[test]
-fn props_duplicate_defined_external() {
+fn props_uncooked() {
+    match emit::props! {
+        r#type: 1,
+    } {
+        props => {
+            assert_eq!(1, props.pull::<i32, _>("type").unwrap());
+        }
+    }
+}
+
+#[test]
+fn props_external() {
     let x = 42;
 
     match emit::props! {

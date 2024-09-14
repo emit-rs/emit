@@ -1,4 +1,29 @@
-use std::time::Duration;
+/*!
+This example demonstrates configuring `emit` to produce OTLP directly.
+
+You can point `emit` directly at an OpenTelemetry Collector or other compatible service.
+*/
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let _ = emit::setup().emit_to(emit_term::stdout()).init_internal();
+
+    // Configure `emit` to produce OTLP
+    let rt = emit::setup()
+        .emit_to(
+            emit_otlp::new()
+                .logs(emit_otlp::logs_grpc_proto("http://localhost:4319"))
+                .traces(emit_otlp::traces_grpc_proto("http://localhost:4319"))
+                .metrics(emit_otlp::metrics_grpc_proto("http://localhost:4319"))
+                .spawn(),
+        )
+        .init();
+
+    run();
+
+    rt.blocking_flush(std::time::Duration::from_secs(10));
+
+    Ok(())
+}
 
 // Emit a span
 #[emit::span("Running")]
@@ -21,24 +46,4 @@ fn run() {
         counter,
         emit::Empty,
     ));
-}
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let _ = emit::setup().emit_to(emit_term::stdout()).init_internal();
-
-    let rt = emit::setup()
-        .emit_to(
-            emit_otlp::new()
-                .logs(emit_otlp::logs_grpc_proto("http://localhost:4319"))
-                .traces(emit_otlp::traces_grpc_proto("http://localhost:4319"))
-                .metrics(emit_otlp::metrics_grpc_proto("http://localhost:4319"))
-                .spawn(),
-        )
-        .init();
-
-    run();
-
-    rt.blocking_flush(Duration::from_secs(10));
-
-    Ok(())
 }

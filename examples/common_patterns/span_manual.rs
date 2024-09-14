@@ -1,3 +1,9 @@
+/*!
+This example demonstrates how to construct a span manually, without using `#[emit::span]`.
+
+It can be useful in applications that use disconnected middleware that makes it difficult to pick a single point to introduce `#[emit::span]` to.
+*/
+
 use std::time::Duration;
 
 fn example(i: i32) {
@@ -8,7 +14,11 @@ fn example(i: i32) {
     let ctxt = emit::SpanCtxt::current(emit::ctxt()).new_child(emit::rng());
 
     // Push into the ambient context, so emitted events see the trace and span ids
-    ctxt.push(emit::ctxt()).call(|| {
+    let frame = ctxt.push(emit::ctxt());
+
+    // Execute our code within the context of the frame
+    // If this function was async, then you would use `frame.in_future(..).await`
+    frame.call(|| {
         let r = i + 1;
 
         if r == 4 {

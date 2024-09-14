@@ -1,3 +1,7 @@
+/*!
+This example demonstrates how to emit a property using a key that's not a valid Rust identifier.
+*/
+
 use std::time::Duration;
 
 fn example() {

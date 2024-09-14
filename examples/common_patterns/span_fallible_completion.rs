@@ -1,3 +1,7 @@
+/*!
+This example demonstrates how to make a span automatically include the error of a fallible method.
+*/
+
 use std::time::Duration;
 
 #[derive(thiserror::Error, Debug)]

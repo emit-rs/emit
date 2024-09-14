@@ -1,3 +1,7 @@
+/*!
+This example demonstrates how to exclude a property that's `None`.
+*/
+
 use std::time::Duration;
 
 fn example() {

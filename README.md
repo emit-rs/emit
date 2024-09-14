@@ -14,6 +14,8 @@
 
 ## Getting started
 
+Add `emit` to your `Cargo.toml`:
+
 ```toml
 [dependencies.emit]
 version = "0.11.0-alpha.16"
@@ -22,8 +24,11 @@ version = "0.11.0-alpha.16"
 version = "0.11.0-alpha.16"
 ```
 
+This example uses [`emit_term`](https://docs.rs/emit_term/0.11.0-alpha.16/emit_term/index.html) for writing diagnostics to the console. You can also write the, [to rolling files](https://docs.rs/emit_file/0.11.0-alpha.16/emit_file/index.html), [to a remote collector](https://docs.rs/emit_otlp/0.11.0-alpha.16/emit_otlp/index.html), or to a custom destination.
+
 ```rust
 fn main() {
+    // Configure `emit` to write events to the console
     let rt = emit::setup()
         .emit_to(emit_term::stdout())
         .init();
@@ -31,6 +36,7 @@ fn main() {
     // Your app code goes here
     greet("Rust");
 
+    // Flush any remaining events before `main` returns
     rt.blocking_flush(std::time::Duration::from_secs(5));
 }
 
@@ -42,14 +48,15 @@ fn greet(user: &str) {
 
 ![The output of running the above program](https://github.com/emit-rs/emit/blob/main/asset/emit_term.png?raw=true)
 
-## Where can I send my diagnostics?
+## Emitting events
 
-Diagnostics produced by `emit` are sent to an _emitter_. This repository currently implements the following emitters:
+## Instrumenting functions
 
-- [`emit_term`](https://docs.rs/emit_term/0.11.0-alpha.16/emit_term/index.html) for writing human-readable output to the console.
-- [`emit_file`](https://docs.rs/emit_file/0.11.0-alpha.16/emit_file/index.html) for writing JSON or another machine-readable format to rolling files.
-- [`emit_otlp`](https://docs.rs/emit_otlp/0.11.0-alpha.16/emit_otlp/index.html) for sending diagnostics to an OpenTelemetry compatible collector.
-- [`emit_opentelemetry`](https://docs.rs/emit_opentelemetry/0.11.0-alpha.16/emit_opentelemetry/index.html) for integrating `emit` into an application using the OpenTelemetry SDK for its diagnostics.
+## Sampling metrics
+
+## Troubleshooting
+
+## Next steps
 
 ## Current status
 

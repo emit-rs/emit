@@ -57,6 +57,8 @@ fn routes(method: &str, path: &str) {
 
 // This is a portable traceparent parser
 // You may want to use it, or if you've got another one handy use it instead
+//
+// We may include this in `emit` itself at some point.
 pub mod traceparent {
     pub fn parse(
         traceparent: &str,

@@ -1,3 +1,7 @@
+/*!
+This example demonstrates how to configure and write events through `emit`.
+*/
+
 fn main() {
     let rt = emit::setup().emit_to(emit_term::stdout()).init();
 

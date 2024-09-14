@@ -1,3 +1,49 @@
+/*!
+This example demonstrates configuring `emit` to forward its events through the OpenTelemetry SDK.
+
+This is useful if you're already using the OpenTelemtry SDK, or if your application uses multiple frameworks.
+*/
+
+#[tokio::main]
+async fn main() {
+    // Configure the OpenTelemetry SDK
+    // In this example, we're configuring it to produce OTLP
+    let channel = tonic::transport::Channel::from_static("http://localhost:4319")
+        .connect()
+        .await
+        .unwrap();
+
+    let tracer_provider = opentelemetry_otlp::new_pipeline()
+        .tracing()
+        .with_exporter(
+            opentelemetry_otlp::new_exporter()
+                .tonic()
+                .with_channel(channel.clone()),
+        )
+        .install_batch(opentelemetry_sdk::runtime::Tokio)
+        .unwrap();
+
+    let logger_provider = opentelemetry_otlp::new_pipeline()
+        .logging()
+        .with_exporter(
+            opentelemetry_otlp::new_exporter()
+                .tonic()
+                .with_channel(channel.clone()),
+        )
+        .install_batch(opentelemetry_sdk::runtime::Tokio)
+        .unwrap();
+
+    // Configure `emit` to point to `opentelemetry`
+    let _ = emit_opentelemetry::setup(logger_provider.clone(), tracer_provider.clone()).init();
+
+    // Run our example program
+    run_opentelemetry(tracer_provider.clone());
+
+    // Shutdown the SDK
+    let _ = logger_provider.shutdown();
+    let _ = tracer_provider.shutdown();
+}
+
 // Emit a span
 #[emit::span("Running emit")]
 fn run_emit() {
@@ -34,43 +80,4 @@ where
 
             run_emit();
         })
-}
-
-#[tokio::main]
-async fn main() {
-    // Configure the OpenTelemetry SDK
-    let channel = tonic::transport::Channel::from_static("http://localhost:4319")
-        .connect()
-        .await
-        .unwrap();
-
-    let tracer_provider = opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_exporter(
-            opentelemetry_otlp::new_exporter()
-                .tonic()
-                .with_channel(channel.clone()),
-        )
-        .install_batch(opentelemetry_sdk::runtime::Tokio)
-        .unwrap();
-
-    let logger_provider = opentelemetry_otlp::new_pipeline()
-        .logging()
-        .with_exporter(
-            opentelemetry_otlp::new_exporter()
-                .tonic()
-                .with_channel(channel.clone()),
-        )
-        .install_batch(opentelemetry_sdk::runtime::Tokio)
-        .unwrap();
-
-    // Configure `emit` to point to `opentelemetry`
-    let _ = emit_opentelemetry::setup(logger_provider.clone(), tracer_provider.clone()).init();
-
-    // Run our example program
-    run_opentelemetry(tracer_provider.clone());
-
-    // Shutdown the SDK
-    let _ = logger_provider.shutdown();
-    let _ = tracer_provider.shutdown();
 }

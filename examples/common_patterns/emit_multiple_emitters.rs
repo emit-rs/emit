@@ -1,3 +1,7 @@
+/*!
+This example demonstrates how to emit events to multiple destinations.
+*/
+
 use std::time::Duration;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

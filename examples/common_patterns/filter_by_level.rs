@@ -1,3 +1,7 @@
+/*!
+This example demonstrates how to apply a minimum level filter to specific modules in your application.
+*/
+
 use std::time::Duration;
 
 fn main() {
