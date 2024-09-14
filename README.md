@@ -10,7 +10,11 @@
 
 ## Developer-first diagnostics
 
-`emit` is a framework for manually instrumenting Rust applications using an expressive syntax inspired by [Message Templates](https://messagetemplates.org). `emit` has a small, fundamental data model where everything is represented by a single `Event` type. It has a focused API that keeps configuration straightforward and doesn't stand out within code being instrumented.
+`emit` is a framework for manually instrumenting Rust applications using an expressive syntax inspired by [Message Templates](https://messagetemplates.org).
+
+`emit` has a small, fundamental data model where everything is represented by a single `Event` type.
+
+`emit` has a focused API that keeps configuration straightforward and doesn't stand out within code being instrumented.
 
 ## Getting started
 
@@ -24,7 +28,7 @@ version = "0.11.0-alpha.16"
 version = "0.11.0-alpha.16"
 ```
 
-Then initialize it in your `main.rs` and start peppering diagnostics throughout your application:
+Initialize `emit` in your `main.rs` and start peppering diagnostics throughout your application:
 
 ```rust
 fn main() {
@@ -50,7 +54,7 @@ fn greet(user: &str) {
 
 ## Emitting events
 
-Use the `emit::emit!` macros to emit diagnostic events in your applications:
+Use the `emit!` macros to emit diagnostic events in your application:
 
 ```rust
 let user = "Rust";
@@ -60,7 +64,7 @@ emit::emit!("Hello, {user}!");
 
 `emit`'s macro syntax is more than just format args. Values you use in the string template are included on your events, without losing their original type.
 
-Events produced by `emit` are passed to an _emitter_, which encodes and forwards them on to some external onserver. Typical emitters include:
+Events produced by `emit` are passed to an emitter, which encodes and forwards them on to some external observer. Typical emitters include:
 
 - [`emit_term`](https://docs.rs/emit_term/0.11.0-alpha.16/emit_term/index.html) for writing human-readable output to the console.
 - [`emit_file`](https://docs.rs/emit_file/0.11.0-alpha.16/emit_file/index.html) for writing JSON or another machine-readable format to rolling files.
@@ -69,7 +73,7 @@ Events produced by `emit` are passed to an _emitter_, which encodes and forwards
 
 ## Instrumenting functions
 
-Use the `emit::span!` macros to instrument a function, emitting a span event for it at the end with the time it took to execute:
+Use the `span!` macros to instrument a function, emitting a span event for it at the end with the time it took to execute:
 
 ```rust
 #[emit::span("Greet {user}")]
@@ -80,11 +84,11 @@ fn greet(user: &str) {
 
 Any other events emitted while this function executes will be correlated with it. Any other instrumented functions it calls will form a trace hierarchy.
 
-`emit` doesn't actually hardcode the concept of spans. They're an extension of its data model where everything is an event. A span-aware emitter can treat these events specially. In OTLP for instance, these events can be sent via the traces signal instead of to logs.
+`emit` doesn't actually hardcode the concept of spans. They're an extension of its core data model based on the presence of some well-known properties. A span-aware emitter can treat these events specially. In OTLP for instance, these events can be sent via the traces signal instead of to logs.
 
 ## Sampling metrics
 
-`emit` doesn't have APIs for collecting metrics itself, that's left up to your application. What it does have is another extension to its data model for metric samples:
+`emit` doesn't have APIs for collecting metrics itself, that's left up to your application. What it does have is another extension to its data model for reporting metric samples:
 
 ```rust
 let sample = sample_bytes_written();
@@ -98,7 +102,9 @@ emit::emit!(
 );
 ```
 
-Metric-aware emitters like OTLP can send this event via the metrics signal. There's room in `emit` for many more extensions, including ones you define for your own applications.
+Metric-aware emitters can treat these events specially. In OTLP for instance, these events can be sent via the metrics signal instead of to logs.
+
+There's room in `emit` for many more extensions, including ones you define for your own applications.
 
 ## Troubleshooting
 
