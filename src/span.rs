@@ -390,7 +390,6 @@ fn wait_a_bit(sleep_ms: u64) {
         span.complete_with(|span| {
             emit::warn!(
                 evt: span,
-                when: emit::filter::always(),
                 "wait a bit took too long",
             );
         });

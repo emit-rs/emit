@@ -817,7 +817,7 @@ pub fn __private_complete_span<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock,
 ) {
     emit_core::emit(
         rt.emitter(),
-        crate::filter::always(),
+        crate::Empty,
         rt.ctxt(),
         rt.clock(),
         span.to_event()
