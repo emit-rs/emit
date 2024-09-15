@@ -2,6 +2,8 @@
 
 ## Developer-first diagnostics for Rust applications
 
+`emit` is a framework for manually instrumenting Rust applications using an expressive syntax inspired by [Message Templates](https://messagetemplates.org).
+
 ```rust
 extern crate emit;
 extern crate emit_term;

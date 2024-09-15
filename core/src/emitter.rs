@@ -1,9 +1,9 @@
 /*!
 The [`Emitter`] type.
 
-Emitters are the receivers of diagnostic data in the form of [`Event`]s. A typical emitter will translate and forward those events to some outside observer. That could be a file containing newline JSON, a remote observability system via OTLP, or anything else.
+Emitters are the receivers of diagnostic data in the form of [`Event`]s. A typical emitter will translate and forward those events to some outside observer. That could be the console, rolling files, remote observability system, or anything else.
 
-Emitters are asynchronous, so emitted diagnostics are not guaranteed to have been fully processed until a call to [`Emitter::blocking_flush`].
+Emitters are _non-blocking_ and _asynchronous_. Emitted diagnostics are not guaranteed to have been fully processed until a call to [`Emitter::blocking_flush`].
 */
 
 use core::time::Duration;

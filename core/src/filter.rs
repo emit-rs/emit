@@ -170,13 +170,6 @@ impl<T: Filter, U: Filter> Filter for Or<T, U> {
     }
 }
 
-/**
-A [`Filter`] that always evaluates to `true`.
-*/
-pub fn always() -> Empty {
-    Empty
-}
-
 mod internal {
     use crate::{event::Event, props::ErasedProps};
 
