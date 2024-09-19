@@ -20,7 +20,7 @@
 - [Emitting events](./emitting-events.md)
     - [Console](./emitting-events/console.md)
     - [Rolling files](./emitting-events/rolling-files.md)
-    - [OTLP-aware services](./emitting-events/otlp-aware-services.md)
+    - [Via OTLP](./emitting-events/otlp.md)
 - [Advanced apps](./advanced-apps.md)
     - [Integrating with OpenTelemetry](./advanced-apps/integrating-with-open-telemetry.md)
     - [Custom runtimes](./advanced-apps/custom-runtimes.md)
@@ -32,3 +32,4 @@
     - [Template syntax](./reference/template-syntax.md)
     - [Property capturing](./reference/property-capturing.md)
     - [Property attributes](./reference/property-attributes.md)
+    - [Control parameters](./reference/control-parameters.md)
