@@ -2,4 +2,5 @@
 
 - `emit::emit!`
 - Control parameters
-- Levels
+
+## The `emit::emit!` macro
