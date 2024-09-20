@@ -13,7 +13,7 @@ pub trait Clock {
     /**
     Read the current [`Timestamp`].
 
-    This method may return `None` if the clock couldn't be read for any reason. That may involve the clock not actually supporting reading now, time moving backwards, or any other reason that could result in an inaccurate reading.
+    This method may return `None` if the clock couldn't be read for any reason. That may be because the clock doesn't actually supporting reading now, time moving backwards, or any other reason that could result in an inaccurate reading.
     */
     fn now(&self) -> Option<Timestamp>;
 }

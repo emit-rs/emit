@@ -30,7 +30,7 @@ Properties may be duplicated in a set of `Props`. When a property is duplicated,
 
 # Typed and untyped properties
 
-The [`Props::get`] method will return a property as an untyped [`Value`] that can be formatted or serialized. IF you're looking for a specific type, you can use [`Props::pull`] instead.
+The [`Props::get`] method will return a property as an untyped [`Value`] that can be formatted or serialized. If you're looking for a specific type, you can use [`Props::pull`] instead.
 */
 pub trait Props {
     /**

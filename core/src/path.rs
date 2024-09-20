@@ -49,6 +49,8 @@ impl<'a> FromValue<'a> for Path<'a> {
 impl Path<'static> {
     /**
     Create a path from a raw value.
+
+    This method will fail if the path is malformed. A valid path consists of one or more identifiers separated by `::`s. like `a::b::c`. See the [`is_valid_path`] function for more details.
     */
     pub fn new(path: &'static str) -> Result<Self, InvalidPathError> {
         Path::new_str(Str::new(path))
@@ -57,7 +59,7 @@ impl Path<'static> {
     /**
     Create a path from a raw value without checking its validity.
 
-    This method is not unsafe. There are no memory safety properties tied to the validity of paths.
+    This method is not unsafe. There are no memory safety properties tied to the validity of paths. Code that uses path segments may panic or produce unexpected results if given an invalid path.
     */
     pub const fn new_unchecked(path: &'static str) -> Self {
         Path::new_str_unchecked(Str::new(path))
@@ -69,6 +71,8 @@ impl<'a> Path<'a> {
     Create a path from a raw borrowed value.
 
     The [`Path::new`] method should be preferred where possible.
+
+    This method will fail if the path is malformed. A valid path consists of one or more identifiers separated by `::`s. like `a::b::c`. See the [`is_valid_path`] function for more details.
     */
     pub fn new_ref(path: &'a str) -> Result<Self, InvalidPathError> {
         Self::new_str(Str::new_ref(path))
@@ -79,7 +83,7 @@ impl<'a> Path<'a> {
 
     The [`Path::new_unchecked`] method should be preferred where possible.
 
-    This method is not unsafe. There are no memory safety properties tied to the validity of paths.
+    This method is not unsafe. There are no memory safety properties tied to the validity of paths. Code that uses path segments may panic or produce unexpected results if given an invalid path.
     */
     pub const fn new_ref_unchecked(path: &'a str) -> Self {
         Self::new_str_unchecked(Str::new_ref(path))
@@ -87,6 +91,8 @@ impl<'a> Path<'a> {
 
     /**
     Create a path from a raw [`Str`] value.
+
+    This method will fail if the path is malformed. A valid path consists of one or more identifiers separated by `::`s. like `a::b::c`. See the [`is_valid_path`] function for more details.
     */
     pub fn new_str(path: Str<'a>) -> Result<Self, InvalidPathError> {
         if is_valid_path(path.get()) {
@@ -99,7 +105,7 @@ impl<'a> Path<'a> {
     /**
     Create a path from a raw [`Str`] value without checking its validity.
 
-    This method is not unsafe. There are no memory safety properties tied to the validity of paths.
+    This method is not unsafe. There are no memory safety properties tied to the validity of paths. Code that uses path segments may panic or produce unexpected results if given an invalid path.
     */
     pub const fn new_str_unchecked(path: Str<'a>) -> Self {
         Path(path)
@@ -115,7 +121,7 @@ impl<'a> Path<'a> {
     /**
     Iterate over the segments of the path.
 
-    The behavior of invalid paths is undefined.
+    The behavior of this method on invalid paths is undefined.
     */
     pub fn segments(&self) -> Segments {
         Segments {
@@ -133,7 +139,7 @@ impl<'a> Path<'a> {
 
     This method is reflexive. A path is considered a child of itself.
 
-    The behavior of invalid paths is undefined.
+    The behavior of this method on invalid paths is undefined.
     */
     pub fn is_child_of<'b>(&self, other: &Path<'b>) -> bool {
         let child = self.0.get();
@@ -357,6 +363,8 @@ mod alloc_support {
     impl Path<'static> {
         /**
         Create a path from an owned raw value.
+
+        This method will fail if the path is malformed. A valid path consists of one or more identifiers separated by `::`s. like `a::b::c`. See the [`is_valid_path`] function for more details.
         */
         pub fn new_owned(path: impl Into<Box<str>>) -> Result<Self, InvalidPathError> {
             Path::new_str(Str::new_owned(path))
@@ -365,7 +373,7 @@ mod alloc_support {
         /**
         Create a path from an owned raw value without checking its validity.
 
-        This method is not unsafe. There are no memory safety properties tied to the validity of paths.
+        This method is not unsafe. There are no memory safety properties tied to the validity of paths. Code that uses path segments may panic or produce unexpected results if given an invalid path.
         */
         pub fn new_owned_unchecked(path: impl Into<Box<str>>) -> Self {
             Path::new_str_unchecked(Str::new_owned(path))
@@ -377,6 +385,8 @@ mod alloc_support {
         Create a path from a potentially owned raw value.
 
         If the value is `Cow::Borrowed` then this method will defer to [`Path::new_ref`]. If the value is `Cow::Owned` then this method will defer to [`Path::new_owned`].
+
+        This method will fail if the path is malformed. A valid path consists of one or more identifiers separated by `::`s. like `a::b::c`. See the [`is_valid_path`] function for more details.
         */
         pub fn new_cow_ref(path: Cow<'a, str>) -> Result<Self, InvalidPathError> {
             Path::new_str(Str::new_cow_ref(path))
@@ -387,7 +397,7 @@ mod alloc_support {
 
         If the value is `Cow::Borrowed` then this method will defer to [`Path::new_ref_unchecked`]. If the value is `Cow::Owned` then this method will defer to [`Path::new_owned_unchecked`].
 
-        This method is not unsafe. There are no memory safety properties tied to the validity of paths.
+        This method is not unsafe. There are no memory safety properties tied to the validity of paths. Code that uses path segments may panic or produce unexpected results if given an invalid path.
         */
         pub fn new_cow_ref_unchecked(path: Cow<'a, str>) -> Self {
             Path::new_str_unchecked(Str::new_cow_ref(path))

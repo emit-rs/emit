@@ -1,9 +1,9 @@
 /*!
 Structured diagnostics for Rust applications.
 
-`emit` is a structured logging framework for manually instrumenting Rust applications with an expressive syntax inspired by [Message Templates](https://messagetemplates.org).
+`emit` is a framework for adding diagnostics to your Rust applications with a simple, powerful data model and an expressive syntax inspired by [Message Templates](https://messagetemplates.org).
 
-These are the technical docs for `emit`. See [the guide](https://emitrs.io) for a complete introduction to `emit`.
+These are the technical API docs for `emit`. Also see [the guide](https://emit-rs.io) for a complete introduction.
 
 ## Getting started
 
@@ -32,24 +32,32 @@ fn main() {
 
 #[emit::span("Greet {user}")]
 fn greet(user: &str) {
-    emit::emit!("Hello, {user}!");
+    emit::info!("Hello, {user}!");
 }
 ```
 
 The [`setup()`] function configures `emit` with an [`Emitter`] to write [`Event`]s to. The [`macro@emit`] macro emits an event, capturing any ambient state referred to in its template. The [`macro@span`] macro instruments a function, timing its execution and correlating any other events emitted within it together.
 
-## Where can I send my diagnostics?
+## Stable vs nightly toolchains
 
-Emitters are defined in external libraries and plugged in to your diagnostic pipeline during [`emit::setup`]. Some emitters include:
+`emit` works on stable versions of Rust, but can provide more accurate compiler messages on nightly toolchains.
 
-- [`emit_term`](https://docs.rs/emit_term/0.11.0-alpha.16/emit_term/index.html) for writing human-readable output to the console.
-- [`emit_file`](https://docs.rs/emit_file/0.11.0-alpha.16/emit_file/index.html) for writing JSON or another machine-readable format to rolling files.
-- [`emit_otlp`](https://docs.rs/emit_otlp/0.11.0-alpha.16/emit_otlp/index.html) for sending diagnostics to an OpenTelemetry compatible collector.
-- [`emit_opentelemetry`](https://docs.rs/emit_opentelemetry/0.11.0-alpha.16/emit_opentelemetry/index.html) for integrating `emit` into an application using the OpenTelemetry SDK for its diagnostics.
+## Crate features
+
+- `std` (default): Implies `alloc`
+- `alloc`:
+- `implicit_rt` (default):
+- `implicit_internal_rt` (default):
+- `sval`:
+- `serde`:
+
+## Architecture
+
+## Data model
 
 ## Troubleshooting
 
-Emitters write their own diagnostics to an alternative `emit` runtime, which you can configure to debug them:
+Emitters write their own diagnostics to an alternative `emit` runtime, which you can configure via [`Setup::init_internal`] to debug them:
 
 ```
 # mod emit_term { pub fn stdout() -> impl emit::runtime::InternalEmitter { emit::runtime::AssertInternal(emit::emitter::from_fn(|_| {})) } }
