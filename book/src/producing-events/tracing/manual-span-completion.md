@@ -3,9 +3,10 @@
 The `guard` control parameter can be applied to span macros to bind an identifier in the body of the annotated function for the [`Span`] that's created for it. This span can be completed manually, changing properties of the span along the way:
 
 ```rust
+# extern crate emit;
 #[emit::span(guard: span, "wait a bit", sleep_ms)]
 fn wait_a_bit(sleep_ms: u64) {
-    thread::sleep(Duration::from_millis(sleep_ms));
+    std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
 
     if sleep_ms > 500 {
         span.complete_with(|span| {

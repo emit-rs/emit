@@ -3,6 +3,7 @@
 The [`Source`] trait represents some underlying data source that can be sampled to provide [`Metric`]s. You can sample sources directly, or combine them into a [`Reporter`] to sample all the sources of metrics in your application together:
 
 ```rust
+# extern crate emit;
 use emit::metric::{Source as _, Sampler as _};
 
 // Create some metric sources

@@ -5,6 +5,7 @@ Metric events with a span extent, where the `metric_value` is an array are a com
 The following metric is for a time-series with 15 buckets, where each bucket covers 1 second:
 
 ```rust
+# extern crate emit;
 use emit::{Clock, well_known::METRIC_AGG_COUNT};
 
 let now = emit::clock().now();

@@ -3,6 +3,7 @@
 Span events may also be created manually:
 
 ```rust
+# extern crate emit;
 // Create a new span context that is a child of the current one
 // This context can be freely copied or stored elsewhere
 let ctxt = emit::SpanCtxt::current(emit::ctxt())
@@ -16,7 +17,7 @@ ctxt.push(emit::ctxt())
 
         // Your code goes here
         let sleep_ms = 1200;
-        thread::sleep(Duration::from_millis(sleep_ms));
+        std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
 
         // Make sure you complete the span in the frame.
         // This is especially important for futures, otherwise the span may
@@ -37,11 +38,12 @@ ctxt.push(emit::ctxt())
 Spans may also be emitted as pure events:
 
 ```rust
+# extern crate emit;
 let timer = emit::Timer::start(emit::clock());
 
 // Your code goes here
 let sleep_ms = 1200;
-thread::sleep(Duration::from_millis(sleep_ms));
+std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
 
 emit::emit! {
     extent: timer,

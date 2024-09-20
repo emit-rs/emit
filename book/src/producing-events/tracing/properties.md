@@ -3,13 +3,14 @@
 Properties added to the span macros are added to an ambient context and automatically included on any events emitted within that operation:
 
 ```rust
+# extern crate emit;
 #[emit::span("wait a bit", sleep_ms)]
 fn wait_a_bit(sleep_ms: u64) {
-    thread::sleep(Duration::from_millis(sleep_ms));
+    std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
 
     emit::emit!("waiting a bit longer");
 
-    thread::sleep(Duration::from_millis(sleep_ms));
+    std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
 }
 ```
 
@@ -45,16 +46,17 @@ Event {
 Any operations started within a span will inherit its identifiers:
 
 ```rust
+# extern crate emit;
 #[emit::span("outer span", sleep_ms)]
 fn outer_span(sleep_ms: u64) {
-    thread::sleep(Duration::from_millis(sleep_ms));
+    std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
 
     inner_span(sleep_ms / 2);
 }
 
 #[emit::span("inner span", sleep_ms)]
 fn inner_span(sleep_ms: u64) {
-    thread::sleep(Duration::from_millis(sleep_ms));
+    std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
 }
 ```
 

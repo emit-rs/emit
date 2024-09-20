@@ -5,6 +5,7 @@
 When an incoming request arrives, you can parse the trace and span ids from its traceparent header and push them onto the current context:
 
 ```rust
+# extern crate emit;
 // Parsed from a traceparent header
 let trace_id = "12b2fde225aebfa6758ede9cac81bf4d";
 let span_id = "23995f85b4610391";
@@ -44,6 +45,7 @@ This pattern of pushing the incoming traceparent onto the context and then immed
 When making outbound requests, you can pull the current trace and span ids from the current context and format them into a traceparent header:
 
 ```rust
+# extern crate emit;
 use emit::{Ctxt, Props};
 
 let (trace_id, span_id) = emit::ctxt().with_current(|props| {

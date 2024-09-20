@@ -7,9 +7,10 @@ When your application executes key operations, you can emit span events that dov
 `emit` supports tracing operations through attribute macros on functions. These macros use the same syntax as those for emitting regular events:
 
 ```rust
+# extern crate emit;
 #[emit::span("wait a bit", sleep_ms)]
 fn wait_a_bit(sleep_ms: u64) {
-    thread::sleep(Duration::from_millis(sleep_ms))
+    std::thread::sleep(std::time::Duration::from_millis(sleep_ms))
 }
 
 wait_a_bit(1200);
@@ -36,11 +37,15 @@ When the annotated function returns, a span event for its execution is emitted. 
 
 Asynchronous functions are also supported:
 
-```rust
+```edition2021
+# extern crate emit;
+# async fn sleep<T>(_: T) {}
+# async fn _main() {
 #[emit::span("wait a bit", sleep_ms)]
 async fn wait_a_bit(sleep_ms: u64) {
-    sleep(Duration::from_millis(sleep_ms)).await
+    sleep(std::time::Duration::from_millis(sleep_ms)).await
 }
 
 wait_a_bit(1200).await;
+# }
 ```

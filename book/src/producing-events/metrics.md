@@ -5,6 +5,7 @@ Metrics are an effective approach to monitoring applications at scale. They can 
 A standard kind of metric is a monotonic counter, which can be represented as an atomic integer. In this example, our counter is for the number of bytes written to a file, which we'll call `bytes_written`. We can report a sample of this counter as an event by wrapping it in a [`Metric`]:
 
 ```rust
+# extern crate emit;
 # fn sample_bytes_written() -> usize { 4643 }
 use emit::{well_known::METRIC_AGG_COUNT, Clock};
 
@@ -41,6 +42,7 @@ Event {
 Metrics may also be emitted manually:
 
 ```rust
+# extern crate emit;
 # fn sample_bytes_written() -> usize { 4643 }
 use emit::well_known::{EVENT_KIND_METRIC, METRIC_AGG_COUNT};
 

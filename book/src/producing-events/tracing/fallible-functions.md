@@ -3,18 +3,19 @@
 The `ok_lvl` and `err_lvl` control parameters can be applied to span macros to assign a level based on whether the annotated function returned `Ok` or `Err`:
 
 ```rust
+# extern crate emit;
 #[emit::span(
     ok_lvl: emit::Level::Info,
     err_lvl: emit::Level::Error,
     "wait a bit",
     sleep_ms,
 )]
-fn wait_a_bit(sleep_ms: u64) -> Result<(), io::Error> {
+fn wait_a_bit(sleep_ms: u64) -> Result<(), std::io::Error> {
     if sleep_ms > 500 {
-        return Err(io::Error::new(io::ErrorKind::Other, "the wait is too long"));
+        return Err(std::io::Error::new(std::io::ErrorKind::Other, "the wait is too long"));
     }
 
-    thread::sleep(Duration::from_millis(sleep_ms));
+    std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
 
     Ok(())
 }

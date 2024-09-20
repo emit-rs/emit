@@ -5,6 +5,7 @@ Metric events with a point extent are cumulative. Their `metric_value` is the re
 The following metric reports the current number of bytes written as 591:
 
 ```rust
+# extern crate emit;
 use emit::{Clock, well_known::METRIC_AGG_COUNT};
 
 emit::emit!(

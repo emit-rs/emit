@@ -5,6 +5,7 @@ Metric events with a span extent are deltas. Their `metric_value` is the result 
 The following metric reports that the number of bytes written changed by 17 over the last 30 seconds:
 
 ```rust
+# extern crate emit;
 use emit::{Clock, well_known::METRIC_AGG_COUNT};
 
 let now = emit::clock().now();
