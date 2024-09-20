@@ -16,7 +16,7 @@ std::thread::spawn({
 
 This same process is also needed for async code that involves thread spawning:
 
-```edition2021
+```rust
 # extern crate emit;
 # mod tokio { pub fn spawn(_: impl std::future::Future) {} }
 # fn main() {

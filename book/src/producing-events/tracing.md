@@ -37,7 +37,7 @@ When the annotated function returns, a span event for its execution is emitted. 
 
 Asynchronous functions are also supported:
 
-```edition2021
+```rust
 # extern crate emit;
 # async fn sleep<T>(_: T) {}
 # async fn _main() {

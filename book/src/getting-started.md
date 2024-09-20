@@ -60,7 +60,7 @@ emit::warn!("updating {user} cart failed: {err}");
 
 Add `#[emit::span]` to a significant function in your application to trace its execution:
 
-```edition2021
+```rust
 # extern crate emit;
 #[emit::span("add {item} to {user} cart")]
 async fn add_item(user: &str, item: &str) {
