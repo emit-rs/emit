@@ -4,10 +4,10 @@ Add `emit` to your `Cargo.toml`, along with an _emitter_ to write diagnostics to
 
 ```toml
 [dependencies.emit]
-version = "0.11.0-alpha.16"
+version = "0.11.0-alpha.17"
 
 [dependencies.emit_term]
-version = "0.11.0-alpha.16"
+version = "0.11.0-alpha.17"
 ```
 
 Initialize `emit` at the start of your `main.rs` using `emit::setup()`, and ensure any emitted diagnostics are flushed by calling `blocking_flush()` at the end:
