@@ -38,7 +38,7 @@
     - [Writing an emitter](./for-developers/writing-an-emitter.md)
 - [Reference](./reference.md)
     - [Architecture](./reference/architecture.md)
-    - [Event data model](./reference/event-data-model.md)
+    - [Events](./reference/events.md)
     - [Template syntax](./reference/template-syntax.md)
     - [Property capturing](./reference/property-capturing.md)
     - [Property attributes](./reference/property-attributes.md)

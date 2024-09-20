@@ -1,5 +1,7 @@
 # About
 
+> **NOTE:** This guide is an active work in progress. Most of the content is currently stubbed out, but being filled in.
+
 This guide introduces `emit`. You may also want to look at:
 
 - [the source on GitHub](https://github.com/emit-rs/emit).
