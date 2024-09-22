@@ -166,7 +166,7 @@ impl<'a, P> Metric<'a, P> {
     pub fn ts_start(&self) -> Option<&Timestamp> {
         self.extent
             .as_ref()
-            .and_then(|extent| extent.as_span())
+            .and_then(|extent| extent.as_range())
             .map(|span| &span.start)
     }
 
@@ -969,8 +969,8 @@ mod tests {
             let extent = metric.to_extent();
 
             assert_eq!(
-                expected.map(|extent| extent.as_range().clone()),
-                extent.map(|extent| extent.as_range().clone())
+                expected.map(|extent| extent.as_range().cloned()),
+                extent.map(|extent| extent.as_range().cloned())
             );
         }
     }

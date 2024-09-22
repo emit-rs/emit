@@ -1,6 +1,6 @@
 # Tracing data model
 
-The data model of spans is an extension of `emit`'s events. Span events include the following well-known properties:
+The data model of spans is an extension of [`emit`'s events](../../reference/events.md). Span events include the following well-known properties:
 
 - `evt_kind`: with a value of `"span"` to indicate that the event is a span.
 - `span_name`: a name for the operation the span represents. This defaults to the template.

@@ -592,16 +592,14 @@ fn default_writer(
             stream.record_begin(None, None, None, None)?;
 
             if let Some(extent) = self.0.extent() {
-                let range = extent.as_range();
-
-                if range.end != range.start {
+                if let Some(range) = extent.as_range() {
                     stream.record_value_begin(None, &sval::Label::new(KEY_TS_START))?;
                     sval::stream_display(&mut *stream, &range.start)?;
                     stream.record_value_end(None, &sval::Label::new(KEY_TS_START))?;
                 }
 
                 stream.record_value_begin(None, &sval::Label::new(KEY_TS))?;
-                sval::stream_display(&mut *stream, &range.end)?;
+                sval::stream_display(&mut *stream, extent.as_point())?;
                 stream.record_value_end(None, &sval::Label::new(KEY_TS))?;
             }
 

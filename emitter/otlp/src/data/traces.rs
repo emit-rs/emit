@@ -45,11 +45,11 @@ impl EventEncoder for TracesEventEncoder {
 
         let (start_time_unix_nano, end_time_unix_nano) = evt
             .extent()
-            .filter(|extent| extent.is_span())
-            .map(|extent| {
+            .and_then(|extent| extent.as_range())
+            .map(|range| {
                 (
-                    extent.as_range().start.to_unix().as_nanos() as u64,
-                    extent.as_range().end.to_unix().as_nanos() as u64,
+                    range.start.to_unix().as_nanos() as u64,
+                    range.end.to_unix().as_nanos() as u64,
                 )
             })?;
 

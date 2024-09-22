@@ -23,6 +23,8 @@ jobs:
           mkdir mdbook
           curl -sSL $url | tar -xz --directory=./mdbook
           echo `pwd`/mdbook >> $GITHUB_PATH
+      - name: Install mermaid
+        run: cargo install mdbook-mermaid
       - name: Build Book
         run: mdbook build book
       - name: Setup Pages

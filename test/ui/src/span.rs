@@ -30,7 +30,7 @@ fn span_basic() {
     fn assert_event(evt: &emit::Event<impl Props>) {
         assert_event_base(evt);
 
-        assert!(evt.extent().unwrap().is_span());
+        assert!(evt.extent().unwrap().is_range());
     }
 
     static CALLED: StaticCalled = StaticCalled::new();
@@ -196,7 +196,7 @@ async fn span_basic_async() {
             assert_eq!("greet {user}", evt.tpl().to_string());
             assert_eq!(module_path!(), evt.mdl());
 
-            assert!(evt.extent().unwrap().is_span());
+            assert!(evt.extent().unwrap().is_range());
             assert!(evt.props().pull::<emit::TraceId, _>("trace_id").is_some());
             assert!(evt.props().pull::<emit::SpanId, _>("span_id").is_some());
 

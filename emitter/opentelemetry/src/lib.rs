@@ -610,7 +610,7 @@ impl<L: Logger> emit::Emitter for OpenTelemetryEmitter<L> {
                             ControlFlow::Continue(())
                         });
 
-                        if let Some(extent) = evt.extent().and_then(|ex| ex.as_span()) {
+                        if let Some(extent) = evt.extent().and_then(|ex| ex.as_range()) {
                             span.end_with_timestamp(extent.end.to_system_time());
                         } else {
                             span.end();

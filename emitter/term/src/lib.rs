@@ -156,16 +156,14 @@ fn write_event(buf: &mut Buffer, evt: emit::event::Event<impl emit::props::Props
     }
 
     if let Some(extent) = evt.extent() {
-        if extent.is_span() {
-            if let Some(len) = extent.len() {
-                write_timestamp(buf, *extent.as_point());
-                write_plain(buf, " ");
-                write_duration(buf, len);
-            } else {
-                write_timestamp(buf, extent.as_range().start);
-                write_plain(buf, "..");
-                write_timestamp(buf, extent.as_range().end);
-            }
+        if let Some(len) = extent.len() {
+            write_timestamp(buf, *extent.as_point());
+            write_plain(buf, " ");
+            write_duration(buf, len);
+        } else if let Some(range) = extent.as_range() {
+            write_timestamp(buf, range.start);
+            write_plain(buf, "..");
+            write_timestamp(buf, range.end);
         } else {
             write_timestamp(buf, *extent.as_point());
         }

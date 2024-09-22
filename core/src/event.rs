@@ -109,7 +109,7 @@ impl<'a, P> Event<'a, P> {
     pub fn ts_start(&self) -> Option<&Timestamp> {
         self.extent
             .as_ref()
-            .and_then(|extent| extent.as_span())
+            .and_then(|extent| extent.as_range())
             .map(|span| &span.start)
     }
 
@@ -267,7 +267,7 @@ mod tests {
         let evt = Event::new(
             Path::new_unchecked("module"),
             Template::literal("An event"),
-            Extent::span(Timestamp::MIN..Timestamp::MAX),
+            Extent::range(Timestamp::MIN..Timestamp::MAX),
             [
                 ("a", Value::from(true)),
                 ("b", Value::from(1)),
@@ -279,7 +279,7 @@ mod tests {
             assert_eq!(Path::new_unchecked("module"), evt.mdl());
             assert_eq!(
                 Timestamp::MIN..Timestamp::MAX,
-                evt.extent().unwrap().as_span().unwrap().clone()
+                evt.extent().unwrap().as_range().unwrap().clone()
             );
             assert_eq!("An event", evt.tpl().as_literal().unwrap());
 

@@ -48,7 +48,7 @@ impl<C: Clock> Timer<C> {
         let end = self.clock.now();
 
         match (self.start, end) {
-            (Some(start), Some(end)) => Some(Extent::span(start..end)),
+            (Some(start), Some(end)) => Some(Extent::range(start..end)),
             _ => None,
         }
     }
@@ -110,7 +110,7 @@ mod tests {
         assert_eq!(
             Timestamp::from_unix(Duration::from_secs(0)).unwrap()
                 ..Timestamp::from_unix(Duration::from_secs(0)).unwrap(),
-            timer.extent().unwrap().as_span().unwrap().clone()
+            timer.extent().unwrap().as_range().unwrap().clone()
         );
 
         clock
@@ -122,7 +122,7 @@ mod tests {
         assert_eq!(
             Timestamp::from_unix(Duration::from_secs(0)).unwrap()
                 ..Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
-            timer.extent().unwrap().as_span().unwrap().clone()
+            timer.extent().unwrap().as_range().unwrap().clone()
         );
     }
 
@@ -143,7 +143,7 @@ mod tests {
         assert_eq!(
             Timestamp::from_unix(Duration::from_secs(1)).unwrap()
                 ..Timestamp::from_unix(Duration::from_secs(0)).unwrap(),
-            timer.extent().unwrap().as_span().unwrap().clone()
+            timer.extent().unwrap().as_range().unwrap().clone()
         );
     }
 
