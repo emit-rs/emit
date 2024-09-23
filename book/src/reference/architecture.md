@@ -2,6 +2,141 @@
 
 This section describes `emit`'s key components and how they fit together.
 
+## Crate organization
+
+`emit` is split into a few subcrates:
+
+```mermaid
+classDiagram
+    direction RL
+    
+    emit_core <.. emit_macros
+    emit_core <.. emit
+    emit_macros <.. emit
+
+    class emit_macros {
+        emit_core = "0.17.0-alpha.17"
+        proc-macro2 = "1"
+        quote = "1"
+        syn = "2"
+    }
+
+    emit <.. emit_term
+    emit <.. emit_file
+    emit <.. emit_otlp
+    emit <.. emit_custom
+
+    emit <.. app : required
+
+    class emit {
+        emit_core = "0.17.0-alpha.17"
+        emit_macros = "0.17.0-alpha.17"
+    }
+
+    emit_term .. app : optional
+    emit_file .. app : optional
+    emit_otlp .. app : optional
+    emit_custom .. app : optional
+
+    class emit_term {
+        emit = "0.17.0-alpha.17"
+    }
+
+    class emit_file {
+        emit = "0.17.0-alpha.17"
+    }
+
+    class emit_otlp {
+        emit = "0.17.0-alpha.17"
+    }
+
+    class emit_custom["other emitter"] {
+        emit = "0.17.0-alpha.17"
+    }
+
+    class app["your app"] {
+        emit = "0.17.0-alpha.17"
+        emit_term = "0.17.0-alpha.17"*
+        emit_file = "0.17.0-alpha.17"*
+        emit_otlp = "0.17.0-alpha.17"*
+        emit_custom = "*"*
+    }
+
+    click emit_core href "https://docs.rs/emit_core/0.11.0-alpha.17/emit_core/index.html"
+    click emit_macros href "https://docs.rs/emit_macros/0.11.0-alpha.17/emit_macros/index.html"
+    click emit href "https://docs.rs/emit/0.11.0-alpha.17/emit/index.html"
+    click emit_term href "https://docs.rs/emit_term/0.11.0-alpha.17/emit_term/index.html"
+    click emit_file href "https://docs.rs/emit_file/0.11.0-alpha.17/emit_file/index.html"
+    click emit_otlp href "https://docs.rs/emit_otlp/0.11.0-alpha.17/emit_otlp/index.html"
+```
+
+- [`emit`](https://docs.rs/emit/0.11.0-alpha.17/emit/index.html): The main library that re-exports `emit_core` and `emit_macros`. This is the one your applications depend on.
+- [`emit_core`](https://docs.rs/emit_core/0.11.0-alpha.17/emit_core/index.html): Just the fundamental APIs. It includes the `shared()` and `internal()` runtimes. The goal of this library is to remain stable, even if macro syntax evolves over time.
+- [`emit_macros`](https://docs.rs/emit_macros/0.11.0-alpha.17/emit_macros/index.html): `emit::emit!`, `#[emit::span]`, and other procedural macros.
+
+The `emit` library doesn't implement anywhere for you to send your diagnostics itself, but there are other libraries that do:
+
+- [`emit_term`](https://docs.rs/emit_term/0.11.0-alpha.17/emit_term/index.html): Writes to the console.
+- [`emit_file`](https://docs.rs/emit_file/0.11.0-alpha.17/emit_file/index.html): Writes to rolling files.
+- [`emit_otlp`](https://docs.rs/emit_otlp/0.11.0-alpha.17/emit_otlp/index.html): Writes OpenTelemetry's wire protocol.
+
+You can also write your own emitters by implementing the [`Emitter`](https://docs.rs/emit/0.11.0-alpha.17/emit/trait.Emitter.html) trait. See [Writing an Emitter](../for-developers/writing-an-emitter.md) for details.
+
+## Events
+
+[`Event`](https://docs.rs/emit/0.11.0-alpha.17/emit/struct.Event.html)s are the central data type in `emit` that all others hang off. They look like this:
+
+```mermaid
+classDiagram
+    direction RL
+    Timestamp <.. Extent
+
+    Str <.. Props
+    Value <.. Props
+
+    class Props {
+        for_each(Fn(Str, Value))*
+    }
+
+    <<Trait>> Props
+
+    Path <.. Event
+    Props <.. Event
+    Template <.. Event
+
+    class Extent {
+        as_point() Timestamp
+        as_range() Option~Range~Timestamp~~
+    }
+
+    Extent <.. Event
+
+    class Event {
+        mdl() Path
+        tpl() Template
+        extent() Extent
+        props() Props
+    }
+
+    click Event href "https://docs.rs/emit/0.11.0-alpha.17/emit/struct.Event.html"
+    click Timestamp href "https://docs.rs/emit/0.11.0-alpha.17/emit/struct.Timestamp.html"
+    click Extent href "https://docs.rs/emit/0.11.0-alpha.17/emit/struct.Extent.html"
+    click Str href "https://docs.rs/emit/0.11.0-alpha.17/emit/struct.Str.html"
+    click Value href "https://docs.rs/emit/0.11.0-alpha.17/emit/struct.Value.html"
+    click Props href "https://docs.rs/emit/0.11.0-alpha.17/emit/trait.Props.html"
+    click Template href "https://docs.rs/emit/0.11.0-alpha.17/emit/struct.Template.html"
+    click Path href "https://docs.rs/emit/0.11.0-alpha.17/emit/struct.Path.html"
+```
+
+Events include:
+
+- A [`Path`](https://docs.rs/emit/0.11.0-alpha.17/emit/struct.Path.html) for the component that generated them.
+- A [`Template`](https://docs.rs/emit/0.11.0-alpha.17/emit/struct.Template.html) for their human-readable description. Templates can also make good low-cardinality identifiers for a specific shape of event.
+- An [`Extent`](https://docs.rs/emit/0.11.0-alpha.17/emit/struct.Extent.html) for the time the event is relevant. The extent itself may be a single [`Timestamp`](https://docs.rs/emit/0.11.0-alpha.17/emit/struct.Timestamp.html) for a point in time, or a pair of timestamps representing an active time range.
+- [`Props`](https://docs.rs/emit/0.11.0-alpha.17/emit/trait.Props.html) for structured key-value pairs attached to the event. These can be lazily interpolated into the template.
+
+## Runtimes
+
 In `emit`, a diagnostic pipeline is an instance of a [`Runtime`](https://docs.rs/emit/0.11.0-alpha.17/emit/runtime/struct.Runtime.html). Each runtime is an isolated set of components that help construct and emit diagnostic events in your applications. It looks like this:
 
 ```mermaid
@@ -83,38 +218,67 @@ An [`AmbientSlot`](https://docs.rs/emit/0.11.0-alpha.17/emit/runtime/struct.Ambi
 
 You can also define your own `AmbientSlot`s or use `Runtime`s directly.
 
-See [Events](./events.md) for details on how these components are used to construct and consume events.
+## Event construction and emission
 
-## Crate organization
-
-`emit` is split into a few subcrates:
+When the [`emit!`](https://docs.rs/emit/0.11.0-alpha.17/emit/macro.emit.html) macro is called, an event is constructed using features of the runtime before being emitted through it. This is how it works:
 
 ```mermaid
-classDiagram
-    direction RL
+flowchart
+    start((start)) --> macro["`<code>emit!('a {x}', y)</code>`"]
+
+    macro --> tpl["`<code>Template('a {x}')</code>`"]
+    macro --> macro_props["`<code>Props { x, y }</code>`"]
     
-    emit_core <.. emit_macros
-    emit_core <.. emit
-    emit_macros <.. emit
+    ctxt{{"`<code>Ctxt::Current</code>`"}} --> ctxt_props["`<code>Props { z }</code>`"]
+    
+    props["`<code>Props { x, y, z }</code>`"]
+    macro_props --> props
+    ctxt_props --> props
 
-    emit <.. emit_term
-    emit <.. emit_file
-    emit <.. emit_otlp
+    clock{{"`<code>Clock::now</code>`"}} --> ts["`<code>Timestamp</code>`"] --> extent["`<code>Extent::point</code>`"]
 
-    emit <.. app : required
-    emit_term .. app : optional
-    emit_file .. app : optional
-    emit_otlp .. app : optional
+    mdl_path["`<code>module_path!()</code>`"] --> mdl["`<code>Path('a::b::c')</code>`"]
 
-    class app["your application"]
+    event["`<code>Event</code>`"]
+    props -- props --> event
+    extent -- extent --> event
+    tpl -- tpl --> event
+    mdl -- mdl --> event
+
+    filter{"`<code>Filter::matches</code>`"}
+
+    event --> filter
+    filter -- false --> filter_no(((discard)))
+
+    emitter{{"`<code>Emitter::emit</code>`"}}
+
+    filter -- true --> emitter
+
+    emitter --> END(((end)))
+
+    click macro href "https://docs.rs/emit/0.11.0-alpha.17/emit/macro.emit.html"
+
+    click tpl href "https://docs.rs/emit/0.11.0-alpha.17/emit/struct.Template.html"
+
+    click macro_props href "https://docs.rs/emit/0.11.0-alpha.17/emit/trait.Props.html"
+    click ctxt_props href "https://docs.rs/emit/0.11.0-alpha.17/emit/trait.Props.html"
+    click props href "https://docs.rs/emit/0.11.0-alpha.17/emit/trait.Props.html"
+
+    click mdl href "https://docs.rs/emit/0.11.0-alpha.17/emit/struct.Path.html"
+
+    click ts href "https://docs.rs/emit/0.11.0-alpha.17/emit/struct.Timestamp.html"
+    click extent href "https://docs.rs/emit/0.11.0-alpha.17/emit/struct.Extent.html"
+
+    click event href "https://docs.rs/emit/0.11.0-alpha.17/emit/struct.Event.html"
+
+    click emitter href "https://docs.rs/emit/0.11.0-alpha.17/emit/trait.Emitter.html"
+    click filter href "https://docs.rs/emit/0.11.0-alpha.17/emit/trait.Filter.html"
+    click ctxt href "https://docs.rs/emit/0.11.0-alpha.17/emit/trait.Ctxt.html"
+    click clock href "https://docs.rs/emit/0.11.0-alpha.17/emit/trait.Clock.html"
 ```
 
-- [`emit_core`](https://docs.rs/emit_core/0.11.0-alpha.17/emit_core/index.html): The fundamental APIs needed to define runtimes. It includes the `shared()` and `internal()` runtimes.
-- [`emit_macros`](https://docs.rs/emit_macros/0.11.0-alpha.17/emit_macros/index.html): The `emit::emit!` and `#[emit::span]` macros.
-- [`emit`](https://docs.rs/emit/0.11.0-alpha.17/emit/index.html): The main library that re-exports `emit_core` and `emit_macros`. This is the one your applications depend on.
+When constructing an event, the runtime provides the current timestamp and any ambient context. When emitting an event, the runtime filters out events to discard and emits the ones that remain.
 
-`emit` doesn't implement any emitters itself, but does provide a few additional libraries that do:
+Once an event is constructed, it no longer distinguishes properties attached directly from properties added by the ambient context.
 
-- [`emit_term`](https://docs.rs/emit_term/0.11.0-alpha.17/emit_term/index.html): Writes to the console.
-- [`emit_file`](https://docs.rs/emit_file/0.11.0-alpha.17/emit_file/index.html): Writes to rolling files.
-- [`emit_otlp`](https://docs.rs/emit_otlp/0.11.0-alpha.17/emit_otlp/index.html): Writes OpenTelemetry's wire protocol.
+You don't need to use macros to construct events. You can also do it manually to get more control over the data they contain.
