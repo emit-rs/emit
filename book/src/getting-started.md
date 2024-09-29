@@ -10,7 +10,7 @@ version = "0.11.0-alpha.17"
 version = "0.11.0-alpha.17"
 ```
 
-Initialize `emit` at the start of your `main.rs` using `emit::setup()`, and ensure any emitted diagnostics are flushed by calling `blocking_flush()` at the end:
+Initialize `emit` at the start of your `main.rs` using [`emit::setup()`](https://docs.rs/emit/0.11.0-alpha.17/emit/setup/index.html), and ensure any emitted diagnostics are flushed by calling [`blocking_flush()`](https://docs.rs/emit/0.11.0-alpha.17/emit/setup/struct.Init.html#method.blocking_flush) at the end:
 
 ```rust
 extern crate emit;
@@ -33,7 +33,7 @@ Start peppering diagnostics through your application with `emit`'s macros.
 
 ## Logging events
 
-When something of note happens, use `emit::debug!` or `emit::info!` to log it:
+When something of note happens, use [`debug!`](https://docs.rs/emit/0.11.0-alpha.17/emit/macro.debug.html) or [`info!`](https://docs.rs/emit/0.11.0-alpha.17/emit/macro.info.html) to log it:
 
 ```rust
 # extern crate emit;
@@ -43,7 +43,7 @@ let item = "product-123";
 emit::info!("{user} added {item} to their cart");
 ```
 
-When something fails, use `emit::warn!` or `emit::error!`:
+When something fails, use [`warn!`](https://docs.rs/emit/0.11.0-alpha.17/emit/macro.warn.html) or [`error!`](https://docs.rs/emit/0.11.0-alpha.17/emit/macro.error.html):
 
 ```rust
 # extern crate emit;
@@ -58,7 +58,7 @@ emit::warn!("updating {user} cart failed: {err}");
 
 ## Tracing functions
 
-Add `#[emit::span]` to a significant function in your application to trace its execution:
+Add [`#[span]`](https://docs.rs/emit/0.11.0-alpha.17/emit/attr.span.html) to a significant function in your application to trace its execution:
 
 ```rust
 # extern crate emit;
@@ -69,3 +69,15 @@ async fn add_item(user: &str, item: &str) {
 ```
 
 Any diagnostics emitted within a traced function will be correlated with it. Any other traced functions it calls will form a trace hierarchy.
+
+## Next steps
+
+To learn more about using `emit`, see the [Producing events](./producing-events.md) section.
+
+To learn `emit`'s architecture in more detail, see the [Reference](./reference.md) section.
+
+You may also want to explore:
+
+- [the source on GitHub](https://github.com/emit-rs/emit).
+- [a set of task-oriented examples](https://github.com/emit-rs/emit/tree/main/examples).
+- [the API docs](https://docs.rs/emit/0.11.0-alpha.17/emit/index.html).

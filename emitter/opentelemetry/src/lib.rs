@@ -547,7 +547,7 @@ impl<L: Logger> emit::Emitter for OpenTelemetryEmitter<L> {
         let evt = evt.to_event();
 
         // If the event is for a span then attempt to end it
-        // The typical case is the span was created through `#[emit::span]`
+        // The typical case is the span was created through `#[span]`
         // and so is the currently active frame. If it isn't the active frame
         // then it's been created manually or spans are being completed out of order
         if emit::kind::is_span_filter().matches(&evt) {

@@ -1,6 +1,6 @@
 # Logging
 
-- `emit::emit!`
+- `emit!`
 - Control parameters
 
-## The `emit::emit!` macro
+## The `emit!` macro

@@ -71,7 +71,7 @@ classDiagram
 
 - [`emit`](https://docs.rs/emit/0.11.0-alpha.17/emit/index.html): The main library that re-exports `emit_core` and `emit_macros`. This is the one your applications depend on.
 - [`emit_core`](https://docs.rs/emit_core/0.11.0-alpha.17/emit_core/index.html): Just the fundamental APIs. It includes the `shared()` and `internal()` runtimes. The goal of this library is to remain stable, even if macro syntax evolves over time.
-- [`emit_macros`](https://docs.rs/emit_macros/0.11.0-alpha.17/emit_macros/index.html): `emit::emit!`, `#[emit::span]`, and other procedural macros.
+- [`emit_macros`](https://docs.rs/emit_macros/0.11.0-alpha.17/emit_macros/index.html): `emit!`, `#[span]`, and other procedural macros.
 
 The `emit` library doesn't implement anywhere for you to send your diagnostics itself, but there are other libraries that do:
 

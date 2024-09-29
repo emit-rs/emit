@@ -1,5 +1,5 @@
 # Control parameters
 
-## `emit::emit!`
+## `emit!`
 
-## `#[emit::span]`
+## `#[span]`
