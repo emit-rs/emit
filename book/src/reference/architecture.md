@@ -59,7 +59,6 @@ classDiagram
         emit_term = "0.17.0-alpha.17"*
         emit_file = "0.17.0-alpha.17"*
         emit_otlp = "0.17.0-alpha.17"*
-        emit_custom = "*"*
     }
 
     click emit_core href "https://docs.rs/emit_core/0.11.0-alpha.17/emit_core/index.html"
@@ -76,9 +75,9 @@ classDiagram
 
 The `emit` library doesn't implement anywhere for you to send your diagnostics itself, but there are other libraries that do:
 
-- [`emit_term`](https://docs.rs/emit_term/0.11.0-alpha.17/emit_term/index.html): Writes to the console.
-- [`emit_file`](https://docs.rs/emit_file/0.11.0-alpha.17/emit_file/index.html): Writes to rolling files.
-- [`emit_otlp`](https://docs.rs/emit_otlp/0.11.0-alpha.17/emit_otlp/index.html): Writes OpenTelemetry's wire protocol.
+- [`emit_term`](https://docs.rs/emit_term/0.11.0-alpha.17/emit_term/index.html): Writes to the console. See [Emitting to the console](../emitting-events/console.md) for details.
+- [`emit_file`](https://docs.rs/emit_file/0.11.0-alpha.17/emit_file/index.html): Writes to rolling files. See [Emitting to rolling files](../emitting-events/rolling-files.md) for details.
+- [`emit_otlp`](https://docs.rs/emit_otlp/0.11.0-alpha.17/emit_otlp/index.html): Writes OpenTelemetry's wire protocol. See [Emitting via OTLP](../emitting-events/otlp.md) for details.
 
 You can also write your own emitters by implementing the [`Emitter`](https://docs.rs/emit/0.11.0-alpha.17/emit/trait.Emitter.html) trait. See [Writing an Emitter](../for-developers/writing-an-emitter.md) for details.
 
@@ -134,6 +133,8 @@ Events include:
 - A [`Template`](https://docs.rs/emit/0.11.0-alpha.17/emit/struct.Template.html) for their human-readable description. Templates can also make good low-cardinality identifiers for a specific shape of event.
 - An [`Extent`](https://docs.rs/emit/0.11.0-alpha.17/emit/struct.Extent.html) for the time the event is relevant. The extent itself may be a single [`Timestamp`](https://docs.rs/emit/0.11.0-alpha.17/emit/struct.Timestamp.html) for a point in time, or a pair of timestamps representing an active time range.
 - [`Props`](https://docs.rs/emit/0.11.0-alpha.17/emit/trait.Props.html) for structured key-value pairs attached to the event. These can be lazily interpolated into the template.
+
+See [Event data model](./events.md) for more details.
 
 ## Runtimes
 
