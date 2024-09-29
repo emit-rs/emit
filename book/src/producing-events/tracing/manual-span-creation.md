@@ -23,19 +23,15 @@ ctxt.push(emit::ctxt())
         // This is especially important for futures, otherwise the span may
         // complete before the future does
         emit::emit!(
-            evt: emit::Span::new(
-                emit::mdl!(),
-                "wait a bit",
-                timer,
-                emit::props! {
-                    sleep_ms,
-                },
-            ),
+            extent: timer,
+            "wait a bit",
+            evt_kind: "span",
+            sleep_ms,
         );
     });
 ```
 
-Spans may also be emitted as pure events:
+Trace and span ids don't need to be managed by `emit` if you have another scheme in mind. In these cases, they can be attached as regular properties to the span event:
 
 ```rust
 # extern crate emit;
