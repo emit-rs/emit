@@ -1,0 +1,129 @@
+# Template syntax and rendering
+
+## Producing templates
+
+`emit` templates are string literals with holes for properties between braces. This is an example of a template:
+
+```rust
+let user = "Rust";
+
+emit::emit!("Hello, {user}");
+```
+
+The [`emit!`](https://docs.rs/emit/0.11.0-alpha.17/emit/macro.emit.html) and [`#[span]`](https://docs.rs/emit/0.11.0-alpha.17/emit/attr.span.html) macros use the same syntax.
+
+### Properties within templates
+
+Properties in templates appear within braces:
+
+```rust
+# let user = "Rust";
+emit::emit!("Hello, {user}");
+```
+
+Braces may be escaped by doubling them:
+
+```rust
+emit::emit!("Hello, {{user}}");
+```
+
+Properties use Rust's field value syntax, like you'd write when initializing struct fields. Usually they're a standalone identifer that will capture a property in scope with that name. Properties can also be given a value inline as an expression:
+
+```rust
+emit::emit!("Hello, {user: \"Rust\"}");
+```
+
+Properties may have attributes applied to them:
+
+```rust
+# let user = "Rust";
+emit::emit!("Hello, {#[cfg(enabled)] user}")
+```
+
+### Properties after templates
+
+Complex property expressions are distracting within templates. Attributes and values for properties declared in the template can be written after it using the same field-value syntax:
+
+```rust
+emit::emit!(
+    "Hello, {user}",
+    #[cfg(enabled)]
+    user: "Rust",
+);
+```
+
+Properties outside of the template don't need a corresponding hole to be captured:
+
+```rust
+# let user = "Rust";
+emit::emit!(
+    "Hello, {user}",
+    lang: "en",
+);
+```
+
+### Properties before templates
+
+Properties declared before the template aren't captured. They're called _control parameters_ and are used to change the way events are constructed or emitted:
+
+```rust
+# let user = "Rust";
+emit::emit!(
+    mdl: emit::Path::new("a::b::c").unwrap(),
+    "Hello, {user}",
+)
+```
+
+The names and values of control parameters are different between `emit!` and `#[span]`. See [Control parameters](./control-parameters.md) for details.
+
+## Rendering templates
+
+Templates are tokenized into sequences of text and holes for property interpolation:
+
+```text
+Hello, {user}
+```
+
+When tokenized, this template will look like:
+
+```rust
+# use emit::template::Part;
+let tokens = [
+    Part::text("Hello, "),
+    Part::hole("user"),
+];
+```
+
+The template can then be fed a value for `user` and rendered:
+
+```rust
+# use emit::{Template, template::Part};
+# let tokens = [Part::text("Hello, "), Part::hole("user")];
+let template = Template::new_ref(&tokens);
+
+let rendered = template.render(("user", "Rust")).to_string();
+# assert_eq!("Hello, Rust", rendered);
+```
+
+which will produce:
+
+```text
+Hello, Rust
+```
+
+Any holes in the template that are rendered without a matching property will reproduce the hole:
+
+```rust
+# use emit::{Template, template::Part};
+# let tokens = [Part::text("Hello, "), Part::hole("user")];
+let template = Template::new_ref(&tokens);
+
+let rendered = template.render(emit::Empty).to_string();
+# assert_eq!("Hello, {user}", rendered);
+```
+
+```text
+Hello, {user}
+```
+
+You can control how properties are rendered within templates by implementing the [`template::Write`](https://docs.rs/emit/0.11.0-alpha.17/emit/template/trait.Write.html) trait. `emit_term` uses this for example to render different property types in different colors.

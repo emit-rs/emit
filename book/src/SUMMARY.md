@@ -42,7 +42,7 @@
 - [Reference](./reference.md)
     - [Architecture](./reference/architecture.md)
     - [Events](./reference/events.md)
-    - [Template syntax](./reference/template-syntax.md)
+    - [Template syntax and rendering](./reference/templates.md)
     - [Property capturing](./reference/property-capturing.md)
     - [Property attributes](./reference/property-attributes.md)
     - [Control parameters](./reference/control-parameters.md)
