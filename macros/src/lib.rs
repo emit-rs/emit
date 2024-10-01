@@ -4,7 +4,6 @@ Implementation details for `emit!` macros.
 This crate is not intended to be consumed directly.
 */
 
-#![deny(missing_docs)]
 /*
 # Organization
 
@@ -18,6 +17,8 @@ Code is transformed through _hooks_. A hook is a well-known method call, like `a
 
 Tests for this project mostly live in the top-level `test/ui` crate.
 */
+
+#![deny(missing_docs)]
 #![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]
 
 extern crate proc_macro;
@@ -649,7 +650,7 @@ fmt_string
 
 where
 
-- `fmt_string`: A string literal with the format flags, like `":?"`. See the [`std::fmt`] docs for details on available flags.
+- `fmt_string`: A string literal with the format flags, like `":?"`. See the [`std::fmt`](https://doc.rust-lang.org/std/fmt/index.html) docs for details on available flags.
 
 # Applicable to
 

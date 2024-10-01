@@ -40,6 +40,8 @@ Properties may have attributes applied to them:
 emit::emit!("Hello, {#[cfg(enabled)] user}")
 ```
 
+See [Property attributes](./property-attributes.md) for details on attributes you can apply. Also see [Property capturing](./property-capturing.md) for details on what types of properties can be captured.
+
 ### Properties after templates
 
 Complex property expressions are distracting within templates. Attributes and values for properties declared in the template can be written after it using the same field-value syntax:
