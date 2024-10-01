@@ -38,7 +38,7 @@ These goals result in some tradeoffs that may affect `emit`'s suitability for yo
 - Simplicity over performance. Keeping the impact of diagnostics small is still important, but not at the expense of usability or simplicity.
 - Not an SDK. `emit` has a hackable API you can tailor to your needs but is also a small, complete, and cohesive set of components for you to use out-of-the-box.
 
-## Stable vs nightly toolchains
+## Supported Rust toolchains
 
 `emit` works on stable versions of Rust, but can provide more accurate compiler messages on nightly toolchains. If you're using `rustup`, you can [easily install a nightly build of Rust](https://rust-lang.github.io/rustup/concepts/channels.html#working-with-nightly-rust) from it.
 
