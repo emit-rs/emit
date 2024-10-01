@@ -1,6 +1,6 @@
 # Tracing fallible functions
 
-The `ok_lvl` and `err_lvl` control parameters can be applied to span macros to assign a level based on whether the annotated function returned `Ok` or `Err`:
+The `ok_lvl` and `err_lvl` [control parameters](../../reference/control-parameters.md) can be applied to span macros to assign a level based on whether the annotated function returned `Ok` or `Err`:
 
 ```rust
 # extern crate emit;

@@ -1,6 +1,6 @@
 # Manual span creation
 
-Span events may also be created manually:
+Span events may be created manually without using the `#[span]` attribute:
 
 ```rust
 # extern crate emit;
@@ -51,4 +51,4 @@ emit::emit! {
 }
 ```
 
-Keep in mind when emitting spans as regular events that you still thread the trace context around somehow, otherwise other events emitted within its execution won't be correlated with it.
+Note that when emitting spans as regular events that you still thread the trace context around somehow, otherwise other events emitted within its execution won't be correlated with it.
