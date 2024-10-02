@@ -1,8 +1,6 @@
 # Attaching errors to events
 
-In Rust, errors are typically communicated through the [`Error`](https://doc.rust-lang.org/std/error/trait.Error.html) trait. `emit` supports capturing errors implementing the `Error` trait.
-
-If you attach a property with the `err` [well-known property](https://docs.rs/emit/0.11.0-alpha.17/emit/well_known/index.html) to an event, it will automatically try capture it using its `Error` implementation:
+In Rust, errors are typically communicated through the [`Error`](https://doc.rust-lang.org/std/error/trait.Error.html) trait. If you attach a property with the `err` [well-known property](https://docs.rs/emit/0.11.0-alpha.17/emit/well_known/index.html) to an event, it will automatically try capture it using its `Error` implementation:
 
 ```rust
 # extern crate emit;
