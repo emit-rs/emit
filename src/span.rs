@@ -555,7 +555,10 @@ impl<'a, P: Props> Span<'a, P> {
 }
 
 impl<'a, P: Props> ToEvent for Span<'a, P> {
-    type Props<'b> = &'b Self where Self: 'b;
+    type Props<'b>
+        = &'b Self
+    where
+        Self: 'b;
 
     fn to_event<'b>(&'b self) -> Event<'b, Self::Props<'b>> {
         // "{span_name} completed"

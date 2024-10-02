@@ -10,6 +10,17 @@ You can add the standard `#[cfg]` attribute to properties in templates. If the `
 emit::emit!("Hello, {#[cfg(disabled)] user}");
 ```
 
+```text
+Event {
+    mdl: "my_app",
+    tpl: "Hello, ",
+    extent: Some(
+        "2024-10-02T22:01:01.431485400Z",
+    ),
+    props: {},
+}
+```
+
 ## `#[key]`
 
 The [`#[key`](https://docs.rs/emit/0.11.0-alpha.17/emit/attr.key.html) attribute can be used to set the name of a captured property. This can be used to give a property a name that isn't a valid Rust identifier:
@@ -17,6 +28,19 @@ The [`#[key`](https://docs.rs/emit/0.11.0-alpha.17/emit/attr.key.html) attribute
 ```rust
 # let user = "Rust";
 emit::emit!("Hello, {user}", #[emit::key("user.name")] user);
+```
+
+```text
+Event {
+    mdl: "my_app",
+    tpl: "Hello, {user.name}",
+    extent: Some(
+        "2024-10-02T22:01:24.321035400Z",
+    ),
+    props: {
+        "user.name": "Rust",
+    },
+}
 ```
 
 ## `#[fmt]`
@@ -27,7 +51,24 @@ The [`#[fmt]`](https://docs.rs/emit/0.11.0-alpha.17/emit/attr.fmt.html) attribut
 emit::emit!("pi is {pi}", #[emit::fmt(".3")] pi: 3.1415927);
 ```
 
-Note the missing `:` in the format flags in the above example.
+```text
+Event {
+    mdl: "my_app",
+    tpl: "pi is {pi}",
+    extent: Some(
+        "2024-10-02T22:01:58.842629700Z",
+    ),
+    props: {
+        "pi": 3.1415927,
+    },
+}
+```
+
+When rendered, the template will produce:
+
+```text
+pi is 3.142
+```
 
 ## `#[as_debug`
 
@@ -48,7 +89,31 @@ emit::emit!(
 );
 ```
 
-Note that the structure of the captured value is lost. It'll be treated as a string like `"User { name: \"Rust\" }"` when serialized.
+```text
+Event {
+    mdl: "my_app",
+    tpl: "Hello, {user}",
+    extent: Some(
+        "2024-10-02T22:03:23.588049400Z",
+    ),
+    props: {
+        "user": User {
+            name: "Rust",
+        },
+    },
+}
+```
+
+Note that the structure of the captured value is lost. It'll be treated as a string like `"User { name: \"Rust\" }"` when serialized:
+
+```json
+{
+    "mdl": "my_app",
+    "tpl": "Hello, {user}",
+    "ts": "2024-10-02T22:03:23.588049400Z",
+    "user": "User { name: \"Rust\" }"
+}
+```
 
 See [Property capturing](./property-capturing.md) for more details.
 
@@ -71,6 +136,32 @@ emit::emit!(
 );
 ```
 
-The structure of properties captured this way is fully preserved.
+```text
+Event {
+    mdl: "my_app",
+    tpl: "Hello, {user}",
+    extent: Some(
+        "2024-10-02T22:05:05.258099900Z",
+    ),
+    props: {
+        "user": User {
+            name: "Rust",
+        },
+    },
+}
+```
+
+The structure of properties captured this way is fully preserved:
+
+```json
+{
+    "mdl": "my_app",
+    "tpl": "Hello, {user}",
+    "ts": "2024-10-02T22:05:05.258099900Z",
+    "user": {
+        "name": "Rust"
+    }
+}
+```
 
 See [Property capturing](./property-capturing.md) for more details.

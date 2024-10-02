@@ -241,7 +241,10 @@ pub trait ToEvent {
 }
 
 impl<'a, T: ToEvent + ?Sized> ToEvent for &'a T {
-    type Props<'b> = T::Props<'b> where Self: 'b;
+    type Props<'b>
+        = T::Props<'b>
+    where
+        Self: 'b;
 
     fn to_event<'b>(&'b self) -> Event<'b, Self::Props<'b>> {
         (**self).to_event()
@@ -249,7 +252,10 @@ impl<'a, T: ToEvent + ?Sized> ToEvent for &'a T {
 }
 
 impl<'a, P: Props> ToEvent for Event<'a, P> {
-    type Props<'b> = &'b P where Self: 'b;
+    type Props<'b>
+        = &'b P
+    where
+        Self: 'b;
 
     fn to_event<'b>(&'b self) -> Event<'b, Self::Props<'b>> {
         self.by_ref()
