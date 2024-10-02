@@ -11,9 +11,9 @@ The most straightforward way to add ambient context is using the [`#[span]`](htt
 #[emit::span("greet {user}", lang)]
 fn greet(user: &str, lang: &str) {
     match lang {
+        "el" => emit::emit!("Γεια σου, {user}"),
         "en" => emit::emit!("Hello, {user}"),
         "eo" => emit::emit!("Saluton, {user}"),
-        "el" => emit::emit!("Γεια σου, {user}"),
 # /*
         ..
 # */    _ => (),
@@ -69,9 +69,9 @@ fn greet(user: &str, lang: &str) {
 
     // The rest of the function proceeds as normal
     match lang {
+        "el" => emit::emit!("Γεια σου, {user}"),
         "en" => emit::emit!("Hello, {user}"),
         "eo" => emit::emit!("Saluton, {user}"),
-        "el" => emit::emit!("Γεια σου, {user}"),
 # /*
         ..
 # */     _ => (),
