@@ -46,6 +46,40 @@ fn main() {
     rt.blocking_flush(std::time::Duration::from_secs(30));
 }
 ```
+
+## Configuration
+
+`emit_term` has a fixed format, but can be configured to force or disable color output instead of detect it.
+
+To disable colors, call [`Stdout::colored`] with the value `false`:
+
+```rust
+fn main() {
+    let rt = emit::setup()
+        // Disable colors
+        .emit_to(emit_term::stdout().colored(false))
+        .init();
+
+    // Your app code goes here
+
+    rt.blocking_flush(std::time::Duration::from_secs(5));
+}
+```
+
+To force colors, call [`Stdout::colored`] with the value `true`:
+
+```rust
+fn main() {
+    let rt = emit::setup()
+        // Force colors
+        .emit_to(emit_term::stdout().colored(true))
+        .init();
+
+    // Your app code goes here
+
+    rt.blocking_flush(std::time::Duration::from_secs(5));
+}
+```
 */
 
 #![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]

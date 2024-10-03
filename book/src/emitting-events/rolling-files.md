@@ -1,7 +1,30 @@
 # Emitting to rolling files
 
-- Use `emit_file` to emit events to rolling files in line-delimited JSON.
-- Format can be customized.
-- Can roll files by minute, hour, day.
-- Can limit size based on file size and count.
-- Recovers from IO errors.
+You can use [`emit_file`](https://docs.rs/emit_file/0.11.0-alpha.17/emit_file/index.html) to write diagnostic events to local rolling files:
+
+```toml
+[dependencies.emit_file]
+version = "0.11.0-alpha.17"
+```
+
+```rust
+fn main() {
+    let rt = emit::setup()
+        .emit_to(emit_file::set("./target/logs/my_app.txt").spawn())
+        .init();
+
+    // Your app code goes here
+
+    rt.blocking_flush(std::time::Duration::from_secs(5));
+}
+```
+
+Events will be written in newline-delimited JSON by default:
+
+```json
+{"ts_start":"2024-05-29T03:35:13.922768000Z","ts":"2024-05-29T03:35:13.943506000Z","module":"my_app","msg":"in_ctxt failed with `a` is odd","tpl":"in_ctxt failed with `err`","a":1,"err":"`a` is odd","lvl":"warn","span_id":"0a3686d1b788b277","span_parent":"1a50b58f2ef93f3b","trace_id":"8dd5d1f11af6ba1db4124072024933cb"}
+```
+
+`emit_file` is a robust, asynchronous file writer that can recover from IO errors and manage the size of your retained logs on-disk.
+
+See [the crate docs](https://docs.rs/emit_file/0.11.0-alpha.17/emit_file/index.html) for more details.
