@@ -17,6 +17,10 @@ fn main() {
 }
 ```
 
+See [the crate docs](https://docs.rs/emit_term/0.11.0-alpha.17/emit_term/index.html) for more details.
+
+## Format
+
 Events are written with a header containing the timestamp, level, and emitting package name, followed by the rendered message template:
 
 ```rust
@@ -52,4 +56,42 @@ write_to_file("./file.txt", b"Hello")?;
 
 ![`emit_term` output for the above program](../asset/term-span.png)
 
-See [the crate docs](https://docs.rs/emit_term/0.11.0-alpha.17/emit_term/index.html) for more details.
+## Configuration
+
+`emit_term` has a fixed format, but can be configured to force or disable color output instead of detect it.
+
+To disable colors, call [`colored`](https://docs.rs/emit_term/0.11.0-alpha.17/emit_term/struct.Stdout.html#method.colored) with the value `false`:
+
+```rust
+fn main() {
+    let rt = emit::setup()
+        // Disable colors
+        .emit_to(emit_term::stdout()
+            .colored(false))
+        .init();
+
+    // Your app code goes here
+
+    rt.blocking_flush(std::time::Duration::from_secs(5));
+}
+```
+
+To force colors, call [`colored`](https://docs.rs/emit_term/0.11.0-alpha.17/emit_term/struct.Stdout.html#method.colored) with the value `true`:
+
+```rust
+fn main() {
+    let rt = emit::setup()
+        // Force colors
+        .emit_to(emit_term::stdout()
+            .colored(true))
+        .init();
+
+    // Your app code goes here
+
+    rt.blocking_flush(std::time::Duration::from_secs(5));
+}
+```
+
+## Writing your own console emitter
+
+The `emit_term` [source code](https://github.com/emit-rs/emit/blob/main/emitter/term/src/lib.rs) is written to be hackable. You can take and adapt its source to your needs, or write your own emitter that formats events the way you'd like. See [Writing an emitter](../for-developers/writing-an-emitter.md) for details.
