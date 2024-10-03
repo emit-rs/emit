@@ -58,7 +58,7 @@ fn main() {
         .map_emitter(|emitter| emitter
             .wrap_emitter(emit::emitter::wrapping::from_fn(|emitter, evt| {
                 let evt = evt.with_mdl(emit::Path::new_unchecked("new_path"));
-                
+
                 emitter.emit(evt)
             })
         )
@@ -69,3 +69,51 @@ fn main() {
     rt.blocking_flush(std::time::Duration::from_secs(5));
 }
 ```
+
+## Wrapping emitters
+
+Emitters can be treated like middleware using a [`Wrapping`](https://docs.rs/emit/0.11.0-alpha.17/emit/emitter/wrapping/trait.Wrapping.html) by calling [`Emitter::wrap_emitter`](https://docs.rs/emit/0.11.0-alpha.17/emit/trait.Emitter.html#method.wrap_emitter). Wrappings are functions over an [`Emitter`](https://docs.rs/emit/0.11.0-alpha.17/emit/trait.Emitter.html) and [`Event`](https://docs.rs/emit/0.11.0-alpha.17/emit/event/struct.Event.html) that may transform the event before emitting it, or discard it altogether.
+
+### Transforming events with a wrapping
+
+Wrappings can freely modify an event before forwarding it through the wrapped emitter:
+
+```rust
+let emitter = emit::emitter::from_fn(|evt| println!("{evt:?}"))
+    .wrap_emitter(emit::emitter::wrapping::from_fn(|emitter, evt| {
+        // Wrappings can transform the event in any way before emitting it
+        // In this example we clear any extent on the event
+        let evt = evt.with_extent(None);
+
+        // Wrappings need to call the given emitter in order for the event
+        // to be emitted
+        emitter.emit(evt)
+    }));
+```
+
+### Filtering events with a wrapping
+
+If a wrapping doesn't forward an event then it will be discarded:
+
+```rust
+let emitter = emit::emitter::from_fn(|evt| println!("{evt:?}"))
+    .wrap_emitter(emit::emitter::wrapping::from_fn(|emitter, evt| {
+        // If a wrapping doesn't call the given emitter then the event
+        // will be discarded. In this example, we only emit events
+        // carrying a property called "sampled" with the value `true`
+        if evt.props.pull::<bool, _>("sampled").unwrap_or_default() {
+            emitter.emit(evt)
+        }
+    }));
+```
+
+You can also treat a [`Filter`](https://docs.rs/emit/0.11.0-alpha.17/emit/trait.Filter.html) as a wrapping directly:
+
+```rust
+let emitter = emit::emitter::from_fn(|evt| println!("{evt:?}"))
+    .wrap_emitter(emit::emitter::wrapping::from_filter(
+        emit::level::min_filter(emit::Level::Warn)
+    ));
+```
+
+Also see [Filtering events](./filtering-events.md) for more details on filtering in `emit`.
