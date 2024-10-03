@@ -47,7 +47,9 @@ fn write_to_file(path: &str, data: &[u8]) -> std::io::Result<()> {
     Ok(())
 }
 
-write_to_file("./file.txt", b"Hello").unwrap();
+write_to_file("./file.txt", b"Hello")?;
 ```
 
 ![`emit_term` output for the above program](../asset/term-span.png)
+
+See [the crate docs](https://docs.rs/emit_term/0.11.0-alpha.17/emit_term/index.html) for more details.
