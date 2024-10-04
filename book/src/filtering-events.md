@@ -110,9 +110,9 @@ fn main() {
     let rt = emit::setup()
         // This filter accepts any event with a level over warn
         .emit_when(emit::level::min_by_path_filter([
-            (emit::Path::new("noisy_module").unwrap(), emit::Level::Warn),
-            (emit::Path::new("noisy_module::important_sub_module").unwrap(), emit::Level::Info),
-            (emit::Path::new("important_module").unwrap(), emit::Level::Debug),
+            (emit::path!("noisy_module"), emit::Level::Warn),
+            (emit::path!("noisy_module::important_sub_module"), emit::Level::Info),
+            (emit::path!("important_module"), emit::Level::Debug),
         ]))
         .emit_to(emit_term::stdout())
         .init();

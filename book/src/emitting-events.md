@@ -62,7 +62,7 @@ fn main() {
         // to `emit_to`, but may be easier to follow when split across two calls
         .map_emitter(|emitter| emitter
             .wrap_emitter(emit::emitter::wrapping::from_fn(|emitter, evt| {
-                let evt = evt.with_mdl(emit::Path::new_unchecked("new_path"));
+                let evt = evt.with_mdl(emit::path!("new_path"));
 
                 emitter.emit(evt)
             }))

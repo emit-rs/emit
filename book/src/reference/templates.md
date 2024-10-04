@@ -79,7 +79,7 @@ Properties declared before the template aren't captured. They're called _control
 # extern crate emit;
 # let user = "Rust";
 emit::emit!(
-    mdl: emit::Path::new("a::b::c").unwrap(),
+    mdl: emit::path!("a::b::c"),
     "Hello, {user}",
 )
 ```
