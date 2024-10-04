@@ -35,7 +35,6 @@
     - [Via OTLP](./emitting-events/otlp.md)
 - [Advanced apps](./advanced-apps.md)
     - [Integrating with OpenTelemetry](./advanced-apps/integrating-with-open-telemetry.md)
-    - [Custom runtimes](./advanced-apps/custom-runtimes.md)
 - [For developers](./for-developers.md)
     - [Writing an emitter](./for-developers/writing-an-emitter.md)
 - [Troubleshooting](./troubleshooting.md)

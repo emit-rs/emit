@@ -51,10 +51,6 @@ The [`setup()`] function configures `emit` with an [`Emitter`] to write [`Event`
 - `sval`:
 - `serde`:
 
-## Architecture
-
-## Data model
-
 ## Troubleshooting
 
 Emitters write their own diagnostics to an alternative `emit` runtime, which you can configure via [`Setup::init_internal`] to debug them:

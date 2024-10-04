@@ -36,7 +36,7 @@ If the event contains an error (the well-known `err` property), then it will be 
 
 ```rust
 # extern crate emit;
-# let err = "example error";
+# let err = "";
 emit::warn!("writing to {path} failed", path: "./file.txt", err);
 ```
 
