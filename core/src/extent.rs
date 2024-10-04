@@ -1,7 +1,7 @@
 /*!
 The [`Extent`] type.
 
-An extent is the time for which an event is active. It may be either a point for an event that occurred at a particular time, or a span for an event that was active over a particular period.
+An extent is the time for which an event is active. It may be either a point for an event that occurred at a particular time, or a range for an event that was active over a particular period.
 
 Extents can be constructed directly, or generically through the [`ToExtent`] trait.
 */
@@ -10,12 +10,12 @@ use crate::{empty::Empty, timestamp::Timestamp};
 use core::{fmt, ops::Range, time::Duration};
 
 /**
-Either a single [`Timestamp`] for a point in time, or a pair of [`Timestamp`]s for a timespan.
+Either a single [`Timestamp`] for a point in time, or a pair of [`Timestamp`]s for a range.
 */
 #[derive(Clone)]
 pub struct Extent {
     range: Range<Timestamp>,
-    is_span: bool,
+    is_range: bool,
 }
 
 impl Extent {
@@ -25,47 +25,38 @@ impl Extent {
     pub fn point(ts: Timestamp) -> Self {
         Extent {
             range: ts..ts,
-            is_span: false,
+            is_range: false,
         }
     }
 
     /**
-    Create an extent for a timespan.
+    Create an extent for a range.
 
-    The end of the range should be after the start, but an empty range is still considered a span.
+    The end of the range should be after the start, but an empty range is still considered a range.
     */
-    pub fn span(ts: Range<Timestamp>) -> Self {
+    pub fn range(ts: Range<Timestamp>) -> Self {
         Extent {
             range: ts,
-            is_span: true,
+            is_range: true,
         }
-    }
-
-    /**
-    Get the extent as a range of timestamps.
-
-    For point extents, this will return an empty range with the start and end bounds being equal. For span extents, this will return exactly the range the extent was created from.
-    */
-    pub fn as_range(&self) -> &Range<Timestamp> {
-        &self.range
     }
 
     /**
     Get the extent as a point in time.
 
-    For point extents, this will return exactly the value the extent was created from. For span extents, this will return the end bound.
+    For point extents, this will return exactly the value the extent was created from. For range extents, this will return the end bound.
     */
     pub fn as_point(&self) -> &Timestamp {
         &self.range.end
     }
 
     /**
-    Try get the extent as a timespan.
+    Try get the extent as a range.
 
-    This method will return `Some` if the extent is a span, even if that span is empty. It will return `None` for point extents.
+    This method will return `Some` if the extent is a range, even if that range is empty. It will return `None` for point extents.
     */
-    pub fn as_span(&self) -> Option<&Range<Timestamp>> {
-        if self.is_span() {
+    pub fn as_range(&self) -> Option<&Range<Timestamp>> {
+        if self.is_range() {
             Some(&self.range)
         } else {
             None
@@ -75,10 +66,10 @@ impl Extent {
     /**
     Try get the length of the extent.
 
-    This method will return `Some` if the extent is a span, even if that span is empty. It will return `None` for point extents.
+    This method will return `Some` if the extent is a range, even if that range is empty. It will return `None` for point extents.
     */
     pub fn len(&self) -> Option<Duration> {
-        if self.is_span() {
+        if self.is_range() {
             self.range.end.duration_since(self.range.start)
         } else {
             None
@@ -86,23 +77,23 @@ impl Extent {
     }
 
     /**
-    Whether the extent is a point in time.
+    Whether the extent is a single point in time.
     */
     pub fn is_point(&self) -> bool {
-        !self.is_span()
+        !self.is_range()
     }
 
     /**
-    Whether the extent is a timespan.
+    Whether the extent is a range.
     */
-    pub fn is_span(&self) -> bool {
-        self.is_span
+    pub fn is_range(&self) -> bool {
+        self.is_range
     }
 }
 
 impl fmt::Debug for Extent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.is_span() {
+        if self.is_range() {
             fmt::Debug::fmt(&self.range.start, f)?;
             f.write_str("..")?;
             fmt::Debug::fmt(&self.range.end, f)
@@ -114,7 +105,7 @@ impl fmt::Debug for Extent {
 
 impl fmt::Display for Extent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.is_span() {
+        if self.is_range() {
             fmt::Display::fmt(&self.range.start, f)?;
             f.write_str("..")?;
             fmt::Display::fmt(&self.range.end, f)
@@ -166,7 +157,7 @@ impl ToExtent for Timestamp {
 
 impl ToExtent for Range<Timestamp> {
     fn to_extent(&self) -> Option<Extent> {
-        Some(Extent::span(self.clone()))
+        Some(Extent::range(self.clone()))
     }
 }
 
@@ -190,41 +181,40 @@ mod tests {
         let ts = Extent::point(Timestamp::MIN);
 
         assert!(ts.is_point());
-        assert!(!ts.is_span());
+        assert!(!ts.is_range());
 
         assert_eq!(&Timestamp::MIN, ts.as_point());
 
-        assert_eq!(&(Timestamp::MIN..Timestamp::MIN), ts.as_range());
-        assert_eq!(None, ts.as_span());
+        assert_eq!(None, ts.as_range());
         assert_eq!(None, ts.len());
     }
 
     #[test]
-    fn span() {
-        let ts = Extent::span(Timestamp::MIN..Timestamp::MIN + Duration::from_secs(1));
+    fn range() {
+        let ts = Extent::range(Timestamp::MIN..Timestamp::MIN + Duration::from_secs(1));
 
         assert!(!ts.is_point());
-        assert!(ts.is_span());
+        assert!(ts.is_range());
 
         assert_eq!(&(Timestamp::MIN + Duration::from_secs(1)), ts.as_point());
 
         assert_eq!(
             &(Timestamp::MIN..Timestamp::MIN + Duration::from_secs(1)),
-            ts.as_range()
+            ts.as_range().unwrap(),
         );
         assert_eq!(
             Some(&(Timestamp::MIN..Timestamp::MIN + Duration::from_secs(1))),
-            ts.as_span()
+            ts.as_range()
         );
         assert_eq!(Some(Duration::from_secs(1)), ts.len());
     }
 
     #[test]
-    fn span_empty() {
-        let ts = Extent::span(Timestamp::MIN..Timestamp::MIN);
+    fn range_empty() {
+        let ts = Extent::range(Timestamp::MIN..Timestamp::MIN);
 
         assert!(!ts.is_point());
-        assert!(ts.is_span());
+        assert!(ts.is_range());
 
         assert_eq!(&Timestamp::MIN, ts.as_point());
 
@@ -232,11 +222,11 @@ mod tests {
     }
 
     #[test]
-    fn span_backwards() {
-        let ts = Extent::span(Timestamp::MAX..Timestamp::MIN);
+    fn range_backwards() {
+        let ts = Extent::range(Timestamp::MAX..Timestamp::MIN);
 
         assert!(!ts.is_point());
-        assert!(ts.is_span());
+        assert!(ts.is_range());
 
         assert_eq!(&Timestamp::MIN, ts.as_point());
 

@@ -166,7 +166,7 @@ impl<'a, P> Metric<'a, P> {
     pub fn ts_start(&self) -> Option<&Timestamp> {
         self.extent
             .as_ref()
-            .and_then(|extent| extent.as_span())
+            .and_then(|extent| extent.as_range())
             .map(|span| &span.start)
     }
 
@@ -193,7 +193,10 @@ impl<'a, P> Metric<'a, P> {
 }
 
 impl<'a, P: Props> ToEvent for Metric<'a, P> {
-    type Props<'b> = &'b Self where Self: 'b;
+    type Props<'b>
+        = &'b Self
+    where
+        Self: 'b;
 
     fn to_event<'b>(&'b self) -> Event<'b, Self::Props<'b>> {
         // "{metric_agg} of {metric_name} is {metric_value}"
@@ -969,8 +972,8 @@ mod tests {
             let extent = metric.to_extent();
 
             assert_eq!(
-                expected.map(|extent| extent.as_range().clone()),
-                extent.map(|extent| extent.as_range().clone())
+                expected.map(|extent| extent.as_range().cloned()),
+                extent.map(|extent| extent.as_range().cloned())
             );
         }
     }

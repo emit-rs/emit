@@ -19,7 +19,9 @@ jobs:
         mkdir bin
         curl -sSL $url | tar -xz --directory=bin
         echo "$(pwd)/bin" >> $GITHUB_PATH
+    - name: Install mermaid
+      run: cargo install mdbook-mermaid
     - name: Run tests
       run: |
-        cargo build --all
+        cargo build --all --all-features
         mdbook test book -L target/debug/deps

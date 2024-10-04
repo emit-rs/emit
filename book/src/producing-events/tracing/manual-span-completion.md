@@ -1,6 +1,6 @@
 # Manual span completion
 
-The `guard` control parameter can be applied to span macros to bind an identifier in the body of the annotated function for the [`Span`] that's created for it. This span can be completed manually, changing properties of the span along the way:
+The `guard` [control parameter](../../reference/control-parameters.md) can be applied to span macros to bind an identifier in the body of the annotated function for the [`Span`] that's created for it. This span can be completed manually, changing properties of the span along the way:
 
 ```rust
 # extern crate emit;

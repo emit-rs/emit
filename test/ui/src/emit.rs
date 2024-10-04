@@ -219,7 +219,7 @@ fn emit_extent_span() {
             assert_eq!(
                 emit::Timestamp::from_unix(Duration::from_secs(42)).unwrap()
                     ..emit::Timestamp::from_unix(Duration::from_secs(47)).unwrap(),
-                evt.extent().unwrap().as_span().unwrap().clone()
+                evt.extent().unwrap().as_range().unwrap().clone()
             );
         },
         |_| true,

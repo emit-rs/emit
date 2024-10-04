@@ -1,8 +1,8 @@
 # Tracing
 
-When your application executes key operations, you can emit span events that dover the time they were active. Any other operations involved in that execution, or any other events emitted during it, will be correlated through identifiers to form a hierarchical call tree. Together, these events form a trace, which in distributed systems can involve operations executed by other services. Traces are a useful way to build a picture of service dependencies in distributed applications, and to identify performance problems across them.
+When your application executes key operations, you can emit span events that cover the time they were active. Any other operations involved in that execution, or any other events emitted during it, will be correlated through identifiers to form a hierarchical call tree. Together, these events form a trace, which in distributed systems can involve operations executed by other services. Traces are a useful way to build a picture of service dependencies in distributed applications, and to identify performance problems across them.
 
-## The `#[emit::span]` macro
+## The `#[span]` macro
 
 `emit` supports tracing operations through attribute macros on functions. These macros use the same syntax as those for emitting regular events:
 
@@ -49,3 +49,12 @@ async fn wait_a_bit(sleep_ms: u64) {
 wait_a_bit(1200).await;
 # }
 ```
+
+`emit` also defines macros for emitting spans at different levels for filtering:
+
+- [`#[debug_span]`](https://docs.rs/emit/0.11.0-alpha.17/emit/attr.debug_span.html)
+- [`#[info_span]`](https://docs.rs/emit/0.11.0-alpha.17/emit/attr.info_span.html)
+- [`#[warn_span]`](https://docs.rs/emit/0.11.0-alpha.17/emit/attr.warn_span.html)
+- [`#[error_span]`](https://docs.rs/emit/0.11.0-alpha.17/emit/attr.error_span.html)
+
+The level of a span may also depend on its execution. See [Fallible functions](./tracing/fallible-functions.md) and [Manual span completion](./tracing/manual-span-completion.md) for details.

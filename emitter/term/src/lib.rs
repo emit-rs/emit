@@ -46,6 +46,40 @@ fn main() {
     rt.blocking_flush(std::time::Duration::from_secs(30));
 }
 ```
+
+## Configuration
+
+`emit_term` has a fixed format, but can be configured to force or disable color output instead of detect it.
+
+To disable colors, call [`Stdout::colored`] with the value `false`:
+
+```rust
+fn main() {
+    let rt = emit::setup()
+        // Disable colors
+        .emit_to(emit_term::stdout().colored(false))
+        .init();
+
+    // Your app code goes here
+
+    rt.blocking_flush(std::time::Duration::from_secs(5));
+}
+```
+
+To force colors, call [`Stdout::colored`] with the value `true`:
+
+```rust
+fn main() {
+    let rt = emit::setup()
+        // Force colors
+        .emit_to(emit_term::stdout().colored(true))
+        .init();
+
+    // Your app code goes here
+
+    rt.blocking_flush(std::time::Duration::from_secs(5));
+}
+```
 */
 
 #![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]
@@ -156,16 +190,14 @@ fn write_event(buf: &mut Buffer, evt: emit::event::Event<impl emit::props::Props
     }
 
     if let Some(extent) = evt.extent() {
-        if extent.is_span() {
-            if let Some(len) = extent.len() {
-                write_timestamp(buf, *extent.as_point());
-                write_plain(buf, " ");
-                write_duration(buf, len);
-            } else {
-                write_timestamp(buf, extent.as_range().start);
-                write_plain(buf, "..");
-                write_timestamp(buf, extent.as_range().end);
-            }
+        if let Some(len) = extent.len() {
+            write_timestamp(buf, *extent.as_point());
+            write_plain(buf, " ");
+            write_duration(buf, len);
+        } else if let Some(range) = extent.as_range() {
+            write_timestamp(buf, range.start);
+            write_plain(buf, "..");
+            write_timestamp(buf, range.end);
         } else {
             write_timestamp(buf, *extent.as_point());
         }

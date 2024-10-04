@@ -1,3 +1,3 @@
 # Advanced apps
 
-- How to integrate `emit` into bigger applications, or those with more bespoke requirements.
+This section covers advanced integration scenarios for bigger or more demanding applications.

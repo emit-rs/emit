@@ -61,16 +61,20 @@ impl EventEncoder for MetricsEventEncoder {
             let (start_time_unix_nano, time_unix_nano, aggregation_temporality) = evt
                 .extent()
                 .map(|extent| {
-                    let range = extent.as_range();
+                    let (start, end, temporality) = if let Some(range) = extent.as_range() {
+                        (range.start, range.end, AggregationTemporality::Delta)
+                    } else {
+                        (
+                            *extent.as_point(),
+                            *extent.as_point(),
+                            AggregationTemporality::Cumulative,
+                        )
+                    };
 
                     (
-                        range.start.to_unix().as_nanos() as u64,
-                        range.end.to_unix().as_nanos() as u64,
-                        if extent.is_span() {
-                            AggregationTemporality::Delta
-                        } else {
-                            AggregationTemporality::Cumulative
-                        },
+                        start.to_unix().as_nanos() as u64,
+                        end.to_unix().as_nanos() as u64,
+                        temporality,
                     )
                 })
                 .unwrap_or((0, 0, AggregationTemporality::Unspecified));

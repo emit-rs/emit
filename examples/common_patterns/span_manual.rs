@@ -1,7 +1,7 @@
 /*!
-This example demonstrates how to construct a span manually, without using `#[emit::span]`.
+This example demonstrates how to construct a span manually, without using `#[span]`.
 
-It can be useful in applications that use disconnected middleware that makes it difficult to pick a single point to introduce `#[emit::span]` to.
+It can be useful in applications that use disconnected middleware that makes it difficult to pick a single point to introduce `#[span]` to.
 */
 
 use std::time::Duration;

@@ -1,3 +1,3 @@
 # Reference
 
-- An index of overarching and cross-cutting concepts.
+This section is an index of overarching and cross-cutting concepts in `emit`.

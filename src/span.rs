@@ -542,7 +542,7 @@ impl<'a, P: Props> Span<'a, P> {
     pub fn ts_start(&self) -> Option<&Timestamp> {
         self.extent
             .as_ref()
-            .and_then(|extent| extent.as_span())
+            .and_then(|extent| extent.as_range())
             .map(|span| &span.start)
     }
 
@@ -555,7 +555,10 @@ impl<'a, P: Props> Span<'a, P> {
 }
 
 impl<'a, P: Props> ToEvent for Span<'a, P> {
-    type Props<'b> = &'b Self where Self: 'b;
+    type Props<'b>
+        = &'b Self
+    where
+        Self: 'b;
 
     fn to_event<'b>(&'b self) -> Event<'b, Self::Props<'b>> {
         // "{span_name} completed"
@@ -1114,8 +1117,8 @@ mod tests {
             let extent = span.to_extent();
 
             assert_eq!(
-                expected.map(|extent| extent.as_range().clone()),
-                extent.map(|extent| extent.as_range().clone())
+                expected.map(|extent| extent.as_range().cloned()),
+                extent.map(|extent| extent.as_range().cloned())
             );
         }
     }
@@ -1153,11 +1156,11 @@ mod tests {
             |evt| {
                 assert_eq!(
                     Timestamp::from_unix(Duration::from_secs(0)).unwrap(),
-                    evt.extent().unwrap().as_span().unwrap().start
+                    evt.extent().unwrap().as_range().unwrap().start
                 );
                 assert_eq!(
                     Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
-                    evt.extent().unwrap().as_span().unwrap().end
+                    evt.extent().unwrap().as_range().unwrap().end
                 );
 
                 assert_eq!("test", evt.mdl());

@@ -4,7 +4,6 @@ Implementation details for `emit!` macros.
 This crate is not intended to be consumed directly.
 */
 
-#![deny(missing_docs)]
 /*
 # Organization
 
@@ -18,6 +17,8 @@ Code is transformed through _hooks_. A hook is a well-known method call, like `a
 
 Tests for this project mostly live in the top-level `test/ui` crate.
 */
+
+#![deny(missing_docs)]
 #![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]
 
 extern crate proc_macro;
@@ -237,9 +238,11 @@ where
 
 This macro accepts the following optional control parameters:
 
-- `mdl: impl Into<emit::Path>`: The module the event belongs to. If unspecified the current module path is used.
-- `props: impl emit::Props`: A base set of properties to add to the event.
-- `extent: impl emit::ToExtent`: The extent to use on the event.
+| name     | type                    | description                                                                      |
+| -------- | ----------------------- | -------------------------------------------------------------------------------- |
+| `mdl`    | `impl Into<emit::Path>` | The module the event belongs to. If unspecified the current module path is used. |
+| `props`  | `impl emit::Props`      | A base set of properties to add to the event.                                    |
+| `extent` | `impl emit::ToExtent`   | The extent to use on the event.                                                  |
 
 # Template
 
@@ -361,12 +364,14 @@ where
 
 This macro accepts the following optional control parameters:
 
-- `rt: impl emit::runtime::Runtime`: The runtime to emit the event through.
-- `mdl: impl Into<emit::Path>`: The module the event belongs to. If unspecified the current module path is used.
-- `when: impl emit::Filter`: A filter to use instead of the one configured on the runtime.
-- `arg`: An identifier to bind an `emit::Span` to in the body of the span for manual completion.
-- `ok_lvl`: Assume the instrumented block returns a `Result`. Assign the event the given level when the result is `Ok`.
-- `err_lvl`. Assume the instrumented block returns a `Result`. Assign the event the given level when the result is `Err` and attach the error as the `err` property.
+| name      | type                          | description                                                                                                                                             |
+| --------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rt`      | `impl emit::runtime::Runtime` | The runtime to emit the event through.                                                                                                                  |
+| `mdl`     | `impl Into<emit::Path>`       | The module the event belongs to. If unspecified the current module path is used.                                                                        |
+| `when`    | `impl emit::Filter`           | A filter to use instead of the one configured on the runtime.                                                                                           |
+| `guard`   | -                             | An identifier to bind an `emit::Span` to in the body of the span for manual completion.                                                                 |
+| `ok_lvl`  | -                             | Assume the instrumented block returns a `Result`. Assign the event the given level when the result is `Ok`.                                             |
+| `err_lvl` | -                             | Assume the instrumented block returns a `Result`. Assign the event the given level when the result is `Err` and attach the error as the `err` property. |
 
 # Template
 
@@ -528,12 +533,14 @@ where
 
 This macro accepts the following optional control parameters:
 
-- `rt: impl emit::runtime::Runtime`: The runtime to emit the event through.
-- `evt: impl emit::event::ToEvent`: A base event to emit. Any properties captured by the macro will be appended to the base event. If this control parameter is specified then `module`, `props`, and `extent` cannot also be set.
-- `mdl: impl Into<emit::Path>`: The module the event belongs to. If unspecified the current module path is used.
-- `props: impl emit::Props`: A base set of properties to add to the event.
-- `extent: impl emit::ToExtent`: The extent to use on the event. If it resolves to `None` then the clock on the runtime will be used to assign a point extent.
-- `when: impl emit::Filter`: A filter to use instead of the one configured on the runtime.
+| name      | type                          | description                                                                                                                                                                                    |
+| --------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rt`      | `impl emit::runtime::Runtime` | The runtime to emit the event through.                                                                                                                                                         |
+| `mdl`     | `impl Into<emit::Path>`       | The module the event belongs to. If unspecified the current module path is used.                                                                                                               |
+| `extent`  | `impl emit::ToExtent`         | The extent to use on the event. If it resolves to `None` then the clock on the runtime will be used to assign a point extent.                                                                  |
+| `props`   | `impl emit::Props`            | A base set of properties to add to the event.                                                                                                                                                  |
+| `evt`     | `impl emit::event::ToEvent`   | A base event to emit. Any properties captured by the macro will be appended to the base event. If this control parameter is specified then `module`, `props`, and `extent` cannot also be set. |
+| `when`    | `impl emit::Filter`           | A filter to use instead of the one configured on the runtime.                                                                                                                                  |
 
 # Template
 
@@ -649,7 +656,7 @@ fmt_string
 
 where
 
-- `fmt_string`: A string literal with the format flags, like `":?"`. See the [`std::fmt`] docs for details on available flags.
+- `fmt_string`: A string literal with the format flags, like `":?"`. See the [`std::fmt`](https://doc.rust-lang.org/std/fmt/index.html) docs for details on available flags.
 
 # Applicable to
 
