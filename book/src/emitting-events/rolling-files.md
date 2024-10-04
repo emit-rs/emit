@@ -8,6 +8,8 @@ version = "0.11.0-alpha.17"
 ```
 
 ```rust
+# extern crate emit;
+# extern crate emit_file;
 fn main() {
     let rt = emit::setup()
         .emit_to(emit_file::set("./target/logs/my_app.txt").spawn())

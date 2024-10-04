@@ -23,5 +23,5 @@ jobs:
       run: cargo install mdbook-mermaid
     - name: Run tests
       run: |
-        cargo build --all
+        cargo build --all --all-features
         mdbook test book -L target/debug/deps

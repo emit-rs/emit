@@ -12,6 +12,7 @@ Emitters are configured through the [`setup`](https://docs.rs/emit/0.11.0-alpha.
 
 ```rust
 # extern crate emit;
+# extern crate emit_term;
 fn main() {
     let rt = emit::setup()
         // Set the emitter
@@ -30,6 +31,8 @@ Once initialized, any subsequent calls to [`init`](https://docs.rs/emit/0.11.0-a
 
 ```rust
 # extern crate emit;
+# extern crate emit_term;
+# extern crate emit_file;
 fn main() {
     let rt = emit::setup()
         // Set multiple emitters
@@ -47,7 +50,9 @@ You can map an emitter to a new value by calling [`map_emitter`](https://docs.rs
 
 ```rust
 # extern crate emit;
-# use emit::Emitter;
+# extern crate emit_file;
+use emit::Emitter;
+
 fn main() {
     let rt = emit::setup()
         // Set the emitter
@@ -60,7 +65,7 @@ fn main() {
                 let evt = evt.with_mdl(emit::Path::new_unchecked("new_path"));
 
                 emitter.emit(evt)
-            })
+            }))
         )
         .init();
 
@@ -79,11 +84,14 @@ Emitters can be treated like middleware using a [`Wrapping`](https://docs.rs/emi
 Wrappings can freely modify an event before forwarding it through the wrapped emitter:
 
 ```rust
+# extern crate emit;
+use emit::Emitter;
+
 let emitter = emit::emitter::from_fn(|evt| println!("{evt:?}"))
     .wrap_emitter(emit::emitter::wrapping::from_fn(|emitter, evt| {
         // Wrappings can transform the event in any way before emitting it
         // In this example we clear any extent on the event
-        let evt = evt.with_extent(None);
+        let evt = evt.with_extent(emit::Empty);
 
         // Wrappings need to call the given emitter in order for the event
         // to be emitted
@@ -96,12 +104,15 @@ let emitter = emit::emitter::from_fn(|evt| println!("{evt:?}"))
 If a wrapping doesn't forward an event then it will be discarded:
 
 ```rust
+# extern crate emit;
+use emit::{Emitter, Props};
+
 let emitter = emit::emitter::from_fn(|evt| println!("{evt:?}"))
     .wrap_emitter(emit::emitter::wrapping::from_fn(|emitter, evt| {
         // If a wrapping doesn't call the given emitter then the event
         // will be discarded. In this example, we only emit events
         // carrying a property called "sampled" with the value `true`
-        if evt.props.pull::<bool, _>("sampled").unwrap_or_default() {
+        if evt.props().pull::<bool, _>("sampled").unwrap_or_default() {
             emitter.emit(evt)
         }
     }));
@@ -110,6 +121,9 @@ let emitter = emit::emitter::from_fn(|evt| println!("{evt:?}"))
 You can also treat a [`Filter`](https://docs.rs/emit/0.11.0-alpha.17/emit/trait.Filter.html) as a wrapping directly:
 
 ```rust
+# extern crate emit;
+use emit::Emitter;
+
 let emitter = emit::emitter::from_fn(|evt| println!("{evt:?}"))
     .wrap_emitter(emit::emitter::wrapping::from_filter(
         emit::level::min_filter(emit::Level::Warn)

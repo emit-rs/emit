@@ -12,13 +12,15 @@ version = "0.11.0-alpha.17"
 ```
 
 ```rust
+# extern crate emit;
+# extern crate emit_otlp;
 fn main() {
     let rt = emit::setup()
         .emit_to(emit_otlp::new()
             // Add required resource properties for OTLP
             .resource(emit::props! {
                 #[emit::key("service.name")]
-                service_name: emit::pkg!(),
+                service_name: "my_app",
             })
             // Configure endpoints for logs/traces/metrics using gRPC + protobuf
             .logs(emit_otlp::logs_grpc_proto("http://localhost:4319"))

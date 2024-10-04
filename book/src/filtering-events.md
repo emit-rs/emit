@@ -8,6 +8,7 @@ Filters are configured through the [`setup`](https://docs.rs/emit/0.11.0-alpha.1
 
 ```rust
 # extern crate emit;
+# extern crate emit_term;
 fn main() {
     let rt = emit::setup()
         // This filter accepts any event with a level over warn
@@ -25,6 +26,9 @@ Filters can be combined with [`and_when`](https://docs.rs/emit/0.11.0-alpha.17/e
 
 ```rust
 # extern crate emit;
+use emit::Filter;
+
+# extern crate emit_term;
 fn main() {
     let rt = emit::setup()
         // This filter accepts any event with a level over warn or where the module path is `my_module`
@@ -46,6 +50,9 @@ You can also wrap an emitter in [`emit_to`](https://docs.rs/emit/0.11.0-alpha.17
 
 ```rust
 # extern crate emit;
+# extern crate emit_term;
+use emit::Emitter;
+
 fn main() {
     let rt = emit::setup()
         // Wrap the emitter in a filter instead of setting it independently
@@ -76,6 +83,7 @@ You can use the [`level::min_filter`](https://docs.rs/emit/0.11.0-alpha.17/emit/
 
 ```rust
 # extern crate emit;
+# extern crate emit_term;
 fn main() {
     let rt = emit::setup()
         // This filter accepts any event with a level over warn
@@ -97,6 +105,7 @@ You can use the [`level::min_by_path_filter`](https://docs.rs/emit/0.11.0-alpha.
 
 ```rust
 # extern crate emit;
+# extern crate emit_term;
 fn main() {
     let rt = emit::setup()
         // This filter accepts any event with a level over warn

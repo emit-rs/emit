@@ -12,6 +12,7 @@ Each event is the combination of:
 Here's an example of an event created using the [`emit!`](https://docs.rs/emit/0.11.0-alpha.17/emit/macro.emit.html) macro:
 
 ```rust
+# extern crate emit;
 let user = "user-123";
 let item = "product-456";
 
@@ -61,18 +62,21 @@ An extent that stores a pair of timestamps is called a range. These are used by 
 Events don't have to be constructed using macros. You can use the [`Event::new`](https://docs.rs/emit/0.11.0-alpha.17/emit/struct.Event.html#method.new) constructor manually:
 
 ```rust
+# extern crate emit;
+let parts = [
+    emit::template::Part::hole("user"),
+    emit::template::Part::text(" added "),
+    emit::template::Part::hole("item"),
+    emit::template::Part::text(" to their cart"),
+];
+
 let evt = emit::Event::new(
     // mdl
     emit::Path::new("shop::orders::add_to_cart").unwrap(),
     // tpl
-    emit::Template::new(&[
-        emit::template::Part::hole("user"),
-        emit::template::Part::text(" added "),
-        emit::template::Part::hole("item"),
-        emit::template::Part::text(" to their cart"),
-    ]),
+    emit::Template::new_ref(&parts),
     // extent
-    emit::Timestamp::from_str("2024-01-02T03:04:05.678Z").unwrap(),
+    emit::Timestamp::try_from_str("2024-01-02T03:04:05.678Z").unwrap(),
     // props
     [
         ("user", "user-123"),

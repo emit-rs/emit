@@ -5,6 +5,7 @@
 `emit` templates are string literals with holes for properties between braces. This is an example of a template:
 
 ```rust
+# extern crate emit;
 let user = "Rust";
 
 emit::emit!("Hello, {user}");
@@ -17,6 +18,7 @@ The [`emit!`](https://docs.rs/emit/0.11.0-alpha.17/emit/macro.emit.html) and [`#
 Properties in templates appear within braces:
 
 ```rust
+# extern crate emit;
 # let user = "Rust";
 emit::emit!("Hello, {user}");
 ```
@@ -24,18 +26,21 @@ emit::emit!("Hello, {user}");
 Braces may be escaped by doubling them:
 
 ```rust
+# extern crate emit;
 emit::emit!("Hello, {{user}}");
 ```
 
 Properties use Rust's field value syntax, like you'd write when initializing struct fields. Usually they're a standalone identifer that will capture a property in scope with that name. Properties can also be given a value inline as an expression:
 
 ```rust
+# extern crate emit;
 emit::emit!("Hello, {user: \"Rust\"}");
 ```
 
 Properties may have attributes applied to them:
 
 ```rust
+# extern crate emit;
 # let user = "Rust";
 emit::emit!("Hello, {#[cfg(enabled)] user}")
 ```
@@ -47,6 +52,7 @@ See [Property attributes](./property-attributes.md) for details on attributes yo
 Complex property expressions are distracting within templates. Attributes and values for properties declared in the template can be written after it using the same field-value syntax:
 
 ```rust
+# extern crate emit;
 emit::emit!(
     "Hello, {user}",
     #[cfg(enabled)]
@@ -57,6 +63,7 @@ emit::emit!(
 Properties outside of the template don't need a corresponding hole to be captured:
 
 ```rust
+# extern crate emit;
 # let user = "Rust";
 emit::emit!(
     "Hello, {user}",
@@ -69,6 +76,7 @@ emit::emit!(
 Properties declared before the template aren't captured. They're called _control parameters_ and are used to change the way events are constructed or emitted:
 
 ```rust
+# extern crate emit;
 # let user = "Rust";
 emit::emit!(
     mdl: emit::Path::new("a::b::c").unwrap(),
@@ -89,6 +97,7 @@ Hello, {user}
 When tokenized, this template will look like:
 
 ```rust
+# extern crate emit;
 # use emit::template::Part;
 let tokens = [
     Part::text("Hello, "),
@@ -99,6 +108,7 @@ let tokens = [
 The template can then be fed a value for `user` and rendered:
 
 ```rust
+# extern crate emit;
 # use emit::{Template, template::Part};
 # let tokens = [Part::text("Hello, "), Part::hole("user")];
 let template = Template::new_ref(&tokens);
@@ -116,6 +126,7 @@ Hello, Rust
 Any holes in the template that are rendered without a matching property will reproduce the hole:
 
 ```rust
+# extern crate emit;
 # use emit::{Template, template::Part};
 # let tokens = [Part::text("Hello, "), Part::hole("user")];
 let template = Template::new_ref(&tokens);
