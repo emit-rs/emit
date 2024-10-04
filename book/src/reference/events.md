@@ -72,7 +72,7 @@ let parts = [
 
 let evt = emit::Event::new(
     // mdl
-    emit::Path::new("shop::orders::add_to_cart").unwrap(),
+    emit::path!("shop::orders::add_to_cart"),
     // tpl
     emit::Template::new_ref(&parts),
     // extent
