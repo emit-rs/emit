@@ -1,0 +1,8 @@
+[package]
+name = "emit_traceparent"
+version = "0.11.0-alpha.18"
+edition = "2021"
+
+[dependencies.emit]
+version = "0.11.0-alpha.18"
+path = "../"

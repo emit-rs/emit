@@ -2,6 +2,7 @@
 members = [
     "core",
     "batcher",
+    "traceparent",
     "emitter/term",
     "emitter/file",
     "emitter/file/test/integration",
@@ -14,7 +15,7 @@ members = [
     "examples/common_patterns",
     "examples/opentelemetry/direct_otlp",
     "examples/opentelemetry/via_sdk",
-    "test/ui",
+    "test/ui", "traceparent",
 ]
 
 [package]
