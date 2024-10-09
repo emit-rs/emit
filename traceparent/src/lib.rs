@@ -2,30 +2,39 @@
 Distributed trace context for `emit` with support for sampling.
 */
 
-use std::{cell::RefCell, fmt, mem, str::FromStr};
+use std::{
+    cell::RefCell,
+    fmt::{self, Write as _},
+    mem,
+    str::FromStr,
+};
 
 use emit::{
     event::ToEvent,
     span::{SpanCtxt, SpanId, TraceId},
     well_known::{KEY_SPAN_ID, KEY_TRACE_ID},
-    Ctxt, Filter, Props,
+    Ctxt, Empty, Filter, Frame, Props,
 };
 
-thread_local! {
-    static ACTIVE_TRACEPARENT: RefCell<Option<Traceparent>> = RefCell::new(None);
+/**
+Get the current trace context.
+*/
+pub fn current() -> Option<Traceparent> {
+    get_traceparent_internal()
 }
 
-// TODO: Need a guard that unsets on Drop
-pub fn set_traceparent(traceparent: Option<Traceparent>) -> Option<Traceparent> {
-    ACTIVE_TRACEPARENT.with(|slot| {
-        let mut slot = slot.borrow_mut();
+/**
+Get a [`Frame`] that can set the current trace context in a scope.
 
-        mem::replace(&mut *slot, traceparent)
-    })
-}
+While the frame is active, [`current`] will return the value of `traceparent`.
+*/
+pub fn set(traceparent: Option<Traceparent>) -> Frame<TraceparentCtxt> {
+    let mut frame = Frame::current(TraceparentCtxt::new(Empty));
 
-pub fn get_traceparent() -> Option<Traceparent> {
-    ACTIVE_TRACEPARENT.with(|slot| *slot.borrow())
+    frame.inner_mut().slot = traceparent;
+    frame.inner_mut().active = true;
+
+    frame
 }
 
 /**
@@ -44,55 +53,18 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-#[derive(Debug, Clone, Copy)]
+/**
+A [W3C traceparent](https://www.w3.org/TR/trace-context).
+
+This type contains `emit`'s [`TraceId`] and [`SpanId`], along with [`TraceFlags`] that determine sampling.
+
+Traceparents exist at the edges of your application. On incoming requests, it may carry a traceparent header that can be parsed into a `Traceparent` and pushed onto the active trace context with [`set`]. On outgoing requests, the active trace context is pulled by [`get`] and formatted into a traceparent header.
+*/
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Traceparent {
     trace_id: Option<TraceId>,
     span_id: Option<SpanId>,
     trace_flags: TraceFlags,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct TraceFlags(u8);
-
-impl TraceFlags {
-    pub const EMPTY: Self = TraceFlags(0);
-    pub const SAMPLED: Self = TraceFlags(1);
-
-    pub fn try_from_str(flags: &str) -> Result<Self, Error> {
-        match flags {
-            "00" => Ok(TraceFlags::EMPTY),
-            "01" => Ok(TraceFlags::SAMPLED),
-            _ => Err(Error {
-                msg: format!("unexpected flags {flags:?}"),
-            }),
-        }
-    }
-
-    pub fn from_u8(raw: u8) -> Self {
-        TraceFlags(raw)
-    }
-
-    pub fn to_u8(&self) -> u8 {
-        self.0
-    }
-
-    pub fn is_sampled(&self) -> bool {
-        self.0 & Self::SAMPLED.0 == 0
-    }
-}
-
-impl FromStr for TraceFlags {
-    type Err = Error;
-
-    fn from_str(flags: &str) -> Result<Self, Error> {
-        Self::try_from_str(flags)
-    }
-}
-
-impl fmt::Display for TraceFlags {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        todo!()
-    }
 }
 
 impl Traceparent {
@@ -137,11 +109,21 @@ impl Traceparent {
             });
         };
 
-        let trace_id = TraceId::try_from_hex(trace_id).map_err(|e| Error { msg: e.to_string() })?;
-        let span_id = SpanId::try_from_hex(span_id).map_err(|e| Error { msg: e.to_string() })?;
+        let trace_id = if trace_id == "00000000000000000000000000000000" {
+            None
+        } else {
+            Some(TraceId::try_from_hex(trace_id).map_err(|e| Error { msg: e.to_string() })?)
+        };
+
+        let span_id = if span_id == "0000000000000000" {
+            None
+        } else {
+            Some(SpanId::try_from_hex(span_id).map_err(|e| Error { msg: e.to_string() })?)
+        };
+
         let trace_flags = TraceFlags::try_from_str(trace_flags)?;
 
-        Ok(Traceparent::new(Some(trace_id), Some(span_id), trace_flags))
+        Ok(Traceparent::new(trace_id, span_id, trace_flags))
     }
 
     pub fn from_span_ctxt(span_ctxt: SpanCtxt) -> Self {
@@ -183,21 +165,107 @@ impl FromStr for Traceparent {
 
 impl fmt::Display for Traceparent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        todo!()
+        f.write_str("00-")?;
+
+        if let Some(trace_id) = self.trace_id {
+            fmt::Display::fmt(&trace_id, f)?;
+            f.write_char('-')?;
+        } else {
+            f.write_str("00000000000000000000000000000000-")?;
+        }
+
+        if let Some(span_id) = self.span_id {
+            fmt::Display::fmt(&span_id, f)?;
+            f.write_char('-')?;
+        } else {
+            f.write_str("0000000000000000-")?;
+        }
+
+        fmt::Display::fmt(&self.trace_flags, f)
     }
 }
 
-// Intercept calls to `open` and look for `trace_id` and `span_id`
-// Push then to the trace context; that means getting the current
-// and using its sampled flag if present
-pub struct TraceparentCtxt<C> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TraceFlags(u8);
+
+impl TraceFlags {
+    pub const EMPTY: Self = TraceFlags(0);
+    pub const SAMPLED: Self = TraceFlags(1);
+
+    pub fn try_from_str(flags: &str) -> Result<Self, Error> {
+        if flags.len() != 2 {
+            return Err(Error {
+                msg: "flags must be a 2 digit value".into(),
+            });
+        }
+
+        Ok(TraceFlags(
+            u8::from_str_radix(flags, 16).map_err(|e| Error { msg: e.to_string() })?,
+        ))
+    }
+
+    pub fn from_u8(raw: u8) -> Self {
+        TraceFlags(raw)
+    }
+
+    pub fn to_u8(&self) -> u8 {
+        self.0
+    }
+
+    pub fn is_sampled(&self) -> bool {
+        self.0 & Self::SAMPLED.0 == 0
+    }
+}
+
+impl FromStr for TraceFlags {
+    type Err = Error;
+
+    fn from_str(flags: &str) -> Result<Self, Error> {
+        Self::try_from_str(flags)
+    }
+}
+
+impl fmt::Display for TraceFlags {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::LowerHex::fmt(&self.0, f)
+    }
+}
+
+thread_local! {
+    static ACTIVE_TRACEPARENT: RefCell<Option<Traceparent>> = RefCell::new(None);
+}
+
+fn set_traceparent_internal(traceparent: Option<Traceparent>) -> Option<Traceparent> {
+    ACTIVE_TRACEPARENT.with(|slot| {
+        let mut slot = slot.borrow_mut();
+
+        mem::replace(&mut *slot, traceparent)
+    })
+}
+
+fn get_traceparent_internal() -> Option<Traceparent> {
+    ACTIVE_TRACEPARENT.with(|slot| *slot.borrow())
+}
+
+/**
+A [`Ctxt`] that synchronizes [`Traceparent`]s with an underlying ambient context.
+
+The trace context is shared by all instances of `TraceparentCtxt`, and any calls to [`current`] and [`set`].
+*/
+pub struct TraceparentCtxt<C = Empty> {
     inner: C,
 }
 
-pub struct TraceparentCtxtFrame<F> {
+pub struct TraceparentCtxtFrame<F = Empty> {
     inner: F,
     active: bool,
     slot: Option<Traceparent>,
+}
+
+impl<C> TraceparentCtxt<C> {
+    pub fn new(inner: C) -> Self {
+        TraceparentCtxt { inner }
+    }
 }
 
 impl<C: Ctxt> Ctxt for TraceparentCtxt<C> {
@@ -234,7 +302,7 @@ impl<C: Ctxt> Ctxt for TraceparentCtxt<C> {
 
     fn enter(&self, frame: &mut Self::Frame) {
         if frame.active {
-            frame.slot = set_traceparent(frame.slot);
+            frame.slot = set_traceparent_internal(frame.slot);
         }
 
         self.inner.enter(&mut frame.inner)
@@ -242,7 +310,7 @@ impl<C: Ctxt> Ctxt for TraceparentCtxt<C> {
 
     fn exit(&self, frame: &mut Self::Frame) {
         if frame.active {
-            frame.slot = set_traceparent(frame.slot);
+            frame.slot = set_traceparent_internal(frame.slot);
         }
 
         self.inner.exit(&mut frame.inner)
@@ -258,7 +326,7 @@ fn incoming_traceparent(props: impl Props) -> Option<Traceparent> {
     let span_id = props.pull::<SpanId, _>(KEY_SPAN_ID);
 
     if let Some(span_id) = span_id {
-        let current_traceparent = get_traceparent();
+        let current_traceparent = get_traceparent_internal();
 
         let traceparent = Traceparent::new(
             trace_id
@@ -275,11 +343,16 @@ fn incoming_traceparent(props: impl Props) -> Option<Traceparent> {
     }
 }
 
+/**
+A filter that excludes events when the current trace context is unsampled.
+
+This filter uses [`current`] and checks [`TraceFlags::is_sampled`] on the returned [`Traceparent`] to determine whether the current context is sampled or not.
+*/
 pub struct TraceparentFilter {}
 
 impl Filter for TraceparentFilter {
     fn matches<E: ToEvent>(&self, _: E) -> bool {
-        let Some(traceparent) = get_traceparent() else {
+        let Some(traceparent) = current() else {
             return true;
         };
 
@@ -290,6 +363,11 @@ impl Filter for TraceparentFilter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn traceparent_roundtrip() {
+        todo!()
+    }
 
     #[test]
     fn traceparent_parse_valid() {
@@ -304,6 +382,29 @@ mod tests {
     #[test]
     fn traceparent_to_span_ctxt() {
         todo!()
+    }
+
+    #[test]
+    fn traceparent_set_current() {
+        let rng = emit::platform::rand_rng::RandRng::new();
+
+        assert_eq!(None, current());
+
+        let traceparent = Traceparent::new(
+            TraceId::random(&rng),
+            SpanId::random(&rng),
+            TraceFlags::SAMPLED,
+        );
+
+        let frame = set(Some(traceparent));
+
+        assert_eq!(None, current());
+
+        frame.call(|| {
+            assert_eq!(Some(traceparent), current());
+        });
+
+        assert_eq!(None, current());
     }
 
     #[test]

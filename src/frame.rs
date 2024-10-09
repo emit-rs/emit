@@ -102,6 +102,20 @@ impl<C: Ctxt> Frame<C> {
             future,
         }
     }
+
+    /**
+    Get a reference to the underlying context frame.
+    */
+    pub fn inner(&self) -> &C::Frame {
+        &self.scope
+    }
+
+    /**
+    Get an exclusive reference to the underlying context frame.
+    */
+    pub fn inner_mut(&mut self) -> &mut C::Frame {
+        &mut self.scope
+    }
 }
 
 /**
