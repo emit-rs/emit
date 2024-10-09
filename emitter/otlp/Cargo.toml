@@ -51,14 +51,18 @@ features = ["std"]
 
 [dependencies.tokio]
 version = "1"
+default-features = false
 features = ["rt-multi-thread", "sync", "net"]
 
 [dependencies.hyper]
 version = "1"
+default-features = false
 features = ["client", "http1", "http2"]
 
-[dependencies.futures]
+[dependencies.futures-util]
 version = "0.3"
+default-features = false
+features = ["std"]
 
 [dependencies.tokio-rustls]
 version = "0.26"

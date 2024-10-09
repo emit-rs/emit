@@ -13,7 +13,7 @@ use crate::{
     Error, OtlpMetrics,
 };
 use emit_batcher::BatchError;
-use futures::{stream::FuturesUnordered, StreamExt};
+use futures_util::{stream::FuturesUnordered, StreamExt};
 use std::{
     collections::HashMap,
     future::Future,
