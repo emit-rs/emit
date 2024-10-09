@@ -45,7 +45,7 @@ pub trait Ctxt {
 
     Once a frame is entered, it must be exited by a call to [`Ctxt::exit`] on the same thread.
     */
-    fn enter(&self, local: &mut Self::Frame);
+    fn enter(&self, frame: &mut Self::Frame);
 
     /**
     Access the current context.
@@ -61,7 +61,7 @@ pub trait Ctxt {
 
     Once a frame is exited, it can be entered again with a new call to [`Ctxt::enter`], potentially on another thread if [`Ctxt::Frame`] allows it.
     */
-    fn exit(&self, local: &mut Self::Frame);
+    fn exit(&self, frame: &mut Self::Frame);
 
     /**
     Close a frame, performing any shared cleanup.

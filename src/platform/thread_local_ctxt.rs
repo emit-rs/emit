@@ -120,12 +120,12 @@ impl Ctxt for ThreadLocalCtxt {
         span
     }
 
-    fn enter(&self, link: &mut Self::Frame) {
-        swap(self.id, link);
+    fn enter(&self, frame: &mut Self::Frame) {
+        swap(self.id, frame);
     }
 
-    fn exit(&self, link: &mut Self::Frame) {
-        swap(self.id, link);
+    fn exit(&self, frame: &mut Self::Frame) {
+        swap(self.id, frame);
     }
 
     fn close(&self, _: Self::Frame) {}
