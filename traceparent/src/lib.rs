@@ -147,9 +147,14 @@ impl Traceparent {
             get_active_traceparent()
                 .map(|active| ActiveTraceparent {
                     traceparent: *self,
+                    // If the incoming traceparent is for the same trace is the current
+                    // then use the current's span id as the parent id
                     span_parent: if active.is_parent_of(self.trace_id) {
                         active.traceparent.span_id
-                    } else {
+                    }
+                    // If the incoming traceparent is for a different trace then
+                    // treat it as a root span (with no parent id)
+                    else {
                         None
                     },
                 })
@@ -252,6 +257,13 @@ struct ActiveTraceparent {
 
 impl ActiveTraceparent {
     fn is_parent_of(&self, trace_id: Option<TraceId>) -> bool {
+        // A traceparent is a parent of a trace id if:
+        // 1. The traceparent has a trace id
+        // 2. The traceparent's trace id matches the input trace id
+        //
+        // That means a traceparent is never considered the parent
+        // of an empty trace id
+
         self.traceparent.trace_id.is_some() && self.traceparent.trace_id == trace_id
     }
 }
@@ -277,10 +289,12 @@ A [`Ctxt`] that synchronizes [`Traceparent`]s with an underlying ambient context
 
 The trace context is shared by all instances of `TraceparentCtxt`, and any calls to [`current`] and [`set`].
 */
+#[derive(Debug, Clone, Copy)]
 pub struct TraceparentCtxt<C = Empty> {
     inner: C,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct TraceparentCtxtFrame<F = Empty> {
     inner: F,
     active: bool,
@@ -402,10 +416,11 @@ fn incoming_traceparent(props: impl Props) -> (Option<ActiveTraceparent>, impl P
         );
     };
 
+    // Only consider the current traceparent if the trace id matches
     let parent = get_active_traceparent()
         .filter(|active| trace_id.is_none() || active.is_parent_of(trace_id));
 
-    // Only consider an incoming traceparent if it's different
+    // Only consider an incoming traceparent if the span id has changed
     if Some(span_id) == parent.and_then(|parent| parent.traceparent.span_id) {
         return (
             None,
@@ -417,6 +432,9 @@ fn incoming_traceparent(props: impl Props) -> (Option<ActiveTraceparent>, impl P
     }
 
     let incoming = if let Some(parent) = parent {
+        // The incoming traceparent is a child of the current one
+        // Construct a traceparent from it with the same trace id and flags,
+        // using the span id of the parent as the parent id of the incoming
         ActiveTraceparent {
             traceparent: Traceparent::new(
                 parent.traceparent.trace_id,
@@ -426,6 +444,8 @@ fn incoming_traceparent(props: impl Props) -> (Option<ActiveTraceparent>, impl P
             span_parent: parent.traceparent.span_id,
         }
     } else {
+        // The incoming traceparent is for a root span
+        // We consider traces created by `emit` this way to be sampled
         ActiveTraceparent {
             traceparent: Traceparent::new(trace_id, Some(span_id), TraceFlags::SAMPLED),
             span_parent: None,
@@ -456,7 +476,9 @@ impl<P: Props> Props for ExcludeTraceparentProps<P> {
         }
 
         self.inner.for_each(|key, value| match key.get() {
+            // Properties that come from the traceparent context
             KEY_TRACE_ID | KEY_SPAN_ID | KEY_SPAN_PARENT => ControlFlow::Continue(()),
+            // Properties to pass through to the underlying context
             _ => for_each(key, value),
         })
     }
@@ -481,6 +503,8 @@ impl Filter for TraceparentFilter {
 mod tests {
     use super::*;
 
+    use std::thread;
+
     #[test]
     fn traceparent_roundtrip() {
         todo!()
@@ -493,11 +517,6 @@ mod tests {
 
     #[test]
     fn traceparent_parse_invalid() {
-        todo!()
-    }
-
-    #[test]
-    fn traceparent_to_span_ctxt() {
         todo!()
     }
 
@@ -578,7 +597,46 @@ mod tests {
     }
 
     #[test]
+    fn traceparent_across_threads() {
+        let rng = emit::platform::rand_rng::RandRng::new();
+
+        let traceparent = Traceparent::new(
+            TraceId::random(&rng),
+            SpanId::random(&rng),
+            TraceFlags::SAMPLED,
+        );
+
+        let frame = traceparent.push();
+
+        thread::spawn(move || {
+            frame.call(|| {
+                let current = Traceparent::current();
+
+                assert_eq!(traceparent, current);
+            })
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
     fn traceparent_ctxt_across_threads() {
-        todo!()
+        let rng = emit::platform::rand_rng::RandRng::new();
+        let ctxt = TraceparentCtxt::new(emit::platform::thread_local_ctxt::ThreadLocalCtxt::new());
+
+        let span_ctxt = SpanCtxt::current(&ctxt).new_child(&rng).push(ctxt.clone());
+
+        thread::spawn(move || {
+            span_ctxt.call(|| {
+                let traceparent = Traceparent::current();
+                let span_ctxt = SpanCtxt::current(&ctxt);
+
+                assert_eq!(span_ctxt.trace_id(), traceparent.trace_id());
+                assert_eq!(span_ctxt.span_id(), traceparent.span_id());
+                assert_eq!(TraceFlags::SAMPLED, *traceparent.trace_flags());
+            })
+        })
+        .join()
+        .unwrap();
     }
 }
