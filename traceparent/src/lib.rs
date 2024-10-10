@@ -6,6 +6,7 @@ use std::{
     cell::RefCell,
     fmt::{self, Write as _},
     mem,
+    ops::ControlFlow,
     str::FromStr,
 };
 
@@ -13,7 +14,7 @@ use emit::{
     event::ToEvent,
     span::{SpanCtxt, SpanId, TraceId},
     well_known::{KEY_SPAN_ID, KEY_TRACE_ID},
-    Ctxt, Empty, Filter, Frame, Props,
+    Ctxt, Empty, Filter, Frame, Props, Str, Value,
 };
 
 /**
@@ -136,6 +137,7 @@ impl Traceparent {
 
     pub fn to_span_ctxt(&self) -> Option<SpanCtxt> {
         if self.trace_flags.is_sampled() {
+            // TODO: Should the parent come from somewhere?
             Some(SpanCtxt::new(self.trace_id, None, self.span_id))
         } else {
             None
@@ -213,7 +215,7 @@ impl TraceFlags {
     }
 
     pub fn is_sampled(&self) -> bool {
-        self.0 & Self::SAMPLED.0 == 0
+        self.0 & Self::SAMPLED.0 == 1
     }
 }
 
@@ -262,6 +264,32 @@ pub struct TraceparentCtxtFrame<F = Empty> {
     slot: Option<Traceparent>,
 }
 
+pub struct TraceparentCtxtProps<P: ?Sized> {
+    inner: *const P,
+    ctxt: SpanCtxt,
+}
+
+impl<P: Props + ?Sized> Props for TraceparentCtxtProps<P> {
+    fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
+        &'kv self,
+        mut for_each: F,
+    ) -> ControlFlow<()> {
+        self.ctxt.for_each(&mut for_each)?;
+
+        // SAFETY: This type is only exposed for arbitrarily short (`for<'a>`) lifetimes
+        // so inner it's guaranteed to be valid for `'kv`, which must be shorter than its
+        // original lifetime
+        unsafe { &*self.inner }.for_each(|k, v| {
+            // TODO: Should we also consider the parent span id?
+            if k != emit::well_known::KEY_TRACE_ID && k != emit::well_known::KEY_SPAN_ID {
+                for_each(k, v)?;
+            }
+
+            ControlFlow::Continue(())
+        })
+    }
+}
+
 impl<C> TraceparentCtxt<C> {
     pub fn new(inner: C) -> Self {
         TraceparentCtxt { inner }
@@ -269,15 +297,29 @@ impl<C> TraceparentCtxt<C> {
 }
 
 impl<C: Ctxt> Ctxt for TraceparentCtxt<C> {
-    type Current = C::Current;
+    type Current = TraceparentCtxtProps<C::Current>;
     type Frame = TraceparentCtxtFrame<C::Frame>;
 
     fn with_current<R, F: FnOnce(&Self::Current) -> R>(&self, with: F) -> R {
-        self.inner.with_current(with)
+        // Get the current span context
+        let traceparent = get_traceparent_internal();
+
+        let ctxt = traceparent
+            .and_then(|traceparent| traceparent.to_span_ctxt())
+            .unwrap_or(SpanCtxt::empty());
+
+        self.inner.with_current(|props| {
+            let props = TraceparentCtxtProps {
+                ctxt,
+                inner: props as *const C::Current,
+            };
+
+            with(&props)
+        })
     }
 
     fn open_root<P: Props>(&self, props: P) -> Self::Frame {
-        let slot = incoming_traceparent(&props);
+        let (slot, props) = incoming_traceparent(props);
 
         let inner = self.inner.open_root(props);
 
@@ -289,7 +331,7 @@ impl<C: Ctxt> Ctxt for TraceparentCtxt<C> {
     }
 
     fn open_push<P: Props>(&self, props: P) -> Self::Frame {
-        let slot = incoming_traceparent(&props);
+        let (slot, props) = incoming_traceparent(props);
 
         let inner = self.inner.open_push(props);
 
@@ -321,25 +363,69 @@ impl<C: Ctxt> Ctxt for TraceparentCtxt<C> {
     }
 }
 
-fn incoming_traceparent(props: impl Props) -> Option<Traceparent> {
+fn incoming_traceparent(props: impl Props) -> (Option<Traceparent>, impl Props) {
     let trace_id = props.pull::<TraceId, _>(KEY_TRACE_ID);
     let span_id = props.pull::<SpanId, _>(KEY_SPAN_ID);
 
-    if let Some(span_id) = span_id {
-        let current_traceparent = get_traceparent_internal();
-
-        let traceparent = Traceparent::new(
-            trace_id
-                .or_else(|| current_traceparent.and_then(|current| current.trace_id().copied())),
-            Some(span_id),
-            current_traceparent
-                .map(|current| *current.trace_flags())
-                .unwrap_or(TraceFlags::SAMPLED),
+    // Only consider props that carry a span id
+    let Some(span_id) = span_id else {
+        return (
+            None,
+            ExcludeTraceparentProps {
+                check: false,
+                inner: props,
+            },
         );
+    };
 
-        Some(traceparent)
-    } else {
-        None
+    let current_traceparent = get_traceparent_internal();
+
+    // Only consider an incoming traceparent if it's different
+    if Some(span_id) != current_traceparent.and_then(|traceparent| traceparent.span_id().copied()) {
+        return (
+            None,
+            ExcludeTraceparentProps {
+                check: false,
+                inner: props,
+            },
+        );
+    }
+
+    let traceparent = Traceparent::new(
+        trace_id.or_else(|| current_traceparent.and_then(|current| current.trace_id().copied())),
+        Some(span_id),
+        current_traceparent
+            .map(|current| *current.trace_flags())
+            .unwrap_or(TraceFlags::SAMPLED),
+    );
+
+    (
+        Some(traceparent),
+        ExcludeTraceparentProps {
+            check: true,
+            inner: props,
+        },
+    )
+}
+
+struct ExcludeTraceparentProps<P> {
+    check: bool,
+    inner: P,
+}
+
+impl<P: Props> Props for ExcludeTraceparentProps<P> {
+    fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
+        &'kv self,
+        mut for_each: F,
+    ) -> ControlFlow<()> {
+        if !self.check {
+            return self.inner.for_each(for_each);
+        }
+
+        self.inner.for_each(|str, value| match str.get() {
+            KEY_TRACE_ID | KEY_SPAN_ID => ControlFlow::Continue(()),
+            _ => for_each(str, value),
+        })
     }
 }
 
@@ -402,6 +488,13 @@ mod tests {
 
         frame.call(|| {
             assert_eq!(Some(traceparent), current());
+
+            // Any `TraceparentCtxt` should observe the current trace context
+            let emit_ctxt = SpanCtxt::current(TraceparentCtxt::new(Empty));
+
+            assert_eq!(traceparent.trace_id(), emit_ctxt.trace_id());
+            assert!(emit_ctxt.span_parent().is_none());
+            assert_eq!(traceparent.span_id(), emit_ctxt.span_id());
         });
 
         assert_eq!(None, current());

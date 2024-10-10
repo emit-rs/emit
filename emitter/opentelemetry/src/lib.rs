@@ -110,8 +110,6 @@ Also see the [`opentelemetry`] docs for any details on getting diagnostics out o
 use std::{cell::RefCell, fmt, ops::ControlFlow, sync::Arc};
 
 use emit::{
-    str::ToStr,
-    value::ToValue,
     well_known::{
         KEY_ERR, KEY_EVT_KIND, KEY_LVL, KEY_SPAN_ID, KEY_SPAN_NAME, KEY_SPAN_PARENT, KEY_TRACE_ID,
         LVL_DEBUG, LVL_ERROR, LVL_INFO, LVL_WARN,
@@ -245,8 +243,7 @@ pub struct OpenTelemetryFrame<F> {
 The [`emit::Ctxt::Current`] used by [`OpenTelemetryCtxt`].
 */
 pub struct OpenTelemetryProps<P: ?Sized> {
-    trace_id: Option<emit::TraceId>,
-    span_id: Option<emit::SpanId>,
+    ctxt: emit::span::SpanCtxt,
     // Props from the wrapped `Ctxt`
     inner: *const P,
 }
@@ -279,13 +276,7 @@ impl<P: emit::Props + ?Sized> emit::Props for OpenTelemetryProps<P> {
         &'kv self,
         mut for_each: F,
     ) -> ControlFlow<()> {
-        if let Some(ref trace_id) = self.trace_id {
-            for_each(emit::well_known::KEY_TRACE_ID.to_str(), trace_id.to_value())?;
-        }
-
-        if let Some(ref span_id) = self.span_id {
-            for_each(emit::well_known::KEY_SPAN_ID.to_str(), span_id.to_value())?;
-        }
+        self.ctxt.for_each(&mut for_each)?;
 
         // SAFETY: This type is only exposed for arbitrarily short (`for<'a>`) lifetimes
         // so inner it's guaranteed to be valid for `'kv`, which must be shorter than its
@@ -402,8 +393,11 @@ where
 
         self.inner.with_current(|props| {
             let props = OpenTelemetryProps {
-                trace_id: emit::TraceId::from_bytes(trace_id),
-                span_id: emit::SpanId::from_bytes(span_id),
+                ctxt: emit::span::SpanCtxt::new(
+                    emit::TraceId::from_bytes(trace_id),
+                    None, // Span parents are tracked by OpenTelemetry internally
+                    emit::SpanId::from_bytes(span_id),
+                ),
                 inner: props as *const C::Current,
             };
 
