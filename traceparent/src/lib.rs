@@ -534,7 +534,9 @@ mod tests {
             span_ctxt_2.push(&ctxt).call(|| {
                 let traceparent = Traceparent::current();
 
-                let span_ctxt_2 = SpanCtxt::current(&ctxt);
+                let span_ctxt_3 = SpanCtxt::current(&ctxt);
+
+                assert_eq!(span_ctxt_2, span_ctxt_3);
 
                 assert_eq!(
                     span_ctxt_1.trace_id().unwrap(),
