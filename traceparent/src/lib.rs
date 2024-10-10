@@ -143,15 +143,21 @@ impl Traceparent {
     pub fn push(&self) -> Frame<TraceparentCtxt> {
         let mut frame = Frame::current(TraceparentCtxt::new(Empty));
 
-        frame.inner_mut().slot = Some({
-            let span_parent =
-                get_active_traceparent().and_then(|active| active.traceparent.span_id);
-
-            ActiveTraceparent {
-                traceparent: *self,
-                span_parent,
-            }
-        });
+        frame.inner_mut().slot = Some(
+            get_active_traceparent()
+                .map(|active| ActiveTraceparent {
+                    traceparent: *self,
+                    span_parent: if active.is_parent_of(self.trace_id) {
+                        active.traceparent.span_id
+                    } else {
+                        None
+                    },
+                })
+                .unwrap_or(ActiveTraceparent {
+                    traceparent: *self,
+                    span_parent: None,
+                }),
+        );
         frame.inner_mut().active = true;
 
         frame
@@ -242,6 +248,12 @@ impl fmt::Display for TraceFlags {
 struct ActiveTraceparent {
     traceparent: Traceparent,
     span_parent: Option<SpanId>,
+}
+
+impl ActiveTraceparent {
+    fn is_parent_of(&self, trace_id: Option<TraceId>) -> bool {
+        self.traceparent.trace_id.is_some() && self.traceparent.trace_id == trace_id
+    }
 }
 
 thread_local! {
@@ -377,7 +389,6 @@ impl<C: Ctxt> Ctxt for TraceparentCtxt<C> {
 
 fn incoming_traceparent(props: impl Props) -> (Option<ActiveTraceparent>, impl Props) {
     let trace_id = props.pull::<TraceId, _>(KEY_TRACE_ID);
-    let span_parent = props.pull::<SpanId, _>(KEY_SPAN_PARENT);
     let span_id = props.pull::<SpanId, _>(KEY_SPAN_ID);
 
     // Only consider props that carry a span id
@@ -391,10 +402,11 @@ fn incoming_traceparent(props: impl Props) -> (Option<ActiveTraceparent>, impl P
         );
     };
 
-    let active = get_active_traceparent();
+    let parent = get_active_traceparent()
+        .filter(|active| trace_id.is_none() || active.is_parent_of(trace_id));
 
     // Only consider an incoming traceparent if it's different
-    if Some(span_id) == active.and_then(|active| active.traceparent.span_id) {
+    if Some(span_id) == parent.and_then(|parent| parent.traceparent.span_id) {
         return (
             None,
             ExcludeTraceparentProps {
@@ -404,20 +416,24 @@ fn incoming_traceparent(props: impl Props) -> (Option<ActiveTraceparent>, impl P
         );
     }
 
-    let trace_id = trace_id.or_else(|| active.and_then(|active| active.traceparent.trace_id));
-    let span_id = Some(span_id);
-    let span_parent = span_parent.or_else(|| active.and_then(|active| active.traceparent.span_id));
-    let trace_flags = active
-        .map(|active| *active.traceparent.trace_flags())
-        .unwrap_or(TraceFlags::SAMPLED);
-
-    let traceparent = Traceparent::new(trace_id, span_id, trace_flags);
+    let incoming = if let Some(parent) = parent {
+        ActiveTraceparent {
+            traceparent: Traceparent::new(
+                parent.traceparent.trace_id,
+                Some(span_id),
+                parent.traceparent.trace_flags,
+            ),
+            span_parent: parent.traceparent.span_id,
+        }
+    } else {
+        ActiveTraceparent {
+            traceparent: Traceparent::new(trace_id, Some(span_id), TraceFlags::SAMPLED),
+            span_parent: None,
+        }
+    };
 
     (
-        Some(ActiveTraceparent {
-            traceparent,
-            span_parent,
-        }),
+        Some(incoming),
         ExcludeTraceparentProps {
             check: true,
             inner: props,
