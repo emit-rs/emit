@@ -1509,10 +1509,8 @@ mod tests {
         static SLOT: AmbientSlot = AmbientSlot::new();
         let (logs, spans, _, tracer_provider) = build(&SLOT);
 
-        #[emit::span(rt: SLOT.get(), guard: span, "emit {attr}", attr: "span")]
+        #[emit::span(rt: SLOT.get(), "emit {attr}", attr: "span")]
         fn emit_span() {
-            assert!(!span.is_enabled());
-
             emit::emit!(rt: SLOT.get(), "emit event");
         }
 

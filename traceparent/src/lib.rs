@@ -321,7 +321,7 @@ impl<P: Props + ?Sized> Props for TraceparentCtxtProps<P> {
 }
 
 impl<C> TraceparentCtxt<C> {
-    pub fn new(inner: C) -> Self {
+    pub const fn new(inner: C) -> Self {
         TraceparentCtxt { inner }
     }
 }
@@ -640,7 +640,67 @@ mod tests {
         .unwrap();
     }
 
-    // TODO: Even if the filter doesn't pass, we need to stash our traceparent frame
-    // That means the sampler matches the root span, but stores unsampled flags
-    // so that the resulting span is not emitted, but the traceparent is stored
+    #[test]
+    fn traceparent_span() {
+        use emit::{
+            and::And,
+            filter,
+            platform::{
+                rand_rng::RandRng, system_clock::SystemClock, thread_local_ctxt::ThreadLocalCtxt,
+            },
+            runtime::Runtime,
+            Empty,
+        };
+
+        static RT: Runtime<
+            Empty,
+            And<filter::FromFn, TraceparentFilter>,
+            TraceparentCtxt<ThreadLocalCtxt>,
+            SystemClock,
+            RandRng,
+        > = Runtime::build(
+            Empty,
+            And::new(
+                filter::FromFn::new(|evt| evt.mdl() != emit::path!("unsampled")),
+                TraceparentFilter {},
+            ),
+            TraceparentCtxt::new(ThreadLocalCtxt::shared()),
+            SystemClock::new(),
+            RandRng::new(),
+        );
+
+        #[emit::span(rt: RT, mdl: emit::path!("unsampled"), "a")]
+        fn unsampled() {
+            unsampled_sampled();
+        }
+
+        #[emit::span(rt: RT, mdl: emit::path!("sampled"), "a")]
+        fn unsampled_sampled() {
+            let ctxt = SpanCtxt::current(RT.ctxt());
+            let traceparent = Traceparent::current();
+
+            assert!(ctxt.trace_id().is_none());
+            assert!(ctxt.span_id().is_none());
+
+            assert!(traceparent.trace_id().is_some());
+            assert!(traceparent.span_id().is_some());
+            assert!(!traceparent.trace_flags().is_sampled());
+        }
+
+        #[emit::span(rt: RT, mdl: emit::path!("sampled"), "a")]
+        fn sampled() {
+            let ctxt = SpanCtxt::current(RT.ctxt());
+            let traceparent = Traceparent::current();
+
+            assert!(ctxt.trace_id().is_some());
+            assert!(ctxt.span_id().is_some());
+
+            assert_eq!(traceparent.trace_id(), ctxt.trace_id());
+            assert_eq!(traceparent.span_id(), ctxt.span_id());
+            assert!(traceparent.trace_flags().is_sampled());
+        }
+
+        sampled();
+        unsampled();
+    }
 }

@@ -804,10 +804,7 @@ impl<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> SpanGuard<'a, C, P, F> {
         }
     }
 
-    /**
-    Whether the span will emit an event on completion.
-    */
-    pub fn is_enabled(&self) -> bool {
+    fn is_enabled(&self) -> bool {
         self.state.is_some()
     }
 

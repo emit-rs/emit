@@ -158,7 +158,7 @@ Create an [`Emitter`] from a function.
 
 The input function is assumed not to perform any background work that needs flushing.
 */
-pub fn from_fn<F: Fn(&Event<&dyn ErasedProps>)>(f: F) -> FromFn<F> {
+pub const fn from_fn<F: Fn(&Event<&dyn ErasedProps>)>(f: F) -> FromFn<F> {
     FromFn::new(f)
 }
 
@@ -281,7 +281,7 @@ pub mod wrapping {
     /**
     Create a [`Wrapping`] from a function.
     */
-    pub fn from_fn<F: Fn(&dyn ErasedEmitter, Event<&dyn ErasedProps>)>(f: F) -> FromFn<F> {
+    pub const fn from_fn<F: Fn(&dyn ErasedEmitter, Event<&dyn ErasedProps>)>(f: F) -> FromFn<F> {
         FromFn::new(f)
     }
 

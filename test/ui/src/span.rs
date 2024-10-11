@@ -271,17 +271,23 @@ async fn async_span_by_value_arg() {
 
 #[test]
 fn span_guard() {
-    static RT: StaticRuntime = static_runtime(|_| {}, |_| true);
+    static CALLED: StaticCalled = StaticCalled::new();
+    static RT: StaticRuntime = static_runtime(
+        |_| {
+            CALLED.record();
+        },
+        |_| true,
+    );
 
     #[emit::span(rt: RT, guard: span, "test")]
     fn exec() {
         let span: emit::span::SpanGuard<_, _, _> = span;
-
-        assert!(span.is_enabled());
         span.complete();
     }
 
     exec();
+
+    assert!(CALLED.was_called());
 }
 
 #[test]
@@ -334,29 +340,6 @@ fn span_when() {
 
     #[emit::span(rt: RT, when: emit::filter::from_fn(|evt| evt.mdl() == "false"), mdl: emit::path!("false"), "test")]
     fn exec_false() {}
-
-    exec_true();
-    exec_false();
-
-    RT.emitter().blocking_flush(Duration::from_secs(1));
-
-    assert_eq!(1, CALLED.called_times());
-}
-
-#[test]
-fn span_filter_guard() {
-    static CALLED: StaticCalled = StaticCalled::new();
-    static RT: StaticRuntime = static_runtime(|_| CALLED.record(), |evt| evt.mdl() == "true");
-
-    #[emit::span(rt: RT, guard: span, mdl: emit::path!("true"), "test")]
-    fn exec_true() {
-        assert!(span.is_enabled());
-    }
-
-    #[emit::span(rt: RT, guard: span, mdl: emit::path!("false"), "test")]
-    fn exec_false() {
-        assert!(!span.is_enabled());
-    }
 
     exec_true();
     exec_false();
