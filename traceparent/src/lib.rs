@@ -639,4 +639,8 @@ mod tests {
         .join()
         .unwrap();
     }
+
+    // TODO: Even if the filter doesn't pass, we need to stash our traceparent frame
+    // That means the sampler matches the root span, but stores unsampled flags
+    // so that the resulting span is not emitted, but the traceparent is stored
 }
