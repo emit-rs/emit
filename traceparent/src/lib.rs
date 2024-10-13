@@ -237,7 +237,7 @@ impl TraceFlags {
     }
 
     /**
-    Try parse a slice of ASCII hex bytes into a span id.
+    Try parse a slice of ASCII hex bytes into trace flags.
 
     If `hex` is not a 2 byte array of valid hex characters (`[a-fA-F0-9]`) then this method will fail.
     */
