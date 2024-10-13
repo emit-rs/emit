@@ -41,6 +41,17 @@ pub trait Ctxt {
     }
 
     /**
+    Create a disabled frame.
+
+    The properties in `P` will not be made live when the frame is entered but may still be tracked by the underlying context using the returned frame. This method can be used to inform a context about properties that would have been used under some other conditions.
+    */
+    fn open_disabled<P: Props>(&self, props: P) -> Self::Frame {
+        let _ = props;
+
+        self.open_push(Empty)
+    }
+
+    /**
     Make the properties in a frame active.
 
     Once a frame is entered, it must be exited by a call to [`Ctxt::exit`] on the same thread.

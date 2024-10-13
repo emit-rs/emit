@@ -380,6 +380,10 @@ impl<C: Ctxt> Ctxt for TraceparentCtxt<C> {
         }
     }
 
+    fn open_disabled<P: Props>(&self, props: P) -> Self::Frame {
+        todo!()
+    }
+
     fn enter(&self, frame: &mut Self::Frame) {
         if frame.active {
             frame.slot = set_active_traceparent(frame.slot);

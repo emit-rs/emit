@@ -56,6 +56,19 @@ impl<C: Ctxt> Frame<C> {
     }
 
     /**
+    Get a disabled frame.
+
+    The properties in `props` will not be visible when the frame is entered. This method should be used when `props` could have been pushed, but were filtered out.
+    */
+    #[track_caller]
+    #[must_use = "call `enter`, `call`, or `in_future` to make the properties active"]
+    pub fn disabled(ctxt: C, props: impl Props) -> Self {
+        let scope = mem::ManuallyDrop::new(ctxt.open_disabled(props));
+
+        Frame { ctxt, scope }
+    }
+
+    /**
     Access the properties in this frame.
     */
     #[track_caller]

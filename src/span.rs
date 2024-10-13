@@ -440,32 +440,6 @@ impl<const N: usize> fmt::Write for Buffer<N> {
 }
 
 /**
-An active span in a distributed trace.
-
-This type is created by the [`macro@crate::span!`] macro with the `guard` control parameter. See the [`mod@crate::span`] module for details on creating spans.
-
-Call [`SpanGuard::complete_with`], or just drop the guard to complete it, emitting a [`Span`] for its execution.
-*/
-pub struct SpanGuard<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> {
-    state: Option<SpanGuardState<'a, C, P>>,
-    on_drop: Option<F>,
-}
-
-struct SpanGuardState<'a, C: Clock, P: Props> {
-    mdl: Path<'a>,
-    timer: Timer<C>,
-    name: Str<'a>,
-    ctxt: SpanCtxt,
-    props: P,
-}
-
-impl<'a, C: Clock, P: Props> SpanGuardState<'a, C, P> {
-    fn complete(self) -> Span<'a, P> {
-        Span::new(self.mdl, self.name, self.timer, self.props)
-    }
-}
-
-/**
 A diagnostic event that represents a span in a distributed trace.
 
 Spans are an extension of [`Event`]s that explicitly take the well-known properties that signal an event as being a span. See the [`mod@crate::span`] module for details.
@@ -734,6 +708,34 @@ impl Props for SpanCtxt {
     }
 }
 
+/**
+An active span in a distributed trace.
+
+This type is created by the [`macro@crate::span!`] macro with the `guard` control parameter. See the [`mod@crate::span`] module for details on creating spans.
+
+Call [`SpanGuard::complete_with`], or just drop the guard to complete it, emitting a [`Span`] for its execution.
+*/
+pub struct SpanGuard<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> {
+    // `state` is `None` if the span is completed
+    state: Option<SpanGuardState<'a, C, P>>,
+    // `on_drop` is `None` if the span is disabled
+    on_drop: Option<F>,
+}
+
+struct SpanGuardState<'a, C: Clock, P: Props> {
+    mdl: Path<'a>,
+    timer: Timer<C>,
+    name: Str<'a>,
+    ctxt: SpanCtxt,
+    props: P,
+}
+
+impl<'a, C: Clock, P: Props> SpanGuardState<'a, C, P> {
+    fn complete(self) -> Span<'a, P> {
+        Span::new(self.mdl, self.name, self.timer, self.props)
+    }
+}
+
 impl<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> Drop for SpanGuard<'a, C, P, F> {
     fn drop(&mut self) {
         if let (Some(value), Some(on_drop)) = (self.state.take(), self.on_drop.take()) {
@@ -755,7 +757,7 @@ impl<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> SpanGuard<'a, C, P, F> {
         let mdl = mdl.into();
         let name = name.into();
 
-        if filter(
+        let is_enabled = filter(
             &ctxt,
             Span::new(
                 mdl.by_ref(),
@@ -763,49 +765,48 @@ impl<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> SpanGuard<'a, C, P, F> {
                 timer.start_timestamp(),
                 &event_props,
             ),
-        ) {
-            SpanGuard {
-                state: Some(SpanGuardState {
-                    timer,
-                    mdl,
-                    ctxt,
-                    name,
-                    props: event_props,
-                }),
-                on_drop: Some(default_complete),
-            }
-        } else {
-            Self::disabled()
-        }
-    }
+        );
 
-    pub(crate) fn disabled() -> Self {
         SpanGuard {
-            state: None,
-            on_drop: None,
+            state: Some(SpanGuardState {
+                timer,
+                mdl,
+                ctxt,
+                name,
+                props: event_props,
+            }),
+            on_drop: if is_enabled {
+                Some(default_complete)
+            } else {
+                None
+            },
         }
     }
 
-    pub(crate) fn push_ctxt<T: Ctxt>(
-        &mut self,
-        ctxt: T,
-        ctxt_props: impl Props,
-    ) -> Frame<Option<T>> {
+    pub(crate) fn push_ctxt<T: Ctxt>(&mut self, ctxt: T, ctxt_props: impl Props) -> Frame<T> {
         if self.is_enabled() {
             Frame::push(
-                Some(ctxt),
+                ctxt,
                 self.state
                     .as_ref()
-                    .map(|state| state.ctxt)
+                    .expect("span is already complete")
+                    .ctxt
                     .and_props(ctxt_props),
             )
         } else {
-            Frame::current(None)
+            Frame::disabled(
+                ctxt,
+                self.state
+                    .as_ref()
+                    .expect("span is already complete")
+                    .ctxt
+                    .and_props(ctxt_props),
+            )
         }
     }
 
     fn is_enabled(&self) -> bool {
-        self.state.is_some()
+        self.on_drop.is_some()
     }
 
     /**
@@ -823,8 +824,14 @@ impl<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> SpanGuard<'a, C, P, F> {
     If the span is disabled then the `complete` closure won't be called.
     */
     pub fn complete_with(mut self, complete: impl FnOnce(Span<'a, P>)) -> bool {
-        if let Some(value) = self.state.take() {
-            complete(value.complete());
+        if let Some(_) = self.on_drop.take() {
+            complete(
+                self.state
+                    .take()
+                    .expect("span is already complete")
+                    .complete(),
+            );
+
             true
         } else {
             false

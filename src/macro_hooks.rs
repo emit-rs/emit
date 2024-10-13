@@ -774,7 +774,7 @@ pub fn __private_begin_span<
     span_ctxt_props: &'b (impl Props + ?Sized),
     span_evt_props: &'b (impl Props + ?Sized),
     default_complete: S,
-) -> (Frame<Option<&'a C>>, SpanGuard<'static, &'a T, Empty, S>) {
+) -> (Frame<&'a C>, SpanGuard<'static, &'a T, Empty, S>) {
     let mdl = mdl.into();
     let name = name.into();
     let tpl = tpl.tpl_control_param();
