@@ -64,7 +64,7 @@ impl Traceparent {
         Self {
             trace_id: None,
             span_id: None,
-            trace_flags: TraceFlags::EMPTY,
+            trace_flags: TraceFlags::SAMPLED,
         }
     }
 
@@ -530,9 +530,7 @@ pub struct TraceparentFilter {}
 
 impl Filter for TraceparentFilter {
     fn matches<E: ToEvent>(&self, _: E) -> bool {
-        let traceparent = Traceparent::current();
-
-        traceparent.is_valid() && traceparent.trace_flags().is_sampled()
+        Traceparent::current().trace_flags().is_sampled()
     }
 }
 
@@ -558,12 +556,12 @@ mod tests {
     }
 
     #[test]
-    fn traceparent_set_current() {
+    fn traceparent_set_current_sampled() {
         let rng = emit::platform::rand_rng::RandRng::new();
 
         assert_eq!(None, Traceparent::current().trace_id());
         assert_eq!(None, Traceparent::current().span_id());
-        assert_eq!(TraceFlags::EMPTY, *Traceparent::current().trace_flags());
+        assert_eq!(TraceFlags::SAMPLED, *Traceparent::current().trace_flags());
 
         let traceparent = Traceparent::new(
             TraceId::random(&rng),
@@ -575,7 +573,7 @@ mod tests {
 
         assert_eq!(None, Traceparent::current().trace_id());
         assert_eq!(None, Traceparent::current().span_id());
-        assert_eq!(TraceFlags::EMPTY, *Traceparent::current().trace_flags());
+        assert_eq!(TraceFlags::SAMPLED, *Traceparent::current().trace_flags());
 
         frame.call(|| {
             assert_eq!(traceparent, Traceparent::current());
@@ -590,7 +588,29 @@ mod tests {
 
         assert_eq!(None, Traceparent::current().trace_id());
         assert_eq!(None, Traceparent::current().span_id());
-        assert_eq!(TraceFlags::EMPTY, *Traceparent::current().trace_flags());
+        assert_eq!(TraceFlags::SAMPLED, *Traceparent::current().trace_flags());
+    }
+
+    #[test]
+    fn traceparent_set_current_unsampled() {
+        let rng = emit::platform::rand_rng::RandRng::new();
+
+        let traceparent = Traceparent::new(
+            TraceId::random(&rng),
+            SpanId::random(&rng),
+            TraceFlags::EMPTY,
+        );
+
+        traceparent.push().call(|| {
+            // The `emit` context should be empty because the active traceparent is unsampled
+            let emit_ctxt = SpanCtxt::current(TraceparentCtxt::new(Empty));
+
+            assert!(emit_ctxt.trace_id().is_none());
+            assert!(emit_ctxt.span_id().is_none());
+            assert!(emit_ctxt.span_parent().is_none());
+        });
+
+        assert_eq!(TraceFlags::SAMPLED, *Traceparent::current().trace_flags());
     }
 
     #[test]
@@ -737,7 +757,7 @@ mod tests {
             assert!(traceparent.trace_flags().is_sampled());
         }
 
-        unsampled();
         sampled();
+        unsampled();
     }
 }
