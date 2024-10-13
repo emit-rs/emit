@@ -7,7 +7,7 @@ use std::{
     fmt::{self, Write as _},
     mem,
     ops::{BitAnd, BitOr, ControlFlow},
-    str::FromStr,
+    str::{self, FromStr},
 };
 
 use emit::{
@@ -60,56 +60,46 @@ impl Traceparent {
         }
     }
 
-    pub const fn empty() -> Self {
-        Self {
-            trace_id: None,
-            span_id: None,
-            trace_flags: TraceFlags::SAMPLED,
+    pub fn try_from_str(traceparent: &str) -> Result<Self, Error> {
+        let bytes = traceparent.as_bytes();
+
+        if bytes.len() != 55 {
+            return Err(Error {
+                msg: "traceparent headers must be 55 bytes".into(),
+            });
         }
-    }
 
-    pub fn try_from_str(header: &str) -> Result<Self, Error> {
-        let mut parts = header.split('-');
-
-        let version = parts.next().ok_or_else(|| Error {
-            msg: "missing version".into(),
-        })?;
-
-        let "00" = version else {
+        if bytes[2] != b'-' || bytes[35] != b'-' || bytes[52] != b'-' {
             return Err(Error {
-                msg: format!("unexpected version {version:?}. Only version '00' is supported"),
+                msg: format!("traceparent contains invalid field separators"),
+            });
+        }
+
+        let version = &bytes[0..2];
+
+        let b"00" = version else {
+            return Err(Error {
+                msg: format!("unexpected non '00' traceparent version"),
             });
         };
 
-        let trace_id = parts.next().ok_or_else(|| Error {
-            msg: "missing trace id".into(),
-        })?;
-        let span_id = parts.next().ok_or_else(|| Error {
-            msg: "missing span id".into(),
-        })?;
-        let trace_flags = parts.next().ok_or_else(|| Error {
-            msg: "missing flags".into(),
-        })?;
+        let trace_id = &bytes[3..35];
+        let span_id = &bytes[36..52];
+        let trace_flags = &bytes[53..55];
 
-        let None = parts.next() else {
-            return Err(Error {
-                msg: format!("traceparent {header:?} is in an invalid format"),
-            });
-        };
-
-        let trace_id = if trace_id == "00000000000000000000000000000000" {
+        let trace_id = if trace_id == b"00000000000000000000000000000000" {
             None
         } else {
-            Some(TraceId::try_from_hex(trace_id).map_err(|e| Error { msg: e.to_string() })?)
+            Some(TraceId::try_from_hex_slice(trace_id).map_err(|e| Error { msg: e.to_string() })?)
         };
 
-        let span_id = if span_id == "0000000000000000" {
+        let span_id = if span_id == b"0000000000000000" {
             None
         } else {
-            Some(SpanId::try_from_hex(span_id).map_err(|e| Error { msg: e.to_string() })?)
+            Some(SpanId::try_from_hex_slice(span_id).map_err(|e| Error { msg: e.to_string() })?)
         };
 
-        let trace_flags = TraceFlags::try_from_str(trace_flags)?;
+        let trace_flags = TraceFlags::try_from_hex_slice(trace_flags)?;
 
         Ok(Traceparent::new(trace_id, span_id, trace_flags))
     }
@@ -128,11 +118,13 @@ impl Traceparent {
 
     /**
     Get the current trace context.
+
+    If no context has been set, this method will return a new traceparent with no trace id or span id, but with [`TraceFlags::SAMPLED`].
     */
     pub fn current() -> Self {
         get_active_traceparent()
             .map(|active| active.traceparent)
-            .unwrap_or(Traceparent::empty())
+            .unwrap_or(Traceparent::new(None, None, TraceFlags::SAMPLED))
     }
 
     /**
@@ -168,6 +160,11 @@ impl Traceparent {
         frame
     }
 
+    /**
+    Whether the traceparent carries a non-empty trace id and span id.
+
+    An invalid traceparent can still be used for propagation, but will likely be ignored by downstream services.
+    */
     pub fn is_valid(&self) -> bool {
         self.trace_id.is_some() && self.span_id.is_some()
     }
@@ -212,18 +209,6 @@ impl TraceFlags {
 
     const ALL: Self = TraceFlags(!0);
 
-    pub fn try_from_str(flags: &str) -> Result<Self, Error> {
-        if flags.len() != 2 {
-            return Err(Error {
-                msg: "flags must be a 2 digit value".into(),
-            });
-        }
-
-        Ok(TraceFlags(
-            u8::from_str_radix(flags, 16).map_err(|e| Error { msg: e.to_string() })?,
-        ))
-    }
-
     pub fn from_u8(raw: u8) -> Self {
         TraceFlags(raw)
     }
@@ -234,6 +219,67 @@ impl TraceFlags {
 
     pub fn is_sampled(&self) -> bool {
         self.0 & Self::SAMPLED.0 == 1
+    }
+
+    /**
+    Convert the trace flags into a 2 byte ASCII-compatible hex string, like `01`.
+    */
+    pub fn to_hex(&self) -> [u8; 2] {
+        const HEX_ENCODE_TABLE: [u8; 16] = [
+            b'0', b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9', b'a', b'b', b'c', b'd',
+            b'e', b'f',
+        ];
+
+        [
+            HEX_ENCODE_TABLE[(self.0 >> 4) as usize],
+            HEX_ENCODE_TABLE[(self.0 & 0x0f) as usize],
+        ]
+    }
+
+    /**
+    Try parse a slice of ASCII hex bytes into a span id.
+
+    If `hex` is not a 2 byte array of valid hex characters (`[a-fA-F0-9]`) then this method will fail.
+    */
+    pub fn try_from_hex_slice(hex: &[u8]) -> Result<Self, Error> {
+        const HEX_DECODE_TABLE: &[u8; 256] = &{
+            let mut buf = [0; 256];
+            let mut i: u8 = 0;
+
+            loop {
+                buf[i as usize] = match i {
+                    b'0'..=b'9' => i - b'0',
+                    b'a'..=b'f' => i - b'a' + 10,
+                    b'A'..=b'F' => i - b'A' + 10,
+                    _ => 0xff,
+                };
+
+                if i == 255 {
+                    break buf;
+                }
+
+                i += 1
+            }
+        };
+
+        let hex: &[u8; 2] = hex.try_into().map_err(|_| Error {
+            msg: "flags must be a 2 digit value".into(),
+        })?;
+
+        let h1 = HEX_DECODE_TABLE[hex[0] as usize];
+        let h2 = HEX_DECODE_TABLE[hex[1] as usize];
+
+        // We use `0xff` as a sentinel value to indicate
+        // an invalid hex character sequence (like the letter `G`)
+        if h1 | h2 == 0xff {
+            return Err(Error {
+                msg: "invalid hex character".into(),
+            });
+        }
+
+        // The upper nibble needs to be shifted into position
+        // to produce the final byte value
+        Ok(TraceFlags((h1 << 4) | h2))
     }
 }
 
@@ -257,13 +303,13 @@ impl FromStr for TraceFlags {
     type Err = Error;
 
     fn from_str(flags: &str) -> Result<Self, Error> {
-        Self::try_from_str(flags)
+        Self::try_from_hex_slice(flags.as_bytes())
     }
 }
 
 impl fmt::Display for TraceFlags {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::LowerHex::fmt(&self.0, f)
+        f.write_str(str::from_utf8(&self.to_hex()).unwrap())
     }
 }
 
@@ -478,7 +524,8 @@ fn incoming_traceparent(
         }
     } else {
         // The incoming traceparent is for a root span
-        // We consider traces created by `emit` this way to be sampled
+        // If the context is enabled, then the span will be sampled
+        // If the context is disabled, then the span will be unsampled
         ActiveTraceparent {
             traceparent: Traceparent::new(
                 trace_id,
@@ -538,21 +585,54 @@ impl Filter for TraceparentFilter {
 mod tests {
     use super::*;
 
+    use emit::Rng;
+
     use std::thread;
 
     #[test]
     fn traceparent_roundtrip() {
-        todo!()
-    }
+        let traceparent = Traceparent::new(None, None, TraceFlags::EMPTY);
 
-    #[test]
-    fn traceparent_parse_valid() {
-        todo!()
+        assert_eq!(
+            "00-00000000000000000000000000000000-0000000000000000-00",
+            traceparent.to_string()
+        );
+
+        assert_eq!(
+            traceparent,
+            Traceparent::try_from_str(&traceparent.to_string()).unwrap()
+        );
+
+        let rng = emit::platform::rand_rng::RandRng::new();
+        for _ in 0..1_000 {
+            let trace_id = TraceId::random(&rng);
+            let span_id = SpanId::random(&rng);
+            let trace_flags = TraceFlags::from_u8(rng.gen_u64().unwrap() as u8);
+
+            let traceparent = Traceparent::new(trace_id, span_id, trace_flags);
+            let formatted = traceparent.to_string();
+
+            assert_eq!(
+                Some(traceparent),
+                Traceparent::try_from_str(&formatted).ok(),
+                "{traceparent:?} ({formatted}) did not roundtrip"
+            );
+        }
     }
 
     #[test]
     fn traceparent_parse_invalid() {
-        todo!()
+        for case in [
+            "",
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-010",
+            "00 4bf92f3577b34da6a3ce929d0e0e4736 00f067aa0ba902b7 01",
+            "0x-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+            "00-4bf92f3577b34da6a3ce929d0e0e473x-00f067aa0ba902b7-01",
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902bx-01",
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-0x",
+        ] {
+            assert!(Traceparent::try_from_str(case).is_err());
+        }
     }
 
     #[test]
