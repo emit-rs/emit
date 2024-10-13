@@ -6,7 +6,7 @@ use std::{
     cell::RefCell,
     fmt::{self, Write as _},
     mem,
-    ops::ControlFlow,
+    ops::{BitAnd, BitOr, ControlFlow},
     str::FromStr,
 };
 
@@ -210,6 +210,8 @@ impl TraceFlags {
     pub const EMPTY: Self = TraceFlags(0);
     pub const SAMPLED: Self = TraceFlags(1);
 
+    const ALL: Self = TraceFlags(!0);
+
     pub fn try_from_str(flags: &str) -> Result<Self, Error> {
         if flags.len() != 2 {
             return Err(Error {
@@ -232,6 +234,22 @@ impl TraceFlags {
 
     pub fn is_sampled(&self) -> bool {
         self.0 & Self::SAMPLED.0 == 1
+    }
+}
+
+impl BitAnd for TraceFlags {
+    type Output = Self;
+
+    fn bitand(self, other: Self) -> Self {
+        TraceFlags(self.0 & other.0)
+    }
+}
+
+impl BitOr for TraceFlags {
+    type Output = Self;
+
+    fn bitor(self, other: Self) -> Self {
+        TraceFlags(self.0 | other.0)
     }
 }
 
@@ -357,7 +375,7 @@ impl<C: Ctxt> Ctxt for TraceparentCtxt<C> {
     }
 
     fn open_root<P: Props>(&self, props: P) -> Self::Frame {
-        let (slot, props) = incoming_traceparent(props);
+        let (slot, props) = incoming_traceparent(props, TraceFlags::ALL);
 
         let inner = self.inner.open_root(props);
 
@@ -369,7 +387,7 @@ impl<C: Ctxt> Ctxt for TraceparentCtxt<C> {
     }
 
     fn open_push<P: Props>(&self, props: P) -> Self::Frame {
-        let (slot, props) = incoming_traceparent(props);
+        let (slot, props) = incoming_traceparent(props, TraceFlags::ALL);
 
         let inner = self.inner.open_push(props);
 
@@ -381,7 +399,15 @@ impl<C: Ctxt> Ctxt for TraceparentCtxt<C> {
     }
 
     fn open_disabled<P: Props>(&self, props: P) -> Self::Frame {
-        todo!()
+        let (slot, props) = incoming_traceparent(props, TraceFlags::EMPTY);
+
+        let inner = self.inner.open_disabled(props);
+
+        TraceparentCtxtFrame {
+            inner,
+            slot,
+            active: slot.is_some(),
+        }
     }
 
     fn enter(&self, frame: &mut Self::Frame) {
@@ -405,7 +431,10 @@ impl<C: Ctxt> Ctxt for TraceparentCtxt<C> {
     }
 }
 
-fn incoming_traceparent(props: impl Props) -> (Option<ActiveTraceparent>, impl Props) {
+fn incoming_traceparent(
+    props: impl Props,
+    trace_flags: TraceFlags,
+) -> (Option<ActiveTraceparent>, impl Props) {
     let trace_id = props.pull::<TraceId, _>(KEY_TRACE_ID);
     let span_id = props.pull::<SpanId, _>(KEY_SPAN_ID);
 
@@ -443,7 +472,7 @@ fn incoming_traceparent(props: impl Props) -> (Option<ActiveTraceparent>, impl P
             traceparent: Traceparent::new(
                 parent.traceparent.trace_id,
                 Some(span_id),
-                parent.traceparent.trace_flags,
+                parent.traceparent.trace_flags & trace_flags,
             ),
             span_parent: parent.traceparent.span_id,
         }
@@ -451,7 +480,11 @@ fn incoming_traceparent(props: impl Props) -> (Option<ActiveTraceparent>, impl P
         // The incoming traceparent is for a root span
         // We consider traces created by `emit` this way to be sampled
         ActiveTraceparent {
-            traceparent: Traceparent::new(trace_id, Some(span_id), TraceFlags::SAMPLED),
+            traceparent: Traceparent::new(
+                trace_id,
+                Some(span_id),
+                TraceFlags::SAMPLED & trace_flags,
+            ),
             span_parent: None,
         }
     };
@@ -704,7 +737,7 @@ mod tests {
             assert!(traceparent.trace_flags().is_sampled());
         }
 
-        sampled();
         unsampled();
+        sampled();
     }
 }

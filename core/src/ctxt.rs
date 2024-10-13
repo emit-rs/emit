@@ -94,6 +94,10 @@ impl<'a, C: Ctxt + ?Sized> Ctxt for &'a C {
         (**self).open_push(props)
     }
 
+    fn open_disabled<P: Props>(&self, props: P) -> Self::Frame {
+        (**self).open_disabled(props)
+    }
+
     fn enter(&self, frame: &mut Self::Frame) {
         (**self).enter(frame)
     }
@@ -132,6 +136,10 @@ impl<C: Ctxt> Ctxt for Option<C> {
         self.as_ref().map(|ctxt| ctxt.open_push(props))
     }
 
+    fn open_disabled<P: Props>(&self, props: P) -> Self::Frame {
+        self.as_ref().map(|ctxt| ctxt.open_disabled(props))
+    }
+
     fn enter(&self, frame: &mut Self::Frame) {
         if let (Some(ctxt), Some(span)) = (self, frame) {
             ctxt.enter(span)
@@ -168,6 +176,10 @@ impl<'a, C: Ctxt + ?Sized + 'a> Ctxt for alloc::boxed::Box<C> {
         (**self).open_push(props)
     }
 
+    fn open_disabled<P: Props>(&self, props: P) -> Self::Frame {
+        (**self).open_disabled(props)
+    }
+
     fn enter(&self, frame: &mut Self::Frame) {
         (**self).enter(frame)
     }
@@ -198,6 +210,10 @@ impl<'a, C: Ctxt + ?Sized + 'a> Ctxt for alloc::sync::Arc<C> {
         (**self).open_push(props)
     }
 
+    fn open_disabled<P: Props>(&self, props: P) -> Self::Frame {
+        (**self).open_disabled(props)
+    }
+
     fn enter(&self, frame: &mut Self::Frame) {
         (**self).enter(frame)
     }
@@ -224,6 +240,10 @@ impl Ctxt for Empty {
     }
 
     fn open_push<P: Props>(&self, _: P) -> Self::Frame {
+        Empty
+    }
+
+    fn open_disabled<P: Props>(&self, _: P) -> Self::Frame {
         Empty
     }
 
@@ -292,6 +312,7 @@ mod alloc_support {
 
             fn dispatch_open_root(&self, props: &dyn ErasedProps) -> ErasedFrame;
             fn dispatch_open_push(&self, props: &dyn ErasedProps) -> ErasedFrame;
+            fn dispatch_open_disabled(&self, props: &dyn ErasedProps) -> ErasedFrame;
             fn dispatch_enter(&self, frame: &mut ErasedFrame);
             fn dispatch_exit(&self, frame: &mut ErasedFrame);
             fn dispatch_close(&self, frame: ErasedFrame);
@@ -375,6 +396,10 @@ mod alloc_support {
             ErasedFrame(Box::new(self.open_push(props)))
         }
 
+        fn dispatch_open_disabled(&self, props: &dyn ErasedProps) -> ErasedFrame {
+            ErasedFrame(Box::new(self.open_disabled(props)))
+        }
+
         fn dispatch_enter(&self, span: &mut ErasedFrame) {
             if let Some(span) = span.0.downcast_mut() {
                 self.enter(span)
@@ -417,6 +442,10 @@ mod alloc_support {
             self.erase_ctxt().0.dispatch_open_push(&props)
         }
 
+        fn open_disabled<P: Props>(&self, props: P) -> Self::Frame {
+            self.erase_ctxt().0.dispatch_open_disabled(&props)
+        }
+
         fn enter(&self, span: &mut Self::Frame) {
             self.erase_ctxt().0.dispatch_enter(span)
         }
@@ -444,6 +473,10 @@ mod alloc_support {
 
         fn open_push<P: Props>(&self, props: P) -> Self::Frame {
             (self as &(dyn ErasedCtxt + 'a)).open_push(props)
+        }
+
+        fn open_disabled<P: Props>(&self, props: P) -> Self::Frame {
+            (self as &(dyn ErasedCtxt + 'a)).open_disabled(props)
         }
 
         fn enter(&self, span: &mut Self::Frame) {
