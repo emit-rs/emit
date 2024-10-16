@@ -704,7 +704,7 @@ fn incoming_traceparent(
         );
     };
 
-    let active = get_active_traceparent();
+    let active = get_active_traceparent().filter(|active| active.traceparent.is_valid());
 
     // Only consider props if the span id has changed
     if Some(span_id) == active.and_then(|parent| parent.traceparent.span_id) {
@@ -1005,6 +1005,24 @@ mod tests {
                 assert!(traceparent.trace_flags().is_sampled());
             });
         });
+    }
+
+    #[test]
+    fn traceparent_ctxt_ignores_invalid_parent() {
+        let rng = RandRng::new();
+        let ctxt = TraceparentCtxt::new(ThreadLocalCtxt::new());
+
+        Traceparent::new(None, None, TraceFlags::EMPTY)
+            .push()
+            .call(|| {
+                let span_ctxt_1 = SpanCtxt::current(&ctxt).new_child(&rng);
+
+                span_ctxt_1.push(&ctxt).call(|| {
+                    let span_ctxt_2 = SpanCtxt::current(&ctxt);
+
+                    assert_eq!(span_ctxt_1, span_ctxt_2);
+                });
+            });
     }
 
     #[test]
