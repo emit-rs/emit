@@ -15,6 +15,9 @@ path = "../../emitter/term"
 [dependencies.emit_file]
 path = "../../emitter/file"
 
+[dependencies.emit_traceparent]
+path = "../../traceparent"
+
 [dependencies.thiserror]
 version = "1"
 
@@ -69,3 +72,11 @@ path = "span_manual.rs"
 [[example]]
 name = "span_trace_propagation"
 path = "span_trace_propagation.rs"
+
+[[example]]
+name = "span_trace_sampling"
+path = "span_trace_sampling.rs"
+
+[[example]]
+name = "span_trace_filtering"
+path = "span_trace_filtering.rs"

@@ -6,7 +6,7 @@ use std::{
     cell::RefCell,
     fmt::{self, Write as _},
     mem,
-    ops::{BitAnd, BitOr, ControlFlow},
+    ops::{BitAnd, BitOr, ControlFlow, Not},
     str::{self, FromStr},
 };
 
@@ -31,12 +31,12 @@ pub fn setup_with_sampler<S: Fn(&SpanCtxt) -> bool + Send + Sync + 'static>(
     sampler: S,
 ) -> emit::Setup<
     emit::setup::DefaultEmitter,
-    TraceparentFilter,
-    TraceparentCtxt<emit::setup::DefaultCtxt, S>,
+    TraceparentFilter<S>,
+    TraceparentCtxt<emit::setup::DefaultCtxt>,
 > {
     emit::setup()
-        .emit_when(TraceparentFilter::new())
-        .map_ctxt(|ctxt| TraceparentCtxt::new_with_sampler(ctxt, sampler))
+        .emit_when(TraceparentFilter::new_with_sampler(sampler))
+        .map_ctxt(|ctxt| TraceparentCtxt::new(ctxt))
 }
 
 /**
@@ -321,6 +321,14 @@ impl BitOr for TraceFlags {
     }
 }
 
+impl Not for TraceFlags {
+    type Output = Self;
+
+    fn not(self) -> Self {
+        TraceFlags(!self.0)
+    }
+}
+
 impl FromStr for TraceFlags {
     type Err = Error;
 
@@ -344,11 +352,12 @@ struct ActiveTraceparent {
 impl ActiveTraceparent {
     fn is_parent_of(&self, trace_id: Option<TraceId>) -> bool {
         // A traceparent is a parent of a trace id if:
-        // 1. The traceparent has a trace id
-        // 2. The traceparent's trace id matches the input trace id
+        //   1. The `traceparent` has a trace id
+        //   2. The `traceparent`'s trace id matches the incoming `trace_id`
         //
-        // That means a traceparent is never considered the parent
-        // of an empty trace id
+        // That means a `traceparent` is never considered the parent
+        // of an empty `trace_id`, and a `trace_id` is never the child
+        // of an empty `traceparent`
 
         self.traceparent.trace_id.is_some() && self.traceparent.trace_id == trace_id
     }
@@ -376,9 +385,8 @@ A [`Ctxt`] that synchronizes [`Traceparent`]s with an underlying ambient context
 The trace context is shared by all instances of `TraceparentCtxt`, and any calls to [`current`] and [`set`].
 */
 #[derive(Debug, Clone, Copy)]
-pub struct TraceparentCtxt<C = Empty, S = fn(&SpanCtxt) -> bool> {
+pub struct TraceparentCtxt<C = Empty> {
     inner: C,
-    sampler: Option<S>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -409,28 +417,17 @@ impl<P: Props + ?Sized> Props for TraceparentCtxtProps<P> {
 
 impl<C> TraceparentCtxt<C> {
     pub const fn new(inner: C) -> Self {
-        TraceparentCtxt {
-            inner,
-            sampler: None,
-        }
+        TraceparentCtxt { inner }
     }
 }
 
-impl<C, S> TraceparentCtxt<C, S> {
-    pub const fn new_with_sampler(inner: C, sampler: S) -> Self {
-        TraceparentCtxt {
-            inner,
-            sampler: Some(sampler),
-        }
-    }
-}
-
-impl<C: Ctxt, S: Fn(&SpanCtxt) -> bool> Ctxt for TraceparentCtxt<C, S> {
+impl<C: Ctxt> Ctxt for TraceparentCtxt<C> {
     type Current = TraceparentCtxtProps<C::Current>;
     type Frame = TraceparentCtxtFrame<C::Frame>;
 
     fn with_current<R, F: FnOnce(&Self::Current) -> R>(&self, with: F) -> R {
-        // Get the current span context
+        // Get the current traceparent and use it as the span context
+        // if it's sampled
         let ctxt = get_active_traceparent()
             .and_then(|active| {
                 if active.traceparent.trace_flags.is_sampled() {
@@ -456,7 +453,8 @@ impl<C: Ctxt, S: Fn(&SpanCtxt) -> bool> Ctxt for TraceparentCtxt<C, S> {
     }
 
     fn open_root<P: Props>(&self, props: P) -> Self::Frame {
-        let (slot, props) = incoming_traceparent(self.sampler.as_ref(), props, TraceFlags::ALL);
+        let (slot, props) =
+            incoming_traceparent(None::<fn(&SpanCtxt) -> bool>, props, TraceFlags::ALL);
 
         let inner = self.inner.open_root(props);
 
@@ -468,7 +466,8 @@ impl<C: Ctxt, S: Fn(&SpanCtxt) -> bool> Ctxt for TraceparentCtxt<C, S> {
     }
 
     fn open_push<P: Props>(&self, props: P) -> Self::Frame {
-        let (slot, props) = incoming_traceparent(self.sampler.as_ref(), props, TraceFlags::ALL);
+        let (slot, props) =
+            incoming_traceparent(None::<fn(&SpanCtxt) -> bool>, props, TraceFlags::ALL);
 
         let inner = self.inner.open_push(props);
 
@@ -480,7 +479,8 @@ impl<C: Ctxt, S: Fn(&SpanCtxt) -> bool> Ctxt for TraceparentCtxt<C, S> {
     }
 
     fn open_disabled<P: Props>(&self, props: P) -> Self::Frame {
-        let (slot, props) = incoming_traceparent(self.sampler.as_ref(), props, TraceFlags::EMPTY);
+        let (slot, props) =
+            incoming_traceparent(None::<fn(&SpanCtxt) -> bool>, props, TraceFlags::EMPTY);
 
         let inner = self.inner.open_disabled(props);
 
@@ -517,7 +517,6 @@ fn incoming_traceparent(
     props: impl Props,
     trace_flags: TraceFlags,
 ) -> (Option<ActiveTraceparent>, impl Props) {
-    let trace_id = props.pull::<TraceId, _>(KEY_TRACE_ID);
     let span_id = props.pull::<SpanId, _>(KEY_SPAN_ID);
 
     // Only consider props that carry a span id
@@ -531,12 +530,10 @@ fn incoming_traceparent(
         );
     };
 
-    // Only consider the current traceparent if the trace id matches
-    let parent = get_active_traceparent()
-        .filter(|active| trace_id.is_none() || active.is_parent_of(trace_id));
+    let active = get_active_traceparent();
 
-    // Only consider an incoming traceparent if the span id has changed
-    if Some(span_id) == parent.and_then(|parent| parent.traceparent.span_id) {
+    // Only consider props if the span id has changed
+    if Some(span_id) == active.and_then(|parent| parent.traceparent.span_id) {
         return (
             None,
             ExcludeTraceparentProps {
@@ -546,46 +543,44 @@ fn incoming_traceparent(
         );
     }
 
-    let incoming = if let Some(parent) = parent {
-        // The incoming traceparent is a child of the current one
+    // If we get this far then the props will be mapped to a traceparent
+
+    let incoming = if let Some(active) = active {
+        // The incoming context is for a child span
+        //
         // Construct a traceparent from it with the same trace id and flags,
         // using the span id of the parent as the parent id of the incoming
+
         ActiveTraceparent {
             traceparent: Traceparent::new(
-                parent.traceparent.trace_id,
+                active.traceparent.trace_id,
                 Some(span_id),
-                parent.traceparent.trace_flags & trace_flags,
+                active.traceparent.trace_flags & trace_flags,
             ),
-            span_parent: parent.traceparent.span_id,
+            span_parent: active.traceparent.span_id,
         }
     } else {
         // The incoming traceparent is for a root span
-        // If the context is enabled, then the span will be sampled
-        // If the context is disabled, then the span will be unsampled
 
-        // Since we're starting a new root span, run the sampler
-        //
-        // This is only worth doing if the incoming trace flags are already sampled
-        let sampling_result = if trace_flags.is_sampled() {
-            if let Some(sampler) = sampler {
-                if sampler(&SpanCtxt::new(trace_id, None, Some(span_id))) {
-                    // If the sampler returns `true` then the span is sampled
-                    TraceFlags::SAMPLED
-                } else {
-                    // If the sampler returns `false` then the span is unsampled
-                    TraceFlags::EMPTY
-                }
+        let trace_id = props.pull::<TraceId, _>(KEY_TRACE_ID);
+
+        // Run the sampler
+        let trace_flags = if let Some(sampler) = sampler {
+            // If the incoming flags don't allow sampling then don't bother running the sampler
+            if trace_flags.is_sampled() && sampler(&SpanCtxt::new(trace_id, None, Some(span_id))) {
+                // Sampled
+                trace_flags & TraceFlags::SAMPLED
             } else {
-                // If there's no sampler then the span is sampled
-                TraceFlags::SAMPLED
+                // Unsampled
+                trace_flags & TraceFlags::EMPTY
             }
         } else {
-            // If the incoming trace flags are already unsampled then the span is unsampled
-            TraceFlags::EMPTY
+            // There's no sampler; default to sampled
+            trace_flags & TraceFlags::SAMPLED
         };
 
         ActiveTraceparent {
-            traceparent: Traceparent::new(trace_id, Some(span_id), sampling_result & trace_flags),
+            traceparent: Traceparent::new(trace_id, Some(span_id), trace_flags),
             span_parent: None,
         }
     };
@@ -627,16 +622,38 @@ A filter that excludes events when the current trace context is unsampled.
 
 This filter uses [`current`] and checks [`TraceFlags::is_sampled`] on the returned [`Traceparent`] to determine whether the current context is sampled or not.
 */
-pub struct TraceparentFilter {}
+pub struct TraceparentFilter<S = fn(&SpanCtxt) -> bool> {
+    sampler: Option<S>,
+}
 
 impl TraceparentFilter {
     pub const fn new() -> Self {
-        TraceparentFilter {}
+        TraceparentFilter { sampler: None }
     }
 }
 
-impl Filter for TraceparentFilter {
-    fn matches<E: ToEvent>(&self, _: E) -> bool {
+impl<S> TraceparentFilter<S> {
+    pub const fn new_with_sampler(sampler: S) -> Self {
+        TraceparentFilter {
+            sampler: Some(sampler),
+        }
+    }
+}
+
+impl<S: Fn(&SpanCtxt) -> bool> Filter for TraceparentFilter<S> {
+    fn matches<E: ToEvent>(&self, evt: E) -> bool {
+        let evt = evt.to_event();
+
+        // If the event is a span then run the sampler over its incoming traceparent
+        if emit::kind::is_span_filter().matches(&evt) {
+            if let (Some(incoming), _) =
+                incoming_traceparent(self.sampler.as_ref(), evt.props(), TraceFlags::SAMPLED)
+            {
+                return incoming.traceparent.trace_flags().is_sampled();
+            }
+        }
+
+        // If the event is not a span then check if the current traceparent is sampled
         Traceparent::current().trace_flags().is_sampled()
     }
 }
@@ -647,7 +664,7 @@ mod tests {
 
     use emit::{
         and::And,
-        filter,
+        emitter, filter,
         platform::{
             rand_rng::RandRng, system_clock::SystemClock, thread_local_ctxt::ThreadLocalCtxt,
         },
@@ -655,7 +672,10 @@ mod tests {
         Empty, Rng,
     };
 
-    use std::thread;
+    use std::{
+        sync::atomic::{AtomicUsize, Ordering},
+        thread,
+    };
 
     #[test]
     fn traceparent_roundtrip() {
@@ -802,6 +822,49 @@ mod tests {
     }
 
     #[test]
+    fn traceparent_ctxt_ignores_mismatched_trace_ids() {
+        let rng = RandRng::new();
+        let ctxt = TraceparentCtxt::new(ThreadLocalCtxt::new());
+
+        let span_ctxt_1 = SpanCtxt::current(&ctxt).new_child(&rng);
+
+        span_ctxt_1.push(&ctxt).call(|| {
+            let span_ctxt_2 = SpanCtxt::new_root(&rng);
+
+            span_ctxt_2.push(&ctxt).call(|| {
+                let traceparent = Traceparent::current();
+
+                let span_ctxt_3 = SpanCtxt::current(&ctxt);
+
+                // The trace id from `span_ctxt_2` is ignored, as well as its span parent
+                assert_ne!(span_ctxt_2.trace_id(), span_ctxt_3.trace_id());
+
+                assert_eq!(span_ctxt_2.span_id(), span_ctxt_3.span_id());
+
+                assert_eq!(
+                    span_ctxt_1.trace_id().unwrap(),
+                    span_ctxt_3.trace_id().unwrap()
+                );
+                assert_eq!(
+                    span_ctxt_1.span_id().unwrap(),
+                    span_ctxt_3.span_parent().unwrap()
+                );
+                assert!(span_ctxt_3.span_id().is_some());
+
+                assert_eq!(
+                    traceparent.trace_id().unwrap(),
+                    span_ctxt_3.trace_id().unwrap()
+                );
+                assert_eq!(
+                    traceparent.span_id().unwrap(),
+                    span_ctxt_3.span_id().unwrap()
+                );
+                assert!(traceparent.trace_flags().is_sampled());
+            });
+        });
+    }
+
+    #[test]
     fn traceparent_across_threads() {
         let rng = RandRng::new();
 
@@ -857,7 +920,7 @@ mod tests {
             Empty,
             And::new(
                 filter::FromFn::new(|evt| evt.mdl() != emit::path!("unsampled")),
-                TraceparentFilter {},
+                TraceparentFilter::new(),
             ),
             TraceparentCtxt::new(ThreadLocalCtxt::shared()),
             SystemClock::new(),
@@ -895,65 +958,46 @@ mod tests {
             assert!(traceparent.trace_flags().is_sampled());
         }
 
-        sampled();
         unsampled();
+        sampled();
     }
 
     #[test]
-    fn traceparent_ctxt_sampler() {
-        let rng = RandRng::new();
+    fn traceparent_span_sampler() {
+        static EMITTER_CALLS: AtomicUsize = AtomicUsize::new(0);
+        static SAMPLER_CALLS: AtomicUsize = AtomicUsize::new(0);
 
-        let unsampled_span_id = SpanId::random(&rng);
+        static RT: Runtime<
+            emitter::FromFn,
+            TraceparentFilter,
+            TraceparentCtxt<ThreadLocalCtxt>,
+            SystemClock,
+            RandRng,
+        > = Runtime::build(
+            emitter::FromFn::new(|_| {
+                EMITTER_CALLS.fetch_add(1, Ordering::Relaxed);
+            }),
+            TraceparentFilter::new_with_sampler({
+                move |_| SAMPLER_CALLS.fetch_add(1, Ordering::Relaxed) % 10 == 0
+            }),
+            TraceparentCtxt::new(ThreadLocalCtxt::shared()),
+            SystemClock::new(),
+            RandRng::new(),
+        );
 
-        let ctxt = TraceparentCtxt::new_with_sampler(ThreadLocalCtxt::new(), |ctxt: &SpanCtxt| {
-            ctxt.span_id() != unsampled_span_id.as_ref()
-        });
+        #[emit::span(rt: RT, "outer")]
+        fn outer() {
+            inner()
+        }
 
-        let sampled_ctxt = SpanCtxt::new(TraceId::random(&rng), None, SpanId::random(&rng));
-        let unsampled_ctxt = SpanCtxt::new(TraceId::random(&rng), None, unsampled_span_id);
+        #[emit::span(rt: RT, "inner")]
+        fn inner() {}
 
-        sampled_ctxt.push(&ctxt).call(|| {
-            let traceparent = Traceparent::current();
-            let current = SpanCtxt::current(&ctxt);
+        for _ in 0..30 {
+            outer();
+        }
 
-            assert_eq!(current.trace_id(), sampled_ctxt.trace_id());
-            assert_eq!(current.span_id(), sampled_ctxt.span_id());
-
-            assert_eq!(current.trace_id(), traceparent.trace_id());
-            assert_eq!(current.span_id(), traceparent.span_id());
-            assert!(traceparent.trace_flags().is_sampled());
-
-            let unsampled_ctxt = SpanCtxt::new(
-                sampled_ctxt.trace_id().copied(),
-                sampled_ctxt.span_id().copied(),
-                unsampled_span_id,
-            );
-
-            // An unsampled child span will set the context
-            unsampled_ctxt.push(&ctxt).call(|| {
-                let traceparent = Traceparent::current();
-                let current = SpanCtxt::current(&ctxt);
-
-                assert_eq!(current.trace_id(), unsampled_ctxt.trace_id());
-                assert_eq!(current.span_id(), unsampled_ctxt.span_id());
-
-                assert_eq!(current.trace_id(), traceparent.trace_id());
-                assert_eq!(current.span_id(), traceparent.span_id());
-                assert!(traceparent.trace_flags().is_sampled());
-            });
-        });
-
-        // An unsampled root span will not set the context
-        unsampled_ctxt.push(&ctxt).call(|| {
-            let traceparent = Traceparent::current();
-            let current = SpanCtxt::current(&ctxt);
-
-            assert!(current.trace_id().is_none());
-            assert!(current.span_id().is_none());
-
-            assert_eq!(unsampled_ctxt.trace_id(), traceparent.trace_id());
-            assert_eq!(unsampled_ctxt.span_id(), traceparent.span_id());
-            assert!(!traceparent.trace_flags().is_sampled());
-        });
+        // `outer` is called 3 times, which also calls `inner` 3 times
+        assert_eq!(6, EMITTER_CALLS.load(Ordering::Relaxed));
     }
 }

@@ -1,12 +1,74 @@
 # Propagating span context across services
 
-`emit` doesn't implement any distributed trace propagation itself. This is the responsibility of end-users through their web framework and clients to manage.
+`emit` doesn't implement any distributed trace propagation itself.
 
-When an incoming request arrives, you can parse the trace and span ids from its traceparent header and push them onto the current context:
+## Using `emit_traceparent` for propagation
+
+[`emit_traceparent`](https://docs.rs/emit_traceparent/latest/emit_traceparent/) is a library that implements trace sampling and propagation.
+
+When an incoming request arrives, you can push the incoming traceparent onto the current context:
 
 ```rust
 # extern crate emit;
-// Parsed from a traceparent header
+# extern crate emit_traceparent;
+// 1. Pull the incoming traceparent
+//    If the request doesn't specify one then use an empty sampled context
+let traceparent = emit_traceparent::Traceparent::try_from_str("00-12b2fde225aebfa6758ede9cac81bf4d-23995f85b4610391-01")
+    .unwrap_or_else(|_| emit_traceparent::Traceparent::current());
+
+// 2. Push the traceparent onto the context and execute your handler within it
+traceparent.push().call(handle_request);
+
+#[emit::span("incoming request")]
+fn handle_request() {
+    // Your code goes here
+}
+```
+
+```text
+Event {
+    mdl: "my_app",
+    tpl: "incoming request",
+    extent: Some(
+        "2024-10-16T10:04:24.783410472Z".."2024-10-16T10:04:24.783463852Z",
+    ),
+    props: {
+        "evt_kind": span,
+        "span_name": "incoming request",
+        "trace_id": 4bf92f3577b34da6a3ce929d0e0e4736,
+        "span_id": 1b46015559cb7b57,
+        "span_parent": 2d7fab81f9e2ed5b,
+    },
+}
+```
+
+When making outbound requests, you can pull the traceparent from the current context and format it as a header:
+
+```rust
+# extern crate emit_traceparent;
+# use std::collections::HashMap;
+let mut headers = HashMap::<String, String>::new();
+
+// 1. Get the current traceparent
+let traceparent = emit_traceparent::Traceparent::current();
+
+if traceparent.is_valid() {
+    // 2. Add the traceparent to the outgoing request
+    headers.insert("traceparent".into(), traceparent.to_string());
+}
+```
+
+## Using the OpenTelemetry SDK for propagation
+
+If you're using the OpenTelemetry SDK with [`emit_opentelemetry`](https://docs.rs/emit_opentelemetry/latest/emit_opentelemetry/), it will handle propagation for you.
+
+## Manual propagation
+
+When an incoming request arrives, you can push the trace and span ids onto the current context:
+
+```rust
+# extern crate emit;
+// Parsed from the incoming call
 let trace_id = "12b2fde225aebfa6758ede9cac81bf4d";
 let span_id = "23995f85b4610391";
 
@@ -40,9 +102,9 @@ Event {
 }
 ```
 
-This pattern of pushing the incoming traceparent onto the context and then immediately calling a span annotated function ensures the `span_id` parsed from the traceparent becomes the `span_parent` in the events emitted by your application, without emitting a span event for the calling service itself.
+This pattern of pushing the incoming trace and span ids onto the context and then immediately calling a span annotated function ensures the incoming `span_id` becomes the `span_parent` in the events emitted by your application, without emitting a span event for the calling service itself.
 
-When making outbound requests, you can pull the current trace and span ids from the current context and format them into a traceparent header:
+When making outbound requests, you can pull the trace and span ids from the current context and format them as needed:
 
 ```rust
 # extern crate emit;
@@ -56,8 +118,6 @@ let (trace_id, span_id) = emit::ctxt().with_current(|props| {
 });
 
 if let (Some(trace_id), Some(span_id)) = (trace_id, span_id) {
-    let traceparent = format!("00-{trace_id}-{span_id}-00");
-
-    // Push the traceparent header onto the request
+    // Added to the outgoing call
 }
 ```
