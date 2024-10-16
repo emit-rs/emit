@@ -12,7 +12,7 @@ This readme covers just enough to give you an idea of what `emit` is. For a prop
 
 - [the guide](https://emit-rs.io)
 - [a set of task-oriented examples](https://github.com/emit-rs/emit/tree/main/examples).
-- [the API docs](https://docs.rs/emit/0.11.0-alpha.18/emit/index.html).
+- [the API docs](https://docs.rs/emit/0.11.0-alpha.19/emit/index.html).
 
 ## Getting started
 
@@ -20,10 +20,10 @@ Add `emit` to your `Cargo.toml`:
 
 ```toml
 [dependencies.emit]
-version = "0.11.0-alpha.18"
+version = "0.11.0-alpha.19"
 
 [dependencies.emit_term]
-version = "0.11.0-alpha.18"
+version = "0.11.0-alpha.19"
 ```
 
 Initialize `emit` in your `main.rs` and start peppering diagnostics throughout your application:
