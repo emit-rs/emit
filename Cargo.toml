@@ -15,7 +15,7 @@ members = [
     "examples/common_patterns",
     "examples/opentelemetry/direct_otlp",
     "examples/opentelemetry/via_sdk",
-    "test/ui", "traceparent",
+    "test/ui",
 ]
 
 [package]
