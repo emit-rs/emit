@@ -52,7 +52,3 @@ fn greet(user: &str) {
 ```
 
 ![The output of running the above program](https://github.com/emit-rs/emit/blob/main/asset/emit_term.png?raw=true)
-
-## Current status
-
-This is alpha-level software. It implements a complete framework but has almost no tests and needs a lot more documentation. 
