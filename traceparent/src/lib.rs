@@ -1,6 +1,88 @@
 /*!
-Distributed trace context for `emit` with support for sampling.
+Distributed trace context for `emit`.
+
+This library implements the [W3C trace context](https://www.w3.org/TR/trace-context) standard over `emit`'s tracing functionality. Trace context is propagated as a traceparent in a simple text format. Here's an example of a traceparent:
+
+```text
+00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+```
+
+It includes:
+
+- A _version_: `00`.
+- A _trace id_: `4bf92f3577b34da6a3ce929d0e0e4736`.
+- A _span id_: `00f067aa0ba902b7`.
+- A set of _trace flags_: `01` (sampled).
+
+# Getting started
+
+Add `emit` and `emit_traceparent` to your `Cargo.toml`:
+
+```toml
+[dependencies.emit]
+version = "0.11.0-alpha.18"
+
+[dependencies.emit_traceparent]
+version = "0.11.0-alpha.18"
+```
+
+Initialize `emit` using the [`setup`] or [`setup_with_sampler`] functions from this library:
+
+```
+fn main() {
+    let rt = emit_traceparent::setup()
+        .emit_to(emit_term::stdout())
+        .init();
+
+    // Your app code goes here
+
+    rt.blocking_flush(std::time::Duration::from_secs(30));
+}
+```
+
+# Incoming traceparent
+
+When a request arrives, parse a [`Traceparent`] from it and push it onto the current context. Handle the request in the returned [`emit::Frame`] to make trace context correlate with the upstream service:
+
+```
+let traceparent = emit_traceparent::Traceparent::try_from_str("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+    .unwrap_or_else(|_| emit_traceparent::Traceparent::current());
+
+// 2. Push the traceparent onto the context and execute your handler within it
+traceparent.push().call(handle_request);
+
+#[emit::span("incoming request")]
+fn handle_request() {
+    // Your code goes here
+}
+```
+
+# Outgoing traceparent
+
+When making an outgoing request, get the current [`Traceparent`] and format it into a header for the downstream service:
+
+```
+# use std::collections::HashMap;
+let mut headers = HashMap::<String, String>::new();
+
+// 1. Get the current traceparent
+let traceparent = emit_traceparent::Traceparent::current();
+
+if traceparent.is_valid() {
+    // 2. Add the traceparent to the outgoing request
+    headers.insert("traceparent".into(), traceparent.to_string());
+}
+```
+
+# `Traceparent` and `SpanCtxt`
+
+`emit` stores the active span context as an [`emit::SpanCtxt`] in its [`emit::Ctxt`], which it generates in [`macro@emit::span`] for you. `SpanCtxt` doesn't have the concept of sampling, so if it exists then it's sampled.
+When in use, the [`Traceparent`] type defined by this library becomes the source of truth for the `SpanCtxt`. If the current `Traceparent` is not sampled, then no `SpanCtxt` will be returned.
+
+Only the span id on incoming `SpanCtxt`s created by [`macro@emit::span`] are respected. The current `Traceparent` overrides any incoming trace ids or span parents.
 */
+
+#![deny(missing_docs)]
 
 use std::{
     cell::RefCell,
@@ -17,6 +99,21 @@ use emit::{
     Ctxt, Empty, Filter, Frame, Props, Str, Value,
 };
 
+/**
+Start a builder for a distributed-trace-aware pipeline.
+
+```
+fn main() {
+    let rt = emit_traceparent::setup()
+        .emit_to(emit_term::stdout())
+        .init();
+
+    // Your app code goes here
+
+    rt.blocking_flush(std::time::Duration::from_secs(30));
+}
+```
+*/
 pub fn setup() -> emit::Setup<
     emit::setup::DefaultEmitter,
     TraceparentFilter,
@@ -27,6 +124,34 @@ pub fn setup() -> emit::Setup<
         .map_ctxt(|ctxt| TraceparentCtxt::new(ctxt))
 }
 
+/**
+Start a builder for a distributed-trace-aware pipeline with a sampler.
+
+The sampler will be called once for each trace when it's started.
+If the sampler returns `true`, the trace and its events will be emitted.
+If the sampler returns `false`, the trace and its events will be discarded.
+
+```
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+fn main() {
+    let rt = emit_traceparent::setup_with_sampler({
+        let counter = AtomicUsize::new(0);
+
+        move |_| {
+            // Sample 1 in every 10 traces
+            counter.fetch_add(1, Ordering::Relaxed) % 10 == 0
+        }
+    })
+    .emit_to(emit_term::stdout())
+    .init();
+
+    // Your app code goes here
+
+    rt.blocking_flush(std::time::Duration::from_secs(30));
+}
+```
+*/
 pub fn setup_with_sampler<S: Fn(&SpanCtxt) -> bool + Send + Sync + 'static>(
     sampler: S,
 ) -> emit::Setup<
@@ -60,7 +185,9 @@ A [W3C traceparent](https://www.w3.org/TR/trace-context).
 
 This type contains `emit`'s [`TraceId`] and [`SpanId`], along with [`TraceFlags`] that determine sampling.
 
-Traceparents exist at the edges of your application. On incoming requests, it may carry a traceparent header that can be parsed into a `Traceparent` and pushed onto the active trace context with [`set`]. On outgoing requests, the active trace context is pulled by [`get`] and formatted into a traceparent header.
+Traceparents exist at the edges of your application.
+On incoming requests, it may carry a traceparent header that can be parsed into a `Traceparent` and pushed onto the active trace context with [`Traceparent::push`].
+On outgoing requests, the active trace context is pulled by [`Traceparent::current`] and formatted into a traceparent header.
 */
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Traceparent {
@@ -70,6 +197,9 @@ pub struct Traceparent {
 }
 
 impl Traceparent {
+    /**
+    Create a new traceparent with the given trace id, span id, and trace flags.
+    */
     pub const fn new(
         trace_id: Option<TraceId>,
         span_id: Option<SpanId>,
@@ -82,6 +212,9 @@ impl Traceparent {
         }
     }
 
+    /**
+    Parse a traceparent from its text format, as defined in the [W3C standard](https://www.w3.org/TR/trace-context).
+    */
     pub fn try_from_str(traceparent: &str) -> Result<Self, Error> {
         let bytes = traceparent.as_bytes();
 
@@ -126,14 +259,25 @@ impl Traceparent {
         Ok(Traceparent::new(trace_id, span_id, trace_flags))
     }
 
+    /**
+    Get the trace id.
+    */
     pub fn trace_id(&self) -> Option<&TraceId> {
         self.trace_id.as_ref()
     }
 
+    /**
+    Get the span id (also called the parent id).
+    */
     pub fn span_id(&self) -> Option<&SpanId> {
         self.span_id.as_ref()
     }
 
+    /**
+    Get the trace flags.
+
+    These flags can be used to tell whether the traceparent is for a sampled trace or not.
+    */
     pub fn trace_flags(&self) -> &TraceFlags {
         &self.trace_flags
     }
@@ -152,7 +296,7 @@ impl Traceparent {
     /**
     Get a [`Frame`] that can set the current trace context in a scope.
 
-    While the frame is active, [`current`] will return the value of `traceparent`.
+    While the frame is active, [`Traceparent::current`] will return this traceparent.
     */
     pub fn push(&self) -> Frame<TraceparentCtxt> {
         let mut frame = Frame::current(TraceparentCtxt::new(Empty));
@@ -222,23 +366,44 @@ impl fmt::Display for Traceparent {
     }
 }
 
+/**
+A set of flags associated with a [`Traceparent`].
+
+Trace flags can be used to control and communicate sampling decisions between distributed services.
+*/
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TraceFlags(u8);
 
 impl TraceFlags {
+    /**
+    An empty set of unsampled trace flags (`00`).
+    */
     pub const EMPTY: Self = TraceFlags(0);
+
+    /**
+    A sampled set of trace flags (`01`).
+    */
     pub const SAMPLED: Self = TraceFlags(1);
 
     const ALL: Self = TraceFlags(!0);
 
+    /**
+    Get a set of trace flags from a raw byte value.
+    */
     pub fn from_u8(raw: u8) -> Self {
         TraceFlags(raw)
     }
 
+    /**
+    Get the trace flags as a raw byte value.
+    */
     pub fn to_u8(&self) -> u8 {
         self.0
     }
 
+    /**
+    Whether the sampled flag is set (`01`).
+    */
     pub fn is_sampled(&self) -> bool {
         self.0 & Self::SAMPLED.0 == 1
     }
@@ -382,13 +547,16 @@ fn get_active_traceparent() -> Option<ActiveTraceparent> {
 /**
 A [`Ctxt`] that synchronizes [`Traceparent`]s with an underlying ambient context.
 
-The trace context is shared by all instances of `TraceparentCtxt`, and any calls to [`current`] and [`set`].
+The trace context is shared by all instances of `TraceparentCtxt`, and any calls to [`Traceparent::current`] and [`Traceparent::push`].
 */
 #[derive(Debug, Clone, Copy)]
 pub struct TraceparentCtxt<C = Empty> {
     inner: C,
 }
 
+/**
+The [`emit::Ctxt::Frame`] used by [`TraceparentCtxt`].
+*/
 #[derive(Debug, Clone, Copy)]
 pub struct TraceparentCtxtFrame<F = Empty> {
     inner: F,
@@ -396,6 +564,9 @@ pub struct TraceparentCtxtFrame<F = Empty> {
     slot: Option<ActiveTraceparent>,
 }
 
+/**
+The [`emit::Ctxt::Current`] used by [`TraceparentCtxt`].
+*/
 pub struct TraceparentCtxtProps<P: ?Sized> {
     inner: *const P,
     ctxt: SpanCtxt,
@@ -416,6 +587,9 @@ impl<P: Props + ?Sized> Props for TraceparentCtxtProps<P> {
 }
 
 impl<C> TraceparentCtxt<C> {
+    /**
+    Wrap the given context, synchronizing any [`emit::SpanCtxt`] with the current [`Traceparent`].
+    */
     pub const fn new(inner: C) -> Self {
         TraceparentCtxt { inner }
     }
@@ -618,21 +792,33 @@ impl<P: Props> Props for ExcludeTraceparentProps<P> {
 }
 
 /**
-A filter that excludes events when the current trace context is unsampled.
+A filter that runs a sampler over traces as they're created and excludes events when the current trace context is unsampled.
 
-This filter uses [`current`] and checks [`TraceFlags::is_sampled`] on the returned [`Traceparent`] to determine whether the current context is sampled or not.
+This filter uses [`Traceparent::current`] and checks [`TraceFlags::is_sampled`] on the returned [`Traceparent`] to determine whether the current context is sampled or not.
 */
 pub struct TraceparentFilter<S = fn(&SpanCtxt) -> bool> {
     sampler: Option<S>,
 }
 
 impl TraceparentFilter {
+    /**
+    Create a new distributed-trace-aware filter with no sampler.
+
+    All incoming traces will be included.
+    */
     pub const fn new() -> Self {
         TraceparentFilter { sampler: None }
     }
 }
 
 impl<S> TraceparentFilter<S> {
+    /**
+    Create a new distributed-trace-aware filter with a sampler.
+
+    The sampler will run at the start of the root span of each trace to determine whether to include it.
+    If the sampler returns `true`, the trace and any events produced within it will be emitted.
+    If the sampler returns `false`, the trace and any events produced within it will be discarded.
+    */
     pub const fn new_with_sampler(sampler: S) -> Self {
         TraceparentFilter {
             sampler: Some(sampler),

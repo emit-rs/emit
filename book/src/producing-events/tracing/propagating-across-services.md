@@ -13,7 +13,7 @@ When an incoming request arrives, you can push the incoming traceparent onto the
 # extern crate emit_traceparent;
 // 1. Pull the incoming traceparent
 //    If the request doesn't specify one then use an empty sampled context
-let traceparent = emit_traceparent::Traceparent::try_from_str("00-12b2fde225aebfa6758ede9cac81bf4d-23995f85b4610391-01")
+let traceparent = emit_traceparent::Traceparent::try_from_str("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
     .unwrap_or_else(|_| emit_traceparent::Traceparent::current());
 
 // 2. Push the traceparent onto the context and execute your handler within it
@@ -36,8 +36,8 @@ Event {
         "evt_kind": span,
         "span_name": "incoming request",
         "trace_id": 4bf92f3577b34da6a3ce929d0e0e4736,
-        "span_id": 1b46015559cb7b57,
-        "span_parent": 2d7fab81f9e2ed5b,
+        "span_id": d6ae3ee046c529d9,
+        "span_parent": 00f067aa0ba902b7,
     },
 }
 ```
