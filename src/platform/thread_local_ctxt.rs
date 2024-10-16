@@ -2,10 +2,14 @@
 The [`ThreadLocalCtxt`] type.
 */
 
-use core::mem;
-use std::{cell::RefCell, collections::HashMap, ops::ControlFlow, sync::Mutex};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    mem,
+    ops::ControlFlow,
+    sync::{Arc, Mutex},
+};
 
-use alloc::sync::Arc;
 use emit_core::{
     ctxt::Ctxt,
     props::Props,
@@ -116,12 +120,12 @@ impl Ctxt for ThreadLocalCtxt {
         span
     }
 
-    fn enter(&self, link: &mut Self::Frame) {
-        swap(self.id, link);
+    fn enter(&self, frame: &mut Self::Frame) {
+        swap(self.id, frame);
     }
 
-    fn exit(&self, link: &mut Self::Frame) {
-        swap(self.id, link);
+    fn exit(&self, frame: &mut Self::Frame) {
+        swap(self.id, frame);
     }
 
     fn close(&self, _: Self::Frame) {}

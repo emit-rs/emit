@@ -2,6 +2,7 @@
 members = [
     "core",
     "batcher",
+    "traceparent",
     "emitter/term",
     "emitter/file",
     "emitter/file/test/integration",

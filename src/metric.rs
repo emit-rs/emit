@@ -393,7 +393,7 @@ pub mod source {
     /**
     Create a [`Source`] from a function.
     */
-    pub fn from_fn<F: Fn(&mut dyn ErasedSampler)>(source: F) -> FromFn<F> {
+    pub const fn from_fn<F: Fn(&mut dyn ErasedSampler)>(source: F) -> FromFn<F> {
         FromFn::new(source)
     }
 
@@ -771,7 +771,7 @@ pub mod sampler {
     /**
     Create a [`Sampler`] from a function.
     */
-    pub fn from_fn<F: Fn(&Metric<&dyn ErasedProps>)>(f: F) -> FromFn<F> {
+    pub const fn from_fn<F: Fn(&Metric<&dyn ErasedProps>)>(f: F) -> FromFn<F> {
         FromFn(f)
     }
 

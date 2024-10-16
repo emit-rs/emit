@@ -1,0 +1,19 @@
+[package]
+name = "emit_traceparent"
+version = "0.11.0-alpha.18"
+authors = ["emit contributors"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/emit-rs/emit"
+description = "W3C traceparent support for emit."
+keywords = ["logging", "tracing", "metrics", "observability"]
+categories = ["development-tools::debugging"]
+edition = "2021"
+
+[dependencies.emit]
+version = "0.11.0-alpha.18"
+path = "../"
+
+[dev-dependencies.emit_term]
+version = "0.11.0-alpha.18"
+path = "../emitter/term"

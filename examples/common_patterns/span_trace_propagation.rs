@@ -13,8 +13,12 @@ Applications using the OpenTelemetry SDK should use its propagation mechanisms i
 use std::{collections::HashMap, time::Duration};
 
 fn main() {
-    let rt = emit::setup().emit_to(emit_term::stdout()).init();
+    // 1. Setup using `emit_traceparent` instead of `emit`
+    let rt = emit_traceparent::setup()
+        .emit_to(emit_term::stdout())
+        .init();
 
+    // A sampled request
     http::incoming(
         http::HttpRequest {
             method: "GET".into(),
@@ -24,6 +28,25 @@ fn main() {
                 map.insert(
                     "traceparent".into(),
                     "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01".into(),
+                );
+                map
+            },
+        },
+        routes,
+    );
+
+    // An unsampled request
+    http::incoming(
+        http::HttpRequest {
+            method: "GET".into(),
+            path: "/api/route-1".into(),
+            headers: {
+                let mut map = HashMap::new();
+                map.insert(
+                    "traceparent".into(),
+                    // Try changing the last digit to 0
+                    // This will cause the trace to be unsampled
+                    "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00".into(),
                 );
                 map
             },
@@ -55,56 +78,7 @@ fn routes(method: &str, path: &str) {
     }
 }
 
-// This is a portable traceparent parser
-// You may want to use it, or if you've got another one handy use it instead
-//
-// We may include this in `emit` itself at some point.
-pub mod traceparent {
-    pub fn parse(
-        traceparent: &str,
-    ) -> Result<(emit::TraceId, emit::SpanId), Box<dyn std::error::Error + Send + Sync>> {
-        let mut parts = traceparent.split('-');
-
-        let version = parts.next().ok_or("missing version")?;
-
-        let "00" = version else {
-            return Err(
-                format!("unexpected version {version:?}. Only version '00' is supported").into(),
-            );
-        };
-
-        let trace_id = parts.next().ok_or("missing trace id")?;
-        let span_id = parts.next().ok_or("missing span id")?;
-        let flags = parts.next().ok_or("missing flags")?;
-
-        let None = parts.next() else {
-            return Err(format!("traceparent {traceparent:?} is in an invalid format").into());
-        };
-
-        let ("00" | "01") = flags else {
-            return Err(format!("unexpected flags {flags:?}").into());
-        };
-
-        let trace_id = trace_id.parse()?;
-        let span_id = span_id.parse()?;
-
-        Ok((trace_id, span_id))
-    }
-
-    pub fn format(
-        trace_id: Option<emit::TraceId>,
-        span_id: Option<emit::SpanId>,
-    ) -> Option<String> {
-        let (Some(trace_id), Some(span_id)) = (trace_id, span_id) else {
-            return None;
-        };
-
-        Some(format!("00-{trace_id}-{span_id}-01"))
-    }
-}
-
 pub mod http {
-    use emit::Props;
     use std::collections::HashMap;
 
     #[derive(serde::Serialize)]
@@ -115,54 +89,32 @@ pub mod http {
     }
 
     pub fn incoming(request: HttpRequest, route: impl Fn(&str, &str)) {
-        // Pulling the traceparent from a HTTP request into the current context
-
         emit::debug!("Inbound {#[emit::as_serde] request}");
 
-        // 1. Pull the trace and span ids from the incoming traceparent
-        let mut trace_id = None;
-        let mut span_id = None;
-
-        if let Some((parsed_trace_id, parsed_span_id)) = request
+        // 1. Pull the incoming traceparent
+        //    If the request doesn't specify one then use an empty sampled context
+        let traceparent = request
             .headers
             .get("traceparent")
-            .and_then(|traceparent| crate::traceparent::parse(traceparent).ok())
-        {
-            trace_id = Some(parsed_trace_id);
-            span_id = Some(parsed_span_id);
-        }
+            .and_then(|traceparent| emit_traceparent::Traceparent::try_from_str(traceparent).ok())
+            .unwrap_or_else(|| emit_traceparent::Traceparent::current());
 
-        // 2. Push the trace and span ids to the current emit context
-        //    This ensures any spans created in the request use the same
-        //    trace id, and set their parent span ids appropriately
-        emit::Frame::push(
-            emit::ctxt(),
-            emit::props! {
-                trace_id,
-                span_id,
-            },
-        )
-        .call(|| {
+        // 2. Push the traceparent onto the context
+        traceparent.push().call(move || {
             // 3. Handle your request within the frame
             route(&request.method, &request.path)
-        });
+        })
     }
 
     pub fn outgoing(mut request: HttpRequest) {
-        // Adding the traceparent from the current context onto a HTTP request
+        // 1. Get the current traceparent
+        let traceparent = emit_traceparent::Traceparent::current();
 
-        // 1. Pull the trace and span ids from the current context
-        let (trace_id, span_id) = emit::Frame::current(emit::ctxt()).with(|current| {
-            (
-                current.pull(emit::well_known::KEY_TRACE_ID),
-                current.pull(emit::well_known::KEY_SPAN_ID),
-            )
-        });
-
-        // 2. Format them as a traceparent header
-        if let Some(traceparent) = crate::traceparent::format(trace_id, span_id) {
-            // 3. Add the traceparent to the outgoing request
-            request.headers.insert("traceparent".into(), traceparent);
+        if traceparent.is_valid() {
+            // 2. Add the traceparent to the outgoing request
+            request
+                .headers
+                .insert("traceparent".into(), traceparent.to_string());
         }
 
         emit::debug!("Outbound {#[emit::as_serde] request}");
