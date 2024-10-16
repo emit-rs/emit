@@ -1,7 +1,0 @@
-error[E0562]: `impl Trait` is not allowed in the type of variable bindings
- --> src/compile_fail/std/span_ok_lvl_impl_trait_return.rs:6:29
-  |
-6 | fn try_work() -> Result<(), impl std::error::Error> {
-  |                             ^^^^^^^^^^^^^^^^^^^^^^
-  |
-  = note: `impl Trait` is only allowed in arguments and return types of functions and methods

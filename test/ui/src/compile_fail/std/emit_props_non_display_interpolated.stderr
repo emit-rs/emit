@@ -1,4 +1,4 @@
-error[E0277]: capturing requires `NotDisplay: Display + Any` by default. If this value does implement `Display`, then dereference or annotate it with `#[emit::as_display]`. If it doesn't, then use one of the `#[emit::as_*]` attributes to capture this value using a trait it does implement.
+error[E0277]: capturing requires `NotDisplay` implements `Display + Any` by default. If this value does implement `Display`, then dereference or annotate it with `#[emit::as_display]`. If it doesn't, then use one of the `#[emit::as_*]` attributes to capture this value using a trait it does implement.
  --> src/compile_fail/std/emit_props_non_display_interpolated.rs:4:28
   |
 4 |     emit::emit!("template {x}");

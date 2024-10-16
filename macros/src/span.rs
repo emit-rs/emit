@@ -1,7 +1,7 @@
 use proc_macro2::{Ident, Span, TokenStream};
 use syn::{
     parse::Parse, spanned::Spanned, Block, Expr, ExprAsync, ExprBlock, FieldValue, Item, ItemFn,
-    ReturnType, Signature, Stmt,
+    Signature, Stmt,
 };
 
 use crate::{
@@ -109,12 +109,9 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         // A synchronous function
         Stmt::Item(Item::Fn(ItemFn {
             block,
-            sig:
-                Signature {
-                    asyncness: None,
-                    output,
-                    ..
-                },
+            sig: Signature {
+                asyncness: None, ..
+            },
             ..
         })) => {
             **block = syn::parse2::<Block>(inject_sync(
@@ -125,7 +122,6 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &ctxt_props,
                 &span_guard,
                 quote!(#block),
-                body_ret_ty_tokens(output),
                 default_lvl_tokens,
                 ok_lvl_tokens,
                 err_lvl_tokens,
@@ -141,7 +137,6 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &ctxt_props,
                 &span_guard,
                 quote!(#block),
-                body_ret_ty_tokens(&ReturnType::Default),
                 default_lvl_tokens,
                 ok_lvl_tokens,
                 err_lvl_tokens,
@@ -150,12 +145,9 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         // An asynchronous function
         Stmt::Item(Item::Fn(ItemFn {
             block,
-            sig:
-                Signature {
-                    asyncness: Some(_),
-                    output,
-                    ..
-                },
+            sig: Signature {
+                asyncness: Some(_), ..
+            },
             ..
         })) => {
             **block = syn::parse2::<Block>(inject_async(
@@ -166,7 +158,6 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &ctxt_props,
                 &span_guard,
                 quote!(#block),
-                body_ret_ty_tokens(output),
                 default_lvl_tokens,
                 ok_lvl_tokens,
                 err_lvl_tokens,
@@ -182,7 +173,6 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &ctxt_props,
                 &span_guard,
                 quote!(#block),
-                body_ret_ty_tokens(&ReturnType::Default),
                 default_lvl_tokens,
                 ok_lvl_tokens,
                 err_lvl_tokens,
@@ -202,7 +192,6 @@ fn inject_sync(
     ctxt_props: &Props,
     span_guard: &Ident,
     body_tokens: TokenStream,
-    body_ret_ty_tokens: TokenStream,
     default_lvl_tokens: Option<TokenStream>,
     ok_lvl_tokens: Option<TokenStream>,
     err_lvl_tokens: Option<TokenStream>,
@@ -224,8 +213,7 @@ fn inject_sync(
         // We also need to specify the return type, otherwise inference seems to fail.
         // We might be able to avoid this in the future
         let body_tokens = quote!((move || {
-            let __r: #body_ret_ty_tokens = #body_tokens;
-            __r
+            #body_tokens
         })());
 
         result_completion(
@@ -268,7 +256,6 @@ fn inject_async(
     ctxt_props: &Props,
     span_guard: &Ident,
     body_tokens: TokenStream,
-    body_ret_ty_tokens: TokenStream,
     default_lvl_tokens: Option<TokenStream>,
     ok_lvl_tokens: Option<TokenStream>,
     err_lvl_tokens: Option<TokenStream>,
@@ -286,8 +273,7 @@ fn inject_async(
         // our matching of the result, and provide a concrete type
         // for inference
         let body_tokens = quote!(async move {
-            let __r: #body_ret_ty_tokens = #body_tokens;
-            __r
+            #body_tokens
         }.await);
 
         result_completion(
@@ -323,13 +309,6 @@ fn inject_async(
     }))
 }
 
-fn body_ret_ty_tokens(output: &ReturnType) -> TokenStream {
-    match output {
-        ReturnType::Type(_, ty) => quote!(#ty),
-        _ => quote!(_),
-    }
-}
-
 struct Completion {
     body_tokens: TokenStream,
     span_evt_props_tokens: TokenStream,
@@ -349,21 +328,19 @@ fn result_completion(
     // We'll attach the error to the span if the call fails and set the appropriate level
 
     let ok_branch = {
-        let mut evt_props = Props::new();
-        push_evt_props(
-            &mut evt_props,
-            ok_lvl_tokens.or_else(|| default_lvl_tokens.clone()),
-        )?;
-        let span_evt_props_tokens = evt_props.props_tokens();
+        let lvl_tokens = ok_lvl_tokens
+            .map(|lvl| lvl.to_ref_tokens())
+            .or_else(|| default_lvl_tokens.as_ref().map(|lvl| lvl.to_ref_tokens()))
+            .to_option_tokens(quote!(&emit::Level));
 
         quote!(
             Ok(ok) => {
                 #span_guard.complete_with(|span| {
-                    emit::__private::__private_complete_span(
+                    emit::__private::__private_complete_span_ok(
                         #rt_tokens,
                         span,
                         #template_tokens,
-                        #span_evt_props_tokens,
+                        #lvl_tokens,
                     )
                 });
 
@@ -375,22 +352,20 @@ fn result_completion(
     let err_branch = {
         let err_ident = Ident::new(emit_core::well_known::KEY_ERR, Span::call_site());
 
-        let mut evt_props = Props::new();
-        push_evt_props(
-            &mut evt_props,
-            err_lvl_tokens.or_else(|| default_lvl_tokens.clone()),
-        )?;
-        evt_props.push(&syn::parse2::<FieldValue>(quote!(#err_ident))?, false, true)?;
-        let span_evt_props_tokens = evt_props.props_tokens();
+        let lvl_tokens = err_lvl_tokens
+            .map(|lvl| lvl.to_ref_tokens())
+            .or_else(|| default_lvl_tokens.as_ref().map(|lvl| lvl.to_ref_tokens()))
+            .to_option_tokens(quote!(&emit::Level));
 
         quote!(
             Err(#err_ident) => {
                 #span_guard.complete_with(|span| {
-                    emit::__private::__private_complete_span(
+                    emit::__private::__private_complete_span_err(
                         #rt_tokens,
                         span,
                         #template_tokens,
-                        #span_evt_props_tokens,
+                        #lvl_tokens,
+                        &#err_ident,
                     )
                 });
 
