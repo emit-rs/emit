@@ -29,9 +29,9 @@ Event {
 
 `emit` also defines macros for emitting events at different levels for filtering:
 
-- [`debug!`](https://docs.rs/emit/0.11.0-alpha.18/emit/macro.debug.html) for events supporting live debugging.
-- [`info!`](https://docs.rs/emit/0.11.0-alpha.18/emit/macro.info.html) for most informative events.
-- [`warn!`](https://docs.rs/emit/0.11.0-alpha.18/emit/macro.warn.html) for errors that didn't cause the calling operation to fail.
-- [`error!`](https://docs.rs/emit/0.11.0-alpha.18/emit/macro.error.html) for errors that caused the calling operation to fail.
+- [`debug!`](https://docs.rs/emit/0.11.0-alpha.19/emit/macro.debug.html) for events supporting live debugging.
+- [`info!`](https://docs.rs/emit/0.11.0-alpha.19/emit/macro.info.html) for most informative events.
+- [`warn!`](https://docs.rs/emit/0.11.0-alpha.19/emit/macro.warn.html) for errors that didn't cause the calling operation to fail.
+- [`error!`](https://docs.rs/emit/0.11.0-alpha.19/emit/macro.error.html) for errors that caused the calling operation to fail.
 
 See [Levels](./logging/levels.md) for details.
