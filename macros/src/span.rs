@@ -24,6 +24,7 @@ struct Args {
     guard: Option<Ident>,
     ok_lvl: Option<TokenStream>,
     err_lvl: Option<TokenStream>,
+    err: Option<TokenStream>,
 }
 
 impl Parse for Args {
@@ -53,6 +54,11 @@ impl Parse for Args {
 
             Ok(quote_spanned!(expr.span()=> #expr))
         });
+        let mut err = Arg::token_stream("err", |fv| {
+            let expr = &fv.expr;
+
+            Ok(quote_spanned!(expr.span()=> #expr))
+        });
         let mut guard = Arg::ident("guard");
 
         args::set_from_field_values(
@@ -64,6 +70,7 @@ impl Parse for Args {
                 &mut when,
                 &mut ok_lvl,
                 &mut err_lvl,
+                &mut err,
             ],
         )?;
 
@@ -73,6 +80,7 @@ impl Parse for Args {
             when: when.take_or_default(),
             ok_lvl: ok_lvl.take_if_std()?,
             err_lvl: err_lvl.take_if_std()?,
+            err: err.take(),
             guard: guard.take(),
         })
     }
@@ -95,6 +103,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     let default_lvl_tokens = opts.level;
     let ok_lvl_tokens = args.ok_lvl;
     let err_lvl_tokens = args.err_lvl;
+    let err_tokens = args.err;
 
     let rt_tokens = args.rt.to_tokens()?.to_ref_tokens();
     let mdl_tokens = args.mdl.to_tokens();
@@ -125,6 +134,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 default_lvl_tokens,
                 ok_lvl_tokens,
                 err_lvl_tokens,
+                err_tokens,
             )?)?;
         }
         // A synchronous block
@@ -140,6 +150,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 default_lvl_tokens,
                 ok_lvl_tokens,
                 err_lvl_tokens,
+                err_tokens,
             )?)?;
         }
         // An asynchronous function
@@ -161,6 +172,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 default_lvl_tokens,
                 ok_lvl_tokens,
                 err_lvl_tokens,
+                err_tokens,
             )?)?;
         }
         // An asynchronous block
@@ -176,6 +188,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 default_lvl_tokens,
                 ok_lvl_tokens,
                 err_lvl_tokens,
+                err_tokens,
             )?)?;
         }
         _ => return Err(syn::Error::new(item.span(), "unrecognized item type")),
@@ -195,6 +208,7 @@ fn inject_sync(
     default_lvl_tokens: Option<TokenStream>,
     ok_lvl_tokens: Option<TokenStream>,
     err_lvl_tokens: Option<TokenStream>,
+    err_tokens: Option<TokenStream>,
 ) -> Result<TokenStream, syn::Error> {
     let ctxt_props_tokens = ctxt_props.props_tokens();
     let template_tokens = template.template_tokens().to_ref_tokens();
@@ -204,7 +218,7 @@ fn inject_sync(
         body_tokens,
         span_evt_props_tokens,
         default_completion_tokens,
-    } = if ok_lvl_tokens.is_some() || err_lvl_tokens.is_some() {
+    } = if use_result_completion(&ok_lvl_tokens, &err_lvl_tokens, &err_tokens) {
         // Wrap the body in a closure so we can rely on code running afterwards
         // without control flow statements like `return` getting in the way
         //
@@ -221,6 +235,7 @@ fn inject_sync(
             default_lvl_tokens,
             ok_lvl_tokens,
             err_lvl_tokens,
+            err_tokens,
             span_guard,
             rt_tokens,
             &template_tokens,
@@ -259,6 +274,7 @@ fn inject_async(
     default_lvl_tokens: Option<TokenStream>,
     ok_lvl_tokens: Option<TokenStream>,
     err_lvl_tokens: Option<TokenStream>,
+    err_tokens: Option<TokenStream>,
 ) -> Result<TokenStream, syn::Error> {
     let ctxt_props_tokens = ctxt_props.props_tokens();
     let template_tokens = template.template_tokens().to_ref_tokens();
@@ -268,7 +284,7 @@ fn inject_async(
         body_tokens,
         span_evt_props_tokens,
         default_completion_tokens,
-    } = if ok_lvl_tokens.is_some() || err_lvl_tokens.is_some() {
+    } = if use_result_completion(&ok_lvl_tokens, &err_lvl_tokens, &err_tokens) {
         // Like the sync case, ensure control flow doesn't interrupt
         // our matching of the result, and provide a concrete type
         // for inference
@@ -281,6 +297,7 @@ fn inject_async(
             default_lvl_tokens,
             ok_lvl_tokens,
             err_lvl_tokens,
+            err_tokens,
             span_guard,
             rt_tokens,
             &template_tokens,
@@ -315,11 +332,20 @@ struct Completion {
     default_completion_tokens: TokenStream,
 }
 
+fn use_result_completion(
+    ok_lvl_tokens: &Option<TokenStream>,
+    err_lvl_tokens: &Option<TokenStream>,
+    err_tokens: &Option<TokenStream>,
+) -> bool {
+    ok_lvl_tokens.is_some() || err_lvl_tokens.is_some() || err_tokens.is_some()
+}
+
 fn result_completion(
     body_tokens: TokenStream,
     default_lvl_tokens: Option<TokenStream>,
     ok_lvl_tokens: Option<TokenStream>,
     err_lvl_tokens: Option<TokenStream>,
+    err_tokens: Option<TokenStream>,
     span_guard: &Ident,
     rt_tokens: &TokenStream,
     template_tokens: &TokenStream,
@@ -352,10 +378,20 @@ fn result_completion(
     let err_branch = {
         let err_ident = Ident::new(emit_core::well_known::KEY_ERR, Span::call_site());
 
+        // In the error case, we don't just defer to the default level
+        // If none is set then we'll mark it as an error
         let lvl_tokens = err_lvl_tokens
             .map(|lvl| lvl.to_ref_tokens())
             .or_else(|| default_lvl_tokens.as_ref().map(|lvl| lvl.to_ref_tokens()))
-            .to_option_tokens(quote!(&emit::Level));
+            .unwrap_or_else(|| {
+                let err_lvl = emit_core::well_known::LVL_ERROR;
+
+                quote!(#err_lvl)
+            });
+
+        let err_tokens = err_tokens
+            .map(|mapper| quote!((#mapper)(&#err_ident)))
+            .unwrap_or_else(|| quote!(&#err_ident));
 
         quote!(
             Err(#err_ident) => {
@@ -365,7 +401,7 @@ fn result_completion(
                         span,
                         #template_tokens,
                         #lvl_tokens,
-                        &#err_ident,
+                        #err_tokens,
                     )
                 });
 
