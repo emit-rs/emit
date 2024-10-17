@@ -161,6 +161,16 @@ impl<C: Ctxt> Frame<C> {
     }
 }
 
+impl<C: Ctxt> Drop for Frame<C> {
+    fn drop(&mut self) {
+        // SAFETY: We're being dropped, so won't access fields again
+        let ctxt = unsafe { mem::ManuallyDrop::take(&mut self.ctxt) };
+        let scope = unsafe { mem::ManuallyDrop::take(&mut self.scope) };
+
+        ctxt.close(scope)
+    }
+}
+
 /**
 The result of calling [`Frame::enter`].
 
@@ -184,16 +194,6 @@ impl<'a, C: Ctxt> EnterGuard<'a, C> {
 impl<'a, C: Ctxt> Drop for EnterGuard<'a, C> {
     fn drop(&mut self) {
         self.scope.ctxt.exit(&mut self.scope.scope);
-    }
-}
-
-impl<C: Ctxt> Drop for Frame<C> {
-    fn drop(&mut self) {
-        // SAFETY: We're being dropped, so won't access `scope` again
-        let ctxt = unsafe { mem::ManuallyDrop::take(&mut self.ctxt) };
-        let scope = unsafe { mem::ManuallyDrop::take(&mut self.scope) };
-
-        ctxt.close(scope)
     }
 }
 
