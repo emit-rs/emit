@@ -35,6 +35,9 @@ version = "2"
 version = "2"
 features = ["std"]
 
+[dependencies.anyhow]
+version = "1"
+
 [dependencies.trybuild]
 version = "1"
 

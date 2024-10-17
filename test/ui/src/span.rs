@@ -377,7 +377,7 @@ fn span_ok_lvl() {
                     .unwrap()
                     .to_string()
             );
-            assert!(evt.props().get("lvl").is_none());
+            assert_eq!(Some(emit::Level::Error), evt.props().pull("lvl"));
         },
         |evt| {
             assert!(evt.props().get("lvl").is_none());
@@ -577,6 +577,43 @@ async fn span_err_lvl_impl_return_async() {
     }
 
     exec(true).await.unwrap_err();
+}
+
+#[test]
+#[cfg(feature = "std")]
+fn span_err() {
+    use std::io;
+
+    static ERR_RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!(
+                "failed",
+                evt.props()
+                    .pull::<&(dyn std::error::Error + 'static), _>("err")
+                    .unwrap()
+                    .to_string()
+            );
+            assert_eq!(
+                emit::Level::Error,
+                evt.props().pull::<emit::Level, _>("lvl").unwrap()
+            );
+        },
+        |_| true,
+    );
+
+    fn as_err(err: &anyhow::Error) -> &(dyn std::error::Error + 'static) {
+        err.as_ref()
+    }
+
+    #[emit::span(rt: ERR_RT, err: as_err, "test")]
+    fn exec_err() -> Result<(), anyhow::Error> {
+        Err(anyhow::Error::from(io::Error::new(
+            io::ErrorKind::Other,
+            "failed",
+        )))
+    }
+
+    exec_err().unwrap_err();
 }
 
 #[test]

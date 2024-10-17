@@ -828,7 +828,7 @@ pub fn __private_complete_span_ok<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clo
     rt: &'a Runtime<E, F, C, T, R>,
     span: Span<'static, Empty>,
     tpl: &'b (impl TplControlParam + ?Sized),
-    lvl: Option<&'b impl CaptureLevel>,
+    lvl: Option<&'b (impl CaptureLevel + ?Sized)>,
 ) {
     let lvl_prop = lvl.and_then(|lvl| lvl.capture()).map(|lvl| (KEY_LVL, lvl));
 
@@ -848,10 +848,10 @@ pub fn __private_complete_span_err<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Cl
     rt: &'a Runtime<E, F, C, T, R>,
     span: Span<'static, Empty>,
     tpl: &'b (impl TplControlParam + ?Sized),
-    lvl: Option<&'b impl CaptureLevel>,
-    err: &'b impl CaptureAsError,
+    lvl: &'b (impl CaptureLevel + ?Sized),
+    err: &'b (impl CaptureAsError + ?Sized),
 ) {
-    let lvl_prop = lvl.and_then(|lvl| lvl.capture()).map(|lvl| (KEY_LVL, lvl));
+    let lvl_prop = lvl.capture().map(|lvl| (KEY_LVL, lvl));
     let err_prop = err.capture().map(|err| (KEY_ERR, err));
 
     emit_core::emit(
