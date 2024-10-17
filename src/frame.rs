@@ -20,7 +20,7 @@ A frame can be converted into a future through [`Frame::in_future`] that enters 
 */
 pub struct Frame<C: Ctxt> {
     scope: mem::ManuallyDrop<C::Frame>,
-    ctxt: C,
+    ctxt: mem::ManuallyDrop<C>,
 }
 
 impl<C: Ctxt> Frame<C> {
@@ -39,9 +39,9 @@ impl<C: Ctxt> Frame<C> {
     #[track_caller]
     #[must_use = "call `enter`, `call`, or `in_future` to make the pushed properties active"]
     pub fn push(ctxt: C, props: impl Props) -> Self {
-        let scope = mem::ManuallyDrop::new(ctxt.open_push(props));
+        let scope = ctxt.open_push(props);
 
-        Frame { ctxt, scope }
+        Self::from_parts(ctxt, scope)
     }
 
     /**
@@ -50,9 +50,9 @@ impl<C: Ctxt> Frame<C> {
     #[track_caller]
     #[must_use = "call `enter`, `call`, or `in_future` to make the properties active"]
     pub fn root(ctxt: C, props: impl Props) -> Self {
-        let scope = mem::ManuallyDrop::new(ctxt.open_root(props));
+        let scope = ctxt.open_root(props);
 
-        Frame { ctxt, scope }
+        Self::from_parts(ctxt, scope)
     }
 
     /**
@@ -63,9 +63,9 @@ impl<C: Ctxt> Frame<C> {
     #[track_caller]
     #[must_use = "call `enter`, `call`, or `in_future` to make the properties active"]
     pub fn disabled(ctxt: C, props: impl Props) -> Self {
-        let scope = mem::ManuallyDrop::new(ctxt.open_disabled(props));
+        let scope = ctxt.open_disabled(props);
 
-        Frame { ctxt, scope }
+        Self::from_parts(ctxt, scope)
     }
 
     /**
@@ -129,6 +129,36 @@ impl<C: Ctxt> Frame<C> {
     pub fn inner_mut(&mut self) -> &mut C::Frame {
         &mut self.scope
     }
+
+    /**
+    Create a frame from its constituent parts.
+
+    In order to be correct, this method requires:
+
+    1. That `scope` was created by `ctxt`.
+    2. That `scope` is not currently entered.
+    */
+    pub const fn from_parts(ctxt: C, scope: C::Frame) -> Self {
+        let scope = mem::ManuallyDrop::new(scope);
+        let ctxt = mem::ManuallyDrop::new(ctxt);
+
+        Frame { ctxt, scope }
+    }
+
+    /**
+    Split the frame into its raw parts.
+
+    The original frame can be re-constituted by calling [`Frame::from_parts`].
+    */
+    pub fn into_parts(mut self) -> (C, C::Frame) {
+        // SAFETY: We're moving ownership out of `Frame` without running its `Drop`
+        let ctxt = unsafe { mem::ManuallyDrop::take(&mut self.ctxt) };
+        let scope = unsafe { mem::ManuallyDrop::take(&mut self.scope) };
+
+        mem::forget(self);
+
+        (ctxt, scope)
+    }
 }
 
 /**
@@ -160,8 +190,10 @@ impl<'a, C: Ctxt> Drop for EnterGuard<'a, C> {
 impl<C: Ctxt> Drop for Frame<C> {
     fn drop(&mut self) {
         // SAFETY: We're being dropped, so won't access `scope` again
-        self.ctxt
-            .close(unsafe { mem::ManuallyDrop::take(&mut self.scope) })
+        let ctxt = unsafe { mem::ManuallyDrop::take(&mut self.ctxt) };
+        let scope = unsafe { mem::ManuallyDrop::take(&mut self.scope) };
+
+        ctxt.close(scope)
     }
 }
 
@@ -192,6 +224,27 @@ impl<C: Ctxt, F: Future> Future for FrameFuture<C, F> {
 mod tests {
     #[cfg(feature = "std")]
     use super::*;
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn frame_manual() {
+        let ctxt = crate::platform::thread_local_ctxt::ThreadLocalCtxt::new();
+
+        let frame = Frame::push(&ctxt, ("a", 1));
+
+        let (ctxt, mut inner) = frame.into_parts();
+        ctxt.enter(&mut inner);
+
+        ctxt.with_current(|props| {
+            assert_eq!(1, props.pull::<i32, _>("a").unwrap());
+        });
+
+        ctxt.exit(&mut inner);
+
+        let frame = Frame::from_parts(ctxt, inner);
+
+        drop(frame);
+    }
 
     #[cfg(feature = "std")]
     #[test]
