@@ -350,6 +350,48 @@ fn span_when() {
 }
 
 #[test]
+fn span_explicit_ids() {
+    static CALLED: StaticCalled = StaticCalled::new();
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!(emit::TraceId::from_u128(1), evt.props().pull("trace_id"));
+            assert_eq!(emit::SpanId::from_u64(2), evt.props().pull("span_parent"));
+            assert_eq!(emit::SpanId::from_u64(3), evt.props().pull("span_id"));
+
+            CALLED.record();
+        },
+        |evt| {
+            assert_eq!(emit::TraceId::from_u128(1), evt.props().pull("trace_id"));
+            assert_eq!(emit::SpanId::from_u64(2), evt.props().pull("span_parent"));
+            assert_eq!(emit::SpanId::from_u64(3), evt.props().pull("span_id"));
+            
+            true
+        },
+    );
+
+    #[emit::span(rt: RT, "test", trace_id, span_parent, span_id)]
+    fn exec(
+        trace_id: &str,
+        span_parent: &str,
+        span_id: &str,
+    ) {
+        let ctxt = emit::SpanCtxt::current(RT.ctxt());
+
+        assert_eq!(emit::TraceId::from_u128(1), ctxt.trace_id().copied());
+        assert_eq!(emit::SpanId::from_u64(2), ctxt.span_parent().copied());
+        assert_eq!(emit::SpanId::from_u64(3), ctxt.span_id().copied());
+    }
+
+    exec(
+        "00000000000000000000000000000001",
+        "0000000000000002",
+        "0000000000000003",
+    );
+
+    assert!(CALLED.was_called());
+}
+
+#[test]
 #[cfg(feature = "std")]
 fn span_ok_lvl() {
     use std::io;

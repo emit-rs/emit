@@ -783,10 +783,8 @@ pub fn __private_begin_span<
                     |span_props| {
                         span_evt_props
                             .and_props(span_props)
-                            // These props will be pushed onto the context
-                            // if the filter matches, so are only needed explicitly here
-                            .and_props(&span_ctxt)
                             .and_props(&span_ctxt_props)
+                            .and_props(&span_ctxt)
                             .and_props(ctxt_props)
                     },
                 ))
@@ -795,6 +793,8 @@ pub fn __private_begin_span<
         mdl,
         Timer::start(rt.clock()),
         name,
+        // NOTE: We could avoid constructing a context if `span_ctxt_props`
+        // already carries trace/span ids
         SpanCtxt::current(rt.ctxt()).new_child(rt.rng()),
         Empty,
         default_complete,
