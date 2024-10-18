@@ -21,6 +21,9 @@ path = "../../traceparent"
 [dependencies.thiserror]
 version = "1"
 
+[dependencies.anyhow]
+version = "1"
+
 [dependencies.serde]
 version = "1"
 features = ["derive"]
@@ -60,6 +63,10 @@ path = "filter_per_emitter.rs"
 [[example]]
 name = "span_fallible_completion"
 path = "span_fallible_completion.rs"
+
+[[example]]
+name = "span_fallible_anyhow"
+path = "span_fallible_anyhow.rs"
 
 [[example]]
 name = "span_manual_completion"

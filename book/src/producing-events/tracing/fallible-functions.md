@@ -60,3 +60,62 @@ Event {
     },
 }
 ```
+
+## Mapping error types
+
+Attaching errors to spans requires they're either [`&str`](https://doc.rust-lang.org/std/primitive.str.html), [`&(dyn std::error::Error + 'static)`](https://doc.rust-lang.org/std/error/trait.Error.html#impl-dyn+Error), or [`impl std::error::Error`](https://doc.rust-lang.org/std/error/trait.Error.html). Error types like [`anyhow::Error`](https://docs.rs/anyhow/latest/anyhow/) don't satisfy these requirements so need to be mapped.
+
+The `err` [control parameter](../../reference/control-parameters.md) can be used to map the error type of a fallible span into one that can be captured:
+
+```rust
+# extern crate emit;
+# extern crate anyhow;
+#[emit::span(
+    ok_lvl: emit::Level::Info,
+    err: anyhow_err,
+    "wait a bit",
+    sleep_ms,
+)]
+fn wait_a_bit(sleep_ms: u64) -> Result<(), anyhow::Error> {
+    if sleep_ms > 500 {
+        return Err(anyhow::Error::msg("the wait is too long"));
+    }
+
+    std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
+
+    Ok(())
+}
+
+fn anyhow_err(err: &anyhow::Error) -> &(dyn std::error::Error + 'static) {
+    err.as_ref()
+}
+
+let _ = wait_a_bit(100);
+let _ = wait_a_bit(1200);
+```
+
+The `err` control parameter accepts an expression that implements `Fn(&E) -> U`, which can either be provided as a closure inline, or as an external function like `anyhow_err` in the above example.
+
+If your error type can't be mapped, you can also fall back to just providing a static string description as the error value:
+
+```rust
+# extern crate emit;
+#[emit::span(
+    ok_lvl: emit::Level::Info,
+    err: (|_| "wait a bit failed"),
+    "wait a bit",
+    sleep_ms,
+)]
+fn wait_a_bit(sleep_ms: u64) -> Result<(), ()> {
+    if sleep_ms > 500 {
+        return Err(());
+    }
+
+    std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
+
+    Ok(())
+}
+
+let _ = wait_a_bit(100);
+let _ = wait_a_bit(1200);
+```
