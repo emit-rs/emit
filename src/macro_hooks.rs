@@ -320,7 +320,9 @@ impl CaptureAsError for str {
     }
 }
 
-#[diagnostic::on_unimplemented(message = "capturing a span id requires a `str` or `SpanId`.")]
+#[diagnostic::on_unimplemented(
+    message = "capturing a span id requires a `str`, `u64`, or `SpanId`."
+)]
 pub trait CaptureSpanId {
     fn capture(&self) -> Option<Value>;
 }
@@ -343,13 +345,21 @@ impl CaptureSpanId for str {
     }
 }
 
+impl CaptureSpanId for u64 {
+    fn capture(&self) -> Option<Value> {
+        Some(self.to_value())
+    }
+}
+
 impl<T: CaptureSpanId> CaptureSpanId for Option<T> {
     fn capture(&self) -> Option<Value> {
         self.as_ref().and_then(|v| v.capture())
     }
 }
 
-#[diagnostic::on_unimplemented(message = "capturing a trace id requires a `str` or `TraceId`.")]
+#[diagnostic::on_unimplemented(
+    message = "capturing a trace id requires a `str`, `u128`, or `TraceId`."
+)]
 pub trait CaptureTraceId {
     fn capture(&self) -> Option<Value>;
 }
@@ -367,6 +377,12 @@ impl CaptureTraceId for TraceId {
 }
 
 impl CaptureTraceId for str {
+    fn capture(&self) -> Option<Value> {
+        Some(self.to_value())
+    }
+}
+
+impl CaptureTraceId for u128 {
     fn capture(&self) -> Option<Value> {
         Some(self.to_value())
     }

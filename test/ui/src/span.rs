@@ -414,13 +414,11 @@ fn span_explicit_ids_ctxt() {
         assert_eq!(ctxt, current);
     }
 
-    exec(
-        emit::SpanCtxt::new(
-            emit::TraceId::from_u128(1),
-            emit::SpanId::from_u64(2),
-            emit::SpanId::from_u64(3),
-        ),
-    );
+    exec(emit::SpanCtxt::new(
+        emit::TraceId::from_u128(1),
+        emit::SpanId::from_u64(2),
+        emit::SpanId::from_u64(3),
+    ));
 
     assert!(CALLED.was_called());
 }
