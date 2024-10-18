@@ -353,6 +353,18 @@ impl<'a, TEmitter: Emitter + ?Sized, TCtxt: Ctxt + ?Sized> Init<'a, TEmitter, TC
     Flush the runtime when the returned guard is dropped, ensuring all diagnostic events are fully processed.
 
     This method forwards to [`Emitter::blocking_flush`], which has details on how the timeout is handled.
+
+    **Important:** Ensure you bind an identifier to this method, otherwise it will be immediately dropped instead of at the end of your `main`:
+
+    ```
+    # use std::time::Duration;
+    fn main() {
+        // Use an ident like `_guard`, not `_`
+        let _guard = emit::setup().init().flush_on_drop(Duration::from_secs(5));
+
+        // Your code goes here
+    }
+    ```
     */
     pub fn flush_on_drop(self, timeout: Duration) -> InitGuard<'a, TEmitter, TCtxt> {
         InitGuard {
