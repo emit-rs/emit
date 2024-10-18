@@ -239,7 +239,7 @@ where
 
     This method initializes [`crate::runtime::shared`].
     */
-    #[must_use = "call `blocking_flush` at the end of `main` to ensure events are flushed."]
+    #[must_use = "call `flush_on_drop` or call `blocking_flush` at the end of `main` to ensure events are flushed."]
     #[cfg(feature = "implicit_rt")]
     pub fn init(self) -> Init<'static, TEmitter, TCtxt> {
         self.init_slot(emit_core::runtime::shared_slot())
@@ -248,7 +248,7 @@ where
     /**
     Initialize a runtime in the given static `slot`.
     */
-    #[must_use = "call `blocking_flush` at the end of `main` to ensure events are flushed."]
+    #[must_use = "call `flush_on_drop` or call `blocking_flush` at the end of `main` to ensure events are flushed."]
     pub fn init_slot<'a>(self, slot: &'a AmbientSlot) -> Init<'a, TEmitter, TCtxt> {
         let ambient = slot
             .init(
@@ -282,7 +282,7 @@ where
 
     This method initializes [`crate::runtime::internal`].
     */
-    #[must_use = "call `blocking_flush` at the end of `main` (after flushing the main runtime) to ensure events are flushed."]
+    #[must_use = "call `flush_on_drop` or call `blocking_flush` at the end of `main` (after flushing the main runtime) to ensure events are flushed."]
     #[cfg(feature = "implicit_internal_rt")]
     pub fn init_internal(self) -> Init<'static, TEmitter, TCtxt> {
         let slot = emit_core::runtime::internal_slot();
@@ -334,6 +334,13 @@ impl<'a, TEmitter: Emitter + ?Sized, TCtxt: Ctxt + ?Sized> Init<'a, TEmitter, TC
     }
 
     /**
+    Get the underlying runtime that was initialized.
+    */
+    pub fn get(&self) -> &'a AmbientRuntime<'a> {
+        self.rt
+    }
+
+    /**
     Flush the runtime, ensuring all diagnostic events are fully processed.
 
     This method forwards to [`Emitter::blocking_flush`], which has details on how the timeout is handled.
@@ -343,9 +350,43 @@ impl<'a, TEmitter: Emitter + ?Sized, TCtxt: Ctxt + ?Sized> Init<'a, TEmitter, TC
     }
 
     /**
-    Get the underlying runtime that was initialized.
+    Flush the runtime when the returned guard is dropped, ensuring all diagnostic events are fully processed.
+
+    This method forwards to [`Emitter::blocking_flush`], which has details on how the timeout is handled.
     */
-    pub fn get(&self) -> &'a AmbientRuntime<'a> {
-        self.rt
+    pub fn flush_on_drop(self, timeout: Duration) -> InitGuard<'a, TEmitter, TCtxt> {
+        InitGuard {
+            inner: self,
+            timeout,
+        }
+    }
+}
+
+/**
+The result of calling [`Init::flush_on_drop`].
+
+This type is a guard that will call [`Init::blocking_flush`] when it goes out of scope. It helps ensure diagnostics are emitted, even if a panic unwinds through your `main` function.
+*/
+pub struct InitGuard<
+    'a,
+    TEmitter: Emitter + ?Sized = DefaultEmitter,
+    TCtxt: Ctxt + ?Sized = DefaultCtxt,
+> {
+    inner: Init<'a, TEmitter, TCtxt>,
+    timeout: Duration,
+}
+
+impl<'a, TEmitter: Emitter + ?Sized, TCtxt: Ctxt + ?Sized> InitGuard<'a, TEmitter, TCtxt> {
+    /**
+    Get the inner [`Init`] value, which can then be used to get the underlying [`AmbientRuntime`].
+    */
+    pub fn inner(&self) -> &Init<'a, TEmitter, TCtxt> {
+        &self.inner
+    }
+}
+
+impl<'a, TEmitter: Emitter + ?Sized, TCtxt: Ctxt + ?Sized> Drop for InitGuard<'a, TEmitter, TCtxt> {
+    fn drop(&mut self) {
+        self.inner.blocking_flush(self.timeout);
     }
 }
