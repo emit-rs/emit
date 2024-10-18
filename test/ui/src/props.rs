@@ -183,6 +183,20 @@ fn props_capture_trace_id_string() {
 }
 
 #[test]
+fn props_capture_trace_id_u128() {
+    match emit::props! {
+        trace_id: 0x00000000000000000000000000000001u128,
+    } {
+        props => {
+            assert_eq!(
+                emit::TraceId::from_u128(1).unwrap(),
+                props.pull::<emit::TraceId, _>("trace_id").unwrap()
+            );
+        }
+    }
+}
+
+#[test]
 fn props_capture_trace_id_as_non_trace_id() {
     match emit::props! {
         #[emit::as_display(inspect: true)] trace_id: true,
@@ -211,6 +225,20 @@ fn props_capture_span_id() {
 fn props_capture_span_id_string() {
     match emit::props! {
         span_id: "0000000000000001",
+    } {
+        props => {
+            assert_eq!(
+                emit::SpanId::from_u64(1).unwrap(),
+                props.pull::<emit::SpanId, _>("span_id").unwrap()
+            );
+        }
+    }
+}
+
+#[test]
+fn props_capture_span_id_u64() {
+    match emit::props! {
+        span_id: 0x0000000000000001u64,
     } {
         props => {
             assert_eq!(

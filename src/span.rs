@@ -74,6 +74,7 @@ impl<'v> FromValue<'v> for TraceId {
         value
             .downcast_ref::<TraceId>()
             .copied()
+            .or_else(|| u128::from_value(value.by_ref()).and_then(TraceId::from_u128))
             .or_else(|| TraceId::try_from_hex(value).ok())
     }
 }
@@ -225,6 +226,7 @@ impl<'v> FromValue<'v> for SpanId {
         value
             .downcast_ref::<SpanId>()
             .copied()
+            .or_else(|| u64::from_value(value.by_ref()).and_then(SpanId::from_u64))
             .or_else(|| SpanId::try_from_hex(value).ok())
     }
 }
@@ -990,6 +992,14 @@ mod tests {
     }
 
     #[test]
+    fn span_id_from_value_u64() {
+        assert_eq!(
+            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+            Value::from(0x0123456789abcdefu64).cast().unwrap()
+        );
+    }
+
+    #[test]
     fn trace_id_to_from_value() {
         let id = TraceId::from_u128(u128::MAX / 2).unwrap();
 
@@ -1001,6 +1011,16 @@ mod tests {
         assert_eq!(
             TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
             Value::from("0123456789abcdef0123456789abcdef")
+                .cast()
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn trace_id_from_value_u128() {
+        assert_eq!(
+            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+            Value::from(0x0123456789abcdef0123456789abcdefu128)
                 .cast()
                 .unwrap()
         );
