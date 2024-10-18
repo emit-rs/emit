@@ -364,17 +364,13 @@ fn span_explicit_ids() {
             assert_eq!(emit::TraceId::from_u128(1), evt.props().pull("trace_id"));
             assert_eq!(emit::SpanId::from_u64(2), evt.props().pull("span_parent"));
             assert_eq!(emit::SpanId::from_u64(3), evt.props().pull("span_id"));
-            
+
             true
         },
     );
 
     #[emit::span(rt: RT, "test", trace_id, span_parent, span_id)]
-    fn exec(
-        trace_id: &str,
-        span_parent: &str,
-        span_id: &str,
-    ) {
+    fn exec(trace_id: &str, span_parent: &str, span_id: &str) {
         let ctxt = emit::SpanCtxt::current(RT.ctxt());
 
         assert_eq!(emit::TraceId::from_u128(1), ctxt.trace_id().copied());
