@@ -787,20 +787,12 @@ impl<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> SpanGuard<'a, C, P, F> {
         if self.is_enabled() {
             Frame::push(
                 ctxt,
-                self.state
-                    .as_ref()
-                    .expect("span is already complete")
-                    .ctxt
-                    .and_props(ctxt_props),
+                ctxt_props.and_props(self.state.as_ref().expect("span is already complete").ctxt),
             )
         } else {
             Frame::disabled(
                 ctxt,
-                self.state
-                    .as_ref()
-                    .expect("span is already complete")
-                    .ctxt
-                    .and_props(ctxt_props),
+                ctxt_props.and_props(self.state.as_ref().expect("span is already complete").ctxt),
             )
         }
     }
