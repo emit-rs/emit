@@ -195,7 +195,7 @@ This method will use [`runtime::shared()`].
 This method forwards to [`Emitter::blocking_flush`], which has details on how the timeout is handled.
 */
 #[cfg(feature = "implicit_rt")]
-pub fn blocking_flush(timeout: std::time::Duration) -> bool {
+pub fn blocking_flush(timeout: core::time::Duration) -> bool {
     runtime::shared().blocking_flush(timeout)
 }
 
