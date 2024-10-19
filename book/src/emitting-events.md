@@ -131,3 +131,41 @@ let emitter = emit::emitter::from_fn(|evt| println!("{evt:?}"))
 ```
 
 Also see [Filtering events](./filtering-events.md) for more details on filtering in `emit`.
+
+## Flushing
+
+Events may be processed asynchronously, so to ensure they're fulling flushed before your `main` returns, you can call [`blocking_flush`](https://docs.rs/emit/0.11.0-alpha.19/emit/setup/struct.Init.html#method.blocking_flush) at the end of your `main` function:
+
+```rust
+# extern crate emit;
+# extern crate emit_term;
+fn main() {
+    let rt = emit::setup()
+        .emit_to(emit_term::stdout())
+        .init();
+
+    // Your app code goes here
+
+    // Flush at the end of `main`
+    rt.blocking_flush(std::time::Duration::from_secs(5));
+}
+```
+
+It's a good idea to flush even if your emitter isn't asynchronous. In this case it'll be a no-op, but will ensure flushing does happen if you ever introduce an asynchronous emitter in the future.
+
+Instead of `blocking_flush`, you can call [`flush_on_drop`](https://docs.rs/emit/0.11.0-alpha.19/emit/setup/struct.Init.html#method.flush_on_drop):
+
+```rust
+# extern crate emit;
+# extern crate emit_term;
+fn main() {
+    let _rt = emit::setup()
+        .emit_to(emit_term::stdout())
+        .init()
+        .flush_on_drop(std::time::Duration::from_secs(5));
+
+    // Your app code goes here
+}
+```
+
+Once the returned guard goes out of scope it'll call `blocking_flush` for you, even if a panic unwinds through your `main` function. **Make sure you give the guard an identifer like `_rt` and not `_`**, otherwise it will be dropped immediately and not at the end of your `main` function.
