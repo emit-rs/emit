@@ -187,6 +187,18 @@ pub fn rng() -> runtime::AmbientRng<'static> {
     *runtime::shared().rng()
 }
 
+/**
+Flush the runtime, ensuring all diagnostic events are fully processed.
+
+This method will use [`runtime::shared()`].
+
+This method forwards to [`Emitter::blocking_flush`], which has details on how the timeout is handled.
+*/
+#[cfg(feature = "implicit_rt")]
+pub fn blocking_flush(timeout: std::time::Duration) -> bool {
+    runtime::shared().blocking_flush(timeout)
+}
+
 #[doc(hidden)]
 pub mod __private {
     pub extern crate core;
