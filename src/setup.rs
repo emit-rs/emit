@@ -238,6 +238,10 @@ where
     Initialize the default runtime used by `emit` macros.
 
     This method initializes [`crate::runtime::shared`].
+
+    # Panics
+
+    This method will panic if the slot has already been initialized.
     */
     #[must_use = "call `flush_on_drop` or call `blocking_flush` at the end of `main` to ensure events are flushed."]
     #[cfg(feature = "implicit_rt")]
@@ -246,26 +250,51 @@ where
     }
 
     /**
+    Try initialize the default runtime used by `emit` macros.
+
+    This method initializes [`crate::runtime::shared`].
+
+    If the slot is already initialized, this method will return `None`.
+    */
+    #[must_use = "call `flush_on_drop` or call `blocking_flush` at the end of `main` to ensure events are flushed."]
+    #[cfg(feature = "implicit_rt")]
+    pub fn try_init(self) -> Option<Init<'static, TEmitter, TCtxt>> {
+        self.try_init_slot(emit_core::runtime::shared_slot())
+    }
+
+    /**
     Initialize a runtime in the given static `slot`.
+
+    # Panics
+
+    This method will panic if the slot has already been initialized.
     */
     #[must_use = "call `flush_on_drop` or call `blocking_flush` at the end of `main` to ensure events are flushed."]
     pub fn init_slot<'a>(self, slot: &'a AmbientSlot) -> Init<'a, TEmitter, TCtxt> {
-        let ambient = slot
-            .init(
-                emit_core::runtime::Runtime::new()
-                    .with_emitter(self.emitter)
-                    .with_filter(self.filter)
-                    .with_ctxt(self.ctxt)
-                    .with_clock(self.platform.clock)
-                    .with_rng(self.platform.rng),
-            )
-            .expect("already initialized");
+        self.try_init_slot(slot).expect("already initialized")
+    }
 
-        Init {
+    /**
+    Try initialize a runtime in the given static `slot`.
+
+    If the slot is already initialized, this method will return `None`.
+    */
+    #[must_use = "call `flush_on_drop` or call `blocking_flush` at the end of `main` to ensure events are flushed."]
+    pub fn try_init_slot<'a>(self, slot: &'a AmbientSlot) -> Option<Init<'a, TEmitter, TCtxt>> {
+        let ambient = slot.init(
+            emit_core::runtime::Runtime::new()
+                .with_emitter(self.emitter)
+                .with_filter(self.filter)
+                .with_ctxt(self.ctxt)
+                .with_clock(self.platform.clock)
+                .with_rng(self.platform.rng),
+        )?;
+
+        Some(Init {
             rt: slot.get(),
             emitter: *ambient.emitter(),
             ctxt: *ambient.ctxt(),
-        }
+        })
     }
 }
 
@@ -281,28 +310,43 @@ where
     Initialize the internal runtime used for diagnosing runtimes themselves.
 
     This method initializes [`crate::runtime::internal`].
+
+    # Panics
+
+    This method will panic if the slot has already been initialized.
     */
     #[must_use = "call `flush_on_drop` or call `blocking_flush` at the end of `main` (after flushing the main runtime) to ensure events are flushed."]
     #[cfg(feature = "implicit_internal_rt")]
     pub fn init_internal(self) -> Init<'static, TEmitter, TCtxt> {
+        self.try_init_internal().expect("already initialized")
+    }
+
+    /**
+    Initialize the internal runtime used for diagnosing runtimes themselves.
+
+    This method initializes [`crate::runtime::internal`].
+
+    If the slot is already initialized, this method will return `None`.
+    */
+    #[must_use = "call `flush_on_drop` or call `blocking_flush` at the end of `main` (after flushing the main runtime) to ensure events are flushed."]
+    #[cfg(feature = "implicit_internal_rt")]
+    pub fn try_init_internal(self) -> Option<Init<'static, TEmitter, TCtxt>> {
         let slot = emit_core::runtime::internal_slot();
 
-        let ambient = slot
-            .init(
-                emit_core::runtime::Runtime::new()
-                    .with_emitter(self.emitter)
-                    .with_filter(self.filter)
-                    .with_ctxt(self.ctxt)
-                    .with_clock(self.platform.clock)
-                    .with_rng(self.platform.rng),
-            )
-            .expect("already initialized");
+        let ambient = slot.init(
+            emit_core::runtime::Runtime::new()
+                .with_emitter(self.emitter)
+                .with_filter(self.filter)
+                .with_ctxt(self.ctxt)
+                .with_clock(self.platform.clock)
+                .with_rng(self.platform.rng),
+        )?;
 
-        Init {
+        Some(Init {
             rt: slot.get(),
             emitter: *ambient.emitter(),
             ctxt: *ambient.ctxt(),
-        }
+        })
     }
 }
 
@@ -400,5 +444,18 @@ impl<'a, TEmitter: Emitter + ?Sized, TCtxt: Ctxt + ?Sized> InitGuard<'a, TEmitte
 impl<'a, TEmitter: Emitter + ?Sized, TCtxt: Ctxt + ?Sized> Drop for InitGuard<'a, TEmitter, TCtxt> {
     fn drop(&mut self) {
         self.inner.blocking_flush(self.timeout);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn try_init() {
+        let slot = AmbientSlot::new();
+
+        assert!(setup().try_init_slot(&slot).is_some());
+        assert!(setup().try_init_slot(&slot).is_none());
     }
 }
