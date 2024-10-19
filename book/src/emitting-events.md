@@ -137,7 +137,6 @@ Also see [Filtering events](./filtering-events.md) for more details on filtering
 Events may be processed asynchronously, so to ensure they're fulling flushed before your `main` returns, you can call [`blocking_flush`](https://docs.rs/emit/0.11.0-alpha.19/emit/setup/struct.Init.html#method.blocking_flush) at the end of your `main` function:
 
 ```rust
-```rust
 # extern crate emit;
 # extern crate emit_term;
 fn main() {
