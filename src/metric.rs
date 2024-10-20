@@ -802,7 +802,7 @@ mod alloc_support {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use std::{cell::Cell, time::Duration};
+        use std::time::Duration;
 
         #[test]
         fn reporter_is_send_sync() {
@@ -812,7 +812,10 @@ mod alloc_support {
         }
 
         #[test]
+        #[cfg(not(miri))]
         fn reporter_sample() {
+            use std::cell::Cell;
+
             let mut reporter = Reporter::new();
 
             reporter
@@ -855,7 +858,7 @@ mod alloc_support {
         }
 
         #[test]
-        #[cfg(feature = "std")]
+        #[cfg(all(feature = "std", not(miri)))]
         fn reporter_normalize_std() {
             let mut reporter = Reporter::new();
 
