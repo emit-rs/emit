@@ -14,6 +14,9 @@ pub struct ExpandTokens {
 }
 
 struct Args {
+    /*
+    NOTE: Also update docs in _Control Parameters_ for this macro when adding new args
+    */
     rt: args::RtArg,
     evt: Option<TokenStream>,
     mdl: args::MdlArg,

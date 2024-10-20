@@ -3,6 +3,9 @@ This example demonstrates how to use `emit` in unit tests.
 
 Using the `setup` control parameter, you can ensure `emit` is initialized before tests run,
 and that any emitted events are flushed when the test completes.
+
+Tests typically panic when they fail. You can use the `panic_lvl` control parameter to mark
+spans as failed if a panic occurs.
 */
 
 // This is the piece of code we're going to test
@@ -26,15 +29,15 @@ fn setup() -> Option<impl Drop> {
 }
 
 #[test]
-#[emit::span(setup, "add_1_1")]
+#[emit::span(setup, panic_lvl: "error", "add_1_1")]
 fn add_1_1() {
     assert_eq!(2, add(1, 1));
 }
 
 #[test]
-#[emit::span(setup, "add_1_0")]
+#[emit::span(setup, panic_lvl: "error", "add_1_0")]
 fn add_1_0() {
-    assert_eq!(1, add(1, 0));
+    assert_eq!(2, add(1, 0));
 }
 
 fn main() {}

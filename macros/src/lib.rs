@@ -364,16 +364,17 @@ where
 
 This macro accepts the following optional control parameters:
 
-| name      | type                          | description                                                                                                                                                    |
-| --------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `rt`      | `impl emit::runtime::Runtime` | The runtime to emit the event through.                                                                                                                         |
-| `mdl`     | `impl Into<emit::Path>`       | The module the event belongs to. If unspecified the current module path is used.                                                                               |
-| `when`    | `impl emit::Filter`           | A filter to use instead of the one configured on the runtime.                                                                                                  |
-| `guard`   | -                             | An identifier to bind an `emit::Span` to in the body of the span for manual completion.                                                                        |
-| `ok_lvl`  | `str` or `emit::Level`        | Assume the instrumented block returns a `Result`. Assign the event the given level when the result is `Ok`.                                                    |
-| `err_lvl` | `str` or `emit::Level`        | Assume the instrumented block returns a `Result`. Assign the event the given level when the result is `Err` and attach the error as the `err` property.        |
-| `err`     | `impl Fn(&E) -> T`            | Assume the instrumented block returns a `Result`. Map the `Err` variant into a new type `U` that is `str`, `&(dyn Error + 'static)`, or `impl Error + 'static` |
-| `setup`   | `impl Fn() -> T`              | Invoke the expression before creating the span, binding the result to a value that's dropped at the end of the annotated function.                             |
+| name        | type                          | description                                                                                                                                                    |
+| ----------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rt`        | `impl emit::runtime::Runtime` | The runtime to emit the event through.                                                                                                                         |
+| `mdl`       | `impl Into<emit::Path>`       | The module the event belongs to. If unspecified the current module path is used.                                                                               |
+| `when`      | `impl emit::Filter`           | A filter to use instead of the one configured on the runtime.                                                                                                  |
+| `guard`     | -                             | An identifier to bind an `emit::Span` to in the body of the span for manual completion.                                                                        |
+| `ok_lvl`    | `str` or `emit::Level`        | Assume the instrumented block returns a `Result`. Assign the event the given level when the result is `Ok`.                                                    |
+| `err_lvl`   | `str` or `emit::Level`        | Assume the instrumented block returns a `Result`. Assign the event the given level when the result is `Err` and attach the error as the `err` property.        |
+| `panic_lvl` | `str` or `emit::Level`        | Detect whether the function panics and use the given level if it does.                                                                                         |
+| `err`       | `impl Fn(&E) -> T`            | Assume the instrumented block returns a `Result`. Map the `Err` variant into a new type `U` that is `str`, `&(dyn Error + 'static)`, or `impl Error + 'static` |
+| `setup`     | `impl Fn() -> T`              | Invoke the expression before creating the span, binding the result to a value that's dropped at the end of the annotated function.                             |
 
 # Template
 

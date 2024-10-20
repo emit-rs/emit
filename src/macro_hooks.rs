@@ -783,21 +783,22 @@ pub fn __private_begin_span<
     mdl: impl Into<Path<'static>>,
     name: impl Into<Str<'static>>,
     tpl: &'b (impl TplControlParam + ?Sized),
+    lvl: Option<&'b (impl CaptureLevel + ?Sized)>,
     when: Option<&'b (impl Filter + ?Sized)>,
     span_ctxt_props: &'b (impl Props + ?Sized),
-    span_evt_props: &'b (impl Props + ?Sized),
     default_complete: S,
 ) -> (Frame<&'a C>, SpanGuard<'static, &'a T, Empty, S>) {
     let mdl = mdl.into();
     let name = name.into();
     let tpl = tpl.tpl_control_param();
+    let lvl_prop = lvl.and_then(|lvl| lvl.capture()).map(|lvl| (KEY_LVL, lvl));
 
     let mut span = SpanGuard::filtered_new(
         |span_ctxt, span| {
             rt.ctxt().with_current(|ctxt_props| {
                 FirstDefined(when, rt.filter()).matches(&span.to_event().with_tpl(tpl).map_props(
                     |span_props| {
-                        span_evt_props
+                        lvl_prop
                             .and_props(span_props)
                             .and_props(&span_ctxt_props)
                             .and_props(&span_ctxt)
@@ -826,8 +827,21 @@ pub fn __private_complete_span<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock,
     rt: &'a Runtime<E, F, C, T, R>,
     span: Span<'static, Empty>,
     tpl: &'b (impl TplControlParam + ?Sized),
-    span_evt_props: &'b (impl Props + ?Sized),
+    lvl: Option<&'b (impl CaptureLevel + ?Sized)>,
+    panic_lvl: Option<&'b (impl CaptureLevel + ?Sized)>,
 ) {
+    let completion_props = if panic_lvl.is_some() && is_panicking() {
+        [
+            panic_lvl.unwrap().capture().map(|lvl| (KEY_LVL, lvl)),
+            Some((KEY_ERR, Value::from_any(&PanicError))),
+        ]
+    } else {
+        [
+            lvl.and_then(|lvl| lvl.capture()).map(|lvl| (KEY_LVL, lvl)),
+            None,
+        ]
+    };
+
     emit_core::emit(
         rt.emitter(),
         crate::Empty,
@@ -835,8 +849,49 @@ pub fn __private_complete_span<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock,
         rt.clock(),
         span.to_event()
             .with_tpl(tpl.tpl_control_param())
-            .map_props(|span_props| span_evt_props.and_props(span_props)),
+            .map_props(|span_props| completion_props.and_props(span_props)),
     );
+}
+
+struct PanicError;
+
+impl fmt::Debug for PanicError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
+
+impl fmt::Display for PanicError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "panicked")
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for PanicError {}
+
+impl ToValue for PanicError {
+    fn to_value(&self) -> Value {
+        #[cfg(feature = "std")]
+        {
+            Value::capture_error(self)
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            Value::capture_display(self)
+        }
+    }
+}
+
+fn is_panicking() -> bool {
+    #[cfg(feature = "std")]
+    {
+        std::thread::panicking()
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        false
+    }
 }
 
 #[track_caller]

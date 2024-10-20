@@ -42,6 +42,9 @@ pub fn template_hole_with_hook(
 }
 
 pub struct Args {
+    /*
+    NOTE: Also update docs in _Control Parameters_ for this macro when adding new args
+    */
     pub flags: String,
 }
 

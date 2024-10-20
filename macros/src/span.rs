@@ -6,7 +6,7 @@ use syn::{
 
 use crate::{
     args::{self, Arg},
-    props::{check_evt_props, push_evt_props, Props},
+    props::{check_evt_props, Props},
     template::{self, Template},
     util::{ToOptionTokens, ToRefTokens},
 };
@@ -18,6 +18,9 @@ pub struct ExpandTokens {
 }
 
 struct Args {
+    /*
+    NOTE: Also update docs in _Control Parameters_ for this macro when adding new args
+    */
     rt: args::RtArg,
     mdl: args::MdlArg,
     when: args::WhenArg,
@@ -25,6 +28,7 @@ struct Args {
     setup: Option<TokenStream>,
     ok_lvl: Option<TokenStream>,
     err_lvl: Option<TokenStream>,
+    panic_lvl: Option<TokenStream>,
     err: Option<TokenStream>,
 }
 
@@ -55,6 +59,11 @@ impl Parse for Args {
 
             Ok(quote_spanned!(expr.span()=> #expr))
         });
+        let mut panic_lvl = Arg::token_stream("panic_lvl", |fv| {
+            let expr = &fv.expr;
+
+            Ok(quote_spanned!(expr.span()=> #expr))
+        });
         let mut err = Arg::token_stream("err", |fv| {
             let expr = &fv.expr;
 
@@ -76,6 +85,7 @@ impl Parse for Args {
                 &mut when,
                 &mut ok_lvl,
                 &mut err_lvl,
+                &mut panic_lvl,
                 &mut setup,
                 &mut err,
             ],
@@ -85,9 +95,10 @@ impl Parse for Args {
             rt: rt.take_or_default(),
             mdl: mdl.take_or_default(),
             when: when.take_or_default(),
-            ok_lvl: ok_lvl.take(),
-            err_lvl: err_lvl.take(),
-            err: err.take(),
+            ok_lvl: ok_lvl.take_if_std()?,
+            err_lvl: err_lvl.take_if_std()?,
+            panic_lvl: panic_lvl.take_if_std()?,
+            err: err.take_if_std()?,
             setup: setup.take(),
             guard: guard.take(),
         })
@@ -109,6 +120,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         .unwrap_or_else(|| Ident::new("__span", Span::call_site()));
 
     let default_lvl_tokens = opts.level;
+    let panic_lvl_tokens = args.panic_lvl;
     let ok_lvl_tokens = args.ok_lvl;
     let err_lvl_tokens = args.err_lvl;
     let err_tokens = args.err;
@@ -142,6 +154,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 setup_tokens,
                 quote!(#block),
                 default_lvl_tokens,
+                panic_lvl_tokens,
                 ok_lvl_tokens,
                 err_lvl_tokens,
                 err_tokens,
@@ -159,6 +172,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 setup_tokens,
                 quote!(#block),
                 default_lvl_tokens,
+                panic_lvl_tokens,
                 ok_lvl_tokens,
                 err_lvl_tokens,
                 err_tokens,
@@ -182,6 +196,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 setup_tokens,
                 quote!(#block),
                 default_lvl_tokens,
+                panic_lvl_tokens,
                 ok_lvl_tokens,
                 err_lvl_tokens,
                 err_tokens,
@@ -199,6 +214,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 setup_tokens,
                 quote!(#block),
                 default_lvl_tokens,
+                panic_lvl_tokens,
                 ok_lvl_tokens,
                 err_lvl_tokens,
                 err_tokens,
@@ -220,17 +236,18 @@ fn inject_sync(
     setup_tokens: Option<TokenStream>,
     body_tokens: TokenStream,
     default_lvl_tokens: Option<TokenStream>,
+    panic_lvl_tokens: Option<TokenStream>,
     ok_lvl_tokens: Option<TokenStream>,
     err_lvl_tokens: Option<TokenStream>,
     err_tokens: Option<TokenStream>,
 ) -> Result<TokenStream, syn::Error> {
     let ctxt_props_tokens = ctxt_props.props_tokens();
     let template_tokens = template.template_tokens().to_ref_tokens();
-    let template_literal_tokens = template.template_literal_tokens();
+    let span_name_tokens = template.template_literal_tokens();
 
     let Completion {
         body_tokens,
-        span_evt_props_tokens,
+        default_lvl_tokens,
         default_completion_tokens,
     } = if use_result_completion(&ok_lvl_tokens, &err_lvl_tokens, &err_tokens) {
         // Wrap the body in a closure so we can rely on code running afterwards
@@ -246,16 +263,23 @@ fn inject_sync(
 
         result_completion(
             body_tokens,
-            default_lvl_tokens,
-            ok_lvl_tokens,
-            err_lvl_tokens,
-            err_tokens,
             span_guard,
             rt_tokens,
             &template_tokens,
+            default_lvl_tokens,
+            panic_lvl_tokens,
+            ok_lvl_tokens,
+            err_lvl_tokens,
+            err_tokens,
         )?
     } else {
-        completion(body_tokens, default_lvl_tokens, rt_tokens, &template_tokens)?
+        completion(
+            body_tokens,
+            rt_tokens,
+            &template_tokens,
+            default_lvl_tokens,
+            panic_lvl_tokens,
+        )?
     };
 
     let setup_tokens = setup_tokens.map(|setup| quote!(let __setup = (#setup)();));
@@ -266,11 +290,11 @@ fn inject_sync(
         let (mut __ctxt, __span_guard) = emit::__private::__private_begin_span(
             #rt_tokens,
             #mdl_tokens,
-            #template_literal_tokens,
+            #span_name_tokens,
             #template_tokens,
+            #default_lvl_tokens,
             #when_tokens,
             #ctxt_props_tokens,
-            #span_evt_props_tokens,
             #default_completion_tokens,
         );
         let __ctxt_guard = __ctxt.enter();
@@ -291,17 +315,18 @@ fn inject_async(
     setup_tokens: Option<TokenStream>,
     body_tokens: TokenStream,
     default_lvl_tokens: Option<TokenStream>,
+    panic_lvl_tokens: Option<TokenStream>,
     ok_lvl_tokens: Option<TokenStream>,
     err_lvl_tokens: Option<TokenStream>,
     err_tokens: Option<TokenStream>,
 ) -> Result<TokenStream, syn::Error> {
     let ctxt_props_tokens = ctxt_props.props_tokens();
     let template_tokens = template.template_tokens().to_ref_tokens();
-    let template_literal_tokens = template.template_literal_tokens();
+    let span_name_tokens = template.template_literal_tokens();
 
     let Completion {
         body_tokens,
-        span_evt_props_tokens,
+        default_lvl_tokens,
         default_completion_tokens,
     } = if use_result_completion(&ok_lvl_tokens, &err_lvl_tokens, &err_tokens) {
         // Like the sync case, ensure control flow doesn't interrupt
@@ -313,16 +338,23 @@ fn inject_async(
 
         result_completion(
             body_tokens,
-            default_lvl_tokens,
-            ok_lvl_tokens,
-            err_lvl_tokens,
-            err_tokens,
             span_guard,
             rt_tokens,
             &template_tokens,
+            default_lvl_tokens,
+            panic_lvl_tokens,
+            ok_lvl_tokens,
+            err_lvl_tokens,
+            err_tokens,
         )?
     } else {
-        completion(body_tokens, default_lvl_tokens, rt_tokens, &template_tokens)?
+        completion(
+            body_tokens,
+            rt_tokens,
+            &template_tokens,
+            default_lvl_tokens,
+            panic_lvl_tokens,
+        )?
     };
 
     let setup_tokens = setup_tokens.map(|setup| quote!(let __setup = (#setup)();));
@@ -333,11 +365,11 @@ fn inject_async(
         let (__ctxt, __span_guard) = emit::__private::__private_begin_span(
             #rt_tokens,
             #mdl_tokens,
-            #template_literal_tokens,
+            #span_name_tokens,
             #template_tokens,
+            #default_lvl_tokens,
             #when_tokens,
             #ctxt_props_tokens,
-            #span_evt_props_tokens,
             #default_completion_tokens,
         );
 
@@ -351,7 +383,7 @@ fn inject_async(
 
 struct Completion {
     body_tokens: TokenStream,
-    span_evt_props_tokens: TokenStream,
+    default_lvl_tokens: TokenStream,
     default_completion_tokens: TokenStream,
 }
 
@@ -365,13 +397,14 @@ fn use_result_completion(
 
 fn result_completion(
     body_tokens: TokenStream,
-    default_lvl_tokens: Option<TokenStream>,
-    ok_lvl_tokens: Option<TokenStream>,
-    err_lvl_tokens: Option<TokenStream>,
-    err_tokens: Option<TokenStream>,
     span_guard: &Ident,
     rt_tokens: &TokenStream,
     template_tokens: &TokenStream,
+    default_lvl_tokens: Option<TokenStream>,
+    panic_lvl_tokens: Option<TokenStream>,
+    ok_lvl_tokens: Option<TokenStream>,
+    err_lvl_tokens: Option<TokenStream>,
+    err_tokens: Option<TokenStream>,
 ) -> Result<Completion, syn::Error> {
     // If the span is applied to a Result-returning function then wrap the body
     // We'll attach the error to the span if the call fails and set the appropriate level
@@ -438,31 +471,43 @@ fn result_completion(
         #err_branch,
     });
 
-    completion(body_tokens, default_lvl_tokens, rt_tokens, template_tokens)
+    completion(
+        body_tokens,
+        rt_tokens,
+        template_tokens,
+        default_lvl_tokens,
+        panic_lvl_tokens,
+    )
 }
 
 fn completion(
     body_tokens: TokenStream,
-    default_lvl_tokens: Option<TokenStream>,
     rt_tokens: &TokenStream,
     template_tokens: &TokenStream,
+    default_lvl_tokens: Option<TokenStream>,
+    panic_lvl_tokens: Option<TokenStream>,
 ) -> Result<Completion, syn::Error> {
-    let mut evt_props = Props::new();
-    push_evt_props(&mut evt_props, default_lvl_tokens)?;
-    let span_evt_props_tokens = evt_props.props_tokens();
+    let lvl_tokens = default_lvl_tokens
+        .map(|lvl| lvl.to_ref_tokens())
+        .to_option_tokens(quote!(&emit::Level));
+
+    let panic_lvl_tokens = panic_lvl_tokens
+        .map(|lvl| lvl.to_ref_tokens())
+        .to_option_tokens(quote!(&emit::Level));
 
     let default_completion_tokens = quote!(|span| {
         emit::__private::__private_complete_span(
             #rt_tokens,
             span,
             #template_tokens,
-            #span_evt_props_tokens,
+            #lvl_tokens,
+            #panic_lvl_tokens,
         )
     });
 
     Ok(Completion {
         body_tokens,
-        span_evt_props_tokens,
+        default_lvl_tokens: lvl_tokens,
         default_completion_tokens,
     })
 }

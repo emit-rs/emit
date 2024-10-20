@@ -21,6 +21,9 @@ pub fn key_with_hook(attrs: &[Attribute], key_expr: &ExprLit) -> TokenStream {
 }
 
 pub struct Args {
+    /*
+    NOTE: Also update docs in _Control Parameters_ for this macro when adding new args
+    */
     pub name: Name,
 }
 
