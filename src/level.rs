@@ -55,6 +55,8 @@ For example, the following will all be parsed as `Level::Info`:
 - `information`
 - `INFO1`
 - `inf(13)`
+
+Note that any trailing data is lost when levels are parsed. That means, for example, that `INFO3` and `INFO4` will both parse to the same value, `Level::Info`, and will sort equivalently.
 */
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Level {
