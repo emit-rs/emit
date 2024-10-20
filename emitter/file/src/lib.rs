@@ -1817,7 +1817,12 @@ mod tests {
 
     #[test]
     fn file_closes_bg_thread_on_drop() {
-        let mut files = set("./target/logs/file_closes_bg_thread_on_drop/logs.txt").spawn();
+        let mut files = set_with_writer(
+            "./target/logs/file_closes_bg_thread_on_drop/logs.txt",
+            |_, _| Ok(()),
+            b"\0",
+        )
+        .spawn();
 
         let handle = {
             let inner = files.inner.take().unwrap();
