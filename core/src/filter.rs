@@ -4,11 +4,8 @@ The [`Filter`] type.
 Filters reduce the burden of diagnostics by limiting the volume of data generated. A typical filter will only match events with a certain level or higher, or it may exclude all events for a particularly noisy module.
 */
 
-use core::time::Duration;
-
 use crate::{
     and::And,
-    emitter::Emitter,
     empty::Empty,
     event::{Event, ToEvent},
     or::Or,
