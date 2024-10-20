@@ -795,7 +795,7 @@ mod alloc_support {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use std::cell::Cell;
+        use std::{cell::Cell, time::Duration};
 
         #[test]
         fn reporter_is_send_sync() {
@@ -839,19 +839,111 @@ mod alloc_support {
             assert_eq!(2, calls.get());
         }
 
+        struct TestClock(Option<Timestamp>);
+
+        impl Clock for TestClock {
+            fn now(&self) -> Option<Timestamp> {
+                self.0
+            }
+        }
+
+        #[test]
+        #[cfg(feature = "std")]
+        fn reporter_normalize_std() {
+            let mut reporter = Reporter::new();
+
+            reporter.add_source(source::from_fn(|sampler| {
+                sampler.metric(Metric::new(
+                    Path::new_unchecked("test"),
+                    "metric 1",
+                    "count",
+                    crate::Empty,
+                    42,
+                    crate::Empty,
+                ));
+            }));
+
+            reporter.sample_metrics(sampler::from_fn(|metric| {
+                assert!(metric.extent().is_some());
+            }));
+        }
+
         #[test]
         fn reporter_normalize_empty_extent() {
-            todo!()
+            let mut reporter = Reporter::new();
+
+            reporter.normalize_with_clock(TestClock(Some(Timestamp::MIN)));
+
+            reporter.add_source(source::from_fn(|sampler| {
+                sampler.metric(Metric::new(
+                    Path::new_unchecked("test"),
+                    "metric 1",
+                    "count",
+                    crate::Empty,
+                    42,
+                    crate::Empty,
+                ));
+            }));
+
+            reporter.sample_metrics(sampler::from_fn(|metric| {
+                assert_eq!(Timestamp::MIN, metric.extent().unwrap().as_point());
+            }));
         }
 
         #[test]
         fn reporter_normalize_point_extent() {
-            todo!()
+            let mut reporter = Reporter::new();
+
+            reporter.normalize_with_clock(TestClock(Some(
+                Timestamp::from_unix(Duration::from_secs(37)).unwrap(),
+            )));
+
+            reporter.add_source(source::from_fn(|sampler| {
+                sampler.metric(Metric::new(
+                    Path::new_unchecked("test"),
+                    "metric 1",
+                    "count",
+                    Timestamp::from_unix(Duration::from_secs(100)).unwrap(),
+                    42,
+                    crate::Empty,
+                ));
+            }));
+
+            reporter.sample_metrics(sampler::from_fn(|metric| {
+                assert_eq!(
+                    Timestamp::from_unix(Duration::from_secs(37)).unwrap(),
+                    metric.extent().unwrap().as_point()
+                );
+            }));
         }
 
         #[test]
         fn reporter_normalize_range_extent() {
-            todo!()
+            let mut reporter = Reporter::new();
+
+            reporter.normalize_with_clock(TestClock(Some(
+                Timestamp::from_unix(Duration::from_secs(350)).unwrap(),
+            )));
+
+            reporter.add_source(source::from_fn(|sampler| {
+                sampler.metric(Metric::new(
+                    Path::new_unchecked("test"),
+                    "metric 1",
+                    "count",
+                    Timestamp::from_unix(Duration::from_secs(100)).unwrap()
+                        ..Timestamp::from_unix(Duration::from_secs(200)).unwrap(),
+                    42,
+                    crate::Empty,
+                ));
+            }));
+
+            reporter.sample_metrics(sampler::from_fn(|metric| {
+                assert_eq!(
+                    Timestamp::from_unix(Duration::from_secs(250)).unwrap()
+                        ..Timestamp::from_unix(Duration::from_secs(350)).unwrap(),
+                    metric.extent().unwrap().as_range().unwrap().clone()
+                );
+            }));
         }
     }
 }
