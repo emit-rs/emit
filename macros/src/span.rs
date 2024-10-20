@@ -22,6 +22,7 @@ struct Args {
     mdl: args::MdlArg,
     when: args::WhenArg,
     guard: Option<Ident>,
+    setup: Option<TokenStream>,
     ok_lvl: Option<TokenStream>,
     err_lvl: Option<TokenStream>,
     err: Option<TokenStream>,
@@ -59,6 +60,11 @@ impl Parse for Args {
 
             Ok(quote_spanned!(expr.span()=> #expr))
         });
+        let mut setup = Arg::token_stream("setup", |fv| {
+            let expr = &fv.expr;
+
+            Ok(quote_spanned!(expr.span()=> #expr))
+        });
         let mut guard = Arg::ident("guard");
 
         args::set_from_field_values(
@@ -70,6 +76,7 @@ impl Parse for Args {
                 &mut when,
                 &mut ok_lvl,
                 &mut err_lvl,
+                &mut setup,
                 &mut err,
             ],
         )?;
@@ -78,9 +85,10 @@ impl Parse for Args {
             rt: rt.take_or_default(),
             mdl: mdl.take_or_default(),
             when: when.take_or_default(),
-            ok_lvl: ok_lvl.take_if_std()?,
-            err_lvl: err_lvl.take_if_std()?,
+            ok_lvl: ok_lvl.take(),
+            err_lvl: err_lvl.take(),
             err: err.take(),
+            setup: setup.take(),
             guard: guard.take(),
         })
     }
@@ -104,6 +112,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     let ok_lvl_tokens = args.ok_lvl;
     let err_lvl_tokens = args.err_lvl;
     let err_tokens = args.err;
+    let setup_tokens = args.setup;
 
     let rt_tokens = args.rt.to_tokens()?.to_ref_tokens();
     let mdl_tokens = args.mdl.to_tokens();
@@ -130,6 +139,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &template,
                 &ctxt_props,
                 &span_guard,
+                setup_tokens,
                 quote!(#block),
                 default_lvl_tokens,
                 ok_lvl_tokens,
@@ -146,6 +156,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &template,
                 &ctxt_props,
                 &span_guard,
+                setup_tokens,
                 quote!(#block),
                 default_lvl_tokens,
                 ok_lvl_tokens,
@@ -168,6 +179,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &template,
                 &ctxt_props,
                 &span_guard,
+                setup_tokens,
                 quote!(#block),
                 default_lvl_tokens,
                 ok_lvl_tokens,
@@ -184,6 +196,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &template,
                 &ctxt_props,
                 &span_guard,
+                setup_tokens,
                 quote!(#block),
                 default_lvl_tokens,
                 ok_lvl_tokens,
@@ -204,6 +217,7 @@ fn inject_sync(
     template: &Template,
     ctxt_props: &Props,
     span_guard: &Ident,
+    setup_tokens: Option<TokenStream>,
     body_tokens: TokenStream,
     default_lvl_tokens: Option<TokenStream>,
     ok_lvl_tokens: Option<TokenStream>,
@@ -244,7 +258,11 @@ fn inject_sync(
         completion(body_tokens, default_lvl_tokens, rt_tokens, &template_tokens)?
     };
 
+    let setup_tokens = setup_tokens.map(|setup| quote!(let __setup = (#setup)();));
+
     Ok(quote!({
+        #setup_tokens
+
         let (mut __ctxt, __span_guard) = emit::__private::__private_begin_span(
             #rt_tokens,
             #mdl_tokens,
@@ -270,6 +288,7 @@ fn inject_async(
     template: &Template,
     ctxt_props: &Props,
     span_guard: &Ident,
+    setup_tokens: Option<TokenStream>,
     body_tokens: TokenStream,
     default_lvl_tokens: Option<TokenStream>,
     ok_lvl_tokens: Option<TokenStream>,
@@ -306,7 +325,11 @@ fn inject_async(
         completion(body_tokens, default_lvl_tokens, rt_tokens, &template_tokens)?
     };
 
+    let setup_tokens = setup_tokens.map(|setup| quote!(let __setup = (#setup)();));
+
     Ok(quote!({
+        #setup_tokens
+
         let (__ctxt, __span_guard) = emit::__private::__private_begin_span(
             #rt_tokens,
             #mdl_tokens,

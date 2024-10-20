@@ -108,27 +108,6 @@ impl<T> Arg<T> {
     pub fn take(self) -> Option<T> {
         self.value
     }
-
-    pub fn take_if_std(self) -> Result<Option<T>, syn::Error> {
-        #[cfg(feature = "std")]
-        {
-            Ok(self.take())
-        }
-        #[cfg(not(feature = "std"))]
-        {
-            if self.value.is_some() {
-                Err(syn::Error::new(
-                    self.span.unwrap_or_else(Span::call_site),
-                    format!(
-                        "capturing `{}` is only possible when the `std` Cargo feature is enabled",
-                        self.key
-                    ),
-                ))
-            } else {
-                Ok(None)
-            }
-        }
-    }
 }
 
 impl<T: Default> Arg<T> {

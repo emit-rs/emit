@@ -372,7 +372,8 @@ This macro accepts the following optional control parameters:
 | `guard`   | -                             | An identifier to bind an `emit::Span` to in the body of the span for manual completion.                                                                        |
 | `ok_lvl`  | `str` or `emit::Level`        | Assume the instrumented block returns a `Result`. Assign the event the given level when the result is `Ok`.                                                    |
 | `err_lvl` | `str` or `emit::Level`        | Assume the instrumented block returns a `Result`. Assign the event the given level when the result is `Err` and attach the error as the `err` property.        |
-| `err`     | `impl Fn(&E) -> U`            | Assume the instrumented block returns a `Result`. Map the `Err` variant into a new type `U` that is `str`, `&(dyn Error + 'static)`, or `impl Error + 'static` |
+| `err`     | `impl Fn(&E) -> T`            | Assume the instrumented block returns a `Result`. Map the `Err` variant into a new type `U` that is `str`, `&(dyn Error + 'static)`, or `impl Error + 'static` |
+| `setup`   | `impl Fn() -> T`              | Invoke the expression before creating the span, binding the result to a value that's dropped at the end of the annotated function.                             |
 
 # Template
 

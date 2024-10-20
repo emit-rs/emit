@@ -888,6 +888,72 @@ async fn info_span_err_lvl_async() {
 }
 
 #[test]
+fn span_setup() {
+    static SETUP_CALLED: StaticCalled = StaticCalled::new();
+    static DROP_CALLED: StaticCalled = StaticCalled::new();
+
+    static RT: StaticRuntime = static_runtime(|_| {}, |_| true);
+
+    struct Guard;
+
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            DROP_CALLED.record();
+        }
+    }
+
+    fn setup() -> Guard {
+        SETUP_CALLED.record();
+        Guard
+    }
+
+    #[emit::span(rt: RT, setup, "greet {user}")]
+    fn exec(user: &str) {
+        assert!(SETUP_CALLED.was_called());
+        assert!(!DROP_CALLED.was_called());
+    }
+
+    exec("Rust");
+
+    assert!(SETUP_CALLED.was_called());
+    assert!(DROP_CALLED.was_called());
+}
+
+#[tokio::test]
+async fn span_setup_async() {
+    static SETUP_CALLED: StaticCalled = StaticCalled::new();
+    static DROP_CALLED: StaticCalled = StaticCalled::new();
+
+    static RT: StaticRuntime = static_runtime(|_| {}, |_| true);
+
+    struct Guard;
+
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            DROP_CALLED.record();
+        }
+    }
+
+    fn setup() -> Guard {
+        SETUP_CALLED.record();
+        Guard
+    }
+
+    #[emit::span(rt: RT, setup, "greet {user}")]
+    async fn exec(user: &str) {
+        tokio::time::sleep(Duration::from_millis(1)).await;
+
+        assert!(SETUP_CALLED.was_called());
+        assert!(!DROP_CALLED.was_called());
+    }
+
+    exec("Rust").await;
+
+    assert!(SETUP_CALLED.was_called());
+    assert!(DROP_CALLED.was_called());
+}
+
+#[test]
 #[cfg(feature = "std")]
 fn span_props_precedence() {
     use std::io;

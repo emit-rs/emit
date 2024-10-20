@@ -87,3 +87,7 @@ path = "span_trace_sampling.rs"
 [[example]]
 name = "span_trace_filtering"
 path = "span_trace_filtering.rs"
+
+[[example]]
+name = "testing"
+path = "testing.rs"
