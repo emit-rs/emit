@@ -124,34 +124,30 @@ pub const fn from_fn<F: Fn(&Event<&dyn ErasedProps>) -> bool>(f: F) -> FromFn<F>
 }
 
 /**
-An [`Emitter`] protected by a [`Filter`].
+A [`Filter`] that always matches any event.
 */
-pub struct FilteredEmitter<F, E> {
-    filter: F,
-    emitter: E,
-}
+pub struct Always {}
 
-impl<F, E> FilteredEmitter<F, E> {
+impl Always {
     /**
-    Create a new filtered emitter with the given filter `F` and emitter `E`.
+    Create a filter that matches any event.
     */
-    pub const fn new(filter: F, emitter: E) -> Self {
-        FilteredEmitter { filter, emitter }
+    pub const fn new() -> Always {
+        Always {}
     }
 }
 
-impl<F: Filter, E: Emitter> Emitter for FilteredEmitter<F, E> {
-    fn emit<T: ToEvent>(&self, evt: T) {
-        let evt = evt.to_event();
-
-        if self.filter.matches(&evt) {
-            self.emitter.emit(evt);
-        }
+impl Filter for Always {
+    fn matches<E: ToEvent>(&self, _: E) -> bool {
+        true
     }
+}
 
-    fn blocking_flush(&self, timeout: Duration) -> bool {
-        self.emitter.blocking_flush(timeout)
-    }
+/**
+Create a [`Filter`] that matches any event.
+*/
+pub const fn always() -> Always {
+    Always::new()
 }
 
 impl<T: Filter, U: Filter> Filter for And<T, U> {
@@ -301,6 +297,18 @@ mod tests {
 
         assert!(!f.matches(Event::new(
             Path::new_unchecked("not_module"),
+            Template::literal("Event"),
+            Empty,
+            Empty,
+        )));
+    }
+
+    #[test]
+    fn always_filter() {
+        let f = always();
+
+        assert!(f.matches(Event::new(
+            Path::new_unchecked("module"),
             Template::literal("Event"),
             Empty,
             Empty,
