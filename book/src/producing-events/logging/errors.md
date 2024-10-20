@@ -1,6 +1,6 @@
 # Attaching errors to events
 
-In Rust, errors are typically communicated through the [`Error`](https://doc.rust-lang.org/std/error/trait.Error.html) trait. If you attach a property with the `err` [well-known property](https://docs.rs/emit/0.11.0-alpha.19/emit/well_known/index.html) to an event, it will automatically try capture it using its `Error` implementation:
+In Rust, errors are typically communicated through the [`Error`](https://doc.rust-lang.org/std/error/trait.Error.html) trait. If you attach a property with the `err` [well-known property](https://docs.rs/emit/0.11.0-alpha.20/emit/well_known/index.html) to an event, it will automatically try capture it using its `Error` implementation:
 
 ```rust
 # extern crate emit;
@@ -29,6 +29,6 @@ Event {
 
 Emitters may treat the `err` property specially when receiving diagnostic events, such as by displaying them more prominently.
 
-You can also use the [`#[as_error]`](https://docs.rs/emit/0.11.0-alpha.19/emit/attr.as_error.html) attribute on a property to capture it using its `Error` implementation.
+You can also use the [`#[as_error]`](https://docs.rs/emit/0.11.0-alpha.20/emit/attr.as_error.html) attribute on a property to capture it using its `Error` implementation.
 
-The [`#[span]`](https://docs.rs/emit/0.11.0-alpha.19/emit/attr.span.html) macro can automatically capture errors from fallible functions. See [Fallible functions](../tracing/fallible-functions.md) for details.
+The [`#[span]`](https://docs.rs/emit/0.11.0-alpha.20/emit/attr.span.html) macro can automatically capture errors from fallible functions. See [Fallible functions](../tracing/fallible-functions.md) for details.

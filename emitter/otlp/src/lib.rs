@@ -1,7 +1,7 @@
 /*!
 Emit diagnostic events via the OpenTelemetry Protocol (OTLP).
 
-This library provides [`Otlp`], an [`emit::Emitter`] that sends export requests directly to some remote OTLP receiver. If you need to integrate [`emit`] with the OpenTelemetry SDK, see [`emit-opentelemetry`](https://docs.rs/emit_opentelemetry/0.11.0-alpha.19/emit_opentelemetry/index.html).
+This library provides [`Otlp`], an [`emit::Emitter`] that sends export requests directly to some remote OTLP receiver. If you need to integrate [`emit`] with the OpenTelemetry SDK, see [`emit-opentelemetry`](https://docs.rs/emit_opentelemetry/0.11.0-alpha.20/emit_opentelemetry/index.html).
 
 # How it works
 
@@ -36,10 +36,10 @@ Add `emit` and `emit_otlp` to your `Cargo.toml`:
 
 ```toml
 [dependencies.emit]
-version = "0.11.0-alpha.19"
+version = "0.11.0-alpha.20"
 
 [dependencies.emit_otlp]
-version = "0.11.0-alpha.19"
+version = "0.11.0-alpha.20"
 ```
 
 Initialize `emit` at the start of your `main.rs` using an OTLP emitter:
