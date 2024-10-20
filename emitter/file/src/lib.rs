@@ -1814,4 +1814,20 @@ mod tests {
                 .contents()
         );
     }
+
+    #[test]
+    fn file_closes_bg_thread_on_drop() {
+        let mut files = set("./target/logs/file_closes_bg_thread_on_drop/logs.txt").spawn();
+
+        let handle = {
+            let inner = files.inner.take().unwrap();
+
+            inner._handle
+        };
+
+        drop(files);
+
+        // Ensure the background thread is torn down
+        handle.join().unwrap();
+    }
 }
