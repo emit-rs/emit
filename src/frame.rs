@@ -260,7 +260,7 @@ mod tests {
         drop(frame);
     }
 
-    #[cfg(feature = "std")]
+    #[cfg(all(feature = "std", not(miri)))]
     #[tokio::test]
     async fn frame_in_future() {
         let ctxt = crate::platform::thread_local_ctxt::ThreadLocalCtxt::new();
