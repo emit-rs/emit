@@ -640,8 +640,15 @@ mod alloc_support {
 
     # Normalization
 
-    The reporter will attempt to normalize the extents of any metrics sampled from its sources. When the `std` Cargo feature is enabled this will be done automatically.
-    In other cases, normalization won't happen unless it's configured by [`Reporter::normalize_with_clock`].
+    The reporter will attempt to normalize the extents of any metrics sampled from its sources. Normalization will:
+
+    1. Take the current timestamp, `now`, when sampling metrics.
+    2. If the metric sample has no extent, or has a point extent, it will be replaced with `now`.
+    3. If the metric sample has a range extent, the end will be set to `now` and the start will be `now` minus the original length. If this would produce an invlaid range then the original is kept.
+
+    When the `std` Cargo feature is enabled this will be done automatically. In other cases, normalization won't happen unless it's configured by [`Reporter::normalize_with_clock`].
+
+    Normalization can be disabled by calling [`Reporter::without_normalization`].
     */
     pub struct Reporter {
         sources: Vec<Box<dyn ErasedSource + Send + Sync>>,
