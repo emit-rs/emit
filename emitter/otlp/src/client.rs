@@ -293,7 +293,7 @@ impl OtlpBuilder {
         // Spawn a background thread to process batches
         // This is a safe way to ensure users of `Otlp` can never
         // deadlock waiting on the processing of batches
-        let _handle = std::thread::Builder::new()
+        let handle = std::thread::Builder::new()
             .name("emit_otlp_worker".into())
             .spawn(move || {
                 tokio::runtime::Builder::new_current_thread()
@@ -309,7 +309,7 @@ impl OtlpBuilder {
             otlp_traces,
             otlp_metrics,
             metrics,
-            _handle,
+            _handle: handle,
         })
     }
 }
@@ -764,5 +764,46 @@ fn encode_resource(encoding: Encoding, resource: &Resource) -> EncodedPayload {
     match encoding {
         Encoding::Proto => data::Proto::encode(&resource),
         Encoding::Json => data::Json::encode(&resource),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn otlp_empty_closes_bg_thread_on_drop() {
+        let mut otlp = Otlp::builder().spawn();
+
+        let handle = {
+            let inner = otlp.inner.take().unwrap();
+
+            inner._handle
+        };
+
+        drop(otlp);
+
+        // Ensure the background thread is torn down
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn otlp_non_empty_closes_bg_thread_on_drop() {
+        let mut otlp = Otlp::builder()
+            .logs(OtlpLogsBuilder::proto(OtlpTransportBuilder::http(
+                "http://localhost:4319",
+            )))
+            .spawn();
+
+        let handle = {
+            let inner = otlp.inner.take().unwrap();
+
+            inner._handle
+        };
+
+        drop(otlp);
+
+        // Ensure the background thread is torn down
+        handle.join().unwrap();
     }
 }
