@@ -888,6 +888,69 @@ async fn info_span_err_lvl_async() {
 }
 
 #[test]
+#[cfg(feature = "std")]
+fn span_panic_lvl() {
+    use std::panic;
+
+    static CALLED: StaticCalled = StaticCalled::new();
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            // NOTE: We're panicking here, so can't assert
+            if evt.props().pull("lvl") == Some(emit::Level::Error) {
+                CALLED.record();
+            }
+        },
+        |evt| {
+            assert!(evt.props().get("lvl").is_none());
+
+            true
+        },
+    );
+
+    #[emit::span(rt: RT, panic_lvl: emit::Level::Error, "test")]
+    fn exec() {
+        panic!("explicit panic")
+    }
+
+    let _ = panic::catch_unwind(panic::AssertUnwindSafe(|| exec()));
+
+    assert!(CALLED.was_called());
+}
+
+#[tokio::test]
+#[cfg(feature = "std")]
+async fn span_panic_lvl_async() {
+    use std::panic;
+
+    static CALLED: StaticCalled = StaticCalled::new();
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            // NOTE: We're panicking here, so can't assert
+            if evt.props().pull("lvl") == Some(emit::Level::Error) {
+                CALLED.record();
+            }
+        },
+        |evt| {
+            assert!(evt.props().get("lvl").is_none());
+
+            true
+        },
+    );
+
+    #[emit::span(rt: RT, panic_lvl: emit::Level::Error, "test")]
+    async fn exec() {
+        panic!("explicit panic")
+    }
+
+    let _ = tokio::spawn(async {
+        exec().await;
+    })
+    .await;
+
+    assert!(CALLED.was_called());
+}
+
+#[test]
 fn span_setup() {
     static SETUP_CALLED: StaticCalled = StaticCalled::new();
     static DROP_CALLED: StaticCalled = StaticCalled::new();
