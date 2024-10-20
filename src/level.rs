@@ -41,6 +41,22 @@ match evt.props().pull::<emit::Level, _>(emit::well_known::KEY_LVL).unwrap_or_de
 ```
 
 The default level is [`Level::Info`].
+
+# Parsing
+
+`Level` has a permissive parser that will match partial and incomplete contents, ignoring case. So long as the start of the text is a submatch of the full level, and any trailing unmatched characters are not ASCII control characters, the level will parse.
+
+For example, the following will all be parsed as `Level::Info`:
+
+- `info`
+- `INFO`
+- `i`
+- `inf`
+- `information`
+- `INFO1`
+- `inf(13)`
+
+Note that any trailing data is lost when levels are parsed. That means, for example, that `INFO3` and `INFO4` will both parse to the same value, `Level::Info`, and will sort equivalently.
 */
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Level {
@@ -137,16 +153,28 @@ fn parse(
     // Doesn't require a full match of the expected content
     // For example, `INF` will match `INFORMATION`
     while let Some(b) = input.get(0) {
-        let Some(e) = expected_uppercase.get(0) else {
-            return Err(ParseLevelError {});
-        };
+        match b {
+            // If the character is a letter then match against the expected value
+            b if b.is_ascii_alphabetic() => {
+                let Some(e) = expected_uppercase.get(0) else {
+                    return Err(ParseLevelError {});
+                };
 
-        if b.to_ascii_uppercase() != *e {
-            return Err(ParseLevelError {});
+                if b.to_ascii_uppercase() != *e {
+                    return Err(ParseLevelError {});
+                }
+
+                expected_uppercase = &expected_uppercase[1..];
+                input = &input[1..];
+            }
+            // If the character is not alphabetic then break
+            // This lets us match more complex schemes like `info13` or `INFO(4)`
+            b if b.is_ascii() && !b.is_ascii_control() => break,
+            // Any other character is an error
+            _ => {
+                return Err(ParseLevelError {});
+            }
         }
-
-        expected_uppercase = &expected_uppercase[1..];
-        input = &input[1..];
     }
 
     Ok(ok)
@@ -195,9 +223,9 @@ A [`Filter`] that matches events with a specific [`Level`].
 The level to match is pulled from the [`KEY_LVL`] well-known property. Events that don't carry any specific level are treated as carrying a default one, as set by [`MinLevelFilter::treat_unleveled_as`].
 */
 #[derive(Debug)]
-pub struct MinLevelFilter {
-    min: Level,
-    default: Level,
+pub struct MinLevelFilter<L = Level> {
+    min: L,
+    default: Option<L>,
 }
 
 impl From<Level> for MinLevelFilter {
@@ -206,33 +234,32 @@ impl From<Level> for MinLevelFilter {
     }
 }
 
-impl MinLevelFilter {
+impl<L> MinLevelFilter<L> {
     /**
     Construct a new [`MinLevelFilter`], treating unleveled events as [`Level::default`].
     */
-    pub const fn new(min: Level) -> MinLevelFilter {
-        MinLevelFilter {
-            min,
-            default: Level::Info,
-        }
+    pub const fn new(min: L) -> MinLevelFilter<L> {
+        MinLevelFilter { min, default: None }
     }
 
     /**
     Treat events without an explicit level as having `default` when evaluating against the filter.
     */
-    pub fn treat_unleveled_as(mut self, default: Level) -> Self {
-        self.default = default;
+    pub fn treat_unleveled_as(mut self, default: L) -> Self {
+        self.default = Some(default);
         self
     }
 }
 
-impl Filter for MinLevelFilter {
+impl<L: for<'a> FromValue<'a> + Ord + Default> Filter for MinLevelFilter<L> {
     fn matches<E: ToEvent>(&self, evt: E) -> bool {
         evt.to_event()
             .props()
-            .pull::<Level, _>(KEY_LVL)
-            .unwrap_or(self.default)
-            >= self.min
+            .pull::<L, _>(KEY_LVL)
+            .as_ref()
+            .or_else(|| self.default.as_ref())
+            .unwrap_or(&L::default())
+            >= &self.min
     }
 }
 
@@ -263,17 +290,17 @@ mod alloc_support {
     Event modules are matched based on [`Path::is_child_of`]. If an event's module is a child of one in the map then its [`MinLevelFilter`] will be checked against it. If an event's module doesn't match any in the map then it will pass the filter.
     */
     #[derive(Debug)]
-    pub struct MinLevelPathMap {
-        root: PathNode,
+    pub struct MinLevelPathMap<L = Level> {
+        root: PathNode<L>,
     }
 
     #[derive(Debug)]
-    struct PathNode {
-        min_level: Option<MinLevelFilter>,
-        children: Vec<(Str<'static>, PathNode)>,
+    struct PathNode<L> {
+        min_level: Option<MinLevelFilter<L>>,
+        children: Vec<(Str<'static>, PathNode<L>)>,
     }
 
-    impl MinLevelPathMap {
+    impl<L> MinLevelPathMap<L> {
         /**
         Create an empty map.
         */
@@ -289,7 +316,7 @@ mod alloc_support {
         /**
         Specify the minimum level for any modules that don't match any added by [`MinLevelPathMap::min_level`].
         */
-        pub fn default_min_level(&mut self, min_level: impl Into<MinLevelFilter>) -> &mut Self {
+        pub fn default_min_level(&mut self, min_level: impl Into<MinLevelFilter<L>>) -> &mut Self {
             self.root.min_level = Some(min_level.into());
 
             self
@@ -301,7 +328,7 @@ mod alloc_support {
         pub fn min_level(
             &mut self,
             path: impl Into<Path<'static>>,
-            min_level: impl Into<MinLevelFilter>,
+            min_level: impl Into<MinLevelFilter<L>>,
         ) -> &mut Self {
             let path = path.into();
 
@@ -335,7 +362,7 @@ mod alloc_support {
         }
     }
 
-    impl Filter for MinLevelPathMap {
+    impl<L: for<'a> FromValue<'a> + Ord + Default> Filter for MinLevelPathMap<L> {
         fn matches<E: ToEvent>(&self, evt: E) -> bool {
             let evt = evt.to_event();
 
@@ -362,8 +389,10 @@ mod alloc_support {
 
     impl InternalFilter for MinLevelPathMap {}
 
-    impl<P: Into<Path<'static>>, L: Into<MinLevelFilter>> FromIterator<(P, L)> for MinLevelPathMap {
-        fn from_iter<T: IntoIterator<Item = (P, L)>>(iter: T) -> Self {
+    impl<L, P: Into<Path<'static>>, T: Into<MinLevelFilter<L>>> FromIterator<(P, T)>
+        for MinLevelPathMap<L>
+    {
+        fn from_iter<I: IntoIterator<Item = (P, T)>>(iter: I) -> Self {
             let mut map = MinLevelPathMap::new();
 
             for (path, min_level) in iter {
@@ -479,6 +508,43 @@ mod alloc_support {
                 (KEY_LVL, Level::Warn),
             )));
         }
+
+        #[test]
+        fn min_level_integer() {
+            let mut filter = MinLevelPathMap::<u8>::new();
+
+            filter
+                .default_min_level(MinLevelFilter::new(3))
+                .min_level(Path::new_unchecked("a"), MinLevelFilter::new(1));
+
+            assert!(filter.matches(crate::Event::new(
+                Path::new_unchecked("a"),
+                crate::Template::literal("test"),
+                crate::Empty,
+                (KEY_LVL, 2),
+            )));
+
+            assert!(filter.matches(crate::Event::new(
+                Path::new_unchecked("b"),
+                crate::Template::literal("test"),
+                crate::Empty,
+                (KEY_LVL, 6),
+            )));
+
+            assert!(!filter.matches(crate::Event::new(
+                Path::new_unchecked("a"),
+                crate::Template::literal("test"),
+                crate::Empty,
+                (KEY_LVL, 0),
+            )));
+
+            assert!(!filter.matches(crate::Event::new(
+                Path::new_unchecked("b"),
+                crate::Template::literal("test"),
+                crate::Empty,
+                (KEY_LVL, 2),
+            )));
+        }
     }
 }
 
@@ -506,11 +572,14 @@ mod tests {
             ("e", Ok(Level::Error)),
             ("err", Ok(Level::Error)),
             ("error", Ok(Level::Error)),
+            ("INFO3", Ok(Level::Info)),
+            ("WRN(x)", Ok(Level::Warn)),
+            ("info warn", Ok(Level::Info)),
             ("", Err(ParseLevelError {})),
             ("ifo", Err(ParseLevelError {})),
             ("trace", Err(ParseLevelError {})),
             ("erroneous", Err(ParseLevelError {})),
-            ("info info", Err(ParseLevelError {})),
+            ("infoℹ️", Err(ParseLevelError {})),
         ] {
             match expected {
                 Ok(expected) => {
@@ -628,6 +697,39 @@ mod tests {
             crate::Template::literal("test"),
             crate::Empty,
             (KEY_LVL, LVL_DEBUG),
+        )));
+    }
+
+    #[test]
+    fn min_level_filter_integer() {
+        let filter = MinLevelFilter::new(3).treat_unleveled_as(1);
+
+        assert!(filter.matches(crate::Event::new(
+            crate::Path::new_unchecked("test"),
+            crate::Template::literal("test"),
+            crate::Empty,
+            (KEY_LVL, 3),
+        )));
+
+        assert!(filter.matches(crate::Event::new(
+            crate::Path::new_unchecked("test"),
+            crate::Template::literal("test"),
+            crate::Empty,
+            (KEY_LVL, 4),
+        )));
+
+        assert!(!filter.matches(crate::Event::new(
+            crate::Path::new_unchecked("test"),
+            crate::Template::literal("test"),
+            crate::Empty,
+            (KEY_LVL, 2),
+        )));
+
+        assert!(!filter.matches(crate::Event::new(
+            crate::Path::new_unchecked("test"),
+            crate::Template::literal("test"),
+            crate::Empty,
+            crate::Empty,
         )));
     }
 }
