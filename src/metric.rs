@@ -291,15 +291,7 @@ pub mod source {
         Produce a current sample for all metrics in the source, emitting them as diagnostic events to the given [`Emitter`].
         */
         fn emit_metrics<E: Emitter>(&self, emitter: E) {
-            struct FromEmitter<E>(E);
-
-            impl<E: Emitter> sampler::Sampler for FromEmitter<E> {
-                fn metric<P: Props>(&self, metric: Metric<P>) {
-                    self.0.emit(metric)
-                }
-            }
-
-            self.sample_metrics(FromEmitter(emitter))
+            self.sample_metrics(from_emitter(emitter))
         }
 
         /**
@@ -381,6 +373,18 @@ pub mod source {
             self.left().emit_metrics(&emitter);
             self.right().emit_metrics(&emitter);
         }
+    }
+
+    pub(in crate::metric) struct FromEmitter<E>(E);
+
+    impl<E: Emitter> sampler::Sampler for FromEmitter<E> {
+        fn metric<P: Props>(&self, metric: Metric<P>) {
+            self.0.emit(metric)
+        }
+    }
+
+    pub(in crate::metric) const fn from_emitter<E: Emitter>(emitter: E) -> FromEmitter<E> {
+        FromEmitter(emitter)
     }
 
     /**
@@ -622,29 +626,77 @@ mod alloc_support {
     use super::*;
 
     use alloc::{boxed::Box, vec::Vec};
+    use core::ops::Range;
 
-    use self::source::{ErasedSource, Source};
+    use crate::{
+        clock::{Clock, ErasedClock},
+        metric::source::{self, ErasedSource, Source},
+    };
 
     /**
     A set of [`Source`]s that are all sampled together.
 
     The reporter can be sampled like any other source through its own [`Source`] implementation.
+
+    # Normalization
+
+    The reporter will attempt to normalize the extents of any metrics sampled from its sources. When the `std` Cargo feature is enabled this will be done automatically.
+    In other cases, normalization won't happen unless it's configured by [`Reporter::normalize_with_clock`].
     */
-    pub struct Reporter(Vec<Box<dyn ErasedSource + Send + Sync>>);
+    pub struct Reporter {
+        sources: Vec<Box<dyn ErasedSource + Send + Sync>>,
+        clock: ReporterClock,
+    }
 
     impl Reporter {
         /**
         Create a new empty reporter.
+
+        When the `std` Cargo feature is enabled, the reporter will normalize timestamps on reported samples using the system clock.
+        When the `std` Cargo feature is not enabled, the reporter will not attempt to normalize timestamps.
         */
         pub const fn new() -> Self {
-            Reporter(Vec::new())
+            Reporter {
+                sources: Vec::new(),
+                clock: {
+                    #[cfg(feature = "std")]
+                    {
+                        ReporterClock::System
+                    }
+                    #[cfg(not(feature = "std"))]
+                    {
+                        ReporterClock::Other(None)
+                    }
+                },
+            }
+        }
+
+        /**
+        Set the clock the reporter will use to unify timestamps on sampled metrics.
+        */
+        pub fn normalize_with_clock(
+            &mut self,
+            clock: impl Clock + Send + Sync + 'static,
+        ) -> &mut Self {
+            self.clock = ReporterClock::Other(Some(Box::new(clock)));
+
+            self
+        }
+
+        /**
+        Disable the clock, preventing the reporter from normalizing timestamps on sampled metrics.
+        */
+        pub fn without_normalization(&mut self) -> &mut Self {
+            self.clock = ReporterClock::Other(None);
+
+            self
         }
 
         /**
         Add a [`Source`] to the reporter.
         */
         pub fn add_source(&mut self, source: impl Source + Send + Sync + 'static) -> &mut Self {
-            self.0.push(Box::new(source));
+            self.sources.push(Box::new(source));
 
             self
         }
@@ -653,7 +705,9 @@ mod alloc_support {
         Produce a current sample for all metrics.
         */
         pub fn sample_metrics<S: sampler::Sampler>(&self, sampler: S) {
-            for source in &self.0 {
+            let sampler = TimeNormalizer::new(self.clock.now(), sampler);
+
+            for source in &self.sources {
                 source.sample_metrics(&sampler);
             }
         }
@@ -662,9 +716,7 @@ mod alloc_support {
         Produce a current sample for all metrics, emitting them as diagnostic events to the given [`Emitter`].
         */
         pub fn emit_metrics<E: Emitter>(&self, emitter: E) {
-            for source in &self.0 {
-                source.emit_metrics(&emitter);
-            }
+            self.sample_metrics(source::from_emitter(emitter))
         }
     }
 
@@ -675,6 +727,68 @@ mod alloc_support {
 
         fn emit_metrics<E: Emitter>(&self, emitter: E) {
             self.emit_metrics(emitter)
+        }
+    }
+
+    struct TimeNormalizer<S> {
+        now: Option<Timestamp>,
+        inner: S,
+    }
+
+    impl<S> TimeNormalizer<S> {
+        fn new(now: Option<Timestamp>, sampler: S) -> TimeNormalizer<S> {
+            TimeNormalizer {
+                now,
+                inner: sampler,
+            }
+        }
+    }
+
+    impl<S: Sampler> Sampler for TimeNormalizer<S> {
+        fn metric<P: Props>(&self, metric: Metric<P>) {
+            if let Some(now) = self.now {
+                let extent = metric.extent();
+
+                let extent = if let Some(range) = extent.and_then(|extent| extent.as_range()) {
+                    // If the extent is a range then attempt to normalize it
+                    normalize_range(now, range)
+                        .map(Extent::range)
+                        // If normalizing the range fails then use the original range
+                        .unwrap_or_else(|| Extent::range(range.clone()))
+                } else {
+                    // If the extent is missing or a point then use the value of now
+                    Extent::point(now)
+                };
+
+                self.inner.metric(metric.with_extent(extent))
+            } else {
+                self.inner.metric(metric)
+            }
+        }
+    }
+
+    fn normalize_range(now: Timestamp, range: &Range<Timestamp>) -> Option<Range<Timestamp>> {
+        // Normalize a range by assigning its end bound to now
+        // and its start bound to now - length
+        let len = range.end.duration_since(range.start)?;
+        let start = now.checked_sub(len)?;
+
+        Some(start..now)
+    }
+
+    enum ReporterClock {
+        #[cfg(feature = "std")]
+        System,
+        Other(Option<Box<dyn ErasedClock + Send + Sync>>),
+    }
+
+    impl Clock for ReporterClock {
+        fn now(&self) -> Option<Timestamp> {
+            match self {
+                #[cfg(feature = "std")]
+                ReporterClock::System => crate::platform::system_clock::SystemClock::new().now(),
+                ReporterClock::Other(clock) => clock.now(),
+            }
         }
     }
 
@@ -723,6 +837,21 @@ mod alloc_support {
             }));
 
             assert_eq!(2, calls.get());
+        }
+
+        #[test]
+        fn reporter_normalize_empty_extent() {
+            todo!()
+        }
+
+        #[test]
+        fn reporter_normalize_point_extent() {
+            todo!()
+        }
+
+        #[test]
+        fn reporter_normalize_range_extent() {
+            todo!()
         }
     }
 }
