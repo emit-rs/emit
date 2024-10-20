@@ -1,6 +1,6 @@
 [package]
 name = "emit_exmaple_opentelemetry_direct_otlp"
-version = "0.11.0-alpha.19"
+version = "0.11.0-alpha.20"
 authors = ["emit contributors"]
 edition = "2021"
 publish = false

@@ -6,7 +6,7 @@ Sampling and [propagation](./propagating-across-services.md) are tied together. 
 
 ## Using `emit_traceparent` for sampling
 
-[`emit_traceparent`](https://docs.rs/emit_traceparent/0.11.0-alpha.19/emit_traceparent/) is a library that implements trace sampling and propagation. Using `setup_with_sampler`, you can configure `emit` with a function that's run at the start of each trace to determine whether to emit it or not. Any other diagnostics produced within an unsampled trace will be discarded along with it.
+[`emit_traceparent`](https://docs.rs/emit_traceparent/0.11.0-alpha.20/emit_traceparent/) is a library that implements trace sampling and propagation. Using `setup_with_sampler`, you can configure `emit` with a function that's run at the start of each trace to determine whether to emit it or not. Any other diagnostics produced within an unsampled trace will be discarded along with it.
 
 This example is a simple sampler that includes one in every 10 traces:
 
@@ -35,7 +35,7 @@ fn main() {
 
 ## Using the OpenTelemetry SDK for sampling
 
-If you're using the OpenTelemetry SDK, [`emit_opentelemetry`](https://docs.rs/emit_opentelemetry/0.11.0-alpha.19/emit_opentelemetry/) will respect its sampling.
+If you're using the OpenTelemetry SDK, [`emit_opentelemetry`](https://docs.rs/emit_opentelemetry/0.11.0-alpha.20/emit_opentelemetry/) will respect its sampling.
 
 ## Manual sampling
 
