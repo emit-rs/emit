@@ -1,6 +1,6 @@
 [package]
 name = "emit_example_opentelemetry_via_sdk"
-version = "0.11.0-alpha.20"
+version = "0.11.0-alpha.21"
 authors = ["emit contributors"]
 edition = "2021"
 publish = false

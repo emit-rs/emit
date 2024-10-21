@@ -1,6 +1,6 @@
 [package]
 name = "emit_traceparent"
-version = "0.11.0-alpha.20"
+version = "0.11.0-alpha.21"
 authors = ["emit contributors"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -11,9 +11,9 @@ categories = ["development-tools::debugging"]
 edition = "2021"
 
 [dependencies.emit]
-version = "0.11.0-alpha.20"
+version = "0.11.0-alpha.21"
 path = "../"
 
 [dev-dependencies.emit_term]
-version = "0.11.0-alpha.20"
+version = "0.11.0-alpha.21"
 path = "../emitter/term"
