@@ -58,3 +58,9 @@ wait_a_bit(1200).await;
 - [`#[error_span]`](https://docs.rs/emit/0.11.0-alpha.21/emit/attr.error_span.html)
 
 The level of a span may also depend on its execution. See [Fallible functions](./tracing/fallible-functions.md) and [Manual span completion](./tracing/manual-span-completion.md) for details.
+
+-----
+
+![an example trace in Zipkin](../asset/trace-zipkin.png)
+
+_An example trace produced by `emit` in Zipkin_

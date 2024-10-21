@@ -35,3 +35,9 @@ Event {
     },
 }
 ```
+
+-----
+
+![an example metric in Prometheus](../asset/metric-prometheus.png)
+
+_An example metric produced by `emit` in Prometheus_

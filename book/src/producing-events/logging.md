@@ -35,3 +35,9 @@ Event {
 - [`error!`](https://docs.rs/emit/0.11.0-alpha.21/emit/macro.error.html) for errors that caused the calling operation to fail.
 
 See [Levels](./logging/levels.md) for details.
+
+-----
+
+![an example log rendered to the console](../asset/term-err.png)
+
+_An example log produced by `emit` rendered to the console_
