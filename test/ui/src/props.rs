@@ -313,8 +313,8 @@ fn props_key() {
 #[test]
 fn props_optional() {
     match emit::props! {
-        #[emit::optional] some: Some(1),
-        #[emit::optional] none: None::<i32>,
+        #[emit::optional] some: Some(&1),
+        #[emit::optional] none: None::<&i32>,
     } {
         props => {
             assert_eq!(1, props.pull::<i32, _>("some").unwrap());
@@ -330,7 +330,7 @@ fn props_optional_ref() {
     let some: Option<&str> = Some(&s);
 
     match emit::props! {
-        #[emit::optional(is_ref: true)] some,
+        #[emit::optional] some,
     } {
         props => {
             assert_eq!("short lived", props.pull::<&str, _>("some").unwrap());

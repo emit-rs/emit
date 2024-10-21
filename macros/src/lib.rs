@@ -705,25 +705,11 @@ Specify that a property value of `None` should not be captured, instead of being
 
 # Syntax
 
-```text
-(control_param),*
-```
-
-where
-
-- `control_param`: A Rust field-value with a pre-determined identifier (see below).
-
-# Control parameters
-
-This macro accepts the following optional control parameters:
-
-| name     | type                          | description                                                                                             |
-| -------- | ----------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `is_ref` | `bool` | Whether the value is an `Option<&T>`. If `true`, the value will not be wrapped in an extra `&` before converting into a value. |
+This macro doesn't accept any arguments.
 
 # Applicable to
 
-This attribute can be applied to properties.
+This attribute can be applied to properties where the type is `Option<&T>`.
 */
 #[proc_macro_attribute]
 pub fn optional(
