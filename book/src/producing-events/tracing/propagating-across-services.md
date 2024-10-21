@@ -4,11 +4,11 @@ Span context can be used in distributed applications to correlate their operatio
 
 Propagation and [sampling](./sampling.md) are tied together. If a service decides not to sample a given trace then it _must_ propagate that decision to downstream services. Otherwise you'll end up with a broken trace.
 
-`emit` supports span context propagation via [W3C traceparents](https://www.w3.org/TR/trace-context/) using [`emit_traceparent`](https://docs.rs/emit_traceparent/0.11.0-alpha.20/emit_traceparent/) or the OpenTelemetry SDK.
+`emit` supports span context propagation via [W3C traceparents](https://www.w3.org/TR/trace-context/) using [`emit_traceparent`](https://docs.rs/emit_traceparent/0.11.0-alpha.21/emit_traceparent/) or the OpenTelemetry SDK.
 
 ## Using `emit_traceparent` for propagation
 
-[`emit_traceparent`](https://docs.rs/emit_traceparent/0.11.0-alpha.20/emit_traceparent/) is a library that implements trace sampling and propagation.
+[`emit_traceparent`](https://docs.rs/emit_traceparent/0.11.0-alpha.21/emit_traceparent/) is a library that implements trace sampling and propagation.
 
 When an incoming request arrives, you can push the incoming traceparent onto the current context:
 
@@ -64,7 +64,7 @@ if traceparent.is_valid() {
 
 ## Using the OpenTelemetry SDK for propagation
 
-If you're using the OpenTelemetry SDK with [`emit_opentelemetry`](https://docs.rs/emit_opentelemetry/0.11.0-alpha.20/emit_opentelemetry/), it will handle propagation for you.
+If you're using the OpenTelemetry SDK with [`emit_opentelemetry`](https://docs.rs/emit_opentelemetry/0.11.0-alpha.21/emit_opentelemetry/), it will handle propagation for you.
 
 ## Manual propagation
 
