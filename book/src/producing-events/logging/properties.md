@@ -46,3 +46,5 @@ Event {
 ```
 
 See [Template syntax and rendering](../../reference/templates.md) for more details.
+
+Properties aren't limited to strings; they can be arbitrarily complex structured values. See [Value data model](../../reference/events.md#value-data-model) for more details.

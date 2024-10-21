@@ -6,7 +6,7 @@
 
 ## Developer-first diagnostics for Rust applications
 
-`emit` is a framework for adding diagnostics to your Rust applications with a simple, powerful data model and an expressive syntax inspired by [Message Templates](https://messagetemplates.org). `emit`'s guiding design principle is low ceremony, low cognitive-load.
+`emit` is a framework for adding structured diagnostics to your Rust applications with a simple, powerful data model and an expressive syntax inspired by [Message Templates](https://messagetemplates.org). `emit`'s guiding design principle is low ceremony, low cognitive-load.
 
 This readme covers just enough to give you an idea of what `emit` is. For a proper treatment, see:
 
@@ -52,3 +52,19 @@ fn greet(user: &str) {
 ```
 
 ![The output of running the above program](https://github.com/emit-rs/emit/blob/main/asset/emit_term.png?raw=true)
+
+## Tracing
+
+`emit` can also produce trace data that's compatible with standard tracing tools, like Zipkin.
+
+![An example trace produced by `emit` in Zipkin](https://github.com/emit-rs/emit/blob/main/asset/trace-zipkin.png?raw=true)
+
+See [the guide](https://emit-rs.io/producing-events/tracing.html) for details.
+
+## Metrics
+
+`emit` can also produce metric data that's compatible with standard metric tools, like Prometheus.
+
+![An example metric produced by `emit` in Prometheus](https://github.com/emit-rs/emit/blob/main/asset/metric-prometheus.png?raw=true)
+
+See [the guide](https://emit-rs.io/producing-events/metrics.html) for details.
