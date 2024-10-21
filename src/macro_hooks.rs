@@ -424,60 +424,81 @@ impl<T: CaptureLevel> CaptureLevel for Option<T> {
 }
 
 pub trait __PrivateOptionalCaptureHook {
-    fn __private_optional_capture_some(&self) -> Option<&Self>;
-
-    fn __private_optional_capture_option_by_value(&self) -> &Self;
-
-    fn __private_optional_capture_option_by_ref(&self) -> &Self;
-}
-
-impl<T: ?Sized> __PrivateOptionalCaptureHook for T {
     fn __private_optional_capture_some(&self) -> Option<&Self> {
         Some(self)
     }
 
-    fn __private_optional_capture_option_by_value(&self) -> &Self {
-        self
-    }
-
-    fn __private_optional_capture_option_by_ref(&self) -> &Self {
+    fn __private_optional_capture_option_ref(self) -> Self
+    where
+        Self: Sized,
+    {
         self
     }
 }
 
-pub trait __PrivateOptionalMapHook<T> {
-    fn __private_optional_map_some<F: FnOnce(T) -> Option<U>, U>(self, map: F) -> Option<U>;
+impl<T: ?Sized> __PrivateOptionalCaptureHook for T {}
 
-    fn __private_optional_map_option_by_value<F: FnOnce(T) -> Option<U>, U>(
+#[diagnostic::on_unimplemented(
+    message = "capturing an optional value requires `Option<&T>`. Try calling `.as_ref()`."
+)]
+pub trait Optional<'a> {
+    type Value: ?Sized + 'a;
+
+    fn into_option(self) -> Option<&'a Self::Value>;
+}
+
+impl<'a, T: ?Sized> Optional<'a> for Option<&'a T> {
+    type Value = T;
+
+    fn into_option(self) -> Option<&'a T> {
+        self
+    }
+}
+
+pub trait __PrivateOptionalMapHook<'a> {
+    fn __private_optional_map_some<
+        F: FnOnce(&'a <Self as Optional<'a>>::Value) -> Option<U>,
+        U: 'a,
+    >(
         self,
-        map: F,
-    ) -> Option<U>;
-
-    fn __private_optional_map_option_by_ref<'a, F: FnOnce(&'a T) -> Option<U>, U: 'a>(
-        &'a self,
         map: F,
     ) -> Option<U>
     where
-        T: 'a;
-}
+        Self: Optional<'a>;
 
-impl<T> __PrivateOptionalMapHook<T> for Option<T> {
-    fn __private_optional_map_some<F: FnOnce(T) -> Option<U>, U>(self, map: F) -> Option<U> {
-        self.and_then(map)
-    }
-
-    fn __private_optional_map_option_by_value<F: FnOnce(T) -> Option<U>, U>(
+    fn __private_optional_map_option_ref<
+        F: FnOnce(&'a <Self as Optional<'a>>::Value) -> Option<U>,
+        U: 'a,
+    >(
         self,
         map: F,
-    ) -> Option<U> {
-        self.and_then(map)
+    ) -> Option<U>
+    where
+        Self: Optional<'a>;
+}
+
+impl<'a, T> __PrivateOptionalMapHook<'a> for T {
+    fn __private_optional_map_some<F: FnOnce(&'a <Self as Optional<'a>>::Value) -> Option<U>, U>(
+        self,
+        map: F,
+    ) -> Option<U>
+    where
+        Self: Optional<'a>,
+    {
+        self.into_option().and_then(map)
     }
 
-    fn __private_optional_map_option_by_ref<'a, F: FnOnce(&'a T) -> Option<U>, U: 'a>(
-        &'a self,
+    fn __private_optional_map_option_ref<
+        F: FnOnce(&'a <Self as Optional<'a>>::Value) -> Option<U>,
+        U,
+    >(
+        self,
         map: F,
-    ) -> Option<U> {
-        self.as_ref().and_then(map)
+    ) -> Option<U>
+    where
+        Self: Optional<'a>,
+    {
+        self.into_option().and_then(map)
     }
 }
 

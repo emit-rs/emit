@@ -17,6 +17,16 @@ fn example() {
         #[emit::as_serde]
         user: None::<&str>,
     );
+
+    // The `optional` attribute is applicable to `Option<&T>`.
+    // If you have an `Option<T>`, you can call `as_ref()` on it:
+    let some = Some(1);
+
+    emit::info!(
+        "Hello, {user}",
+        #[emit::optional]
+        user: some.as_ref(),
+    );
 }
 
 fn main() {
