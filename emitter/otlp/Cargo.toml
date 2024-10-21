@@ -38,7 +38,7 @@ version = "2.10"
 features = ["std", "flatten"]
 
 [dependencies.sval_protobuf]
-version = "0.1"
+version = "0.2"
 features = ["bytes"]
 
 [dependencies.sval_json]
