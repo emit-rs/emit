@@ -426,7 +426,9 @@ impl<T: CaptureLevel> CaptureLevel for Option<T> {
 pub trait __PrivateOptionalCaptureHook {
     fn __private_optional_capture_some(&self) -> Option<&Self>;
 
-    fn __private_optional_capture_option(&self) -> &Self;
+    fn __private_optional_capture_option_by_value(&self) -> &Self;
+
+    fn __private_optional_capture_option_by_ref(&self) -> &Self;
 }
 
 impl<T: ?Sized> __PrivateOptionalCaptureHook for T {
@@ -434,7 +436,11 @@ impl<T: ?Sized> __PrivateOptionalCaptureHook for T {
         Some(self)
     }
 
-    fn __private_optional_capture_option(&self) -> &Self {
+    fn __private_optional_capture_option_by_value(&self) -> &Self {
+        self
+    }
+
+    fn __private_optional_capture_option_by_ref(&self) -> &Self {
         self
     }
 }
@@ -442,7 +448,12 @@ impl<T: ?Sized> __PrivateOptionalCaptureHook for T {
 pub trait __PrivateOptionalMapHook<T> {
     fn __private_optional_map_some<F: FnOnce(T) -> Option<U>, U>(self, map: F) -> Option<U>;
 
-    fn __private_optional_map_option<'a, F: FnOnce(&'a T) -> Option<U>, U: 'a>(
+    fn __private_optional_map_option_by_value<F: FnOnce(T) -> Option<U>, U>(
+        self,
+        map: F,
+    ) -> Option<U>;
+
+    fn __private_optional_map_option_by_ref<'a, F: FnOnce(&'a T) -> Option<U>, U: 'a>(
         &'a self,
         map: F,
     ) -> Option<U>
@@ -455,7 +466,14 @@ impl<T> __PrivateOptionalMapHook<T> for Option<T> {
         self.and_then(map)
     }
 
-    fn __private_optional_map_option<'a, F: FnOnce(&'a T) -> Option<U>, U: 'a>(
+    fn __private_optional_map_option_by_value<F: FnOnce(T) -> Option<U>, U>(
+        self,
+        map: F,
+    ) -> Option<U> {
+        self.and_then(map)
+    }
+
+    fn __private_optional_map_option_by_ref<'a, F: FnOnce(&'a T) -> Option<U>, U: 'a>(
         &'a self,
         map: F,
     ) -> Option<U> {

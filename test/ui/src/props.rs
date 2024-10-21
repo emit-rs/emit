@@ -324,6 +324,21 @@ fn props_optional() {
 }
 
 #[test]
+fn props_optional_ref() {
+    let s = String::from("short lived");
+
+    let some: Option<&str> = Some(&s);
+
+    match emit::props! {
+        #[emit::optional(is_ref: true)] some,
+    } {
+        props => {
+            assert_eq!("short lived", props.pull::<&str, _>("some").unwrap());
+        }
+    }
+}
+
+#[test]
 fn props_as_debug() {
     #[derive(Debug)]
     struct Data;
