@@ -29,7 +29,11 @@ impl<P: emit::props::Props> sval::Value for PropsResourceAttributes<P> {
             &mut *stream,
             &RESOURCE_ATTRIBUTES_LABEL,
             &RESOURCE_ATTRIBUTES_INDEX,
-            |stream| stream_attributes(stream, &self.0, |k, v| Some((k, v))),
+            |stream| {
+                stream_attributes(stream, &self.0, |mut stream, k, v| {
+                    stream.stream_attribute(k, v)
+                })
+            },
         )?;
 
         stream.record_tuple_end(None, None, None)

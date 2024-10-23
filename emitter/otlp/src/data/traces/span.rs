@@ -1,8 +1,8 @@
-use std::marker::PhantomData;
+use std::{fmt, marker::PhantomData};
 
 use sval_derive::Value;
 
-use crate::data::{stream_attributes, stream_field, AnyValue, KeyValue};
+use crate::data::{stream_attributes, stream_field, AnyValue, KeyValue, Stacktrace};
 
 #[derive(Value)]
 #[repr(i32)]
@@ -119,39 +119,39 @@ impl<
             &SPAN_ATTRIBUTES_LABEL,
             &SPAN_ATTRIBUTES_INDEX,
             |stream| {
-                stream_attributes(stream, &self.props, |k, v| match k.get() {
-                    emit::well_known::KEY_EVT_KIND => None,
-                    emit::well_known::KEY_SPAN_NAME => None,
+                stream_attributes(stream, &self.props, |mut stream, k, v| match k.get() {
+                    emit::well_known::KEY_EVT_KIND => Ok(()),
+                    emit::well_known::KEY_SPAN_NAME => Ok(()),
                     emit::well_known::KEY_LVL => {
                         level = v.by_ref().cast().unwrap_or_default();
-                        None
+                        Ok(())
                     }
                     emit::well_known::KEY_SPAN_ID => {
                         span_id = v
                             .by_ref()
                             .cast::<emit::SpanId>()
                             .map(|span_id| SP::from(span_id));
-                        None
+                        Ok(())
                     }
                     emit::well_known::KEY_SPAN_PARENT => {
                         parent_span_id = v
                             .by_ref()
                             .cast::<emit::SpanId>()
                             .map(|parent_span_id| SP::from(parent_span_id));
-                        None
+                        Ok(())
                     }
                     emit::well_known::KEY_TRACE_ID => {
                         trace_id = v
                             .by_ref()
                             .cast::<emit::TraceId>()
                             .map(|trace_id| TR::from(trace_id));
-                        None
+                        Ok(())
                     }
                     emit::well_known::KEY_ERR => {
                         has_err = true;
-                        None
+                        Ok(())
                     }
-                    _ => Some((k, v)),
+                    _ => stream.stream_attribute(k, v),
                 })
             },
         )?;
@@ -193,16 +193,42 @@ impl<
                 &SPAN_EVENTS_LABEL,
                 &SPAN_EVENTS_INDEX,
                 |stream| {
-                    stream.value_computed(&[Event {
-                        name: "exception",
-                        time_unix_nano: self.time_unix_nano,
-                        attributes: &InlineEventAttributes {
-                            attributes: &[KeyValue {
-                                key: "exception.message",
-                                value: AnyValue::<_>::String(sval::Display::new_borrowed(&err)),
-                            }],
-                        },
-                    }])
+                    // If the error has a cause chain then write it into the exception.stacktrace attribute
+                    // We need to duplicate the whole event because the type of its attributes collection
+                    // changes depending on whether there's a stacktrace or not
+                    if let Some(cause) = err.to_borrowed_error().and_then(|err| err.source()) {
+                        stream.value_computed(&[Event {
+                            name: "exception",
+                            time_unix_nano: self.time_unix_nano,
+                            attributes: &InlineEventAttributes {
+                                attributes: &[
+                                    KeyValue {
+                                        key: "exception.stacktrace",
+                                        value: AnyValue::<_>::String(&sval::Display::new(
+                                            &Stacktrace::new_borrowed(cause) as &dyn fmt::Display,
+                                        )),
+                                    },
+                                    KeyValue {
+                                        key: "exception.message",
+                                        value: AnyValue::<_>::String(&sval::Display::new(
+                                            &err as &dyn fmt::Display,
+                                        )),
+                                    },
+                                ],
+                            },
+                        }])
+                    } else {
+                        stream.value_computed(&[Event {
+                            name: "exception",
+                            time_unix_nano: self.time_unix_nano,
+                            attributes: &InlineEventAttributes {
+                                attributes: &[KeyValue {
+                                    key: "exception.message",
+                                    value: AnyValue::<_>::String(sval::Display::new_borrowed(&err)),
+                                }],
+                            },
+                        }])
+                    }
                 },
             )?;
 
@@ -286,7 +312,11 @@ impl<P: emit::props::Props> sval::Value for PropsEventAttributes<P> {
             &mut *stream,
             &EVENT_ATTRIBUTES_LABEL,
             &EVENT_ATTRIBUTES_INDEX,
-            |stream| stream_attributes(stream, &self.0, |k, v| Some((k, v))),
+            |stream| {
+                stream_attributes(stream, &self.0, |mut stream, k, v| {
+                    stream.stream_attribute(k, v)
+                })
+            },
         )?;
 
         stream.record_tuple_end(None, None, None)
