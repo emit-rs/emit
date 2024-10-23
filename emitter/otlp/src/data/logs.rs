@@ -183,9 +183,7 @@ mod tests {
 
         impl std::error::Error for Error {
             fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-                self.source
-                    .as_ref()
-                    .map(|source| &**source)
+                self.source.as_ref().map(|source| &**source)
             }
         }
 
@@ -193,7 +191,10 @@ mod tests {
             msg: "something went wrong",
             source: Some(Box::new(Error {
                 msg: "there was a problem",
-                source: Some(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "IO error"))),
+                source: Some(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "IO error",
+                ))),
             })),
         };
 
@@ -204,7 +205,9 @@ mod tests {
 
             assert_eq!("exception.stacktrace", de.attributes[0].key);
             assert_eq!(
-                Some(string_value("caused by: there was a problem\ncaused by: IO error")),
+                Some(string_value(
+                    "caused by: there was a problem\ncaused by: IO error"
+                )),
                 de.attributes[0].value
             );
 
@@ -215,7 +218,10 @@ mod tests {
             );
         });
 
-        let err = Error { msg: "something went wrong", source: None };
+        let err = Error {
+            msg: "something went wrong",
+            source: None,
+        };
 
         encode_event::<LogsEventEncoder>(emit::evt!("failed: {err}", err), |buf| {
             let de = logs::LogRecord::decode(buf).unwrap();
