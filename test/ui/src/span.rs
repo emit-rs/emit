@@ -692,6 +692,38 @@ fn span_err() {
 
 #[test]
 #[cfg(feature = "std")]
+fn span_err_shadow() {
+    static ERR_RT: StaticRuntime = static_runtime(|_| {}, |_| true);
+
+    fn err(err: &anyhow::Error) -> &(dyn std::error::Error + 'static) {
+        err.as_ref()
+    }
+
+    #[emit::span(rt: ERR_RT, err, "test")]
+    fn exec_err() -> Result<(), anyhow::Error> {
+        Err(anyhow::Error::msg("failed"))
+    }
+
+    exec_err().unwrap_err();
+}
+
+#[test]
+#[cfg(feature = "std")]
+fn span_err_inline() {
+    static ERR_RT: StaticRuntime = static_runtime(|_| {}, |_| true);
+
+    type EmitError = dyn std::error::Error + 'static;
+
+    #[emit::span(rt: ERR_RT, err: (|err| AsRef::<EmitError>::as_ref(err)), "test")]
+    fn exec_err() -> Result<(), anyhow::Error> {
+        Err(anyhow::Error::msg("failed"))
+    }
+
+    exec_err().unwrap_err();
+}
+
+#[test]
+#[cfg(feature = "std")]
 fn span_err_err_lvl() {
     use std::io;
 

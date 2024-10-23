@@ -416,7 +416,7 @@ fn result_completion(
             .to_option_tokens(quote!(&emit::Level));
 
         quote!(
-            Ok(ok) => {
+            Ok(__ok) => {
                 #span_guard.complete_with(|span| {
                     emit::__private::__private_complete_span_ok(
                         #rt_tokens,
@@ -426,14 +426,12 @@ fn result_completion(
                     )
                 });
 
-                Ok(ok)
+                Ok(__ok)
             }
         )
     };
 
     let err_branch = {
-        let err_ident = Ident::new(emit_core::well_known::KEY_ERR, Span::call_site());
-
         // In the error case, we don't just defer to the default level
         // If none is set then we'll mark it as an error
         let lvl_tokens = err_lvl_tokens
@@ -446,11 +444,11 @@ fn result_completion(
             });
 
         let err_tokens = err_tokens
-            .map(|mapper| quote!((#mapper)(&#err_ident)))
-            .unwrap_or_else(|| quote!(&#err_ident));
+            .map(|mapper| quote!((#mapper)(&__err)))
+            .unwrap_or_else(|| quote!(&__err));
 
         quote!(
-            Err(#err_ident) => {
+            Err(__err) => {
                 #span_guard.complete_with(|span| {
                     emit::__private::__private_complete_span_err(
                         #rt_tokens,
@@ -461,7 +459,7 @@ fn result_completion(
                     )
                 });
 
-                Err(#err_ident)
+                Err(__err)
             }
         )
     };
