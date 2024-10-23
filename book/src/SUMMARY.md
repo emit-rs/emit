@@ -29,6 +29,7 @@
         - [Reporting from sources](./producing-events/metrics/reporting-sources.md)
         - [Limitations](./producing-events/metrics/limitations.md)
 - [Filtering events](./filtering-events.md)
+- [Working with events](./working-with-events.md)
 - [Emitting events](./emitting-events.md)
     - [Console](./emitting-events/console.md)
     - [Rolling files](./emitting-events/rolling-files.md)
