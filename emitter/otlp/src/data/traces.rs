@@ -112,7 +112,10 @@ mod tests {
     use prost::Message;
 
     use crate::{
-        data::{generated::trace::v1 as trace, util::*},
+        data::{
+            generated::{trace::v1 as trace, util::*},
+            util::*,
+        },
         util::*,
     };
 
@@ -132,6 +135,127 @@ mod tests {
                 let de = trace::Span::decode(buf).unwrap();
 
                 assert_eq!("test", de.name);
+            },
+        );
+    }
+
+    #[test]
+    fn encode_err_str() {
+        encode_event::<TracesEventEncoder>(
+            emit::evt!(
+                extent: ts(1)..ts(13),
+                "failed: {err}",
+                err: "test",
+                evt_kind: "span",
+                span_name: "test",
+                trace_id: "00000000000000000000000000000001",
+                span_id: "0000000000000001"
+            ),
+            |buf| {
+                let de = trace::Span::decode(buf).unwrap();
+
+                assert_eq!(1, de.events.len());
+
+                let de = &de.events[0];
+
+                assert_eq!("exception", de.name);
+
+                assert_eq!(1, de.attributes.len());
+
+                assert_eq!("exception.message", de.attributes[0].key);
+                assert_eq!(Some(string_value("test")), de.attributes[0].value);
+            },
+        );
+    }
+
+    #[test]
+    fn encode_err_stacktrace() {
+        #[derive(Debug)]
+        struct Error {
+            source: Option<std::io::Error>,
+        }
+
+        impl std::fmt::Display for Error {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(f, "something went wrong")
+            }
+        }
+
+        impl std::error::Error for Error {
+            fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+                self.source
+                    .as_ref()
+                    .map(|source| source as &(dyn std::error::Error + 'static))
+            }
+        }
+
+        let err = Error {
+            source: Some(std::io::Error::new(std::io::ErrorKind::Other, "IO error")),
+        };
+
+        encode_event::<TracesEventEncoder>(
+            emit::evt!(
+                extent: ts(1)..ts(13),
+                "failed: {err}",
+                err,
+                evt_kind: "span",
+                span_name: "test",
+                trace_id: "00000000000000000000000000000001",
+                span_id: "0000000000000001"
+            ),
+            |buf| {
+                let de = trace::Span::decode(buf).unwrap();
+
+                assert_eq!(1, de.events.len());
+
+                let de = &de.events[0];
+
+                assert_eq!("exception", de.name);
+
+                assert_eq!(2, de.attributes.len());
+
+                assert_eq!("exception.stacktrace", de.attributes[0].key);
+                assert_eq!(
+                    Some(string_value("caused by: IO error")),
+                    de.attributes[0].value
+                );
+
+                assert_eq!("exception.message", de.attributes[1].key);
+                assert_eq!(
+                    Some(string_value("something went wrong")),
+                    de.attributes[1].value
+                );
+            },
+        );
+
+        let err = Error { source: None };
+
+        encode_event::<TracesEventEncoder>(
+            emit::evt!(
+                extent: ts(1)..ts(13),
+                "failed: {err}",
+                err,
+                evt_kind: "span",
+                span_name: "test",
+                trace_id: "00000000000000000000000000000001",
+                span_id: "0000000000000001"
+            ),
+            |buf| {
+                let de = trace::Span::decode(buf).unwrap();
+
+                assert_eq!(1, de.events.len());
+
+                let de = &de.events[0];
+
+                assert_eq!("exception", de.name);
+
+                assert_eq!(1, de.attributes.len());
+
+                assert_eq!("exception.message", de.attributes[0].key);
+                assert_eq!(
+                    Some(string_value("something went wrong")),
+                    de.attributes[0].value
+                );
             },
         );
     }

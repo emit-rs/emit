@@ -156,12 +156,77 @@ mod tests {
     }
 
     #[test]
-    fn encode_err() {
+    fn encode_err_str() {
         encode_event::<LogsEventEncoder>(emit::evt!("failed: {err}", err: "test"), |buf| {
             let de = logs::LogRecord::decode(buf).unwrap();
 
+            assert_eq!(1, de.attributes.len());
+
             assert_eq!("exception.message", de.attributes[0].key);
             assert_eq!(Some(string_value("test")), de.attributes[0].value);
+        });
+    }
+
+    #[test]
+    fn encode_err_stacktrace() {
+        #[derive(Debug)]
+        struct Error {
+            msg: &'static str,
+            source: Option<Box<dyn std::error::Error + 'static>>,
+        }
+
+        impl std::fmt::Display for Error {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                std::fmt::Display::fmt(self.msg, f)
+            }
+        }
+
+        impl std::error::Error for Error {
+            fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+                self.source
+                    .as_ref()
+                    .map(|source| &**source)
+            }
+        }
+
+        let err = Error {
+            msg: "something went wrong",
+            source: Some(Box::new(Error {
+                msg: "there was a problem",
+                source: Some(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "IO error"))),
+            })),
+        };
+
+        encode_event::<LogsEventEncoder>(emit::evt!("failed: {err}", err), |buf| {
+            let de = logs::LogRecord::decode(buf).unwrap();
+
+            assert_eq!(2, de.attributes.len());
+
+            assert_eq!("exception.stacktrace", de.attributes[0].key);
+            assert_eq!(
+                Some(string_value("caused by: there was a problem\ncaused by: IO error")),
+                de.attributes[0].value
+            );
+
+            assert_eq!("exception.message", de.attributes[1].key);
+            assert_eq!(
+                Some(string_value("something went wrong")),
+                de.attributes[1].value
+            );
+        });
+
+        let err = Error { msg: "something went wrong", source: None };
+
+        encode_event::<LogsEventEncoder>(emit::evt!("failed: {err}", err), |buf| {
+            let de = logs::LogRecord::decode(buf).unwrap();
+
+            assert_eq!(1, de.attributes.len());
+
+            assert_eq!("exception.message", de.attributes[0].key);
+            assert_eq!(
+                Some(string_value("something went wrong")),
+                de.attributes[0].value
+            );
         });
     }
 }

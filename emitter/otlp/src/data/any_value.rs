@@ -1,3 +1,5 @@
+use std::fmt;
+
 use sval_derive::Value;
 
 use super::stream_field;
@@ -89,6 +91,56 @@ impl<'a, K: sval_ref::ValueRef<'a>, V: sval_ref::ValueRef<'a>> sval_ref::ValueRe
         )?;
 
         stream.record_tuple_end(None, None, None)
+    }
+}
+
+#[repr(transparent)]
+pub struct Stacktrace(dyn std::error::Error + 'static);
+
+impl Stacktrace {
+    pub fn new_borrowed<'a>(err: &'a (dyn std::error::Error + 'static)) -> &'a Self {
+        // SAFETY: `Stacktrace` and `dyn std::error::Error + 'static` have the same ABI
+        unsafe { &*(err as *const (dyn std::error::Error + 'static) as *const Stacktrace) }
+    }
+}
+
+impl fmt::Display for Stacktrace {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut first = true;
+
+        for cause in std::iter::successors(Some(&self.0), |err| (*err).source()) {
+            if !first {
+                f.write_str("\n")?;
+            }
+            first = false;
+
+            f.write_str("caused by: ")?;
+            fmt::Display::fmt(cause, f)?;
+        }
+
+        Ok(())
+    }
+}
+
+pub struct TextValue<T>(pub T);
+
+impl<T: fmt::Display> sval::Value for TextValue<T> {
+    fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(&'sval self, stream: &mut S) -> sval::Result {
+        stream.enum_begin(None, None, None)?;
+        stream.tagged_begin(
+            None,
+            Some(&ANY_VALUE_STRING_LABEL),
+            Some(&ANY_VALUE_STRING_INDEX),
+        )?;
+
+        sval::stream_display(&mut *stream, &self.0)?;
+
+        stream.tagged_end(
+            None,
+            Some(&ANY_VALUE_STRING_LABEL),
+            Some(&ANY_VALUE_STRING_INDEX),
+        )?;
+        stream.enum_end(None, None, None)
     }
 }
 

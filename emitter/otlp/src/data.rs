@@ -281,43 +281,64 @@ pub(crate) fn stream_field<'sval, S: sval::Stream<'sval> + ?Sized>(
     stream.record_tuple_value_end(None, label, index)
 }
 
-pub(crate) fn stream_attributes<'sval>(
-    stream: &mut (impl sval::Stream<'sval> + ?Sized),
+pub(crate) fn stream_attributes<'sval, S: sval::Stream<'sval> + ?Sized>(
+    stream: &mut S,
     props: &'sval impl emit::props::Props,
     mut for_each: impl FnMut(
+        AttributeStream<'_, S>,
         emit::str::Str<'sval>,
         emit::value::Value<'sval>,
-    ) -> Option<(emit::str::Str<'sval>, emit::value::Value<'sval>)>,
+    ) -> sval::Result,
 ) -> sval::Result {
     stream.seq_begin(None)?;
 
     props.dedup().for_each(|k, v| {
-        if let Some((k, v)) = for_each(k, v) {
-            stream
-                .seq_value_begin()
-                .map(|_| ControlFlow::Continue(()))
-                .unwrap_or(ControlFlow::Break(()))?;
-
-            sval_ref::stream_ref(
-                &mut *stream,
-                KeyValue {
-                    key: k,
-                    value: EmitValue(v),
-                },
-            )
+        for_each(AttributeStream(&mut *stream), k, v)
             .map(|_| ControlFlow::Continue(()))
             .unwrap_or(ControlFlow::Break(()))?;
-
-            stream
-                .seq_value_end()
-                .map(|_| ControlFlow::Continue(()))
-                .unwrap_or(ControlFlow::Break(()))?;
-        }
 
         ControlFlow::Continue(())
     });
 
     stream.seq_end()
+}
+
+pub(crate) struct AttributeStream<'a, S: ?Sized>(&'a mut S);
+
+impl<'a, 'sval, S: sval::Stream<'sval> + ?Sized> AttributeStream<'a, S> {
+    pub(crate) fn stream_attribute(
+        &mut self,
+        key: emit::str::Str<'sval>,
+        value: emit::value::Value<'sval>,
+    ) -> sval::Result {
+        self.0.seq_value_begin()?;
+
+        sval_ref::stream_ref(
+            &mut *self.0,
+            KeyValue {
+                key,
+                value: EmitValue(value),
+            },
+        )?;
+
+        self.0.seq_value_end()?;
+
+        Ok(())
+    }
+
+    pub(crate) fn stream_custom_attribute_computed(
+        &mut self,
+        key: emit::str::Str<'_>,
+        value: impl sval::Value,
+    ) -> sval::Result {
+        self.0.seq_value_begin()?;
+
+        self.0.value_computed(&KeyValue { key, value })?;
+
+        self.0.seq_value_end()?;
+
+        Ok(())
+    }
 }
 
 pub(crate) type MessageFormatter = dyn Fn(&emit::event::Event<&dyn emit::props::ErasedProps>, &mut fmt::Formatter) -> fmt::Result

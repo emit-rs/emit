@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use sval_derive::Value;
 
-use crate::data::{stream_attributes, stream_field, AnyValue, KeyValue};
+use crate::data::{stream_attributes, stream_field, AnyValue, KeyValue, Stacktrace, TextValue};
 
 #[derive(Value)]
 #[repr(i32)]
@@ -95,27 +95,39 @@ impl<
             &LOG_RECORD_ATTRIBUTES_LABEL,
             &LOG_RECORD_ATTRIBUTES_INDEX,
             |stream| {
-                stream_attributes(stream, &self.0, |k, v| match k.get() {
+                stream_attributes(stream, &self.0, |mut stream, k, v| match k.get() {
                     emit::well_known::KEY_LVL => {
                         level = v.by_ref().cast::<emit::Level>().unwrap_or_default();
-                        None
+                        Ok(())
                     }
                     emit::well_known::KEY_SPAN_ID => {
                         span_id = v
                             .by_ref()
                             .cast::<emit::SpanId>()
                             .map(|span_id| SP::from(span_id));
-                        None
+                        Ok(())
                     }
                     emit::well_known::KEY_TRACE_ID => {
                         trace_id = v
                             .by_ref()
                             .cast::<emit::TraceId>()
                             .map(|trace_id| TR::from(trace_id));
-                        None
+                        Ok(())
                     }
-                    emit::well_known::KEY_ERR => Some((emit::Str::new("exception.message"), v)),
-                    _ => Some((k, v)),
+                    emit::well_known::KEY_ERR => {
+                        // If the error has a cause chain then write it into the exception.stacktrace attribute
+                        if let Some(cause) = v.to_borrowed_error().and_then(|err| err.source()) {
+                            stream.stream_custom_attribute_computed(
+                                emit::Str::new("exception.stacktrace"),
+                                TextValue(Stacktrace::new_borrowed(cause)),
+                            )?;
+                        }
+
+                        stream.stream_attribute(emit::Str::new("exception.message"), v)?;
+
+                        Ok(())
+                    }
+                    _ => stream.stream_attribute(k, v),
                 })
             },
         )?;
