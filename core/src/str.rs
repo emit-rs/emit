@@ -472,6 +472,12 @@ mod alloc_support {
         }
     }
 
+    impl<'k> From<Str<'k>> for String {
+        fn from(value: Str<'k>) -> String {
+            value.into_string()
+        }
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;

@@ -419,7 +419,7 @@ impl ToValue for dyn fmt::Display {
 }
 
 #[cfg(feature = "std")]
-impl ToValue for (dyn std::error::Error + 'static) {
+impl ToValue for dyn std::error::Error + 'static {
     fn to_value(&self) -> Value {
         Value(value_bag::ValueBag::from_dyn_error(self))
     }
@@ -532,6 +532,18 @@ mod alloc_support {
         }
     }
 
+    impl ToValue for String {
+        fn to_value(&self) -> Value {
+            Value(self.into())
+        }
+    }
+
+    impl<'v> FromValue<'v> for String {
+        fn from_value(value: Value<'v>) -> Option<Self> {
+            value.0.try_into().ok()
+        }
+    }
+
     impl<'a> From<&'a String> for Value<'a> {
         fn from(value: &'a String) -> Self {
             Value(value.into())
@@ -540,6 +552,30 @@ mod alloc_support {
 
     impl<'a> From<Option<&'a String>> for Value<'a> {
         fn from(value: Option<&'a String>) -> Self {
+            Value(value_bag::ValueBag::from_option(value))
+        }
+    }
+
+    impl<'v> ToValue for Cow<'v, str> {
+        fn to_value(&self) -> Value {
+            Value(self.into())
+        }
+    }
+
+    impl<'v> FromValue<'v> for Cow<'v, str> {
+        fn from_value(value: Value<'v>) -> Option<Self> {
+            value.0.try_into().ok()
+        }
+    }
+
+    impl<'a, 'v> From<&'a Cow<'v, str>> for Value<'a> {
+        fn from(value: &'a Cow<'v, str>) -> Self {
+            Value(value.into())
+        }
+    }
+
+    impl<'a, 'v> From<Option<&'a Cow<'v, str>>> for Value<'a> {
+        fn from(value: Option<&'a Cow<'v, str>>) -> Self {
             Value(value_bag::ValueBag::from_option(value))
         }
     }
