@@ -57,6 +57,10 @@ name = "filter_by_level"
 path = "filter_by_level.rs"
 
 [[example]]
+name = "filter_by_property"
+path = "filter_by_property.rs"
+
+[[example]]
 name = "filter_per_emitter"
 path = "filter_per_emitter.rs"
 
