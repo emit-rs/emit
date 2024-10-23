@@ -171,12 +171,13 @@ mod tests {
     fn encode_err_stacktrace() {
         #[derive(Debug)]
         struct Error {
-            source: Option<std::io::Error>,
+            msg: &'static str,
+            source: Option<Box<dyn std::error::Error + 'static>>,
         }
 
         impl std::fmt::Display for Error {
             fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                write!(f, "something went wrong")
+                std::fmt::Display::fmt(self.msg, f)
             }
         }
 
@@ -184,12 +185,16 @@ mod tests {
             fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
                 self.source
                     .as_ref()
-                    .map(|source| source as &(dyn std::error::Error + 'static))
+                    .map(|source| &**source)
             }
         }
 
         let err = Error {
-            source: Some(std::io::Error::new(std::io::ErrorKind::Other, "IO error")),
+            msg: "something went wrong",
+            source: Some(Box::new(Error {
+                msg: "there was a problem",
+                source: Some(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "IO error"))),
+            })),
         };
 
         encode_event::<LogsEventEncoder>(emit::evt!("failed: {err}", err), |buf| {
@@ -199,7 +204,7 @@ mod tests {
 
             assert_eq!("exception.stacktrace", de.attributes[0].key);
             assert_eq!(
-                Some(string_value("caused by: IO error")),
+                Some(string_value("caused by: there was a problem\ncaused by: IO error")),
                 de.attributes[0].value
             );
 
@@ -210,7 +215,7 @@ mod tests {
             );
         });
 
-        let err = Error { source: None };
+        let err = Error { msg: "something went wrong", source: None };
 
         encode_event::<LogsEventEncoder>(emit::evt!("failed: {err}", err), |buf| {
             let de = logs::LogRecord::decode(buf).unwrap();
