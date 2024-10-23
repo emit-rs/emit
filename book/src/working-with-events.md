@@ -25,7 +25,7 @@ Extents can always be treated as a point-in-time timestamp:
 # fn get(extent: emit::Extent) {
 // If the extent is a point-in-time, this will be the value
 // If the extent is a time range, this will be the end bound
-let as_timestamp: emit::Timestamp = extent.as_point();
+let as_timestamp = extent.as_point();
 # }
 # fn main() {}
 ```
@@ -57,6 +57,8 @@ To find a property value by key, you can call [`get()`](https://docs.rs/emit/0.1
 ```rust
 # extern crate emit;
 # fn get(evt: emit::Event<impl emit::Props>) {
+use emit::Props;
+
 if let Some(value) = evt.props().get("my_property") {
     // The value is a type-erased object implementing Display/Serialize
 }
@@ -71,6 +73,7 @@ To find a property and cast it to a concrete type, like a string or `i32`, you c
 ```rust
 # extern crate emit;
 # fn get(evt: emit::Event<impl emit::Props>) {
+# use emit::Props;
 if let Some::<emit::Str>(value) = evt.props().pull("my_property") {
     // The value is a string
 }
@@ -85,6 +88,7 @@ You can also use the [`cast()`](https://docs.rs/emit/0.11.0-alpha.21/emit/struct
 ```rust
 # extern crate emit;
 # fn get(evt: emit::Event<impl emit::Props>) {
+# use emit::Props;
 if let Some(value) = evt.props().get("my_property") {
     if let Some(value) = value.cast::<bool>() {
         // The value is a boolean
@@ -107,8 +111,9 @@ Property values can contain standard [`Error`](https://doc.rust-lang.org/std/err
 ```rust
 # extern crate emit;
 # fn get(evt: emit::Event<impl emit::Props>) {
+# use emit::Props;
 if let Some(err) = evt.props().get("err") {
-    if let Some(err) = value.to_borrowed_error() {
+    if let Some(err) = err.to_borrowed_error() {
         // The value is an error
     }
 
@@ -127,10 +132,13 @@ You can use the [`parse()`](https://docs.rs/emit/0.11.0-alpha.21/emit/struct.Val
 ```rust
 # extern crate emit;
 # fn get(evt: emit::Event<impl emit::Props>) {
+# use emit::Props;
 if let Some(value) = evt.props().get("ip") {
-    if let Some::<std::net::IpAddr> = value.parse() {
+    if let Some::<std::net::IpAddr>(ip) = value.parse() {
         // The value is an IP address
     }
+
+    // The value is something else
 }
 # }
 # fn main() {}
@@ -143,12 +151,13 @@ Use the [`for_each()`](https://docs.rs/emit/0.11.0-alpha.21/emit/trait.Props.htm
 ```rust
 # extern crate emit;
 # use std::collections::BTreeMap;
+# use emit::Props;
 use std::ops::ControlFlow;
 # fn get(evt: emit::Event<impl emit::Props>) {
 let mut buffered = BTreeMap::<String, String>::new();
 
 evt.props().for_each(|k, v| {
-    if !buffered.contains_key(&k) {
+    if !buffered.contains_key(k.get()) {
         buffered.insert(k.into(), v.to_string());
     }
 
@@ -167,6 +176,7 @@ Property collections may contain duplicate values, which will likely be yielded 
 ```rust
 # extern crate emit;
 # use std::collections::BTreeMap;
+# use emit::Props;
 use std::ops::ControlFlow;
 # fn get(evt: emit::Event<impl emit::Props>) {
 // This is the same example as before, but we know properties are unique
