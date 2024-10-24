@@ -15,7 +15,9 @@ members = [
     "examples/common_patterns",
     "examples/opentelemetry/direct_otlp",
     "examples/opentelemetry/via_sdk",
-    "test/ui",
+    "examples/trace_zipkin",
+    "examples/metric_prometheus",
+    "test/ui", "examples/trace_zipkin", "examples/metric_prometheus",
 ]
 
 [package]

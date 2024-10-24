@@ -63,4 +63,4 @@ The level of a span may also depend on its execution. See [Fallible functions](.
 
 ![an example trace in Zipkin](../asset/trace-zipkin.png)
 
-_An example trace produced by `emit` in Zipkin_
+_A trace produced by [this example application](https://github.com/emit-rs/emit/tree/main/examples/trace_zipkin) in Zipkin._
