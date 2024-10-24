@@ -40,4 +40,4 @@ Event {
 
 ![an example metric in Prometheus](../asset/metric-prometheus.png)
 
-_An example metric produced by `emit` in Prometheus_
+_A metric produced by [this example application](https://github.com/emit-rs/emit/tree/main/examples/metric_prometheus) in Prometheus._
