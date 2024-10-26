@@ -21,9 +21,17 @@ Add `emit` to your `Cargo.toml`:
 ```toml
 [dependencies.emit]
 version = "0.11.0-alpha.21"
+# Optional
+features = ["serde"]
 
+# Optional
 [dependencies.emit_term]
 version = "0.11.0-alpha.21"
+
+# Optional
+[dependencies.serde]
+version = "1"
+features = ["derive"]
 ```
 
 Initialize `emit` in your `main.rs` and start peppering diagnostics throughout your application:
@@ -36,18 +44,21 @@ fn main() {
         .init();
 
     // Your app code goes here
-    //
-    // Try uncommenting the following line as an example:
-    //
-    // greet("Rust");
+    greet(&User { id: 1, name: "Rust" });
 
     // Flush any remaining events before `main` returns
     rt.blocking_flush(std::time::Duration::from_secs(5));
 }
 
-#[emit::span("Greet {user}")]
-fn greet(user: &str) {
-    emit::info!("Hello, {user}!");
+#[derive(serde::Serialize)]
+pub struct User<'a> {
+    id: u32,
+    name: &'a str,
+}
+
+#[emit::span("Greet {user}", #[emit::as_serde] user)]
+fn greet(user: &User) {
+    emit::info!("Hello, {user: user.name}!");
 }
 ```
 

@@ -49,6 +49,10 @@ name = "emit_optional_values"
 path = "emit_optional_values.rs"
 
 [[example]]
+name = "emit_debug_values"
+path = "emit_debug_values.rs"
+
+[[example]]
 name = "emit_serde_values"
 path = "emit_serde_values.rs"
 
