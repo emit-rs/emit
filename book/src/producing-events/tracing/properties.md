@@ -98,7 +98,7 @@ Notice the `span_parent` of `inner_span` is the same as the `span_id` of `outer_
 
 Properties aren't limited to strings; they can be arbitrarily complex structured values. See the following sections and [Value data model](../../reference/events.md#value-data-model) for more details.
 
-## Using `fmt::Debug`
+### Using `fmt::Debug`
 
 If you want to log a type that implements `Debug`, you can apply the [`#[as_debug]`](../../reference/property-attributes.md#as_debug) attribute to it to capture it with its debug format:
 
@@ -115,7 +115,7 @@ fn greet(user: &User) {
 }
 ```
 
-## Using `serde::Serialize`
+### Using `serde::Serialize`
 
 If you want to log a type that implements `Serialize`, you can apply the [`#[as_serialize]`](../../reference/property-attributes.md#as_serialize) attribute to it to capture it as a structured value:
 
