@@ -10,7 +10,7 @@
 
 This readme covers just enough to give you an idea of what `emit` is. For a proper treatment, see:
 
-- [the guide](https://emit-rs.io)
+- [the guide](https://emit-rs.io).
 - [a set of task-oriented examples](https://github.com/emit-rs/emit/tree/main/examples).
 - [the API docs](https://docs.rs/emit/0.11.0-alpha.21/emit/index.html).
 
