@@ -93,3 +93,42 @@ Event {
 ```
 
 Notice the `span_parent` of `inner_span` is the same as the `span_id` of `outer_span`. That's because `inner_span` was called within the execution of `outer_span`.
+
+## Capturing complex values
+
+Properties aren't limited to strings; they can be arbitrarily complex structured values. See the following sections and [Value data model](../../reference/events.md#value-data-model) for more details.
+
+## Using `fmt::Debug`
+
+If you want to log a type that implements `Debug`, you can apply the [`#[as_debug]`](../../reference/property-attributes.md#as_debug) attribute to it to capture it with its debug format:
+
+```rust
+# extern crate emit;
+#[derive(Debug)]
+struct User<'a> {
+    name: &'a str,
+}
+
+#[emit::span("greet {user}", #[emit::as_debug] user)]
+fn greet(user: &User) {
+    println!("Hello, {}", user.name);
+}
+```
+
+## Using `serde::Serialize`
+
+If you want to log a type that implements `Serialize`, you can apply the [`#[as_serialize]`](../../reference/property-attributes.md#as_serialize) attribute to it to capture it as a structured value:
+
+```rust
+# extern crate emit;
+# #[macro_use] extern crate serde;
+#[derive(Serialize)]
+struct User<'a> {
+    name: &'a str,
+}
+
+#[emit::span("greet {user}", #[emit::as_serde] user)]
+fn greet(user: &User) {
+    println!("Hello, {}", user.name);
+}
+```

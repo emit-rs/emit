@@ -73,7 +73,7 @@ When rendered, the template will produce:
 pi is 3.142
 ```
 
-## `#[as_debug`
+## `#[as_debug]`
 
 The [`#[as_debug]`](https://docs.rs/emit/0.11.0-alpha.21/emit/attr.as_debug.html) attribute captures a property value using its [`Debug`](https://doc.rust-lang.org/std/fmt/trait.Debug.html) implementation, instead of the default `Display + 'static`:
 

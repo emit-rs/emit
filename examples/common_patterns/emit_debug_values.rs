@@ -1,23 +1,21 @@
 /*!
-This example demonstrates how to emit complex values using `serde`.
+This example demonstrates how to emit complex values using `std::fmt`.
 */
 
 use std::time::Duration;
 
 fn example() {
-    #[derive(serde::Serialize)]
+    #[derive(Debug)]
     pub struct User<'a> {
         id: usize,
         name: &'a str,
     }
 
-    // The `emit::as_serde` attribute captures a property
-    // using its `serde::Serialize` implementation. It's
-    // good for any complex data types you define or that
-    // come from external libraries
+    // The `emit::as_debug` attribute captures a property
+    // using its `fmt::Debug` implementation
     emit::info!(
         "Hello, {user}",
-        #[emit::as_serde]
+        #[emit::as_debug]
         user: User {
             id: 42,
             name: "Rust",
