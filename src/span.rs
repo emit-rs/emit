@@ -16,7 +16,7 @@ use emit_core::{
     event::{Event, ToEvent},
     extent::{Extent, ToExtent},
     path::Path,
-    props::Props,
+    props::{ErasedProps, Props},
     rng::Rng,
     str::{Str, ToStr},
     template::{self, Template},
@@ -36,6 +36,8 @@ use core::{
     ops::ControlFlow,
     str::{self, FromStr},
 };
+
+pub use self::completion::Completion;
 
 /**
 A [W3C Trace Id](https://www.w3.org/TR/trace-context/#trace-id).
@@ -528,6 +530,18 @@ impl<'a, P: Props> Span<'a, P> {
     pub fn props(&self) -> &P {
         &self.props
     }
+
+    /**
+    Get a type-erased span, borrowing data from this one.
+    */
+    pub fn erase<'b>(&'b self) -> Span<'b, &'b dyn ErasedProps> {
+        Span {
+            mdl: self.mdl.by_ref(),
+            extent: self.extent.clone(),
+            name: self.name.by_ref(),
+            props: &self.props,
+        }
+    }
 }
 
 impl<'a, P: Props> ToEvent for Span<'a, P> {
@@ -717,11 +731,11 @@ This type is created by the [`macro@crate::span!`] macro with the `guard` contro
 
 Call [`SpanGuard::complete_with`], or just drop the guard to complete it, emitting a [`Span`] for its execution.
 */
-pub struct SpanGuard<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> {
+pub struct SpanGuard<'a, C: Clock, P: Props, F: Completion> {
     // `state` is `None` if the span is completed
     state: Option<SpanGuardState<'a, C, P>>,
-    // `on_drop` is `None` if the span is disabled
-    on_drop: Option<F>,
+    // `completion` is `None` if the span is disabled
+    completion: Option<F>,
 }
 
 struct SpanGuardState<'a, C: Clock, P: Props> {
@@ -738,15 +752,13 @@ impl<'a, C: Clock, P: Props> SpanGuardState<'a, C, P> {
     }
 }
 
-impl<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> Drop for SpanGuard<'a, C, P, F> {
+impl<'a, C: Clock, P: Props, F: Completion> Drop for SpanGuard<'a, C, P, F> {
     fn drop(&mut self) {
-        if let (Some(value), Some(on_drop)) = (self.state.take(), self.on_drop.take()) {
-            on_drop(value.complete())
-        }
+        self.complete();
     }
 }
 
-impl<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> SpanGuard<'a, C, P, F> {
+impl<'a, C: Clock, P: Props, F: Completion> SpanGuard<'a, C, P, F> {
     pub(crate) fn filtered_new(
         filter: impl FnOnce(&SpanCtxt, Span<&P>) -> bool,
         mdl: impl Into<Path<'a>>,
@@ -777,7 +789,7 @@ impl<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> SpanGuard<'a, C, P, F> {
                 name,
                 props: event_props,
             }),
-            on_drop: if is_enabled {
+            completion: if is_enabled {
                 Some(default_complete)
             } else {
                 None
@@ -800,16 +812,22 @@ impl<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> SpanGuard<'a, C, P, F> {
     }
 
     fn is_enabled(&self) -> bool {
-        self.on_drop.is_some()
+        self.completion.is_some()
     }
 
     /**
     Complete the span.
 
-    If the span is disabled then this method is a no-op.
+    If the span is disabled or has already been completed this method will return `false`.
     */
-    pub fn complete(self) {
-        drop(self);
+    pub fn complete(&mut self) -> bool {
+        if let (Some(state), Some(completion)) = (self.state.take(), self.completion.take()) {
+            completion.complete(state.complete());
+
+            true
+        } else {
+            false
+        }
     }
 
     /**
@@ -817,18 +835,196 @@ impl<'a, C: Clock, P: Props, F: FnOnce(Span<'a, P>)> SpanGuard<'a, C, P, F> {
 
     If the span is disabled then the `complete` closure won't be called.
     */
-    pub fn complete_with(mut self, complete: impl FnOnce(Span<'a, P>)) -> bool {
-        if let Some(_) = self.on_drop.take() {
-            complete(
-                self.state
-                    .take()
-                    .expect("span is already complete")
-                    .complete(),
-            );
+    pub fn complete_with(&mut self, completion: impl Completion) -> bool {
+        if let (Some(state), Some(_)) = (self.state.take(), self.completion.take()) {
+            completion.complete(state.complete());
 
             true
         } else {
             false
+        }
+    }
+}
+
+pub mod completion {
+    /*!
+    The [`Completion`] type.
+
+    A [`Completion`] is a visitor for a [`Span`] that's called by a [`crate::span::SpanGuard`] when it completes.
+    */
+
+    use emit_core::{
+        emitter::Emitter,
+        empty::Empty,
+        props::{ErasedProps, Props},
+    };
+
+    use crate::span::Span;
+
+    /**
+    A receiver of [`Span`]s as they complete.
+    */
+    pub trait Completion {
+        /**
+        Receive a completing span.
+        */
+        fn complete<P: Props>(&self, span: Span<P>);
+    }
+
+    impl<'a, C: Completion + ?Sized> Completion for &'a C {
+        fn complete<P: Props>(&self, span: Span<P>) {
+            (**self).complete(span)
+        }
+    }
+
+    impl Completion for Empty {
+        fn complete<P: Props>(&self, _: Span<P>) {}
+    }
+
+    /**
+    A [`Completion`] from an [`Emitter`].
+
+    On completion, a [`Span`] will be emitted as an event using [`Span::to_event`].
+
+    This type can be created directly, or via [`from_emitter`].
+    */
+    pub struct FromEmitter<E>(E);
+
+    impl<E: Emitter> Completion for FromEmitter<E> {
+        fn complete<P: Props>(&self, span: Span<P>) {
+            self.0.emit(span)
+        }
+    }
+
+    impl<E> FromEmitter<E> {
+        /**
+        Wrap the given emitter.
+        */
+        pub const fn new(emitter: E) -> Self {
+            FromEmitter(emitter)
+        }
+    }
+
+    /**
+    Create a [`Completion`] from an [`Emitter`].
+
+    On completion, a [`Span`] will be emitted as an event using [`Span::to_event`].
+    */
+    pub const fn from_emitter<E: Emitter>(emitter: E) -> FromEmitter<E> {
+        FromEmitter(emitter)
+    }
+
+    /**
+    A [`Completion`] from a function.
+
+    This type can be created directly, or via [`from_fn`].
+    */
+    pub struct FromFn<F = fn(&Span<&dyn ErasedProps>)>(F);
+
+    /**
+    Create a [`Completion`] from a function.
+    */
+    pub const fn from_fn<F: Fn(&Span<&dyn ErasedProps>)>(f: F) -> FromFn<F> {
+        FromFn(f)
+    }
+
+    impl<F> FromFn<F> {
+        /**
+        Wrap the given completion function.
+        */
+        pub const fn new(completion: F) -> FromFn<F> {
+            FromFn(completion)
+        }
+    }
+
+    impl<F: Fn(&Span<&dyn ErasedProps>)> Completion for FromFn<F> {
+        fn complete<P: Props>(&self, span: Span<P>) {
+            (self.0)(&span.erase())
+        }
+    }
+
+    mod internal {
+        use super::*;
+
+        pub trait DispatchCompletion {
+            fn dispatch_complete(&self, span: Span<&dyn ErasedProps>);
+        }
+
+        pub trait SealedCompletion {
+            fn erase_completion(&self) -> crate::internal::Erased<&dyn DispatchCompletion>;
+        }
+    }
+
+    /**
+    An object-safe [`Completion`].
+
+    A `dyn ErasedCompletion` can be treated as `impl Completion`.
+    */
+    pub trait ErasedCompletion: internal::SealedCompletion {}
+
+    impl<T: Completion> ErasedCompletion for T {}
+
+    impl<T: Completion> internal::SealedCompletion for T {
+        fn erase_completion(&self) -> crate::internal::Erased<&dyn internal::DispatchCompletion> {
+            crate::internal::Erased(self)
+        }
+    }
+
+    impl<T: Completion> internal::DispatchCompletion for T {
+        fn dispatch_complete(&self, span: Span<&dyn ErasedProps>) {
+            self.complete(span)
+        }
+    }
+
+    impl<'a> Completion for dyn ErasedCompletion + 'a {
+        fn complete<P: Props>(&self, span: Span<P>) {
+            self.erase_completion().0.dispatch_complete(span.erase())
+        }
+    }
+
+    impl<'a> Completion for dyn ErasedCompletion + Send + Sync + 'a {
+        fn complete<P: Props>(&self, span: Span<P>) {
+            (self as &(dyn ErasedCompletion + 'a)).complete(span)
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use std::cell::Cell;
+
+        use emit_core::path::Path;
+
+        #[test]
+        fn from_fn_completion() {
+            let called = Cell::new(false);
+
+            let completion = from_fn(|span| {
+                assert_eq!("test", span.name());
+
+                called.set(true);
+            });
+
+            completion.complete(Span::new(Path::new_unchecked("test"), "test", Empty, Empty));
+
+            assert!(called.get());
+        }
+
+        #[test]
+        fn erased_completion() {
+            let called = Cell::new(false);
+
+            let completion = from_fn(|span| {
+                assert_eq!("test", span.name());
+
+                called.set(true);
+            });
+
+            let completion = &completion as &dyn ErasedCompletion;
+
+            completion.complete(Span::new(Path::new_unchecked("test"), "test", Empty, Empty));
+
+            assert!(called.get());
         }
     }
 }
@@ -1169,7 +1365,7 @@ mod tests {
             "span",
             span_ctxt,
             ("event_prop", 1),
-            |evt| {
+            completion::from_fn(|evt| {
                 assert_eq!(
                     Timestamp::from_unix(Duration::from_secs(0)).unwrap(),
                     evt.extent().unwrap().as_range().unwrap().start
@@ -1189,7 +1385,7 @@ mod tests {
                 assert_eq!(span_ctxt, current_ctxt);
 
                 complete_called.set(true);
-            },
+            }),
         );
 
         assert!(guard.is_enabled());
@@ -1217,9 +1413,9 @@ mod tests {
             "span",
             SpanCtxt::new_root(&rng),
             crate::Empty,
-            |_| {
+            completion::from_fn(|_| {
                 complete_called.set(true);
-            },
+            }),
         );
 
         assert!(!guard.is_enabled());
@@ -1240,23 +1436,23 @@ mod tests {
         let custom_complete_called = Cell::new(false);
         let default_complete_called = Cell::new(false);
 
-        let guard = SpanGuard::filtered_new(
+        let mut guard = SpanGuard::filtered_new(
             |_, _| true,
             Path::new_unchecked("test"),
             Timer::start(&clock),
             "span",
             SpanCtxt::new_root(&rng),
             crate::Empty,
-            |_| {
+            completion::from_fn(|_| {
                 default_complete_called.set(true);
-            },
+            }),
         );
 
         assert!(guard.is_enabled());
 
-        guard.complete_with(|_| {
+        guard.complete_with(completion::from_fn(|_| {
             custom_complete_called.set(true);
-        });
+        }));
 
         assert!(!default_complete_called.get());
         assert!(custom_complete_called.get());

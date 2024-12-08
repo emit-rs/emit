@@ -28,7 +28,7 @@ use crate::{frame::Frame, span::Span};
 use std::error::Error;
 
 use crate::{
-    span::{SpanCtxt, SpanGuard, SpanId, TraceId},
+    span::{Completion, SpanCtxt, SpanGuard, SpanId, TraceId},
     Level, Timer,
 };
 
@@ -816,7 +816,7 @@ pub fn __private_begin_span<
     C: Ctxt,
     T: Clock,
     R: Rng,
-    S: FnOnce(Span<'static, Empty>),
+    S: Completion,
 >(
     rt: &'a Runtime<E, F, C, T, R>,
     mdl: impl Into<Path<'static>>,
