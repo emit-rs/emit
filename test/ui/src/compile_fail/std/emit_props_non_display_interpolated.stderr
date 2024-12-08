@@ -2,7 +2,7 @@ error[E0277]: capturing requires `NotDisplay` implements `Display + Any` by defa
  --> src/compile_fail/std/emit_props_non_display_interpolated.rs:4:28
   |
 4 |     emit::emit!("template {x}");
-  |                            ^ the trait `std::fmt::Display` is not implemented for `NotDisplay`, which is required by `NotDisplay: CaptureWithDefault`
+  |                            ^ the trait `std::fmt::Display` is not implemented for `NotDisplay`
   |
   = help: the trait `CaptureWithDefault` is implemented for `str`
   = note: required for `NotDisplay` to implement `CaptureWithDefault`

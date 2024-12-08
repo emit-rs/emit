@@ -919,12 +919,12 @@ pub mod completion {
 
     This type can be created directly, or via [`from_fn`].
     */
-    pub struct FromFn<F = fn(&Span<&dyn ErasedProps>)>(F);
+    pub struct FromFn<F = fn(Span<&dyn ErasedProps>)>(F);
 
     /**
     Create a [`Completion`] from a function.
     */
-    pub const fn from_fn<F: Fn(&Span<&dyn ErasedProps>)>(f: F) -> FromFn<F> {
+    pub const fn from_fn<F: Fn(Span<&dyn ErasedProps>)>(f: F) -> FromFn<F> {
         FromFn(f)
     }
 
@@ -937,9 +937,9 @@ pub mod completion {
         }
     }
 
-    impl<F: Fn(&Span<&dyn ErasedProps>)> Completion for FromFn<F> {
+    impl<F: Fn(Span<&dyn ErasedProps>)> Completion for FromFn<F> {
         fn complete<P: Props>(&self, span: Span<P>) {
-            (self.0)(&span.erase())
+            (self.0)(span.erase())
         }
     }
 

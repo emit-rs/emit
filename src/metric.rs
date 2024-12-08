@@ -955,12 +955,12 @@ pub mod sampler {
 
     This type can be created directly, or via [`from_fn`].
     */
-    pub struct FromFn<F = fn(&Metric<&dyn ErasedProps>)>(F);
+    pub struct FromFn<F = fn(Metric<&dyn ErasedProps>)>(F);
 
     /**
     Create a [`Sampler`] from a function.
     */
-    pub const fn from_fn<F: Fn(&Metric<&dyn ErasedProps>)>(f: F) -> FromFn<F> {
+    pub const fn from_fn<F: Fn(Metric<&dyn ErasedProps>)>(f: F) -> FromFn<F> {
         FromFn(f)
     }
 
@@ -973,9 +973,9 @@ pub mod sampler {
         }
     }
 
-    impl<F: Fn(&Metric<&dyn ErasedProps>)> Sampler for FromFn<F> {
+    impl<F: Fn(Metric<&dyn ErasedProps>)> Sampler for FromFn<F> {
         fn metric<P: Props>(&self, metric: Metric<P>) {
-            (self.0)(&metric.erase())
+            (self.0)(metric.erase())
         }
     }
 

@@ -4,13 +4,13 @@ This example demonstrates how to emit complex values using `std::fmt`.
 
 use std::time::Duration;
 
-fn example() {
-    #[derive(Debug)]
-    pub struct User<'a> {
-        id: usize,
-        name: &'a str,
-    }
+#[derive(Debug)]
+pub struct User<'a> {
+    pub id: usize,
+    pub name: &'a str,
+}
 
+fn example() {
     // The `emit::as_debug` attribute captures a property
     // using its `fmt::Debug` implementation
     emit::info!(
