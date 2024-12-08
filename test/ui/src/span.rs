@@ -658,10 +658,7 @@ async fn span_err_lvl_impl_return_async() {
 fn span_err_lvl_guard() {
     use std::io;
 
-    static RT: StaticRuntime = static_runtime(
-        |_| { },
-        |_| true,
-    );
+    static RT: StaticRuntime = static_runtime(|_| {}, |_| true);
 
     #[emit::span(rt: RT, guard: span, err_lvl: emit::Level::Warn, "test")]
     fn exec(fail: bool) -> Result<bool, io::Error> {
@@ -682,10 +679,7 @@ fn span_err_lvl_guard() {
 async fn span_err_lvl_guard_async() {
     use std::io;
 
-    static RT: StaticRuntime = static_runtime(
-        |_| { },
-        |_| true,
-    );
+    static RT: StaticRuntime = static_runtime(|_| {}, |_| true);
 
     #[emit::span(rt: RT, guard: span, err_lvl: emit::Level::Warn, "test")]
     async fn exec(fail: bool) -> Result<bool, io::Error> {

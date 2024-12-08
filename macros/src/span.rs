@@ -300,7 +300,13 @@ fn inject_sync(
 
         let #span_guard = &mut __span_guard;
 
-        #body_tokens
+        let __r = #body_tokens;
+
+        #[allow(unreachable_code)]
+        {
+            __span_guard.complete();
+            __r
+        }
     }))
 }
 
@@ -374,7 +380,13 @@ fn inject_async(
         __ctxt.in_future(async move {
             let #span_guard = &mut __span_guard;
 
-            #body_tokens
+            let __r = #body_tokens;
+
+            #[allow(unreachable_code)]
+            {
+                __span_guard.complete();
+                __r
+            }
         }).await
     }))
 }
