@@ -286,7 +286,7 @@ fn inject_sync(
     Ok(quote!({
         #setup_tokens
 
-        let (mut __ctxt, mut __span_guard) = emit::__private::__private_begin_span(
+        let (__ctxt, __span_guard) = emit::__private::__private_begin_span(
             #rt_tokens,
             #mdl_tokens,
             #span_name_tokens,
@@ -296,17 +296,13 @@ fn inject_sync(
             #ctxt_props_tokens,
             #default_completion_tokens,
         );
-        let __ctxt_guard = __ctxt.enter();
 
-        let #span_guard = &mut __span_guard;
+        __ctxt.call(move || {
+            let mut __span_guard = __span_guard;
+            let #span_guard = &mut __span_guard;
 
-        let __r = #body_tokens;
-
-        #[allow(unreachable_code)]
-        {
-            __span_guard.complete();
-            __r
-        }
+            #body_tokens
+        })
     }))
 }
 
@@ -378,15 +374,10 @@ fn inject_async(
         );
 
         __ctxt.in_future(async move {
-            let #span_guard = &mut __span_guard;
-
-            let __r = #body_tokens;
-
-            #[allow(unreachable_code)]
-            {
-                __span_guard.complete();
-                __r
-            }
+            async move {
+                let #span_guard = &mut __span_guard;
+                #body_tokens
+            }.await
         }).await
     }))
 }
