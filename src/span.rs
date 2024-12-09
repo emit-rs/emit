@@ -729,7 +729,7 @@ An active span in a distributed trace.
 
 This type is created by the [`macro@crate::span!`] macro with the `guard` control parameter. See the [`mod@crate::span`] module for details on creating spans.
 
-Call [`SpanGuard::complete_with`], or just drop the guard to complete it, emitting a [`Span`] for its execution.
+Call [`SpanGuard::complete_with`], or just drop the guard to complete it, passing the resulting [`Span`] to a [`Completion`].
 */
 pub struct SpanGuard<'a, C: Clock, P: Props, F: Completion> {
     // `state` is `None` if the span is completed

@@ -1,6 +1,6 @@
 # Manual span completion
 
-The `guard` [control parameter](../../reference/control-parameters.md) can be applied to span macros to bind an identifier in the body of the annotated function for the [`Span`] that's created for it. This span can be completed manually, changing properties of the span along the way:
+The `guard` [control parameter](../../reference/control-parameters.md) can be applied to span macros to bind an identifier in the body of the annotated function for the span that's created for it. This span can be completed manually, changing properties of the span along the way:
 
 ```rust
 # extern crate emit;
@@ -9,13 +9,14 @@ fn wait_a_bit(sleep_ms: u64) {
     std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
 
     if sleep_ms > 500 {
-        span.complete_with(|span| {
+        // The ident `span` here is what we used as the value for `guard`
+        span.complete_with(emit::span::completion::from_fn(|span| {
             emit::warn!(
                 when: emit::filter::always(),
                 evt: span,
                 "wait a bit took too long",
             );
-        });
+        }));
     }
 }
 
@@ -56,3 +57,5 @@ Event {
 ```
 
 Take care when completing spans manually that they always match the configured filter. This can be done using the `when` control parameter like in the above example. If a span is created it _must_ be emitted, otherwise the resulting trace will be incomplete.
+
+The type of the identifier bound by `guard` is a [`SpanGuard`](https://docs.rs/emit/0.11.0-alpha.21/emit/span/struct.SpanGuard.html). When the guard goes out of scope or is manually completed, it constructs a [`Span`](https://docs.rs/emit/0.11.0-alpha.21/emit/span/struct.Span.html) and passes it to a [`Completion`](https://docs.rs/emit/0.11.0-alpha.21/emit/span/trait.Completion.html). A completion that emits the span will be used by default, but a different completion can also be passed to [`complete_with`](https://docs.rs/emit/0.11.0-alpha.21/emit/span/struct.SpanGuard.html#method.complete_with).
