@@ -281,7 +281,7 @@ fn span_guard() {
 
     #[emit::span(rt: RT, guard: span, "test")]
     fn exec() {
-        let span: &mut emit::span::SpanGuard<_, _, _> = span;
+        let span: emit::span::SpanGuard<_, _, _> = span;
         span.complete();
     }
 
@@ -685,48 +685,6 @@ async fn span_err_lvl_impl_return_async() {
         if fail {
             return Err(io::Error::new(io::ErrorKind::Other, "failed"));
         }
-
-        Ok(true)
-    }
-
-    exec(true).await.unwrap_err();
-}
-
-#[test]
-#[cfg(feature = "std")]
-fn span_err_lvl_guard() {
-    use std::io;
-
-    static RT: StaticRuntime = static_runtime(|_| {}, |_| true);
-
-    #[emit::span(rt: RT, guard: span, err_lvl: emit::Level::Warn, "test")]
-    fn exec(fail: bool) -> Result<bool, io::Error> {
-        if fail {
-            return Err(io::Error::new(io::ErrorKind::Other, "failed"));
-        }
-
-        span.complete();
-
-        Ok(true)
-    }
-
-    exec(true).unwrap_err();
-}
-
-#[tokio::test]
-#[cfg(feature = "std")]
-async fn span_err_lvl_guard_async() {
-    use std::io;
-
-    static RT: StaticRuntime = static_runtime(|_| {}, |_| true);
-
-    #[emit::span(rt: RT, guard: span, err_lvl: emit::Level::Warn, "test")]
-    async fn exec(fail: bool) -> Result<bool, io::Error> {
-        if fail {
-            return Err(io::Error::new(io::ErrorKind::Other, "failed"));
-        }
-
-        span.complete();
 
         Ok(true)
     }

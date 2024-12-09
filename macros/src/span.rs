@@ -91,6 +91,16 @@ impl Parse for Args {
             ],
         )?;
 
+        if let Some(guard) = guard.peek() {
+            if ok_lvl.peek().is_some()
+                || err_lvl.peek().is_some()
+                || panic_lvl.peek().is_some()
+                || err.peek().is_some()
+            {
+                return Err(syn::Error::new(guard.span(), "the `guard` control parameter is incompatible with `ok_lvl`, `err_lvl`, `panic_lvl`, or `err`"));
+            }
+        }
+
         Ok(Args {
             rt: rt.take_or_default(),
             mdl: mdl.take_or_default(),
@@ -265,6 +275,7 @@ fn inject_sync(
             body_tokens,
             rt_tokens,
             &template_tokens,
+            span_guard,
             default_lvl_tokens,
             panic_lvl_tokens,
             ok_lvl_tokens,
@@ -298,8 +309,7 @@ fn inject_sync(
         );
 
         __ctxt.call(move || {
-            let mut __span_guard = __span_guard;
-            let #span_guard = &mut __span_guard;
+            let #span_guard = __span_guard;
 
             #body_tokens
         })
@@ -341,6 +351,7 @@ fn inject_async(
             body_tokens,
             rt_tokens,
             &template_tokens,
+            span_guard,
             default_lvl_tokens,
             panic_lvl_tokens,
             ok_lvl_tokens,
@@ -374,10 +385,8 @@ fn inject_async(
         );
 
         __ctxt.in_future(async move {
-            async move {
-                let #span_guard = &mut __span_guard;
-                #body_tokens
-            }.await
+            let #span_guard = __span_guard;
+            #body_tokens
         }).await
     }))
 }
@@ -400,6 +409,7 @@ fn result_completion(
     body_tokens: TokenStream,
     rt_tokens: &TokenStream,
     template_tokens: &TokenStream,
+    span_guard: &Ident,
     default_lvl_tokens: Option<TokenStream>,
     panic_lvl_tokens: Option<TokenStream>,
     ok_lvl_tokens: Option<TokenStream>,
@@ -417,7 +427,7 @@ fn result_completion(
 
         quote!(
             Ok(__ok) => {
-                __span_guard.complete_with(emit::span::completion::from_fn(|span| {
+                #span_guard.complete_with(emit::span::completion::from_fn(|span| {
                     emit::__private::__private_complete_span_ok(
                         #rt_tokens,
                         span,
@@ -449,7 +459,7 @@ fn result_completion(
 
         quote!(
             Err(__err) => {
-                __span_guard.complete_with(emit::span::completion::from_fn(|span| {
+                #span_guard.complete_with(emit::span::completion::from_fn(|span| {
                     emit::__private::__private_complete_span_err(
                         #rt_tokens,
                         span,

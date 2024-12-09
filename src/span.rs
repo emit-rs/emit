@@ -754,7 +754,7 @@ impl<'a, C: Clock, P: Props> SpanGuardState<'a, C, P> {
 
 impl<'a, C: Clock, P: Props, F: Completion> Drop for SpanGuard<'a, C, P, F> {
     fn drop(&mut self) {
-        self.complete();
+        self.complete_default();
     }
 }
 
@@ -820,7 +820,11 @@ impl<'a, C: Clock, P: Props, F: Completion> SpanGuard<'a, C, P, F> {
 
     If the span is disabled or has already been completed this method will return `false`.
     */
-    pub fn complete(&mut self) -> bool {
+    pub fn complete(mut self) -> bool {
+        self.complete_default()
+    }
+
+    fn complete_default(&mut self) -> bool {
         if let (Some(state), Some(completion)) = (self.state.take(), self.completion.take()) {
             completion.complete(state.complete());
 
@@ -835,7 +839,7 @@ impl<'a, C: Clock, P: Props, F: Completion> SpanGuard<'a, C, P, F> {
 
     If the span is disabled then the `complete` closure won't be called.
     */
-    pub fn complete_with(&mut self, completion: impl Completion) -> bool {
+    pub fn complete_with(mut self, completion: impl Completion) -> bool {
         if let (Some(state), Some(_)) = (self.state.take(), self.completion.take()) {
             completion.complete(state.complete());
 
@@ -1436,7 +1440,7 @@ mod tests {
         let custom_complete_called = Cell::new(false);
         let default_complete_called = Cell::new(false);
 
-        let mut guard = SpanGuard::filtered_new(
+        let guard = SpanGuard::filtered_new(
             |_, _| true,
             Path::new_unchecked("test"),
             Timer::start(&clock),
