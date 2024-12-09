@@ -16,13 +16,13 @@ fn example(i: i32) {
     let r = i + 1;
 
     if r == 4 {
-        span.complete_with(|evt| {
+        span.complete_with(emit::span::completion::from_fn(|evt| {
             emit::error!(evt, "Running an example failed with {r}");
-        });
+        }));
     } else {
-        span.complete_with(|evt| {
+        span.complete_with(emit::span::completion::from_fn(|evt| {
             emit::info!(evt, "Running an example produced {r}");
-        });
+        }));
     }
 }
 

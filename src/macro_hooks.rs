@@ -28,7 +28,7 @@ use crate::{frame::Frame, span::Span};
 use std::error::Error;
 
 use crate::{
-    span::{SpanCtxt, SpanGuard, SpanId, TraceId},
+    span::{Completion, SpanCtxt, SpanGuard, SpanId, TraceId},
     Level, Timer,
 };
 
@@ -816,7 +816,7 @@ pub fn __private_begin_span<
     C: Ctxt,
     T: Clock,
     R: Rng,
-    S: FnOnce(Span<'static, Empty>),
+    S: Completion,
 >(
     rt: &'a Runtime<E, F, C, T, R>,
     mdl: impl Into<Path<'static>>,
@@ -862,9 +862,18 @@ pub fn __private_begin_span<
 }
 
 #[track_caller]
-pub fn __private_complete_span<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
+pub fn __private_complete_span<
+    'a,
+    'b,
+    E: Emitter,
+    F: Filter,
+    C: Ctxt,
+    T: Clock,
+    R: Rng,
+    P: Props,
+>(
     rt: &'a Runtime<E, F, C, T, R>,
-    span: Span<'static, Empty>,
+    span: Span<'b, P>,
     tpl: &'b (impl TplControlParam + ?Sized),
     lvl: Option<&'b (impl CaptureLevel + ?Sized)>,
     panic_lvl: Option<&'b (impl CaptureLevel + ?Sized)>,
@@ -934,9 +943,18 @@ fn is_panicking() -> bool {
 }
 
 #[track_caller]
-pub fn __private_complete_span_ok<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
+pub fn __private_complete_span_ok<
+    'a,
+    'b,
+    E: Emitter,
+    F: Filter,
+    C: Ctxt,
+    T: Clock,
+    R: Rng,
+    P: Props,
+>(
     rt: &'a Runtime<E, F, C, T, R>,
-    span: Span<'static, Empty>,
+    span: Span<'b, P>,
     tpl: &'b (impl TplControlParam + ?Sized),
     lvl: Option<&'b (impl CaptureLevel + ?Sized)>,
 ) {
@@ -954,9 +972,18 @@ pub fn __private_complete_span_ok<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clo
 }
 
 #[track_caller]
-pub fn __private_complete_span_err<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
+pub fn __private_complete_span_err<
+    'a,
+    'b,
+    E: Emitter,
+    F: Filter,
+    C: Ctxt,
+    T: Clock,
+    R: Rng,
+    P: Props,
+>(
     rt: &'a Runtime<E, F, C, T, R>,
-    span: Span<'static, Empty>,
+    span: Span<'b, P>,
     tpl: &'b (impl TplControlParam + ?Sized),
     lvl: &'b (impl CaptureLevel + ?Sized),
     err: &'b (impl CaptureAsError + ?Sized),

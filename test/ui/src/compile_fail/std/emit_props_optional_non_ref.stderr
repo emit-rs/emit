@@ -4,7 +4,8 @@ error[E0277]: capturing an optional value requires `Option<&T>`. Try calling `.a
 2 |     emit::emit!("template", #[emit::optional] some: Some(1));
   |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `Optional<'_>` is not implemented for `Option<{integer}>`
   |
-  = help: the trait `Optional<'_>` is implemented for `Option<&_>`
+  = help: the trait `Optional<'_>` is not implemented for `Option<{integer}>`
+          but it is implemented for `Option<&_>`
   = help: for that trait implementation, expected `&_`, found `{integer}`
 
 error[E0282]: type annotations needed for `&_`

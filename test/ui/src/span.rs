@@ -281,7 +281,7 @@ fn span_guard() {
 
     #[emit::span(rt: RT, guard: span, "test")]
     fn exec() {
-        let span: emit::span::SpanGuard<_, _, _> = span;
+        let span: &mut emit::span::SpanGuard<_, _, _> = span;
         span.complete();
     }
 
@@ -383,6 +383,45 @@ fn span_explicit_ids() {
         "0000000000000002",
         "0000000000000003",
     );
+
+    assert!(CALLED.was_called());
+}
+
+#[tokio::test]
+async fn async_span_explicit_ids() {
+    static CALLED: StaticCalled = StaticCalled::new();
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!(emit::TraceId::from_u128(1), evt.props().pull("trace_id"));
+            assert_eq!(emit::SpanId::from_u64(2), evt.props().pull("span_parent"));
+            assert_eq!(emit::SpanId::from_u64(3), evt.props().pull("span_id"));
+
+            CALLED.record();
+        },
+        |evt| {
+            assert_eq!(emit::TraceId::from_u128(1), evt.props().pull("trace_id"));
+            assert_eq!(emit::SpanId::from_u64(2), evt.props().pull("span_parent"));
+            assert_eq!(emit::SpanId::from_u64(3), evt.props().pull("span_id"));
+
+            true
+        },
+    );
+
+    #[emit::span(rt: RT, "test", trace_id, span_parent, span_id)]
+    async fn exec(trace_id: &str, span_parent: &str, span_id: &str) {
+        let ctxt = emit::SpanCtxt::current(RT.ctxt());
+
+        assert_eq!(emit::TraceId::from_u128(1), ctxt.trace_id().copied());
+        assert_eq!(emit::SpanId::from_u64(2), ctxt.span_parent().copied());
+        assert_eq!(emit::SpanId::from_u64(3), ctxt.span_id().copied());
+    }
+
+    exec(
+        "00000000000000000000000000000001",
+        "0000000000000002",
+        "0000000000000003",
+    )
+    .await;
 
     assert!(CALLED.was_called());
 }
@@ -646,6 +685,48 @@ async fn span_err_lvl_impl_return_async() {
         if fail {
             return Err(io::Error::new(io::ErrorKind::Other, "failed"));
         }
+
+        Ok(true)
+    }
+
+    exec(true).await.unwrap_err();
+}
+
+#[test]
+#[cfg(feature = "std")]
+fn span_err_lvl_guard() {
+    use std::io;
+
+    static RT: StaticRuntime = static_runtime(|_| {}, |_| true);
+
+    #[emit::span(rt: RT, guard: span, err_lvl: emit::Level::Warn, "test")]
+    fn exec(fail: bool) -> Result<bool, io::Error> {
+        if fail {
+            return Err(io::Error::new(io::ErrorKind::Other, "failed"));
+        }
+
+        span.complete();
+
+        Ok(true)
+    }
+
+    exec(true).unwrap_err();
+}
+
+#[tokio::test]
+#[cfg(feature = "std")]
+async fn span_err_lvl_guard_async() {
+    use std::io;
+
+    static RT: StaticRuntime = static_runtime(|_| {}, |_| true);
+
+    #[emit::span(rt: RT, guard: span, err_lvl: emit::Level::Warn, "test")]
+    async fn exec(fail: bool) -> Result<bool, io::Error> {
+        if fail {
+            return Err(io::Error::new(io::ErrorKind::Other, "failed"));
+        }
+
+        span.complete();
 
         Ok(true)
     }

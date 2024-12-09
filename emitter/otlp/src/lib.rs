@@ -634,7 +634,7 @@ fn add(a: i32, b: i32) -> i32 {
    let r = a + b;
 
    if r == 4 {
-      span.complete_with(|evt| {
+      span.complete_with(emit::span::completion::from_fn(|evt| {
             emit::error!(
                evt,
                "Compute {a} + {b} failed",
@@ -643,7 +643,7 @@ fn add(a: i32, b: i32) -> i32 {
                r,
                err: "Invalid result",
             );
-      });
+      }));
    }
 
    r

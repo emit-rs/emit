@@ -71,9 +71,9 @@ fn routes(method: &str, path: &str) {
     match path {
         "/api/route-1" => api_route_1(),
         _ => {
-            span.complete_with(|evt| {
+            span.complete_with(emit::span::completion::from_fn(|evt| {
                 emit::error!(evt, "HTTP {method} {path} matched no route");
-            });
+            }));
         }
     }
 }

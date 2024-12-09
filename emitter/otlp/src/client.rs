@@ -565,19 +565,19 @@ impl<R: data::RequestEncoder> OtlpTransport<R> {
                     .await
                 {
                     Ok(res) => {
-                        span.complete_with(|evt| {
+                        span.complete_with(emit::span::completion::from_fn(|evt| {
                             emit::debug!(
                                 rt: emit::runtime::internal(),
                                 evt,
                                 "OTLP batch of {batch_size} events to {uri}",
                                 batch_size,
                             )
-                        });
+                        }));
 
                         res
                     }
                     Err(err) => {
-                        span.complete_with(|evt| {
+                        span.complete_with(emit::span::completion::from_fn(|evt| {
                             emit::warn!(
                                 rt: emit::runtime::internal(),
                                 evt,
@@ -585,7 +585,7 @@ impl<R: data::RequestEncoder> OtlpTransport<R> {
                                 batch_size,
                                 err,
                             )
-                        });
+                        }));
 
                         return Err(BatchError::retry(err, batch));
                     }
