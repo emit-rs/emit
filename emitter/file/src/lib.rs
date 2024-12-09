@@ -754,7 +754,7 @@ impl Worker {
 
         if file.is_none() {
             if let Err(err) = self.fs.create_dir_all(Path::new(&self.dir)) {
-                span.complete_with(|span| {
+                span.complete_with(emit::span::completion::from_fn(|span| {
                     emit::warn!(
                         rt: emit::runtime::internal(),
                         extent: span.extent(),
@@ -764,7 +764,7 @@ impl Worker {
                         path: &self.dir,
                         err,
                     )
-                });
+                }));
 
                 return Err(emit_batcher::BatchError::retry(err, batch));
             }
@@ -869,7 +869,7 @@ impl Worker {
             if let Err(err) = file.write_event(buf, self.separator) {
                 self.metrics.file_write_failed.increment();
 
-                span.complete_with(|span| {
+                span.complete_with(emit::span::completion::from_fn(|span| {
                     emit::warn!(
                         rt: emit::runtime::internal(),
                         extent: span.extent(),
@@ -879,7 +879,7 @@ impl Worker {
                         path: file.file_path,
                         err,
                     )
-                });
+                }));
 
                 return Err(emit_batcher::BatchError::retry(err, batch));
             }
@@ -894,7 +894,7 @@ impl Worker {
             .sync_all()
             .map_err(|e| emit_batcher::BatchError::no_retry(e))?;
 
-        span.complete_with(|span| {
+        span.complete_with(emit::span::completion::from_fn(|span| {
             emit::debug!(
                 rt: emit::runtime::internal(),
                 extent: span.extent(),
@@ -904,7 +904,7 @@ impl Worker {
                 #[emit::as_debug]
                 path: file.file_path,
             )
-        });
+        }));
 
         // Set the active file so the next batch can attempt to use it
         // At this point the file is expected to be valid

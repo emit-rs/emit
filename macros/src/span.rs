@@ -91,6 +91,16 @@ impl Parse for Args {
             ],
         )?;
 
+        if let Some(guard) = guard.peek() {
+            if ok_lvl.peek().is_some()
+                || err_lvl.peek().is_some()
+                || panic_lvl.peek().is_some()
+                || err.peek().is_some()
+            {
+                return Err(syn::Error::new(guard.span(), "the `guard` control parameter is incompatible with `ok_lvl`, `err_lvl`, `panic_lvl`, or `err`"));
+            }
+        }
+
         Ok(Args {
             rt: rt.take_or_default(),
             mdl: mdl.take_or_default(),
@@ -263,9 +273,9 @@ fn inject_sync(
 
         result_completion(
             body_tokens,
-            span_guard,
             rt_tokens,
             &template_tokens,
+            span_guard,
             default_lvl_tokens,
             panic_lvl_tokens,
             ok_lvl_tokens,
@@ -287,7 +297,7 @@ fn inject_sync(
     Ok(quote!({
         #setup_tokens
 
-        let (mut __ctxt, __span_guard) = emit::__private::__private_begin_span(
+        let (__ctxt, __span_guard) = emit::__private::__private_begin_span(
             #rt_tokens,
             #mdl_tokens,
             #span_name_tokens,
@@ -297,11 +307,12 @@ fn inject_sync(
             #ctxt_props_tokens,
             #default_completion_tokens,
         );
-        let __ctxt_guard = __ctxt.enter();
 
-        let #span_guard = __span_guard;
+        __ctxt.call(move || {
+            let #span_guard = __span_guard;
 
-        #body_tokens
+            #body_tokens
+        })
     }))
 }
 
@@ -338,9 +349,9 @@ fn inject_async(
 
         result_completion(
             body_tokens,
-            span_guard,
             rt_tokens,
             &template_tokens,
+            span_guard,
             default_lvl_tokens,
             panic_lvl_tokens,
             ok_lvl_tokens,
@@ -362,7 +373,7 @@ fn inject_async(
     Ok(quote!({
         #setup_tokens
 
-        let (__ctxt, __span_guard) = emit::__private::__private_begin_span(
+        let (__ctxt, mut __span_guard) = emit::__private::__private_begin_span(
             #rt_tokens,
             #mdl_tokens,
             #span_name_tokens,
@@ -375,7 +386,6 @@ fn inject_async(
 
         __ctxt.in_future(async move {
             let #span_guard = __span_guard;
-
             #body_tokens
         }).await
     }))
@@ -397,9 +407,9 @@ fn use_result_completion(
 
 fn result_completion(
     body_tokens: TokenStream,
-    span_guard: &Ident,
     rt_tokens: &TokenStream,
     template_tokens: &TokenStream,
+    span_guard: &Ident,
     default_lvl_tokens: Option<TokenStream>,
     panic_lvl_tokens: Option<TokenStream>,
     ok_lvl_tokens: Option<TokenStream>,
@@ -417,14 +427,14 @@ fn result_completion(
 
         quote!(
             Ok(__ok) => {
-                #span_guard.complete_with(|span| {
+                #span_guard.complete_with(emit::span::completion::from_fn(|span| {
                     emit::__private::__private_complete_span_ok(
                         #rt_tokens,
                         span,
                         #template_tokens,
                         #lvl_tokens,
                     )
-                });
+                }));
 
                 Ok(__ok)
             }
@@ -449,7 +459,7 @@ fn result_completion(
 
         quote!(
             Err(__err) => {
-                #span_guard.complete_with(|span| {
+                #span_guard.complete_with(emit::span::completion::from_fn(|span| {
                     emit::__private::__private_complete_span_err(
                         #rt_tokens,
                         span,
@@ -457,7 +467,7 @@ fn result_completion(
                         #lvl_tokens,
                         #err_tokens,
                     )
-                });
+                }));
 
                 Err(__err)
             }
@@ -493,7 +503,7 @@ fn completion(
         .map(|lvl| lvl.to_ref_tokens())
         .to_option_tokens(quote!(&emit::Level));
 
-    let default_completion_tokens = quote!(|span| {
+    let default_completion_tokens = quote!(emit::span::completion::from_fn(|span| {
         emit::__private::__private_complete_span(
             #rt_tokens,
             span,
@@ -501,7 +511,7 @@ fn completion(
             #lvl_tokens,
             #panic_lvl_tokens,
         )
-    });
+    }));
 
     Ok(Completion {
         body_tokens,

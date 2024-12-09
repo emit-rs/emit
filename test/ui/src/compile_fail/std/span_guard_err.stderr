@@ -1,0 +1,13 @@
+error: the `guard` control parameter is incompatible with `ok_lvl`, `err_lvl`, `panic_lvl`, or `err`
+ --> src/compile_fail/std/span_guard_err.rs:3:29
+  |
+3 | #[emit::span(rt: RT, guard: span, err: (|err| err), "test")]
+  |                             ^^^^
+
+warning: unused import: `std::io`
+ --> src/compile_fail/std/span_guard_err.rs:1:5
+  |
+1 | use std::io;
+  |     ^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
