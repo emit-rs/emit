@@ -878,9 +878,12 @@ pub fn __private_complete_span<
     lvl: Option<&'b (impl CaptureLevel + ?Sized)>,
     panic_lvl: Option<&'b (impl CaptureLevel + ?Sized)>,
 ) {
-    let completion_props = if panic_lvl.is_some() && is_panicking() {
+    let completion_props = if is_panicking() {
         [
-            panic_lvl.unwrap().capture().map(|lvl| (KEY_LVL, lvl)),
+            panic_lvl
+                .and_then(|lvl| lvl.capture())
+                .or_else(|| Some(Value::from_any(&Level::Error)))
+                .map(|lvl| (KEY_LVL, lvl)),
             Some((KEY_ERR, Value::from_any(&PanicError))),
         ]
     } else {

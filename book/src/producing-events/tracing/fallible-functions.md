@@ -115,3 +115,7 @@ fn wait_a_bit(sleep_ms: u64) -> Result<(), ()> {
 let _ = wait_a_bit(100);
 let _ = wait_a_bit(1200);
 ```
+
+## Panics
+
+If a function annotated with `#[span]` panics, it will emit an event with an error level and an `err` property indicating a panic was observed. The `panic_lvl` [control parameters](../../reference/control-parameters.md) can be used to specify a different level in case of panics.
