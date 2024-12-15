@@ -822,6 +822,28 @@ fn span_err_str() {
 
 #[test]
 #[cfg(feature = "std")]
+fn span_err_anyhow_as_ref() {
+    static ERR_RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!("failed", evt.props().get("err").unwrap().to_string());
+            assert_eq!(
+                emit::Level::Warn,
+                evt.props().pull::<emit::Level, _>("lvl").unwrap()
+            );
+        },
+        |_| true,
+    );
+
+    #[emit::span(rt: ERR_RT, err_lvl: "warn", err: emit::err::as_ref, "test")]
+    fn exec_err() -> Result<(), anyhow::Error> {
+        Err(anyhow::Error::msg("failed"))
+    }
+
+    exec_err().unwrap_err();
+}
+
+#[test]
+#[cfg(feature = "std")]
 fn info_span_ok_lvl() {
     use std::io;
 

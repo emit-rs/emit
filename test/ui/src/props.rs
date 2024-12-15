@@ -103,6 +103,26 @@ fn props_capture_err_string() {
 }
 
 #[test]
+#[cfg(feature = "std")]
+fn props_capture_err_anyhow() {
+    use std::error;
+
+    let err = anyhow::Error::msg("Some error");
+
+    match emit::props! {
+        err: emit::err::as_ref(&err),
+    } {
+        props => {
+            let err = props
+                .pull::<&(dyn error::Error + 'static), _>("err")
+                .unwrap();
+
+            assert_eq!("Some error", err.to_string());
+        }
+    }
+}
+
+#[test]
 fn props_capture_err_as_non_err() {
     match emit::props! {
         #[emit::as_display(inspect: true)] err: true,

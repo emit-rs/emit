@@ -1,5 +1,5 @@
 /*!
-This examples demonstrates how to emit a event with an error.
+This examples demonstrates how to emit an event with an error.
 */
 
 use std::{io, time::Duration};

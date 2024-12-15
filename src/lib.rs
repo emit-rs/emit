@@ -125,6 +125,9 @@ pub mod platform;
 pub mod span;
 pub mod timer;
 
+#[cfg(feature = "std")]
+pub mod err;
+
 pub use self::{
     clock::Clock,
     ctxt::Ctxt,
