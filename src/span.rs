@@ -866,7 +866,7 @@ pub mod completion {
     use crate::span::Span;
 
     /**
-    A receiver of [`Span`]s as they complete.
+    A receiver of [`Span`]s as they're completed by [`crate::span::SpanGuard`]s.
     */
     pub trait Completion {
         /**

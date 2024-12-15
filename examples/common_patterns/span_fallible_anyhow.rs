@@ -11,7 +11,7 @@ use std::time::Duration;
 // `err` can be combined with `ok_lvl` and `err_lvl`. Also see the
 // `span_fallible_completion` example.
 #[emit::span(
-    err: anyhow_err,
+    err: emit::err::as_ref,
     "Running an example",
     i,
 )]
@@ -23,10 +23,6 @@ fn example(i: i32) -> Result<(), anyhow::Error> {
     } else {
         Ok(())
     }
-}
-
-fn anyhow_err(err: &anyhow::Error) -> &(dyn std::error::Error + 'static) {
-    err.as_ref()
 }
 
 fn main() {

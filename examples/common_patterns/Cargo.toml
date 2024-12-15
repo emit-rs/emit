@@ -37,6 +37,10 @@ name = "emit_errors"
 path = "emit_errors.rs"
 
 [[example]]
+name = "emit_errors_anyhow"
+path = "emit_errors_anyhow.rs"
+
+[[example]]
 name = "emit_multiple_emitters"
 path = "emit_multiple_emitters.rs"
 
