@@ -36,6 +36,7 @@ You can also use the [`#[as_error]`](https://docs.rs/emit/0.11.0-alpha.21/emit/a
 Attaching errors to events requires they're either [`&str`](https://doc.rust-lang.org/std/primitive.str.html), [`&(dyn std::error::Error + 'static)`](https://doc.rust-lang.org/std/error/trait.Error.html#impl-dyn+Error), or [`impl std::error::Error`](https://doc.rust-lang.org/std/error/trait.Error.html). Error types like [`anyhow::Error`](https://docs.rs/anyhow/latest/anyhow/) don't satisfy these requirements so need to be mapped. Since property values are expressions, you can do this in any number of ways. As an example, the [`emit::err::as_ref`](https://docs.rs/emit/0.11.0-alpha.21/emit/err/fn.as_ref.html) function can be used to convert an `anyhow::Error` into an `impl std::error::Error`:
 
 ```rust
+# extern crate anyhow;
 # extern crate emit;
 # fn write_to_file(bytes: &[u8]) -> Result<(), anyhow::Error> { Err(anyhow::Error::msg("the file is in an invalid state")) }
 if let Err(err) = write_to_file(b"Hello") {
