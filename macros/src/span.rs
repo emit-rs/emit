@@ -92,11 +92,7 @@ impl Parse for Args {
         )?;
 
         if let Some(guard) = guard.peek() {
-            if ok_lvl.peek().is_some()
-                || err_lvl.peek().is_some()
-                || panic_lvl.peek().is_some()
-                || err.peek().is_some()
-            {
+            if ok_lvl.peek().is_some() || err_lvl.peek().is_some() || err.peek().is_some() {
                 return Err(syn::Error::new(guard.span(), "the `guard` control parameter is incompatible with `ok_lvl`, `err_lvl`, `panic_lvl`, or `err`"));
             }
         }

@@ -50,6 +50,8 @@ wait_a_bit(1200).await;
 # }
 ```
 
+## Spans with levels
+
 `emit` also defines macros for emitting spans at different levels for filtering:
 
 - [`#[debug_span]`](https://docs.rs/emit/0.11.0-alpha.21/emit/attr.debug_span.html)
