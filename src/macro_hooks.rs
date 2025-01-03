@@ -9,7 +9,7 @@ use emit_core::{
     emitter::Emitter,
     event::ToEvent,
     extent::ToExtent,
-    filter::Filter,
+    filter::{self, Filter},
     path::Path,
     props::Props,
     rng::Rng,
@@ -829,23 +829,19 @@ pub fn __private_begin_span<
 ) -> (Frame<&'a C>, SpanGuard<'static, &'a T, Empty, S>) {
     let mdl = mdl.into();
     let name = name.into();
-    let tpl = tpl.tpl_control_param();
     let lvl_prop = lvl.and_then(|lvl| lvl.capture()).map(|lvl| (KEY_LVL, lvl));
 
+    /*
+    We need a way to construct a span using the ambient context etc.
+
+    We then use that to construct a span for the filter. Could we consider this event we pass
+    to the filter as being a "meta event"?
+    */
+
     let mut span = SpanGuard::filtered_new(
-        |span_ctxt, span| {
-            rt.ctxt().with_current(|ctxt_props| {
-                FirstDefined(when, rt.filter()).matches(&span.to_event().with_tpl(tpl).map_props(
-                    |span_props| {
-                        lvl_prop
-                            .and_props(span_props)
-                            .and_props(&span_ctxt_props)
-                            .and_props(&span_ctxt)
-                            .and_props(ctxt_props)
-                    },
-                ))
-            })
-        },
+        filter::from_fn(|evt| {
+            FirstDefined(when, rt.filter()).matches(evt.map_props(|props| props.and_props(&lvl_prop)))
+        }),
         mdl,
         Timer::start(rt.clock()),
         name,

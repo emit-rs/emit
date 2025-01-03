@@ -14,6 +14,7 @@ use emit_core::{
     clock::Clock,
     ctxt::Ctxt,
     event::{Event, ToEvent},
+    filter::Filter,
     extent::{Extent, ToExtent},
     path::Path,
     props::{ErasedProps, Props},
@@ -760,7 +761,7 @@ impl<'a, C: Clock, P: Props, F: Completion> Drop for SpanGuard<'a, C, P, F> {
 
 impl<'a, C: Clock, P: Props, F: Completion> SpanGuard<'a, C, P, F> {
     pub(crate) fn filtered_new(
-        filter: impl FnOnce(&SpanCtxt, Span<&P>) -> bool,
+        filter: impl Filter,
         mdl: impl Into<Path<'a>>,
         timer: Timer<C>,
         name: impl Into<Str<'a>>,
@@ -771,13 +772,12 @@ impl<'a, C: Clock, P: Props, F: Completion> SpanGuard<'a, C, P, F> {
         let mdl = mdl.into();
         let name = name.into();
 
-        let is_enabled = filter(
-            &ctxt,
+        let is_enabled = filter.matches(
             Span::new(
                 mdl.by_ref(),
                 name.by_ref(),
                 timer.start_timestamp(),
-                &event_props,
+                (&event_props).and_props(&ctxt),
             ),
         );
 
@@ -1036,6 +1036,8 @@ pub mod completion {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use emit_core::filter;
 
     use std::time::Duration;
 
@@ -1363,7 +1365,7 @@ mod tests {
         let complete_called = Cell::new(false);
 
         let mut guard = SpanGuard::filtered_new(
-            |_, _| true,
+            filter::from_fn(|_| true),
             Path::new_unchecked("test"),
             Timer::start(&clock),
             "span",
@@ -1411,7 +1413,7 @@ mod tests {
         let complete_called = Cell::new(false);
 
         let mut guard = SpanGuard::filtered_new(
-            |_, _| false,
+            filter::from_fn(|_| false),
             Path::new_unchecked("test"),
             Timer::start(&clock),
             "span",
@@ -1441,7 +1443,7 @@ mod tests {
         let default_complete_called = Cell::new(false);
 
         let guard = SpanGuard::filtered_new(
-            |_, _| true,
+            filter::from_fn(|_| true),
             Path::new_unchecked("test"),
             Timer::start(&clock),
             "span",

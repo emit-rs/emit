@@ -85,9 +85,9 @@ impl Filter for Empty {
     }
 }
 
-impl Filter for fn(&Event<&dyn ErasedProps>) -> bool {
+impl Filter for fn(Event<&dyn ErasedProps>) -> bool {
     fn matches<E: ToEvent>(&self, evt: E) -> bool {
-        (self)(&evt.to_event().erase())
+        (self)(evt.to_event().erase())
     }
 }
 
@@ -96,7 +96,7 @@ A [`Filter`] from a function.
 
 This type can be created directly, or via [`from_fn`].
 */
-pub struct FromFn<F = fn(&Event<&dyn ErasedProps>) -> bool>(F);
+pub struct FromFn<F = fn(Event<&dyn ErasedProps>) -> bool>(F);
 
 impl<F> FromFn<F> {
     /**
@@ -107,16 +107,16 @@ impl<F> FromFn<F> {
     }
 }
 
-impl<F: Fn(&Event<&dyn ErasedProps>) -> bool> Filter for FromFn<F> {
+impl<F: Fn(Event<&dyn ErasedProps>) -> bool> Filter for FromFn<F> {
     fn matches<E: ToEvent>(&self, evt: E) -> bool {
-        (self.0)(&evt.to_event().erase())
+        (self.0)(evt.to_event().erase())
     }
 }
 
 /**
 Create a [`Filter`] from a function.
 */
-pub const fn from_fn<F: Fn(&Event<&dyn ErasedProps>) -> bool>(f: F) -> FromFn<F> {
+pub const fn from_fn<F: Fn(Event<&dyn ErasedProps>) -> bool>(f: F) -> FromFn<F> {
     FromFn(f)
 }
 

@@ -28,7 +28,7 @@ fn span_basic() {
     }
 
     fn assert_event(evt: &emit::Event<impl Props>) {
-        assert_event_base(evt);
+        assert_event_base(&evt);
 
         assert!(evt.extent().unwrap().is_range());
     }
@@ -36,12 +36,12 @@ fn span_basic() {
     static CALLED: StaticCalled = StaticCalled::new();
     static RT: StaticRuntime = static_runtime(
         |evt| {
-            assert_event(evt);
+            assert_event(&evt);
 
             CALLED.record();
         },
         |evt| {
-            assert_event_base(evt);
+            assert_event_base(&evt);
 
             true
         },
@@ -50,7 +50,7 @@ fn span_basic() {
     static DEBUG_CALLED: StaticCalled = StaticCalled::new();
     static DEBUG_RT: StaticRuntime = static_runtime(
         |evt| {
-            assert_event(evt);
+            assert_event(&evt);
 
             assert_eq!(
                 emit::Level::Debug,
@@ -60,7 +60,7 @@ fn span_basic() {
             DEBUG_CALLED.record();
         },
         |evt| {
-            assert_event_base(evt);
+            assert_event_base(&evt);
 
             true
         },
@@ -69,7 +69,7 @@ fn span_basic() {
     static INFO_CALLED: StaticCalled = StaticCalled::new();
     static INFO_RT: StaticRuntime = static_runtime(
         |evt| {
-            assert_event(evt);
+            assert_event(&evt);
 
             assert_eq!(
                 emit::Level::Info,
@@ -79,7 +79,7 @@ fn span_basic() {
             INFO_CALLED.record();
         },
         |evt| {
-            assert_event_base(evt);
+            assert_event_base(&evt);
 
             true
         },
@@ -88,7 +88,7 @@ fn span_basic() {
     static WARN_CALLED: StaticCalled = StaticCalled::new();
     static WARN_RT: StaticRuntime = static_runtime(
         |evt| {
-            assert_event(evt);
+            assert_event(&evt);
 
             assert_eq!(
                 emit::Level::Warn,
@@ -98,7 +98,7 @@ fn span_basic() {
             WARN_CALLED.record();
         },
         |evt| {
-            assert_event_base(evt);
+            assert_event_base(&evt);
 
             true
         },
@@ -107,7 +107,7 @@ fn span_basic() {
     static ERROR_CALLED: StaticCalled = StaticCalled::new();
     static ERROR_RT: StaticRuntime = static_runtime(
         |evt| {
-            assert_event(evt);
+            assert_event(&evt);
 
             assert_eq!(
                 emit::Level::Error,
@@ -117,7 +117,7 @@ fn span_basic() {
             ERROR_CALLED.record();
         },
         |evt| {
-            assert_event_base(evt);
+            assert_event_base(&evt);
 
             true
         },

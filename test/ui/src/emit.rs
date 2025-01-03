@@ -277,9 +277,9 @@ fn emit_props() {
     }
 
     let rt = simple_runtime(
-        |evt| assert_props(evt),
+        |evt| assert_props(&evt),
         |evt| {
-            assert_props(evt);
+            assert_props(&evt);
 
             true
         },
@@ -324,9 +324,9 @@ fn emit_evt() {
     }
 
     let rt = simple_runtime(
-        |evt| assert_evt(evt),
+        |evt| assert_evt(&evt),
         |evt| {
-            assert_evt(evt);
+            assert_evt(&evt);
 
             true
         },

@@ -117,9 +117,9 @@ impl Emitter for Empty {
     }
 }
 
-impl Emitter for fn(&Event<&dyn ErasedProps>) {
+impl Emitter for fn(Event<&dyn ErasedProps>) {
     fn emit<E: ToEvent>(&self, evt: E) {
-        (self)(&evt.to_event().erase())
+        (self)(evt.to_event().erase())
     }
 
     fn blocking_flush(&self, _: Duration) -> bool {
@@ -132,7 +132,7 @@ An [`Emitter`] from a function.
 
 This type can be created directly, or via [`from_fn`].
 */
-pub struct FromFn<F = fn(&Event<&dyn ErasedProps>)>(F);
+pub struct FromFn<F = fn(Event<&dyn ErasedProps>)>(F);
 
 impl<F> FromFn<F> {
     /**
@@ -143,9 +143,9 @@ impl<F> FromFn<F> {
     }
 }
 
-impl<F: Fn(&Event<&dyn ErasedProps>)> Emitter for FromFn<F> {
+impl<F: Fn(Event<&dyn ErasedProps>)> Emitter for FromFn<F> {
     fn emit<E: ToEvent>(&self, evt: E) {
-        (self.0)(&evt.to_event().erase())
+        (self.0)(evt.to_event().erase())
     }
 
     fn blocking_flush(&self, _: Duration) -> bool {
@@ -158,7 +158,7 @@ Create an [`Emitter`] from a function.
 
 The input function is assumed not to perform any background work that needs flushing.
 */
-pub const fn from_fn<F: Fn(&Event<&dyn ErasedProps>)>(f: F) -> FromFn<F> {
+pub const fn from_fn<F: Fn(Event<&dyn ErasedProps>)>(f: F) -> FromFn<F> {
     FromFn::new(f)
 }
 
