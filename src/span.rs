@@ -1058,7 +1058,7 @@ pub mod completion {
                 called.set(true);
             });
 
-            completion.complete(Span::new(Path::new_unchecked("test"), "test", Empty, Empty));
+            completion.complete(Span::new(Path::new_raw("test"), "test", Empty, Empty));
 
             assert!(called.get());
         }
@@ -1075,7 +1075,7 @@ pub mod completion {
 
             let completion = &completion as &dyn ErasedCompletion;
 
-            completion.complete(Span::new(Path::new_unchecked("test"), "test", Empty, Empty));
+            completion.complete(Span::new(Path::new_raw("test"), "test", Empty, Empty));
 
             assert!(called.get());
         }
@@ -1320,7 +1320,7 @@ mod tests {
     #[test]
     fn span_new() {
         let span = Span::new(
-            Path::new_unchecked("test"),
+            Path::new_raw("test"),
             "my span",
             Timestamp::from_unix(Duration::from_secs(1)),
             ("span_prop", true),
@@ -1338,7 +1338,7 @@ mod tests {
     #[test]
     fn span_to_event() {
         let span = Span::new(
-            Path::new_unchecked("test"),
+            Path::new_raw("test"),
             "my span",
             Timestamp::from_unix(Duration::from_secs(1)),
             ("span_prop", true),
@@ -1374,12 +1374,7 @@ mod tests {
             ),
             (None, None),
         ] {
-            let span = Span::new(
-                Path::new_unchecked("test"),
-                "my span",
-                case,
-                ("span_prop", true),
-            );
+            let span = Span::new(Path::new_raw("test"), "my span", case, ("span_prop", true));
 
             let extent = span.to_extent();
 
@@ -1449,7 +1444,7 @@ mod tests {
                 complete_called.set(true);
             }),
             ("ctxt_prop", 2),
-            Path::new_unchecked("test"),
+            Path::new_raw("test"),
             "span",
             ("event_prop", 1),
         );
@@ -1481,7 +1476,7 @@ mod tests {
                 complete_called.set(true);
             }),
             Empty,
-            Path::new_unchecked("test"),
+            Path::new_raw("test"),
             "span",
             Empty,
         );
@@ -1514,7 +1509,7 @@ mod tests {
                 default_complete_called.set(true);
             }),
             Empty,
-            Path::new_unchecked("test"),
+            Path::new_raw("test"),
             "span",
             Empty,
         );

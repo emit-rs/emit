@@ -1,7 +1,7 @@
 /*!
 Distributed trace context for `emit`.
 
-This library implements the [W3C trace context](https://www.w3.org/TR/trace-context) standard over `emit`'s tracing functionality. Trace context is propagated as a traceparent in a simple text format. Here's an example of a traceparent:
+This library implements the [W3C trace context](https://www.w3.org/TR/trace-context) standard over `emit`'s tracing functionality. Trace context is propagated as a traceparent and tracestate in a simple text format. Here's an example of a traceparent:
 
 ```text
 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
@@ -13,6 +13,14 @@ It includes:
 - A _trace id_: `4bf92f3577b34da6a3ce929d0e0e4736`.
 - A _span id_: `00f067aa0ba902b7`.
 - A set of _trace flags_: `01` (sampled).
+
+Here's an example of tracestate:
+
+```text
+vendorname1=opaqueValue1,vendorname2=opaqueValue2
+```
+
+It contains a collection of key-value pairs with vendor-specific information.
 
 # Getting started
 
@@ -224,7 +232,7 @@ pub fn push(traceparent: Traceparent, tracestate: Tracestate) -> Frame<Tracepare
 }
 
 /**
-A [W3C traceparent](https://www.w3.org/TR/trace-context).
+A [W3C traceparent](https://www.w3.org/TR/trace-context/#traceparent-header).
 
 This type contains `emit`'s [`TraceId`] and [`SpanId`], along with [`TraceFlags`] that determine sampling.
 
@@ -557,30 +565,48 @@ impl fmt::Display for TraceFlags {
 }
 
 /**
-A [W3C tracestate](https://www.w3.org/TR/trace-context).
+A [W3C tracestate](https://www.w3.org/TR/trace-context/#tracestate-header).
+
+The role of `Tracestate` is to store and propagate the tracestate header.
+It doesn't currently support any format-aware modification of the underlying value, nor does it parse or validate it.
 */
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Tracestate(Str<'static>);
 
+impl fmt::Display for Tracestate {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
 impl Tracestate {
     /**
-    Construct a new tracestate with the given value.
+    Construct a new tracestate with the given value, without checking its validity.
+
+    This method is not unsafe. There are no safety properties tied to the validity of tracestate values.
+    Downstream consumers may discard a tracestate value if it's not valid.
     */
-    pub const fn new(value: &'static str) -> Tracestate {
+    pub const fn new_raw(value: &'static str) -> Tracestate {
         Tracestate(Str::new(value))
     }
 
     /**
-    Construct a new tracestate with the given value.
+    Construct a new tracestate with the given value, without checking its validity.
+
+    This method is not unsafe. There are no safety properties tied to the validity of tracestate values.
+    Downstream consumers may discard a tracestate value if it's not valid.
     */
-    pub const fn new_str(value: Str<'static>) -> Tracestate {
+    pub const fn new_str_raw(value: Str<'static>) -> Tracestate {
         Tracestate(value)
     }
 
     /**
-    Construct a new tracestate with the given value.
+    Construct a new tracestate with the given value, without checking its validity.
+
+    This method is not unsafe. There are no safety properties tied to the validity of tracestate values.
+    Downstream consumers may discard a tracestate value if it's not valid.
     */
-    pub fn new_owned(value: impl Into<Box<str>>) -> Tracestate {
+    pub fn new_owned_raw(value: impl Into<Box<str>>) -> Tracestate {
         Tracestate(Str::new_owned(value))
     }
 
@@ -591,8 +617,8 @@ impl Tracestate {
     /**
     Get the value of this tracestate.
     */
-    pub fn get(&self) -> &Str<'static> {
-        &self.0
+    pub fn get(&self) -> &str {
+        self.0.get()
     }
 
     /**
@@ -1353,11 +1379,13 @@ mod tests {
 
     #[test]
     fn tracestate_get_set() {
+        assert_eq!("", Tracestate::current().get());
         assert_eq!(Tracestate::empty(), Tracestate::current());
 
-        let state = Tracestate::new("a=1");
+        let state = Tracestate::new_raw("a=1");
 
         state.push().call(|| {
+            assert_eq!("a=1", Tracestate::current().get());
             assert_eq!(state, Tracestate::current());
         });
     }

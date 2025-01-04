@@ -61,8 +61,8 @@ impl Path<'static> {
 
     This method is not unsafe. There are no memory safety properties tied to the validity of paths. Code that uses path segments may panic or produce unexpected results if given an invalid path.
     */
-    pub const fn new_unchecked(path: &'static str) -> Self {
-        Path::new_str_unchecked(Str::new(path))
+    pub const fn new_raw(path: &'static str) -> Self {
+        Path::new_str_raw(Str::new(path))
     }
 }
 
@@ -81,12 +81,12 @@ impl<'a> Path<'a> {
     /**
     Create a path from a raw borrowed value without checking its validity.
 
-    The [`Path::new_unchecked`] method should be preferred where possible.
+    The [`Path::new_raw`] method should be preferred where possible.
 
     This method is not unsafe. There are no memory safety properties tied to the validity of paths. Code that uses path segments may panic or produce unexpected results if given an invalid path.
     */
-    pub const fn new_ref_unchecked(path: &'a str) -> Self {
-        Self::new_str_unchecked(Str::new_ref(path))
+    pub const fn new_ref_raw(path: &'a str) -> Self {
+        Self::new_str_raw(Str::new_ref(path))
     }
 
     /**
@@ -107,7 +107,7 @@ impl<'a> Path<'a> {
 
     This method is not unsafe. There are no memory safety properties tied to the validity of paths. Code that uses path segments may panic or produce unexpected results if given an invalid path.
     */
-    pub const fn new_str_unchecked(path: Str<'a>) -> Self {
+    pub const fn new_str_raw(path: Str<'a>) -> Self {
         Path(path)
     }
 
@@ -375,8 +375,8 @@ mod alloc_support {
 
         This method is not unsafe. There are no memory safety properties tied to the validity of paths. Code that uses path segments may panic or produce unexpected results if given an invalid path.
         */
-        pub fn new_owned_unchecked(path: impl Into<Box<str>>) -> Self {
-            Path::new_str_unchecked(Str::new_owned(path))
+        pub fn new_owned_raw(path: impl Into<Box<str>>) -> Self {
+            Path::new_str_raw(Str::new_owned(path))
         }
     }
 
@@ -395,12 +395,12 @@ mod alloc_support {
         /**
         Create a path from a potentially owned raw value without checking its validity.
 
-        If the value is `Cow::Borrowed` then this method will defer to [`Path::new_ref_unchecked`]. If the value is `Cow::Owned` then this method will defer to [`Path::new_owned_unchecked`].
+        If the value is `Cow::Borrowed` then this method will defer to [`Path::new_ref_raw`]. If the value is `Cow::Owned` then this method will defer to [`Path::new_owned_raw`].
 
         This method is not unsafe. There are no memory safety properties tied to the validity of paths. Code that uses path segments may panic or produce unexpected results if given an invalid path.
         */
-        pub fn new_cow_ref_unchecked(path: Cow<'a, str>) -> Self {
-            Path::new_str_unchecked(Str::new_cow_ref(path))
+        pub fn new_cow_ref_raw(path: Cow<'a, str>) -> Self {
+            Path::new_str_raw(Str::new_cow_ref(path))
         }
 
         /**
@@ -427,7 +427,7 @@ mod alloc_support {
 
             base.push_str("::");
             base.push_str(other.into().0.get());
-            Path::new_owned_unchecked(base)
+            Path::new_owned_raw(base)
         }
     }
 
@@ -437,7 +437,7 @@ mod alloc_support {
 
         #[test]
         fn to_owned() {
-            let path = Path::new_ref_unchecked("module");
+            let path = Path::new_ref_raw("module");
 
             assert_eq!(path, path.to_owned());
         }
@@ -445,11 +445,8 @@ mod alloc_support {
         #[test]
         fn to_cow() {
             for (path, expected) in [
-                (Path::new_unchecked("module"), Cow::Borrowed("module")),
-                (
-                    Path::new_ref_unchecked("module"),
-                    Cow::Owned("module".to_owned()),
-                ),
+                (Path::new_raw("module"), Cow::Borrowed("module")),
+                (Path::new_ref_raw("module"), Cow::Owned("module".to_owned())),
             ] {
                 assert_eq!(expected, path.to_cow());
             }
@@ -462,13 +459,7 @@ mod alloc_support {
                 ("a::b", "c", "a::b::c"),
                 ("a", "b::c", "a::b::c"),
             ] {
-                assert_eq!(
-                    expected,
-                    Path::new_unchecked(a)
-                        .append(Path::new_unchecked(&b))
-                        .0
-                        .get(),
-                );
+                assert_eq!(expected, Path::new_raw(a).append(Path::new_raw(&b)).0.get(),);
             }
         }
     }
@@ -480,7 +471,7 @@ mod tests {
 
     #[test]
     fn by_ref() {
-        let path = Path::new_unchecked("module");
+        let path = Path::new_raw("module");
 
         assert_eq!(path, path.by_ref());
     }
@@ -542,7 +533,7 @@ mod tests {
 
     #[test]
     fn to_from_value() {
-        let path = Path::new_unchecked("module");
+        let path = Path::new_raw("module");
 
         for value in [Value::from_any(&path), Value::from("module")] {
             assert_eq!(path, value.cast::<Path>().unwrap());

@@ -223,21 +223,21 @@ mod tests {
         let filter = KindFilter::new(Kind::Span);
 
         assert!(filter.matches(crate::Event::new(
-            crate::Path::new_unchecked("test"),
+            crate::Path::new_raw("test"),
             crate::Template::literal("test"),
             crate::Empty,
             (KEY_EVT_KIND, EVENT_KIND_SPAN),
         )));
 
         assert!(!filter.matches(crate::Event::new(
-            crate::Path::new_unchecked("test"),
+            crate::Path::new_raw("test"),
             crate::Template::literal("test"),
             crate::Empty,
             (KEY_EVT_KIND, EVENT_KIND_METRIC),
         )));
 
         assert!(!filter.matches(crate::Event::new(
-            crate::Path::new_unchecked("test"),
+            crate::Path::new_raw("test"),
             crate::Template::literal("test"),
             crate::Empty,
             crate::Empty,

@@ -411,17 +411,17 @@ mod alloc_support {
         fn min_level() {
             let mut filter = MinLevelPathMap::new();
 
-            filter.min_level(Path::new_unchecked("a"), Level::Error);
+            filter.min_level(Path::new_raw("a"), Level::Error);
 
             assert!(!filter.matches(crate::Event::new(
-                Path::new_unchecked("a"),
+                Path::new_raw("a"),
                 crate::Template::literal("test"),
                 crate::Empty,
                 (KEY_LVL, Level::Warn),
             )));
 
             assert!(filter.matches(crate::Event::new(
-                Path::new_unchecked("a"),
+                Path::new_raw("a"),
                 crate::Template::literal("test"),
                 crate::Empty,
                 (KEY_LVL, Level::Error),
@@ -435,14 +435,14 @@ mod alloc_support {
             filter.default_min_level(Level::Error);
 
             assert!(!filter.matches(crate::Event::new(
-                Path::new_unchecked("a"),
+                Path::new_raw("a"),
                 crate::Template::literal("test"),
                 crate::Empty,
                 (KEY_LVL, Level::Warn),
             )));
 
             assert!(filter.matches(crate::Event::new(
-                Path::new_unchecked("a"),
+                Path::new_raw("a"),
                 crate::Template::literal("test"),
                 crate::Empty,
                 (KEY_LVL, Level::Error),
@@ -454,25 +454,25 @@ mod alloc_support {
             let mut filter = MinLevelPathMap::new();
 
             filter
-                .min_level(Path::new_unchecked("a"), Level::Error)
-                .min_level(Path::new_unchecked("a::b::c"), Level::Warn);
+                .min_level(Path::new_raw("a"), Level::Error)
+                .min_level(Path::new_raw("a::b::c"), Level::Warn);
 
             assert!(!filter.matches(crate::Event::new(
-                Path::new_unchecked("a"),
+                Path::new_raw("a"),
                 crate::Template::literal("test"),
                 crate::Empty,
                 (KEY_LVL, Level::Warn),
             )));
 
             assert!(!filter.matches(crate::Event::new(
-                Path::new_unchecked("a::b"),
+                Path::new_raw("a::b"),
                 crate::Template::literal("test"),
                 crate::Empty,
                 (KEY_LVL, Level::Warn),
             )));
 
             assert!(filter.matches(crate::Event::new(
-                Path::new_unchecked("a::b::c"),
+                Path::new_raw("a::b::c"),
                 crate::Template::literal("test"),
                 crate::Empty,
                 (KEY_LVL, Level::Warn),
@@ -483,10 +483,10 @@ mod alloc_support {
         fn min_level_unmatched() {
             let mut filter = MinLevelPathMap::new();
 
-            filter.min_level(Path::new_unchecked("a"), Level::Error);
+            filter.min_level(Path::new_raw("a"), Level::Error);
 
             assert!(filter.matches(crate::Event::new(
-                Path::new_unchecked("b"),
+                Path::new_raw("b"),
                 crate::Template::literal("test"),
                 crate::Empty,
                 (KEY_LVL, Level::Warn),
@@ -499,10 +499,10 @@ mod alloc_support {
 
             filter
                 .default_min_level(Level::Error)
-                .min_level(Path::new_unchecked("a"), Level::Error);
+                .min_level(Path::new_raw("a"), Level::Error);
 
             assert!(!filter.matches(crate::Event::new(
-                Path::new_unchecked("b"),
+                Path::new_raw("b"),
                 crate::Template::literal("test"),
                 crate::Empty,
                 (KEY_LVL, Level::Warn),
@@ -515,31 +515,31 @@ mod alloc_support {
 
             filter
                 .default_min_level(MinLevelFilter::new(3))
-                .min_level(Path::new_unchecked("a"), MinLevelFilter::new(1));
+                .min_level(Path::new_raw("a"), MinLevelFilter::new(1));
 
             assert!(filter.matches(crate::Event::new(
-                Path::new_unchecked("a"),
+                Path::new_raw("a"),
                 crate::Template::literal("test"),
                 crate::Empty,
                 (KEY_LVL, 2),
             )));
 
             assert!(filter.matches(crate::Event::new(
-                Path::new_unchecked("b"),
+                Path::new_raw("b"),
                 crate::Template::literal("test"),
                 crate::Empty,
                 (KEY_LVL, 6),
             )));
 
             assert!(!filter.matches(crate::Event::new(
-                Path::new_unchecked("a"),
+                Path::new_raw("a"),
                 crate::Template::literal("test"),
                 crate::Empty,
                 (KEY_LVL, 0),
             )));
 
             assert!(!filter.matches(crate::Event::new(
-                Path::new_unchecked("b"),
+                Path::new_raw("b"),
                 crate::Template::literal("test"),
                 crate::Empty,
                 (KEY_LVL, 2),
@@ -625,35 +625,35 @@ mod tests {
         let filter = MinLevelFilter::new(Level::Warn);
 
         assert!(filter.matches(crate::Event::new(
-            crate::Path::new_unchecked("test"),
+            crate::Path::new_raw("test"),
             crate::Template::literal("test"),
             crate::Empty,
             (KEY_LVL, LVL_ERROR),
         )));
 
         assert!(filter.matches(crate::Event::new(
-            crate::Path::new_unchecked("test"),
+            crate::Path::new_raw("test"),
             crate::Template::literal("test"),
             crate::Empty,
             (KEY_LVL, LVL_WARN),
         )));
 
         assert!(!filter.matches(crate::Event::new(
-            crate::Path::new_unchecked("test"),
+            crate::Path::new_raw("test"),
             crate::Template::literal("test"),
             crate::Empty,
             crate::Empty,
         )));
 
         assert!(!filter.matches(crate::Event::new(
-            crate::Path::new_unchecked("test"),
+            crate::Path::new_raw("test"),
             crate::Template::literal("test"),
             crate::Empty,
             (KEY_LVL, LVL_DEBUG),
         )));
 
         assert!(!filter.matches(crate::Event::new(
-            crate::Path::new_unchecked("test"),
+            crate::Path::new_raw("test"),
             crate::Template::literal("test"),
             crate::Empty,
             (KEY_LVL, LVL_INFO),
@@ -665,35 +665,35 @@ mod tests {
         let filter = MinLevelFilter::new(Level::Info).treat_unleveled_as(Level::Info);
 
         assert!(filter.matches(crate::Event::new(
-            crate::Path::new_unchecked("test"),
+            crate::Path::new_raw("test"),
             crate::Template::literal("test"),
             crate::Empty,
             (KEY_LVL, LVL_ERROR),
         )));
 
         assert!(filter.matches(crate::Event::new(
-            crate::Path::new_unchecked("test"),
+            crate::Path::new_raw("test"),
             crate::Template::literal("test"),
             crate::Empty,
             (KEY_LVL, LVL_WARN),
         )));
 
         assert!(filter.matches(crate::Event::new(
-            crate::Path::new_unchecked("test"),
+            crate::Path::new_raw("test"),
             crate::Template::literal("test"),
             crate::Empty,
             (KEY_LVL, LVL_INFO),
         )));
 
         assert!(filter.matches(crate::Event::new(
-            crate::Path::new_unchecked("test"),
+            crate::Path::new_raw("test"),
             crate::Template::literal("test"),
             crate::Empty,
             crate::Empty,
         )));
 
         assert!(!filter.matches(crate::Event::new(
-            crate::Path::new_unchecked("test"),
+            crate::Path::new_raw("test"),
             crate::Template::literal("test"),
             crate::Empty,
             (KEY_LVL, LVL_DEBUG),
@@ -705,28 +705,28 @@ mod tests {
         let filter = MinLevelFilter::new(3).treat_unleveled_as(1);
 
         assert!(filter.matches(crate::Event::new(
-            crate::Path::new_unchecked("test"),
+            crate::Path::new_raw("test"),
             crate::Template::literal("test"),
             crate::Empty,
             (KEY_LVL, 3),
         )));
 
         assert!(filter.matches(crate::Event::new(
-            crate::Path::new_unchecked("test"),
+            crate::Path::new_raw("test"),
             crate::Template::literal("test"),
             crate::Empty,
             (KEY_LVL, 4),
         )));
 
         assert!(!filter.matches(crate::Event::new(
-            crate::Path::new_unchecked("test"),
+            crate::Path::new_raw("test"),
             crate::Template::literal("test"),
             crate::Empty,
             (KEY_LVL, 2),
         )));
 
         assert!(!filter.matches(crate::Event::new(
-            crate::Path::new_unchecked("test"),
+            crate::Path::new_raw("test"),
             crate::Template::literal("test"),
             crate::Empty,
             crate::Empty,

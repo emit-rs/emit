@@ -95,7 +95,7 @@ This defers uses the standard `module_path` macro.
 #[macro_export]
 macro_rules! mdl {
     () => {
-        $crate::Path::new_unchecked($crate::__private::core::module_path!())
+        $crate::Path::new_raw($crate::__private::core::module_path!())
     };
 }
 
@@ -107,7 +107,7 @@ This macro uses the build-time `CARGO_PKG_NAME` environment variable.
 #[macro_export]
 macro_rules! pkg {
     () => {
-        $crate::Path::new_unchecked($crate::__private::core::env!("CARGO_PKG_NAME"))
+        $crate::Path::new_raw($crate::__private::core::env!("CARGO_PKG_NAME"))
     };
 }
 
