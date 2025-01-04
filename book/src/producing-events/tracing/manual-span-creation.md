@@ -15,7 +15,7 @@ let (span, frame) = emit::span::ActiveSpan::start(
     emit::rng(),
     // What to do with the span when the guard completes
     // Typically you'll want to emit it
-    emit::span::completion::from_fn(|evt| emit!(evt)),
+    emit::span::completion::from_fn(|evt| emit::emit!(evt)),
     // Any properties to put in the ambient context
     emit::Empty,
     // The module that generated the span
