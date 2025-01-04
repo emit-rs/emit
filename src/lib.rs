@@ -159,6 +159,16 @@ pub mod setup;
 pub use setup::{setup, Setup};
 
 /**
+Get the shared filter.
+
+This method will use the [`Filter`] from [`runtime::shared()`].
+*/
+#[cfg(feature = "implicit_rt")]
+pub fn filter() -> runtime::AmbientFilter<'static> {
+    *runtime::shared().filter()
+}
+
+/**
 Get the shared clock.
 
 This method will use the [`Clock`] from [`runtime::shared()`].

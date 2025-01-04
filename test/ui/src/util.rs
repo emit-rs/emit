@@ -20,8 +20,8 @@ pub type SimpleRuntime<E, F> = Runtime<E, F, SimpleCtxt, CountingClock, Counting
 pub type StaticRuntime = SimpleRuntime<emit::emitter::FromFn, emit::filter::FromFn>;
 
 pub const fn static_runtime(
-    emitter: fn(&Event<&dyn ErasedProps>),
-    filter: fn(&Event<&dyn ErasedProps>) -> bool,
+    emitter: fn(Event<&dyn ErasedProps>),
+    filter: fn(Event<&dyn ErasedProps>) -> bool,
 ) -> StaticRuntime {
     Runtime::build(
         emit::emitter::FromFn::new(emitter),
@@ -33,8 +33,8 @@ pub const fn static_runtime(
 }
 
 pub const fn simple_runtime<
-    E: Fn(&Event<&dyn ErasedProps>),
-    F: Fn(&Event<&dyn ErasedProps>) -> bool,
+    E: Fn(Event<&dyn ErasedProps>),
+    F: Fn(Event<&dyn ErasedProps>) -> bool,
 >(
     emitter: E,
     filter: F,

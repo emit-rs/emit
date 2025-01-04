@@ -9,7 +9,7 @@ use emit_core::{
     emitter::Emitter,
     event::ToEvent,
     extent::ToExtent,
-    filter::Filter,
+    filter::{self, Filter},
     path::Path,
     props::Props,
     rng::Rng,
@@ -28,8 +28,8 @@ use crate::{frame::Frame, span::Span};
 use std::error::Error;
 
 use crate::{
-    span::{Completion, SpanCtxt, SpanGuard, SpanId, TraceId},
-    Level, Timer,
+    span::{ActiveSpan, Completion, SpanId, TraceId},
+    Level,
 };
 
 #[diagnostic::on_unimplemented(
@@ -821,44 +821,29 @@ pub fn __private_begin_span<
     rt: &'a Runtime<E, F, C, T, R>,
     mdl: impl Into<Path<'static>>,
     name: impl Into<Str<'static>>,
-    tpl: &'b (impl TplControlParam + ?Sized),
     lvl: Option<&'b (impl CaptureLevel + ?Sized)>,
     when: Option<&'b (impl Filter + ?Sized)>,
     span_ctxt_props: &'b (impl Props + ?Sized),
     default_complete: S,
-) -> (Frame<&'a C>, SpanGuard<'static, &'a T, Empty, S>) {
+) -> (ActiveSpan<'static, &'a T, Empty, S>, Frame<&'a C>) {
     let mdl = mdl.into();
     let name = name.into();
-    let tpl = tpl.tpl_control_param();
     let lvl_prop = lvl.and_then(|lvl| lvl.capture()).map(|lvl| (KEY_LVL, lvl));
 
-    let mut span = SpanGuard::filtered_new(
-        |span_ctxt, span| {
-            rt.ctxt().with_current(|ctxt_props| {
-                FirstDefined(when, rt.filter()).matches(&span.to_event().with_tpl(tpl).map_props(
-                    |span_props| {
-                        lvl_prop
-                            .and_props(span_props)
-                            .and_props(&span_ctxt_props)
-                            .and_props(&span_ctxt)
-                            .and_props(ctxt_props)
-                    },
-                ))
-            })
-        },
-        mdl,
-        Timer::start(rt.clock()),
-        name,
-        // NOTE: We could avoid constructing a context if `span_ctxt_props`
-        // already carries trace/span ids
-        SpanCtxt::current(rt.ctxt()).new_child(rt.rng()),
-        Empty,
+    ActiveSpan::start(
+        filter::from_fn(|evt| {
+            FirstDefined(when, rt.filter())
+                .matches(evt.map_props(|props| props.and_props(&lvl_prop)))
+        }),
+        rt.ctxt(),
+        rt.clock(),
+        rt.rng(),
         default_complete,
-    );
-
-    let frame = span.push_ctxt(rt.ctxt(), span_ctxt_props);
-
-    (frame, span)
+        span_ctxt_props,
+        mdl,
+        name,
+        Empty,
+    )
 }
 
 #[track_caller]

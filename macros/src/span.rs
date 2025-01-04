@@ -293,11 +293,10 @@ fn inject_sync(
     Ok(quote!({
         #setup_tokens
 
-        let (__ctxt, __span_guard) = emit::__private::__private_begin_span(
+        let (__span_guard, __ctxt) = emit::__private::__private_begin_span(
             #rt_tokens,
             #mdl_tokens,
             #span_name_tokens,
-            #template_tokens,
             #default_lvl_tokens,
             #when_tokens,
             #ctxt_props_tokens,
@@ -369,11 +368,10 @@ fn inject_async(
     Ok(quote!({
         #setup_tokens
 
-        let (__ctxt, mut __span_guard) = emit::__private::__private_begin_span(
+        let (mut __span_guard, __ctxt) = emit::__private::__private_begin_span(
             #rt_tokens,
             #mdl_tokens,
             #span_name_tokens,
-            #template_tokens,
             #default_lvl_tokens,
             #when_tokens,
             #ctxt_props_tokens,
