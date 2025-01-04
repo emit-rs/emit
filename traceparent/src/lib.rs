@@ -181,6 +181,49 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {}
 
 /**
+Get the current [`Traceparent`] and [`Tracestate`].
+
+This method is equivalent to calling [`Traceparent::current`] and [`Tracestate::current`], but avoids some duplicate overhead.
+*/
+pub fn current() -> (Traceparent, Tracestate) {
+    get_active_traceparent()
+        .map(|active| (active.traceparent, active.tracestate))
+        .unwrap_or((Traceparent::empty(), Tracestate::empty()))
+}
+
+/**
+Set the current [`Traceparent`] and [`Tracestate`].
+
+This method is equivalent to calling [`Traceparent::push`] and [`Tracestate::push`], but avoids some duplicate overhead.
+*/
+pub fn push(traceparent: Traceparent, tracestate: Tracestate) -> Frame<TraceparentCtxt> {
+    let mut frame = Frame::current(TraceparentCtxt::new(Empty));
+
+    let slot = if let Some(active) = get_active_traceparent() {
+        ActiveTraceparent {
+            span_parent: if active.is_parent_of(traceparent.trace_id) {
+                active.traceparent.span_id
+            } else {
+                None
+            },
+            traceparent,
+            tracestate,
+        }
+    } else {
+        ActiveTraceparent {
+            traceparent,
+            tracestate,
+            span_parent: None,
+        }
+    };
+
+    frame.inner_mut().slot = Some(slot);
+    frame.inner_mut().active = true;
+
+    frame
+}
+
+/**
 A [W3C traceparent](https://www.w3.org/TR/trace-context).
 
 This type contains `emit`'s [`TraceId`] and [`SpanId`], along with [`TraceFlags`] that determine sampling.
@@ -210,6 +253,10 @@ impl Traceparent {
             span_id,
             trace_flags,
         }
+    }
+
+    const fn empty() -> Self {
+        Traceparent::new(None, None, TraceFlags::SAMPLED)
     }
 
     /**
@@ -290,7 +337,7 @@ impl Traceparent {
     pub fn current() -> Self {
         get_active_traceparent()
             .map(|active| active.traceparent)
-            .unwrap_or(Traceparent::new(None, None, TraceFlags::SAMPLED))
+            .unwrap_or(Traceparent::empty())
     }
 
     /**
@@ -299,28 +346,29 @@ impl Traceparent {
     While the frame is active, [`Traceparent::current`] will return this traceparent.
     */
     pub fn push(&self) -> Frame<TraceparentCtxt> {
+        let traceparent = *self;
+
         let mut frame = Frame::current(TraceparentCtxt::new(Empty));
 
-        frame.inner_mut().slot = Some(
-            get_active_traceparent()
-                .map(|active| ActiveTraceparent {
-                    traceparent: *self,
-                    // If the incoming traceparent is for the same trace is the current
-                    // then use the current's span id as the parent id
-                    span_parent: if active.is_parent_of(self.trace_id) {
-                        active.traceparent.span_id
-                    }
-                    // If the incoming traceparent is for a different trace then
-                    // treat it as a root span (with no parent id)
-                    else {
-                        None
-                    },
-                })
-                .unwrap_or(ActiveTraceparent {
-                    traceparent: *self,
-                    span_parent: None,
-                }),
-        );
+        let slot = if let Some(active) = get_active_traceparent() {
+            ActiveTraceparent {
+                span_parent: if active.is_parent_of(self.trace_id) {
+                    active.traceparent.span_id
+                } else {
+                    None
+                },
+                traceparent,
+                tracestate: active.tracestate,
+            }
+        } else {
+            ActiveTraceparent {
+                traceparent,
+                tracestate: Tracestate::empty(),
+                span_parent: None,
+            }
+        };
+
+        frame.inner_mut().slot = Some(slot);
         frame.inner_mut().active = true;
 
         frame
@@ -508,9 +556,91 @@ impl fmt::Display for TraceFlags {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+/**
+A [W3C tracestate](https://www.w3.org/TR/trace-context).
+*/
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Tracestate(Str<'static>);
+
+impl Tracestate {
+    /**
+    Construct a new tracestate with the given value.
+    */
+    pub const fn new(value: &'static str) -> Tracestate {
+        Tracestate(Str::new(value))
+    }
+
+    /**
+    Construct a new tracestate with the given value.
+    */
+    pub const fn new_str(value: Str<'static>) -> Tracestate {
+        Tracestate(value)
+    }
+
+    /**
+    Construct a new tracestate with the given value.
+    */
+    pub fn new_owned(value: impl Into<Box<str>>) -> Tracestate {
+        Tracestate(Str::new_owned(value))
+    }
+
+    const fn empty() -> Tracestate {
+        Tracestate(Str::new(""))
+    }
+
+    /**
+    Get the value of this tracestate.
+    */
+    pub fn get(&self) -> &Str<'static> {
+        &self.0
+    }
+
+    /**
+    Get the current trace state.
+
+    If no context has been set, this method will return an empty value.
+    */
+    pub fn current() -> Self {
+        get_active_traceparent()
+            .map(|active| active.tracestate)
+            .unwrap_or(Tracestate::empty())
+    }
+
+    /**
+    Get a [`Frame`] that can set the current trace state in a scope.
+
+    While the frame is active, [`Tracestate::current`] will return this state.
+    */
+    pub fn push(&self) -> Frame<TraceparentCtxt> {
+        let tracestate = Tracestate(self.0.to_shared());
+
+        let mut frame = Frame::current(TraceparentCtxt::new(Empty));
+
+        let slot = if let Some(active) = get_active_traceparent() {
+            ActiveTraceparent {
+                span_parent: active.span_parent,
+                traceparent: active.traceparent,
+                tracestate,
+            }
+        } else {
+            ActiveTraceparent {
+                traceparent: Traceparent::empty(),
+                tracestate,
+                span_parent: None,
+            }
+        };
+
+        frame.inner_mut().slot = Some(slot);
+        frame.inner_mut().active = true;
+
+        frame
+    }
+}
+
+#[derive(Debug, Clone)]
 struct ActiveTraceparent {
     traceparent: Traceparent,
+    tracestate: Tracestate,
     span_parent: Option<SpanId>,
 }
 
@@ -541,7 +671,7 @@ fn set_active_traceparent(traceparent: Option<ActiveTraceparent>) -> Option<Acti
 }
 
 fn get_active_traceparent() -> Option<ActiveTraceparent> {
-    ACTIVE_TRACEPARENT.with(|slot| *slot.borrow())
+    ACTIVE_TRACEPARENT.with(|slot| slot.borrow().clone())
 }
 
 /**
@@ -557,7 +687,7 @@ pub struct TraceparentCtxt<C = Empty> {
 /**
 The [`emit::Ctxt::Frame`] used by [`TraceparentCtxt`].
 */
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct TraceparentCtxtFrame<F = Empty> {
     inner: F,
     active: bool,
@@ -634,8 +764,8 @@ impl<C: Ctxt> Ctxt for TraceparentCtxt<C> {
 
         TraceparentCtxtFrame {
             inner,
-            slot,
             active: slot.is_some(),
+            slot,
         }
     }
 
@@ -647,8 +777,8 @@ impl<C: Ctxt> Ctxt for TraceparentCtxt<C> {
 
         TraceparentCtxtFrame {
             inner,
-            slot,
             active: slot.is_some(),
+            slot,
         }
     }
 
@@ -660,14 +790,14 @@ impl<C: Ctxt> Ctxt for TraceparentCtxt<C> {
 
         TraceparentCtxtFrame {
             inner,
-            slot,
             active: slot.is_some(),
+            slot,
         }
     }
 
     fn enter(&self, frame: &mut Self::Frame) {
         if frame.active {
-            frame.slot = set_active_traceparent(frame.slot);
+            frame.slot = set_active_traceparent(frame.slot.take());
         }
 
         self.inner.enter(&mut frame.inner)
@@ -675,7 +805,7 @@ impl<C: Ctxt> Ctxt for TraceparentCtxt<C> {
 
     fn exit(&self, frame: &mut Self::Frame) {
         if frame.active {
-            frame.slot = set_active_traceparent(frame.slot);
+            frame.slot = set_active_traceparent(frame.slot.take());
         }
 
         self.inner.exit(&mut frame.inner)
@@ -707,7 +837,11 @@ fn incoming_traceparent(
     let active = get_active_traceparent().filter(|active| active.traceparent.is_valid());
 
     // Only consider props if the span id has changed
-    if Some(span_id) == active.and_then(|parent| parent.traceparent.span_id) {
+    if Some(span_id)
+        == active
+            .as_ref()
+            .and_then(|parent| parent.traceparent.span_id)
+    {
         return (
             None,
             ExcludeTraceparentProps {
@@ -731,6 +865,7 @@ fn incoming_traceparent(
                 Some(span_id),
                 active.traceparent.trace_flags & trace_flags,
             ),
+            tracestate: active.tracestate,
             span_parent: active.traceparent.span_id,
         }
     } else {
@@ -755,6 +890,7 @@ fn incoming_traceparent(
 
         ActiveTraceparent {
             traceparent: Traceparent::new(trace_id, Some(span_id), trace_flags),
+            tracestate: Tracestate::empty(),
             span_parent: None,
         }
     };
@@ -1213,5 +1349,16 @@ mod tests {
 
         // all events are included, regardless of sampling
         assert_eq!(30, EMITTER_EVENT_CALLS.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn tracestate_get_set() {
+        assert_eq!(Tracestate::empty(), Tracestate::current());
+
+        let state = Tracestate::new("a=1");
+
+        state.push().call(|| {
+            assert_eq!(state, Tracestate::current());
+        });
     }
 }
