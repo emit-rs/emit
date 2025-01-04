@@ -1437,7 +1437,10 @@ mod tests {
                 assert_eq!("span", evt.name());
 
                 assert_eq!(1, evt.props().pull::<usize, _>("event_prop").unwrap());
-                assert_eq!(2, evt.props().pull::<usize, _>("ctxt_prop").unwrap());
+
+                ctxt.with_current(|props| {
+                    assert_eq!(2, props.pull::<usize, _>("ctxt_prop").unwrap());
+                });
 
                 let current_ctxt = SpanCtxt::current(&ctxt);
 
