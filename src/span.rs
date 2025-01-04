@@ -13,6 +13,7 @@ Licensed under Apache 2.0
 use emit_core::{
     clock::Clock,
     ctxt::Ctxt,
+    empty::Empty,
     event::{Event, ToEvent},
     extent::{Extent, ToExtent},
     filter::Filter,
@@ -545,6 +546,18 @@ impl<'a, P: Props> Span<'a, P> {
     }
 }
 
+// "{span_name} started"
+const START_TEMPLATE: &'static [template::Part<'static>] = &[
+    template::Part::hole("span_name"),
+    template::Part::text(" started"),
+];
+
+// "{span_name} completed"
+const END_TEMPLATE: &'static [template::Part<'static>] = &[
+    template::Part::hole("span_name"),
+    template::Part::text(" completed"),
+];
+
 impl<'a, P: Props> ToEvent for Span<'a, P> {
     type Props<'b>
         = &'b Self
@@ -552,15 +565,9 @@ impl<'a, P: Props> ToEvent for Span<'a, P> {
         Self: 'b;
 
     fn to_event<'b>(&'b self) -> Event<'b, Self::Props<'b>> {
-        // "{span_name} completed"
-        const TEMPLATE: &'static [template::Part<'static>] = &[
-            template::Part::hole("span_name"),
-            template::Part::text(" completed"),
-        ];
-
         Event::new(
             self.mdl.by_ref(),
-            Template::new(TEMPLATE),
+            Template::new(END_TEMPLATE),
             self.extent.clone(),
             &self,
         )
@@ -728,9 +735,17 @@ impl Props for SpanCtxt {
 /**
 An active span in a distributed trace.
 
+## Creating span guards automatically
+
 This type is created by the [`macro@crate::span!`] macro with the `guard` control parameter. See the [`mod@crate::span`] module for details on creating spans.
 
 Call [`SpanGuard::complete_with`], or just drop the guard to complete it, passing the resulting [`Span`] to a [`Completion`].
+
+## Creating span guards manually
+
+The [`SpanGuard::new`] method can be used to construct a `SpanGuard` and [`Frame`] manually.
+
+**Make sure you pass ownership of the returned `SpanGuard` into the closure in [`Frame::call`] or async block in [`Frame::in_future`]**. If you don't, the span will complete early, without its ambient context.
 */
 pub struct SpanGuard<'a, T: Clock, P: Props, F: Completion> {
     // `state` is `None` if the span is completed
@@ -761,7 +776,24 @@ impl<'a, T: Clock, P: Props, F: Completion> Drop for SpanGuard<'a, T, P, F> {
 
 impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
     /**
-    Create a span guard.
+    Create a new active span.
+
+    This method takes a number of parameters to construct a span. They are:
+
+    - `filter`, `ctxt`, `clock`, `rng`: These typically come from a [`crate::runtime::Runtime`], like [`crate::runtime::shared`].
+    - `completion`: A [`Completion`] that will be used by default when the returned `SpanGuard` is completed.
+    - `ctxt_props`: A set of [`Props`] that will be pushed to the ambient context.
+    - `span_mdl`, `span_name`, `span_props`: The input parameters to [`Span::new`] used to construct a span when the guard is completed.
+
+    This method constructs a span based on the input properties and current context as follows:
+
+    1. A [`SpanCtxt`] for the span is generated using [`SpanCtxt::new_child`].
+    2. The filter is checked to see if the span should be enabled or disabled. The event passed to the filter is a [`Span`] carrying the generated span context, but without an extent.
+    3. A [`Frame`] carrying the generated [`SpanCtxt`] and `ctxt_props`, and a `SpanGuard` for completing the span is returned.
+
+    The returned `SpanGuard` will complete automatically on drop, or manually through [`SpanGuard::complete`] or [`SpanGuard::complete_with`].
+
+    **Make sure you pass ownership of the returned `SpanGuard` into the closure in [`Frame::call`] or async block in [`Frame::in_future`]**. If you don't, the span will complete early, without its ambient context.
     */
     pub fn new<C: Ctxt>(
         filter: impl Filter,
@@ -780,13 +812,26 @@ impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
         let span_ctxt = SpanCtxt::current(&ctxt).new_child(rng);
         let span_timer = Timer::start(clock);
 
-        let is_enabled = filter.matches(Span::new(
-            span_mdl.by_ref(),
-            span_name.by_ref(),
-            span_timer.start_timestamp(),
-            (&span_props).and_props(&span_ctxt),
-        ));
+        // Check whether the span should be constructed using a dummy event
+        let is_enabled = ctxt.with_current(|current_ctxt_props| {
+            filter.matches(
+                Span::new(
+                    span_mdl.by_ref(),
+                    span_name.by_ref(),
+                    Empty,
+                    (&span_props)
+                        .and_props(&ctxt_props)
+                        .and_props(span_ctxt)
+                        .and_props(current_ctxt_props),
+                )
+                .to_event()
+                .with_tpl(Template::new(START_TEMPLATE)),
+            )
+        });
 
+        // Create a guard for the span
+        // This can be completed automatically by dropping
+        // or manually through the `complete` method
         let guard = SpanGuard {
             state: Some(SpanGuardState {
                 timer: span_timer,
@@ -798,22 +843,20 @@ impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
             completion: if is_enabled { Some(completion) } else { None },
         };
 
+        // Create a frame for the span props
+        // This includes the trace and span ids
         let frame = guard.push_ctxt(ctxt, ctxt_props);
 
         (guard, frame)
     }
 
-    fn push_ctxt<C: Ctxt>(&self, ctxt: C, props: impl Props) -> Frame<C> {
+    fn push_ctxt<C: Ctxt>(&self, ctxt: C, ctxt_props: impl Props) -> Frame<C> {
+        let span_ctxt = self.state.as_ref().expect("span is already complete").ctxt;
+
         if self.is_enabled() {
-            Frame::push(
-                ctxt,
-                props.and_props(self.state.as_ref().expect("span is already complete").ctxt),
-            )
+            Frame::push(ctxt, ctxt_props.and_props(span_ctxt))
         } else {
-            Frame::disabled(
-                ctxt,
-                props.and_props(self.state.as_ref().expect("span is already complete").ctxt),
-            )
+            Frame::disabled(ctxt, ctxt_props.and_props(span_ctxt))
         }
     }
 
@@ -1164,7 +1207,7 @@ mod tests {
 
     #[test]
     fn span_id_random_empty() {
-        assert!(SpanId::random(crate::Empty).is_none());
+        assert!(SpanId::random(Empty).is_none());
     }
 
     #[test]
@@ -1175,7 +1218,7 @@ mod tests {
 
     #[test]
     fn trace_id_random_empty() {
-        assert!(TraceId::random(crate::Empty).is_none());
+        assert!(TraceId::random(Empty).is_none());
     }
 
     #[test]
@@ -1361,7 +1404,7 @@ mod tests {
 
     #[test]
     #[cfg(all(feature = "std", feature = "rand"))]
-    fn span_guard_filtered_new() {
+    fn span_guard_new() {
         let clock = MyClock(Cell::new(0));
         let rng = crate::platform::rand_rng::RandRng::new();
         let ctxt = crate::platform::thread_local_ctxt::ThreadLocalCtxt::new();
@@ -1369,7 +1412,14 @@ mod tests {
         let complete_called = Cell::new(false);
 
         let (guard, frame) = SpanGuard::new(
-            filter::from_fn(|_| true),
+            filter::from_fn(|evt| {
+                assert_eq!(2, evt.props().pull::<usize, _>("ctxt_prop").unwrap());
+
+                assert!(evt.props().get("trace_id").is_some());
+                assert!(evt.props().get("span_id").is_some());
+
+                true
+            }),
             &ctxt,
             &clock,
             &rng,
@@ -1387,6 +1437,7 @@ mod tests {
                 assert_eq!("span", evt.name());
 
                 assert_eq!(1, evt.props().pull::<usize, _>("event_prop").unwrap());
+                assert_eq!(2, evt.props().pull::<usize, _>("ctxt_prop").unwrap());
 
                 let current_ctxt = SpanCtxt::current(&ctxt);
 
@@ -1411,7 +1462,7 @@ mod tests {
 
     #[test]
     #[cfg(all(feature = "std", feature = "rand", not(miri)))]
-    fn span_guard_filtered_new_disabled() {
+    fn span_guard_new_disabled() {
         let rng = crate::platform::rand_rng::RandRng::new();
         let clock = crate::platform::system_clock::SystemClock::new();
         let ctxt = crate::platform::thread_local_ctxt::ThreadLocalCtxt::new();
@@ -1426,10 +1477,10 @@ mod tests {
             completion::from_fn(|_| {
                 complete_called.set(true);
             }),
-            crate::Empty,
+            Empty,
             Path::new_unchecked("test"),
             "span",
-            crate::Empty,
+            Empty,
         );
 
         assert!(!guard.is_enabled());
@@ -1459,10 +1510,10 @@ mod tests {
             completion::from_fn(|_| {
                 default_complete_called.set(true);
             }),
-            crate::Empty,
+            Empty,
             Path::new_unchecked("test"),
             "span",
-            crate::Empty,
+            Empty,
         );
 
         assert!(guard.is_enabled());

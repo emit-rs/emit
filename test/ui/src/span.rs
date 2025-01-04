@@ -7,8 +7,6 @@ use crate::util::{static_runtime, StaticCalled, StaticRuntime};
 #[test]
 fn span_basic() {
     fn assert_event_base(evt: &emit::Event<impl Props>) {
-        assert_eq!("greet Rust", evt.msg().to_string());
-        assert_eq!("greet {user}", evt.tpl().to_string());
         assert_eq!(module_path!(), evt.mdl());
 
         assert!(evt.props().pull::<&str, _>("user").is_some());
@@ -31,6 +29,9 @@ fn span_basic() {
         assert_event_base(&evt);
 
         assert!(evt.extent().unwrap().is_range());
+
+        assert_eq!("greet Rust", evt.msg().to_string());
+        assert_eq!("greet {user}", evt.tpl().to_string());
     }
 
     static CALLED: StaticCalled = StaticCalled::new();
