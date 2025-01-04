@@ -1,10 +1,10 @@
 # Manual span creation
 
-Span events may be created manually without using the `#[span]` attribute using a [`SpanGuard`](https://docs.rs/emit/0.11.0-alpha.21/emit/span/struct.SpanGuard.html):
+Span events may be created manually without using the `#[span]` attribute using an [`ActiveSpan`](https://docs.rs/emit/0.11.0-alpha.21/emit/span/struct.ActiveSpan.html):
 
 ```rust
 # extern crate emit;
-let (span, frame) = emit::span::SpanGuard::new(
+let (span, frame) = emit::span::ActiveSpan::start(
     // A filter that determines whether the span is active or not
     emit::filter(),
     // The context to generate span context from, and store ambient context in
@@ -34,9 +34,9 @@ frame.call(move || {
 })
 ```
 
-**Make sure you pass ownership of the returned [`SpanGuard`](https://docs.rs/emit/0.11.0-alpha.21/emit/span/struct.SpanGuard.html) into the closure in [`Frame::call`](https://docs.rs/emit/0.11.0-alpha.21/emit/frame/struct.Frame.html#method.call) or async block in [`Frame::in_future`](https://docs.rs/emit/0.11.0-alpha.21/emit/frame/struct.Frame.html#method.in_future)**. If you don't, the span will complete early, without its ambient context.
+**Make sure you pass ownership of the returned [`ActiveSpan`](https://docs.rs/emit/0.11.0-alpha.21/emit/span/struct.ActiveSpan.html) into the closure in [`Frame::call`](https://docs.rs/emit/0.11.0-alpha.21/emit/frame/struct.Frame.html#method.call) or async block in [`Frame::in_future`](https://docs.rs/emit/0.11.0-alpha.21/emit/frame/struct.Frame.html#method.in_future)**. If you don't, the span will complete early, without its ambient context.
 
-In simple cases where sampling or filtering aren't used, or when control flow is straightforward, you can create spans without using a `SpanGuard`:
+In simple cases where sampling or filtering aren't used, or when control flow is straightforward, you can create spans without using an `ActiveSpan`:
 
 ```rust
 # extern crate emit;

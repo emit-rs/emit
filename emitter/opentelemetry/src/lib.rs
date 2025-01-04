@@ -211,7 +211,7 @@ An [`emit::Ctxt`] created during [`setup`] for integrating `emit` with the OpenT
 
 This type is responsible for intercepting calls that push span state to `emit`'s ambient context and forwarding them to the OpenTelemetry SDK's own context.
 
-When [`macro@emit::span`] is called, an [`opentelemetry::trace::Span`] is started using the given trace and span ids. The span doesn't carry any other ambient properties until it's completed either through [`emit::span::SpanGuard::complete`], or at the end of the scope the [`macro@emit::span`] macro covers.
+When [`macro@emit::span`] is called, an [`opentelemetry::trace::Span`] is started using the given trace and span ids. The span doesn't carry any other ambient properties until it's completed either through [`emit::span::ActiveSpan::complete`], or at the end of the scope the [`macro@emit::span`] macro covers.
 */
 pub struct OpenTelemetryCtxt<C, T> {
     tracer: T,
