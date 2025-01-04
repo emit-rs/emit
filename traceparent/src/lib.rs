@@ -839,8 +839,8 @@ impl<S: Fn(&SpanCtxt) -> bool> Filter for TraceparentFilter<S> {
             }
         }
 
-        // If the event is not a span then check if the current traceparent is sampled
-        Traceparent::current().trace_flags().is_sampled()
+        // If the event is not a span then include it
+        true
     }
 }
 
@@ -1168,7 +1168,8 @@ mod tests {
 
     #[test]
     fn traceparent_span_sampler() {
-        static EMITTER_CALLS: AtomicUsize = AtomicUsize::new(0);
+        static EMITTER_SPAN_CALLS: AtomicUsize = AtomicUsize::new(0);
+        static EMITTER_EVENT_CALLS: AtomicUsize = AtomicUsize::new(0);
         static SAMPLER_CALLS: AtomicUsize = AtomicUsize::new(0);
 
         static RT: Runtime<
@@ -1178,8 +1179,12 @@ mod tests {
             SystemClock,
             RandRng,
         > = Runtime::build(
-            emitter::FromFn::new(|_| {
-                EMITTER_CALLS.fetch_add(1, Ordering::Relaxed);
+            emitter::FromFn::new(|evt| {
+                if evt.props().pull("evt_kind") == Some(emit::Kind::Span) {
+                    EMITTER_SPAN_CALLS.fetch_add(1, Ordering::Relaxed);
+                } else {
+                    EMITTER_EVENT_CALLS.fetch_add(1, Ordering::Relaxed);
+                }
             }),
             TraceparentFilter::new_with_sampler({
                 move |_| SAMPLER_CALLS.fetch_add(1, Ordering::Relaxed) % 10 == 0
@@ -1195,13 +1200,18 @@ mod tests {
         }
 
         #[emit::span(rt: RT, "inner")]
-        fn inner() {}
+        fn inner() {
+            emit::emit!(rt: RT, "event");
+        }
 
         for _ in 0..30 {
             outer();
         }
 
         // `outer` is called 3 times, which also calls `inner` 3 times
-        assert_eq!(6, EMITTER_CALLS.load(Ordering::Relaxed));
+        assert_eq!(6, EMITTER_SPAN_CALLS.load(Ordering::Relaxed));
+
+        // all events are included, regardless of sampling
+        assert_eq!(30, EMITTER_EVENT_CALLS.load(Ordering::Relaxed));
     }
 }
