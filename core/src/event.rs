@@ -271,7 +271,7 @@ mod tests {
     #[test]
     fn event_new() {
         let evt = Event::new(
-            Path::new_unchecked("module"),
+            Path::new_raw("module"),
             Template::literal("An event"),
             Extent::range(Timestamp::MIN..Timestamp::MAX),
             [
@@ -282,7 +282,7 @@ mod tests {
         );
 
         fn assert(evt: &Event<impl Props>) {
-            assert_eq!(Path::new_unchecked("module"), evt.mdl());
+            assert_eq!(Path::new_raw("module"), evt.mdl());
             assert_eq!(
                 Timestamp::MIN..Timestamp::MAX,
                 evt.extent().unwrap().as_range().unwrap().clone()

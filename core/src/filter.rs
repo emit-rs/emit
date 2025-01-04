@@ -232,7 +232,7 @@ mod tests {
             assert_eq!(
                 matches,
                 case.matches(Event::new(
-                    Path::new_unchecked("module"),
+                    Path::new_raw("module"),
                     Template::literal("Event"),
                     Empty,
                     Empty,
@@ -251,7 +251,7 @@ mod tests {
                 assert_eq!(
                     a && b,
                     fa.and_when(fb).matches(Event::new(
-                        Path::new_unchecked("module"),
+                        Path::new_raw("module"),
                         Template::literal("Event"),
                         Empty,
                         Empty,
@@ -271,7 +271,7 @@ mod tests {
                 assert_eq!(
                     a || b,
                     fa.or_when(fb).matches(Event::new(
-                        Path::new_unchecked("module"),
+                        Path::new_raw("module"),
                         Template::literal("Event"),
                         Empty,
                         Empty,
@@ -283,17 +283,17 @@ mod tests {
 
     #[test]
     fn from_fn_filter() {
-        let f = from_fn(|evt| evt.mdl() == Path::new_unchecked("module"));
+        let f = from_fn(|evt| evt.mdl() == Path::new_raw("module"));
 
         assert!(f.matches(Event::new(
-            Path::new_unchecked("module"),
+            Path::new_raw("module"),
             Template::literal("Event"),
             Empty,
             Empty,
         )));
 
         assert!(!f.matches(Event::new(
-            Path::new_unchecked("not_module"),
+            Path::new_raw("not_module"),
             Template::literal("Event"),
             Empty,
             Empty,
@@ -305,7 +305,7 @@ mod tests {
         let f = always();
 
         assert!(f.matches(Event::new(
-            Path::new_unchecked("module"),
+            Path::new_raw("module"),
             Template::literal("Event"),
             Empty,
             Empty,
@@ -318,7 +318,7 @@ mod tests {
         let f = &f as &dyn ErasedFilter;
 
         assert!(f.matches(Event::new(
-            Path::new_unchecked("module"),
+            Path::new_raw("module"),
             Template::literal("Event"),
             Empty,
             Empty,
@@ -328,7 +328,7 @@ mod tests {
         let f = &f as &dyn ErasedFilter;
 
         assert!(!f.matches(Event::new(
-            Path::new_unchecked("module"),
+            Path::new_raw("module"),
             Template::literal("Event"),
             Empty,
             Empty,

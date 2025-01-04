@@ -136,7 +136,7 @@ mod tests {
             MyCtxt("ctxt_prop", 13),
             MyClock(timestamp::Timestamp::from_unix(Duration::from_secs(77))),
             event::Event::new(
-                path::Path::new_unchecked("test"),
+                path::Path::new_raw("test"),
                 template::Template::literal("text"),
                 empty::Empty,
                 ("evt_prop", true),
@@ -154,7 +154,7 @@ mod tests {
             empty::Empty,
             empty::Empty,
             event::Event::new(
-                path::Path::new_unchecked("test"),
+                path::Path::new_raw("test"),
                 template::Template::literal("text"),
                 empty::Empty,
                 ("evt_prop", true),

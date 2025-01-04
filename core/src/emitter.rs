@@ -388,12 +388,7 @@ pub mod wrapping {
 
                 wrapping.wrap(
                     Empty,
-                    Event::new(
-                        Path::new_unchecked("a"),
-                        Template::literal("test"),
-                        Empty,
-                        Empty,
-                    ),
+                    Event::new(Path::new_raw("a"), Template::literal("test"), Empty, Empty),
                 );
             }
 
@@ -410,12 +405,7 @@ pub mod wrapping {
 
             wrapping.wrap(
                 Empty,
-                Event::new(
-                    Path::new_unchecked("a"),
-                    Template::literal("test"),
-                    Empty,
-                    Empty,
-                ),
+                Event::new(Path::new_raw("a"), Template::literal("test"), Empty, Empty),
             );
 
             assert_eq!(1, calls.get());
@@ -535,7 +525,7 @@ mod tests {
             let emitter = &emitter as &dyn ErasedEmitter;
 
             emitter.emit(Event::new(
-                Path::new_unchecked("a"),
+                Path::new_raw("a"),
                 Template::literal("event 1"),
                 Empty,
                 Empty,
@@ -553,7 +543,7 @@ mod tests {
             (None, vec![]),
         ] {
             emitter.emit(Event::new(
-                Path::new_unchecked("a"),
+                Path::new_raw("a"),
                 Template::literal("event 1"),
                 Empty,
                 Empty,
@@ -571,13 +561,13 @@ mod tests {
         let count = Cell::new(0);
 
         let emitter = from_fn(|evt| {
-            assert_eq!(Path::new_unchecked("a"), evt.mdl());
+            assert_eq!(Path::new_raw("a"), evt.mdl());
 
             count.set(count.get() + 1);
         });
 
         emitter.emit(Event::new(
-            Path::new_unchecked("a"),
+            Path::new_raw("a"),
             Template::literal("event 1"),
             Empty,
             Empty,
@@ -591,7 +581,7 @@ mod tests {
         let emitter = MyEmitter::new().and_to(MyEmitter::new());
 
         emitter.emit(Event::new(
-            Path::new_unchecked("a"),
+            Path::new_raw("a"),
             Template::literal("event 1"),
             Empty,
             Empty,
@@ -615,7 +605,7 @@ mod tests {
         }));
 
         emitter.emit(Event::new(
-            Path::new_unchecked("a"),
+            Path::new_raw("a"),
             Template::literal("event 1"),
             Empty,
             Empty,

@@ -426,7 +426,7 @@ pub mod source {
             impl Source for MySource {
                 fn sample_metrics<S: Sampler>(&self, sampler: S) {
                     sampler.metric(Metric::new(
-                        Path::new_unchecked("test"),
+                        Path::new_raw("test"),
                         "metric 1",
                         "count",
                         crate::Empty,
@@ -435,7 +435,7 @@ pub mod source {
                     ));
 
                     sampler.metric(Metric::new(
-                        Path::new_unchecked("test"),
+                        Path::new_raw("test"),
                         "metric 2",
                         "count",
                         crate::Empty,
@@ -460,7 +460,7 @@ pub mod source {
 
             from_fn(|sampler| {
                 sampler.metric(Metric::new(
-                    Path::new_unchecked("test"),
+                    Path::new_raw("test"),
                     "metric 1",
                     "count",
                     crate::Empty,
@@ -470,7 +470,7 @@ pub mod source {
             })
             .and_sample(from_fn(|sampler| {
                 sampler.metric(Metric::new(
-                    Path::new_unchecked("test"),
+                    Path::new_raw("test"),
                     "metric 2",
                     "count",
                     crate::Empty,
@@ -491,7 +491,7 @@ pub mod source {
 
             from_fn(|sampler| {
                 sampler.metric(Metric::new(
-                    Path::new_unchecked("test"),
+                    Path::new_raw("test"),
                     "metric 1",
                     "count",
                     crate::Empty,
@@ -500,7 +500,7 @@ pub mod source {
                 ));
 
                 sampler.metric(Metric::new(
-                    Path::new_unchecked("test"),
+                    Path::new_raw("test"),
                     "metric 2",
                     "count",
                     crate::Empty,
@@ -519,7 +519,7 @@ pub mod source {
         fn erased_source() {
             let source = from_fn(|sampler| {
                 sampler.metric(Metric::new(
-                    Path::new_unchecked("test"),
+                    Path::new_raw("test"),
                     "metric 1",
                     "count",
                     crate::Empty,
@@ -528,7 +528,7 @@ pub mod source {
                 ));
 
                 sampler.metric(Metric::new(
-                    Path::new_unchecked("test"),
+                    Path::new_raw("test"),
                     "metric 2",
                     "count",
                     crate::Empty,
@@ -746,7 +746,7 @@ mod alloc_support {
             reporter
                 .add_source(source::from_fn(|sampler| {
                     sampler.metric(Metric::new(
-                        Path::new_unchecked("test"),
+                        Path::new_raw("test"),
                         "metric 1",
                         "count",
                         crate::Empty,
@@ -756,7 +756,7 @@ mod alloc_support {
                 }))
                 .add_source(source::from_fn(|sampler| {
                     sampler.metric(Metric::new(
-                        Path::new_unchecked("test"),
+                        Path::new_raw("test"),
                         "metric 2",
                         "count",
                         crate::Empty,
@@ -789,7 +789,7 @@ mod alloc_support {
 
             reporter.add_source(source::from_fn(|sampler| {
                 sampler.metric(Metric::new(
-                    Path::new_unchecked("test"),
+                    Path::new_raw("test"),
                     "metric 1",
                     "count",
                     crate::Empty,
@@ -811,7 +811,7 @@ mod alloc_support {
 
             reporter.add_source(source::from_fn(|sampler| {
                 sampler.metric(Metric::new(
-                    Path::new_unchecked("test"),
+                    Path::new_raw("test"),
                     "metric 1",
                     "count",
                     crate::Empty,
@@ -835,7 +835,7 @@ mod alloc_support {
 
             reporter.add_source(source::from_fn(|sampler| {
                 sampler.metric(Metric::new(
-                    Path::new_unchecked("test"),
+                    Path::new_raw("test"),
                     "metric 1",
                     "count",
                     Timestamp::from_unix(Duration::from_secs(100)).unwrap(),
@@ -862,7 +862,7 @@ mod alloc_support {
 
             reporter.add_source(source::from_fn(|sampler| {
                 sampler.metric(Metric::new(
-                    Path::new_unchecked("test"),
+                    Path::new_raw("test"),
                     "metric 1",
                     "count",
                     Timestamp::from_unix(Duration::from_secs(100)).unwrap()
@@ -1040,7 +1040,7 @@ pub mod sampler {
             });
 
             sampler.metric(Metric::new(
-                Path::new_unchecked("test"),
+                Path::new_raw("test"),
                 "test",
                 "count",
                 Empty,
@@ -1064,7 +1064,7 @@ pub mod sampler {
             let sampler = &sampler as &dyn ErasedSampler;
 
             sampler.metric(Metric::new(
-                Path::new_unchecked("test"),
+                Path::new_raw("test"),
                 "test",
                 "count",
                 Empty,
@@ -1087,7 +1087,7 @@ mod tests {
     #[test]
     fn metric_new() {
         let metric = Metric::new(
-            Path::new_unchecked("test"),
+            Path::new_raw("test"),
             "my metric",
             "count",
             Timestamp::from_unix(Duration::from_secs(1)),
@@ -1109,7 +1109,7 @@ mod tests {
     #[test]
     fn metric_to_event() {
         let metric = Metric::new(
-            Path::new_unchecked("test"),
+            Path::new_raw("test"),
             "my metric",
             "count",
             Timestamp::from_unix(Duration::from_secs(1)),
@@ -1150,7 +1150,7 @@ mod tests {
             (None, None),
         ] {
             let metric = Metric::new(
-                Path::new_unchecked("test"),
+                Path::new_raw("test"),
                 "my metric",
                 "count",
                 case,

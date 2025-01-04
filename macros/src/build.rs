@@ -110,7 +110,7 @@ pub fn expand_path_tokens(opts: ExpandPathTokens) -> Result<TokenStream, syn::Er
     let path = path.value();
 
     if emit_core::path::is_valid_path(&path) {
-        Ok(quote!(emit::Path::new_unchecked(#path)))
+        Ok(quote!(emit::Path::new_raw(#path)))
     } else {
         Err(syn::Error::new(span, "the value is not a valid path"))
     }
