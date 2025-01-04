@@ -1,7 +1,7 @@
 /*!
 Distributed trace context for `emit`.
 
-This library implements the [W3C trace context](https://www.w3.org/TR/trace-context) standard over `emit`'s tracing functionality. Trace context is propagated as a traceparent in a simple text format. Here's an example of a traceparent:
+This library implements the [W3C trace context](https://www.w3.org/TR/trace-context) standard over `emit`'s tracing functionality. Trace context is propagated as a traceparent and tracestate in a simple text format. Here's an example of a traceparent:
 
 ```text
 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
@@ -13,6 +13,14 @@ It includes:
 - A _trace id_: `4bf92f3577b34da6a3ce929d0e0e4736`.
 - A _span id_: `00f067aa0ba902b7`.
 - A set of _trace flags_: `01` (sampled).
+
+Here's an example of tracestate:
+
+```text
+vendorname1=opaqueValue1,vendorname2=opaqueValue2
+```
+
+It contains a collection of key-value pairs with vendor-specific information.
 
 # Getting started
 
