@@ -181,6 +181,9 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {}
 
 /**
+Get the current [`Traceparent`] and [`Tracestate`].
+
+This method is equivalent to calling [`Traceparent::current`] and [`Tracestate::current`], but avoids some duplicate overhead.
 */
 pub fn current() -> (Traceparent, Tracestate) {
     get_active_traceparent()
@@ -189,11 +192,14 @@ pub fn current() -> (Traceparent, Tracestate) {
 }
 
 /**
+Set the current [`Traceparent`] and [`Tracestate`].
+
+This method is equivalent to calling [`Traceparent::push`] and [`Tracestate::push`], but avoids some duplicate overhead.
 */
 pub fn push(traceparent: Traceparent, tracestate: Tracestate) -> Frame<TraceparentCtxt> {
     let mut frame = Frame::current(TraceparentCtxt::new(Empty));
 
-    let active = if let Some(active) = get_active_traceparent() {
+    let slot = if let Some(active) = get_active_traceparent() {
         ActiveTraceparent {
             span_parent: if active.is_parent_of(traceparent.trace_id) {
                 active.traceparent.span_id
@@ -211,7 +217,7 @@ pub fn push(traceparent: Traceparent, tracestate: Tracestate) -> Frame<Tracepare
         }
     };
 
-    frame.inner_mut().slot = Some(active);
+    frame.inner_mut().slot = Some(slot);
     frame.inner_mut().active = true;
 
     frame
@@ -340,25 +346,29 @@ impl Traceparent {
     While the frame is active, [`Traceparent::current`] will return this traceparent.
     */
     pub fn push(&self) -> Frame<TraceparentCtxt> {
+        let traceparent = *self;
+
         let mut frame = Frame::current(TraceparentCtxt::new(Empty));
 
-        frame.inner_mut().slot = Some(
-            get_active_traceparent()
-                .map(|active| ActiveTraceparent {
-                    span_parent: if active.is_parent_of(self.trace_id) {
-                        active.traceparent.span_id
-                    } else {
-                        None
-                    },
-                    traceparent: *self,
-                    tracestate: active.tracestate,
-                })
-                .unwrap_or(ActiveTraceparent {
-                    traceparent: Traceparent::empty(),
-                    tracestate: Tracestate::empty(),
-                    span_parent: None,
-                }),
-        );
+        let slot = if let Some(active) = get_active_traceparent() {
+            ActiveTraceparent {
+                span_parent: if active.is_parent_of(self.trace_id) {
+                    active.traceparent.span_id
+                } else {
+                    None
+                },
+                traceparent,
+                tracestate: active.tracestate,
+            }
+        } else {
+            ActiveTraceparent {
+                traceparent,
+                tracestate: Tracestate::empty(),
+                span_parent: None,
+            }
+        };
+
+        frame.inner_mut().slot = Some(slot);
         frame.inner_mut().active = true;
 
         frame
@@ -556,8 +566,22 @@ impl Tracestate {
     /**
     Construct a new tracestate with the given value.
     */
-    pub const fn new(value: Str<'static>) -> Tracestate {
+    pub const fn new(value: &'static str) -> Tracestate {
+        Tracestate(Str::new(value))
+    }
+
+    /**
+    Construct a new tracestate with the given value.
+    */
+    pub const fn new_str(value: Str<'static>) -> Tracestate {
         Tracestate(value)
+    }
+
+    /**
+    Construct a new tracestate with the given value.
+    */
+    pub fn new_owned(value: impl Into<Box<str>>) -> Tracestate {
+        Tracestate(Str::new_owned(value))
     }
 
     const fn empty() -> Tracestate {
@@ -588,21 +612,25 @@ impl Tracestate {
     While the frame is active, [`Tracestate::current`] will return this state.
     */
     pub fn push(&self) -> Frame<TraceparentCtxt> {
+        let tracestate = Tracestate(self.0.to_shared());
+
         let mut frame = Frame::current(TraceparentCtxt::new(Empty));
 
-        frame.inner_mut().slot = Some(
-            get_active_traceparent()
-                .map(|active| ActiveTraceparent {
-                    span_parent: active.span_parent,
-                    traceparent: active.traceparent,
-                    tracestate: Tracestate(self.0.to_shared()),
-                })
-                .unwrap_or(ActiveTraceparent {
-                    traceparent: Traceparent::empty(),
-                    tracestate: Tracestate::empty(),
-                    span_parent: None,
-                }),
-        );
+        let slot = if let Some(active) = get_active_traceparent() {
+            ActiveTraceparent {
+                span_parent: active.span_parent,
+                traceparent: active.traceparent,
+                tracestate,
+            }
+        } else {
+            ActiveTraceparent {
+                traceparent: Traceparent::empty(),
+                tracestate,
+                span_parent: None,
+            }
+        };
+
+        frame.inner_mut().slot = Some(slot);
         frame.inner_mut().active = true;
 
         frame
@@ -1325,6 +1353,12 @@ mod tests {
 
     #[test]
     fn tracestate_get_set() {
-        todo!()
+        assert_eq!(Tracestate::empty(), Tracestate::current());
+
+        let state = Tracestate::new("a=1");
+
+        state.push().call(|| {
+            assert_eq!(state, Tracestate::current());
+        });
     }
 }
