@@ -88,6 +88,11 @@ if traceparent.is_valid() {
 When in use, the [`Traceparent`] type defined by this library becomes the source of truth for the `SpanCtxt`. If the current `Traceparent` is not sampled, then no `SpanCtxt` will be returned.
 
 Only the span id on incoming `SpanCtxt`s created by [`macro@emit::span`] are respected. The current `Traceparent` overrides any incoming trace ids or span parents.
+
+# Sampling
+
+The [`setup_with_sampler`] function lets you configure a sampling function that's run on the first span of each trace.
+See the function docs for more details.
 */
 
 #![deny(missing_docs)]
@@ -136,8 +141,8 @@ pub fn setup() -> emit::Setup<
 Start a builder for a distributed-trace-aware pipeline with a sampler.
 
 The sampler will be called once for each trace when it's started.
-If the sampler returns `true`, the trace and its events will be emitted.
-If the sampler returns `false`, the trace and its events will be discarded.
+If the sampler returns `true`, the trace will be emitted.
+If the sampler returns `false`, the trace will be discarded.
 
 ```
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -151,6 +156,33 @@ fn main() {
             counter.fetch_add(1, Ordering::Relaxed) % 10 == 0
         }
     })
+    .emit_to(emit_term::stdout())
+    .init();
+
+    // Your app code goes here
+
+    rt.blocking_flush(std::time::Duration::from_secs(30));
+}
+```
+
+Note that other events emitted within an unsampled trace will still be emitted.
+You can
+
+```
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+fn main() {
+    let rt = emit_traceparent::setup_with_sampler({
+        let counter = AtomicUsize::new(0);
+
+        move |_| {
+            // Sample 1 in every 10 traces
+            counter.fetch_add(1, Ordering::Relaxed) % 10 == 0
+        }
+    })
+    // The `true` here tells us to include events outside traces
+    // If we pass `false` then any event outside a trace will be discarded
+    .and_emit_when(emit_traceparent::in_sampled_trace(true))
     .emit_to(emit_term::stdout())
     .init();
 
@@ -1004,6 +1036,45 @@ impl<S: Fn(&SpanCtxt) -> bool> Filter for TraceparentFilter<S> {
         // If the event is not a span then include it
         true
     }
+}
+
+/**
+A filter that matches events in a sampled trace.
+*/
+pub struct InSampledTraceFilter {
+    match_events_outside_traces: bool,
+}
+
+impl Filter for InSampledTraceFilter {
+    fn matches<E: ToEvent>(&self, _: E) -> bool {
+        if let Some(active) = get_active_traceparent() {
+            active.traceparent.trace_flags().is_sampled()
+        } else {
+            self.match_events_outside_traces
+        }
+    }
+}
+
+impl InSampledTraceFilter {
+    /**
+    Create a filter that matches events in sampled traces.
+
+    The `match_events_outside_traces` parameter determines whether events outside of any trace are matched or discarded.
+    */
+    pub const fn new(match_events_outside_traces: bool) -> Self {
+        InSampledTraceFilter {
+            match_events_outside_traces,
+        }
+    }
+}
+
+/**
+Create a filter that matches events in sampled traces.
+
+The `match_events_outside_traces` parameter determines whether events outside of any trace are matched or discarded.
+*/
+pub const fn in_sampled_trace(match_events_outside_traces: bool) -> InSampledTraceFilter {
+    InSampledTraceFilter::new(match_events_outside_traces)
 }
 
 #[cfg(test)]

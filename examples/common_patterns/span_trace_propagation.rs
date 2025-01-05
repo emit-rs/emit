@@ -92,15 +92,21 @@ pub mod http {
         emit::debug!("Inbound {#[emit::as_serde] request}");
 
         // 1. Pull the incoming traceparent
-        //    If the request doesn't specify one then use an empty sampled context
         let traceparent = request
             .headers
             .get("traceparent")
             .and_then(|traceparent| emit_traceparent::Traceparent::try_from_str(traceparent).ok())
-            .unwrap_or_else(|| emit_traceparent::Traceparent::current());
+            .unwrap_or_else(emit_traceparent::Traceparent::current);
+
+        let tracestate = request
+            .headers
+            .get("tracestate")
+            .cloned()
+            .map(emit_traceparent::Tracestate::new_owned_raw)
+            .unwrap_or_else(emit_traceparent::Tracestate::current);
 
         // 2. Push the traceparent onto the context
-        traceparent.push().call(move || {
+        emit_traceparent::push(traceparent, tracestate).call(move || {
             // 3. Handle your request within the frame
             route(&request.method, &request.path)
         })
@@ -108,13 +114,17 @@ pub mod http {
 
     pub fn outgoing(mut request: HttpRequest) {
         // 1. Get the current traceparent
-        let traceparent = emit_traceparent::Traceparent::current();
+        let (traceparent, tracestate) = emit_traceparent::current();
 
         if traceparent.is_valid() {
             // 2. Add the traceparent to the outgoing request
             request
                 .headers
                 .insert("traceparent".into(), traceparent.to_string());
+
+            request
+                .headers
+                .insert("tracestate".into(), tracestate.to_string());
         }
 
         emit::debug!("Outbound {#[emit::as_serde] request}");

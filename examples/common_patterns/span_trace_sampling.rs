@@ -34,6 +34,8 @@ fn main() {
 fn run_work(i: i32) -> i32 {
     let r = i + 1;
 
+    // These events will still be emitted, they just won't
+    // be part of unsampled traces
     emit::debug!("computed {r} = {i} + 1");
 
     r

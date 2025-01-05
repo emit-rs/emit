@@ -85,8 +85,12 @@ name = "span_manual_completion"
 path = "span_manual_completion.rs"
 
 [[example]]
-name = "span_manual"
-path = "span_manual.rs"
+name = "span_manual_creation"
+path = "span_manual_creation.rs"
+
+[[example]]
+name = "span_manual_creation_full"
+path = "span_manual_creation_full.rs"
 
 [[example]]
 name = "span_trace_propagation"

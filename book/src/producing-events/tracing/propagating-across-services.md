@@ -53,12 +53,13 @@ When making outbound requests, you can pull the traceparent from the current con
 # use std::collections::HashMap;
 let mut headers = HashMap::<String, String>::new();
 
-// 1. Get the current traceparent
-let traceparent = emit_traceparent::Traceparent::current();
+// 1. Get the current traceparent and tracestate
+let (traceparent, tracestate) = emit_traceparent::current();
 
 if traceparent.is_valid() {
-    // 2. Add the traceparent to the outgoing request
+    // 2. Add the traceparent and tracestate to the outgoing request
     headers.insert("traceparent".into(), traceparent.to_string());
+    headers.insert("tracestate".into(), tracestate.to_string());
 }
 ```
 
