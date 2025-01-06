@@ -1460,4 +1460,33 @@ mod tests {
             assert_eq!(state, Tracestate::current());
         });
     }
+
+    #[test]
+    fn in_trace_filter_includes_or_excludes_traced_events() {
+        Traceparent::new(
+            TraceId::from_u128(1),
+            SpanId::from_u64(1),
+            TraceFlags::SAMPLED,
+        )
+        .push()
+        .call(|| {
+            assert!(in_sampled_trace(true).matches(emit::evt!("event")));
+        });
+
+        Traceparent::new(
+            TraceId::from_u128(1),
+            SpanId::from_u64(1),
+            TraceFlags::EMPTY,
+        )
+        .push()
+        .call(|| {
+            assert!(!in_sampled_trace(true).matches(emit::evt!("event")));
+        });
+    }
+
+    #[test]
+    fn in_trace_filter_includes_or_excludes_untraced_events() {
+        assert!(in_sampled_trace(true).matches(emit::evt!("event")));
+        assert!(!in_sampled_trace(false).matches(emit::evt!("event")));
+    }
 }
