@@ -166,7 +166,7 @@ fn main() {
 ```
 
 Note that other events emitted within an unsampled trace will still be emitted.
-You can add the [`in_sampled_trace`] filter to filter out events in unsampled traces:
+You can add the [`in_sampled_trace_filter`] filter to filter out events in unsampled traces:
 
 ```
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -182,7 +182,7 @@ fn main() {
     })
     // The `true` here tells us to include events outside traces
     // If we pass `false` then any event outside a trace will be discarded
-    .and_emit_when(emit_traceparent::in_sampled_trace(true))
+    .and_emit_when(emit_traceparent::in_sampled_trace_filter(true))
     .emit_to(emit_term::stdout())
     .init();
 
@@ -192,7 +192,7 @@ fn main() {
 }
 ```
 
-The `true` parameter passed to `in_sampled_trace` here includes events that aren't in any trace.
+The `true` parameter passed to `in_sampled_trace_filter` here includes events that aren't in any trace.
 Passing `false` will also filter out events that aren't part of any trace.
 */
 pub fn setup_with_sampler<S: Fn(&SpanCtxt) -> bool + Send + Sync + 'static>(
@@ -1076,7 +1076,7 @@ Create a filter that matches events in sampled traces.
 
 The `match_events_outside_traces` parameter determines whether events outside of any trace are matched or discarded.
 */
-pub const fn in_sampled_trace(match_events_outside_traces: bool) -> InSampledTraceFilter {
+pub const fn in_sampled_trace_filter(match_events_outside_traces: bool) -> InSampledTraceFilter {
     InSampledTraceFilter::new(match_events_outside_traces)
 }
 
@@ -1473,7 +1473,7 @@ mod tests {
         )
         .push()
         .call(|| {
-            assert!(in_sampled_trace(true).matches(emit::evt!("event")));
+            assert!(in_sampled_trace_filter(true).matches(emit::evt!("event")));
         });
 
         Traceparent::new(
@@ -1483,13 +1483,13 @@ mod tests {
         )
         .push()
         .call(|| {
-            assert!(!in_sampled_trace(true).matches(emit::evt!("event")));
+            assert!(!in_sampled_trace_filter(true).matches(emit::evt!("event")));
         });
     }
 
     #[test]
     fn in_trace_filter_includes_or_excludes_untraced_events() {
-        assert!(in_sampled_trace(true).matches(emit::evt!("event")));
-        assert!(!in_sampled_trace(false).matches(emit::evt!("event")));
+        assert!(in_sampled_trace_filter(true).matches(emit::evt!("event")));
+        assert!(!in_sampled_trace_filter(false).matches(emit::evt!("event")));
     }
 }
