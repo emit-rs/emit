@@ -199,6 +199,21 @@ impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt> Setup<TEmitter, TFilter, T
     }
 
     /**
+    Add a [`Filter`] that will also be applied before diagnostic events are emitted.
+    */
+    pub fn and_emit_when<UFilter: Filter>(
+        self,
+        filter: UFilter,
+    ) -> Setup<TEmitter, And<TFilter, UFilter>, TCtxt> {
+        Setup {
+            emitter: self.emitter,
+            filter: self.filter.and_when(filter),
+            ctxt: self.ctxt,
+            platform: self.platform,
+        }
+    }
+
+    /**
     Set the [`Ctxt`] that will store ambient properties and attach them to diagnostic events.
     */
     pub fn with_ctxt<UCtxt: Ctxt>(self, ctxt: UCtxt) -> Setup<TEmitter, TFilter, UCtxt> {
