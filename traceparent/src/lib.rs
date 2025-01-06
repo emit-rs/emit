@@ -166,7 +166,7 @@ fn main() {
 ```
 
 Note that other events emitted within an unsampled trace will still be emitted.
-You can
+You can add the [`in_sampled_trace`] filter to filter out events in unsampled traces:
 
 ```
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -191,6 +191,9 @@ fn main() {
     rt.blocking_flush(std::time::Duration::from_secs(30));
 }
 ```
+
+The `true` parameter passed to `in_sampled_trace` here includes events that aren't in any trace.
+Passing `false` will also filter out events that aren't part of any trace.
 */
 pub fn setup_with_sampler<S: Fn(&SpanCtxt) -> bool + Send + Sync + 'static>(
     sampler: S,
