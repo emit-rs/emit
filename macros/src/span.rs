@@ -6,6 +6,7 @@ use syn::{
 
 use crate::{
     args::{self, Arg},
+    capture,
     props::{check_evt_props, Props},
     template::{self, Template},
     util::{ToOptionTokens, ToRefTokens},
@@ -114,7 +115,8 @@ impl Parse for Args {
 pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     let span = opts.input.span();
 
-    let (args, template, ctxt_props) = template::parse2::<Args>(opts.input, true)?;
+    let (args, template, ctxt_props) =
+        template::parse2::<Args>(opts.input, capture::default_fn_name, true)?;
 
     let template =
         template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;

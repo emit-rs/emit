@@ -33,26 +33,10 @@ impl Parse for Args {
 pub fn key_value_with_hook(
     attrs: &[Attribute],
     fv: &FieldValue,
+    fn_name: TokenStream,
     interpolated: bool,
     captured: bool,
 ) -> syn::Result<TokenStream> {
-    let fn_name = match &*fv.key_name() {
-        // Well-known properties
-        emit_core::well_known::KEY_LVL => quote_spanned!(fv.span()=> __private_capture_as_level),
-        emit_core::well_known::KEY_ERR => quote_spanned!(fv.span()=> __private_capture_as_error),
-        emit_core::well_known::KEY_SPAN_ID => {
-            quote_spanned!(fv.span()=> __private_capture_as_span_id)
-        }
-        emit_core::well_known::KEY_SPAN_PARENT => {
-            quote_spanned!(fv.span()=> __private_capture_as_span_id)
-        }
-        emit_core::well_known::KEY_TRACE_ID => {
-            quote_spanned!(fv.span()=> __private_capture_as_trace_id)
-        }
-        // In other cases, capture using the default implementation
-        _ => quote_spanned!(fv.span()=> __private_capture_as_default),
-    };
-
     let key_expr = fv.key_expr();
     let expr = &fv.expr;
 
@@ -81,6 +65,25 @@ pub fn key_value_with_hook(
             (#key_tokens, #value_tokens)
         }),
     )
+}
+
+pub fn default_fn_name(fv: &FieldValue) -> TokenStream {
+    match &*fv.key_name() {
+        // Well-known properties
+        emit_core::well_known::KEY_LVL => quote_spanned!(fv.span()=> __private_capture_as_level),
+        emit_core::well_known::KEY_ERR => quote_spanned!(fv.span()=> __private_capture_as_error),
+        emit_core::well_known::KEY_SPAN_ID => {
+            quote_spanned!(fv.span()=> __private_capture_as_span_id)
+        }
+        emit_core::well_known::KEY_SPAN_PARENT => {
+            quote_spanned!(fv.span()=> __private_capture_as_span_id)
+        }
+        emit_core::well_known::KEY_TRACE_ID => {
+            quote_spanned!(fv.span()=> __private_capture_as_trace_id)
+        }
+        // In other cases, capture using the default implementation
+        _ => quote_spanned!(fv.span()=> __private_capture_as_default),
+    }
 }
 
 pub struct RenameHookTokens<T> {

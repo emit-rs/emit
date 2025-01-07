@@ -1,0 +1,5 @@
+error: keys cannot be duplicated
+ --> src/compile_fail/std/dbg_props_duplicate.rs:2:23
+  |
+2 |     emit::dbg!(a: 42, a: true);
+  |                       ^^^^^^^

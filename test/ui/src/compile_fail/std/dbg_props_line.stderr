@@ -1,0 +1,5 @@
+error: `line` can't be used as a key in the `dbg` macro
+ --> src/compile_fail/std/dbg_props_line.rs:2:16
+  |
+2 |     emit::dbg!(line: "x");
+  |                ^^^^^^^^^

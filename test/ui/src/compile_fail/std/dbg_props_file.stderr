@@ -1,0 +1,5 @@
+error: `file` can't be used as a key in the `dbg` macro
+ --> src/compile_fail/std/dbg_props_file.rs:2:16
+  |
+2 |     emit::dbg!(file: "x");
+  |                ^^^^^^^^^

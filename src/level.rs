@@ -103,7 +103,7 @@ impl Default for Level {
 
 impl fmt::Debug for Level {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "\"{}\"", self)
+        write!(f, "{}", self)
     }
 }
 
@@ -598,11 +598,11 @@ mod tests {
     #[test]
     fn roundtrip() {
         for lvl in [Level::Info, Level::Debug, Level::Warn, Level::Error] {
-            let fmt = lvl.to_string();
+            for fmt in [lvl.to_string(), format!("{:?}", lvl)] {
+                let parsed: Level = fmt.parse().unwrap();
 
-            let parsed: Level = fmt.parse().unwrap();
-
-            assert_eq!(lvl, parsed, "{}", fmt);
+                assert_eq!(lvl, parsed, "{}", fmt);
+            }
         }
     }
 

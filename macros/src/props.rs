@@ -8,6 +8,7 @@ use crate::{
     util::{AttributeCfg, FieldValueKey},
 };
 
+#[derive(Debug)]
 pub struct Props {
     match_value_tokens: Vec<TokenStream>,
     match_binding_tokens: Vec<TokenStream>,
@@ -22,13 +23,14 @@ impl Parse for Props {
         let mut props = Props::new();
 
         for fv in fv {
-            props.push(&fv, false, true)?;
+            props.push(&fv, capture::default_fn_name(&fv), false, true)?;
         }
 
         Ok(props)
     }
 }
 
+#[derive(Debug)]
 pub struct KeyValue {
     match_bound_tokens: TokenStream,
     direct_bound_tokens: TokenStream,
@@ -88,13 +90,14 @@ impl Props {
         self.key_values.get(label)
     }
 
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item = &'a KeyValue> + 'a {
-        self.key_values.values()
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item = (&'a str, &'a KeyValue)> + 'a {
+        self.key_values.iter().map(|(k, v)| (&**k, v))
     }
 
     pub fn push(
         &mut self,
         fv: &FieldValue,
+        fn_name: TokenStream,
         interpolated: bool,
         captured: bool,
     ) -> Result<(), syn::Error> {
@@ -120,7 +123,7 @@ impl Props {
 
         let key_value_tokens = {
             let key_value_tokens =
-                capture::key_value_with_hook(&attrs, &fv, interpolated, captured)?;
+                capture::key_value_with_hook(&attrs, &fv, fn_name, interpolated, captured)?;
 
             match cfg_attr {
                 Some(ref cfg_attr) => quote_spanned!(fv.span()=>
@@ -229,11 +232,9 @@ pub fn push_evt_props(props: &mut Props, level: Option<TokenStream>) -> Result<(
     if let Some(level_value) = level {
         let level_ident = Ident::new(emit_core::well_known::KEY_LVL, Span::call_site());
 
-        props.push(
-            &syn::parse2::<FieldValue>(quote!(#level_ident: #level_value))?,
-            false,
-            true,
-        )?;
+        let fv = syn::parse2::<FieldValue>(quote!(#level_ident: #level_value))?;
+
+        props.push(&fv, capture::default_fn_name(&fv), false, true)?;
     }
 
     Ok(())

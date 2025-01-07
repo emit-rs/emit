@@ -3,6 +3,7 @@ use syn::{parse::Parse, spanned::Spanned, FieldValue, LitStr};
 
 use crate::{
     args::{self, Arg},
+    capture,
     props::{push_evt_props, Props},
     template,
     util::ToRefTokens,
@@ -57,7 +58,8 @@ The `tpl_parts!` macro.
 pub fn expand_tpl_parts_tokens(opts: ExpandTplTokens) -> Result<TokenStream, syn::Error> {
     let span = opts.input.span();
 
-    let (_, template, props) = template::parse2::<TplPartsArgs>(opts.input, false)?;
+    let (_, template, props) =
+        template::parse2::<TplPartsArgs>(opts.input, capture::default_fn_name, false)?;
 
     let template =
         template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;
@@ -73,7 +75,8 @@ The `tpl!` macro.
 pub fn expand_tpl_tokens(opts: ExpandTplTokens) -> Result<TokenStream, syn::Error> {
     let span = opts.input.span();
 
-    let (_, template, props) = template::parse2::<TplArgs>(opts.input, false)?;
+    let (_, template, props) =
+        template::parse2::<TplArgs>(opts.input, capture::default_fn_name, false)?;
 
     let template =
         template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;
@@ -85,7 +88,7 @@ pub fn expand_tpl_tokens(opts: ExpandTplTokens) -> Result<TokenStream, syn::Erro
 
 fn validate_props(props: &Props) -> Result<(), syn::Error> {
     // Ensure that a standalone template only specifies identifiers
-    for key_value in props.iter() {
+    for (_, key_value) in props.iter() {
         if !key_value.interpolated {
             return Err(syn::Error::new(
                 key_value.span(),
@@ -164,7 +167,8 @@ The `evt!` macro.
 pub fn expand_evt_tokens(opts: ExpandEvtTokens) -> Result<TokenStream, syn::Error> {
     let span = opts.input.span();
 
-    let (args, template, mut props) = template::parse2::<EvtArgs>(opts.input, true)?;
+    let (args, template, mut props) =
+        template::parse2::<EvtArgs>(opts.input, capture::default_fn_name, true)?;
 
     let template =
         template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;

@@ -8,6 +8,7 @@ use crate::{fmt, props::Props, util::FieldValueKey};
 
 pub fn parse2<A: Parse>(
     input: TokenStream,
+    fn_name: impl Fn(&FieldValue) -> TokenStream,
     captured: bool,
 ) -> Result<(A, Option<Template>, Props), syn::Error> {
     let template =
@@ -58,10 +59,10 @@ pub fn parse2<A: Parse>(
                     ));
                 }
 
-                props.push(extra_fv, true, captured)?;
+                props.push(extra_fv, fn_name(extra_fv), true, captured)?;
             }
             None => {
-                props.push(fv, true, captured)?;
+                props.push(fv, fn_name(fv), true, captured)?;
             }
         }
     }
@@ -69,7 +70,7 @@ pub fn parse2<A: Parse>(
     // Push any remaining extra field-values
     // This won't include any field values that also appear in the template
     for (_, fv) in extra_field_values {
-        props.push(fv, false, captured)?;
+        props.push(fv, fn_name(fv), false, captured)?;
     }
 
     // A runtime representation of the template
