@@ -134,7 +134,7 @@ fn compute_template(props: &Props) -> Result<Template, syn::Error> {
 }
 
 fn dbg_capture_fn(fv: &FieldValue) -> TokenStream {
-    quote_spanned!(fv.span()=> __private_capture_as_debug)
+    quote_spanned!(fv.span()=> __private_capture_anon_as_debug)
 }
 
 fn check_dbg_props(props: &Props) -> Result<(), syn::Error> {
