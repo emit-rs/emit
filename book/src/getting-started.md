@@ -76,11 +76,13 @@ Use the [`dbg!`](https://docs.rs/emit/0.11.0-alpha.21/emit/macro.dbg.html) macro
 
 ```rust
 # extern crate emit;
+# fn main() {
 let user = "user@example
 com";
 let id = 42;
 
 emit::dbg!(user, id);
+# }
 ```
 
 It works a lot like the standard library's `dbg!` macro, and is meant to be used as a quick, temporary debugging aid.
