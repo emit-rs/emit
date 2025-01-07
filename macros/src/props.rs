@@ -8,6 +8,7 @@ use crate::{
     util::{AttributeCfg, FieldValueKey},
 };
 
+#[derive(Debug)]
 pub struct Props {
     match_value_tokens: Vec<TokenStream>,
     match_binding_tokens: Vec<TokenStream>,
@@ -29,6 +30,7 @@ impl Parse for Props {
     }
 }
 
+#[derive(Debug)]
 pub struct KeyValue {
     match_bound_tokens: TokenStream,
     direct_bound_tokens: TokenStream,

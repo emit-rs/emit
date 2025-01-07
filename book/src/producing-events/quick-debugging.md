@@ -17,6 +17,22 @@ fn confirm_email(user: &str, email: &str) {
 }
 ```
 
+```text
+Event {
+    mdl: "dbg",
+    tpl: "user = {user} at {file}:{line}",
+    extent: Some(
+        "2025-01-07T03:55:19.738224881Z",
+    ),
+    props: {
+        "file": "main.rs",
+        "line": 11,
+        "lvl": debug,
+        "user": "Rust",
+    },
+}
+```
+
 `dbg!` accepts multiple field-values:
 
 ```rust
@@ -28,6 +44,23 @@ fn confirm_email(user: &str, email: &str) {
 }
 ```
 
+```text
+Event {
+    mdl: "dbg",
+    tpl: "email = {email}, user = {user} at {file}:{line}",
+    extent: Some(
+        "2025-01-07T03:56:02.570025234Z",
+    ),
+    props: {
+        "email": "rust@example.com",
+        "file": "main.rs",
+        "line": 11,
+        "lvl": debug,
+        "user": "Rust",
+    },
+}
+```
+
 You can also specify a template, just like in [regular logging](./logging.md):
 
 ```rust
@@ -36,6 +69,23 @@ fn confirm_email(user: &str, email: &str) {
     emit::dbg!("got {user} and {email}");
 
     // ..
+}
+```
+
+```text
+Event {
+    mdl: "dbg",
+    tpl: "got {user} and {email}",
+    extent: Some(
+        "2025-01-07T03:56:28.150050260Z",
+    ),
+    props: {
+        "email": "rust@example.com",
+        "file": "main.rs",
+        "line": 11,
+        "lvl": debug,
+        "user": "Rust",
+    },
 }
 ```
 

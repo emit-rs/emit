@@ -1,5 +1,7 @@
+use std::fmt::Write as _;
+
 use proc_macro2::TokenStream;
-use syn::{parse::Parse, spanned::Spanned, FieldValue};
+use syn::{parse::Parse, spanned::Spanned, FieldValue, Ident};
 
 use crate::{
     args, capture,
@@ -38,6 +40,8 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 props.push(&fv, dbg_capture_fn(&fv), false, true)?;
             }
 
+            check_dbg_props(&props)?;
+
             compute_template(&props)?
         }
         Some(template) => {
@@ -49,11 +53,12 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 ));
             }
 
+            check_dbg_props(&props)?;
+
             template
         }
     };
 
-    check_dbg_props(&props)?;
     push_loc_props(&mut props)?;
     push_evt_props(&mut props, Some(quote!(emit::Level::Debug)))?;
 
@@ -93,11 +98,9 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
 
 fn push_loc_props(props: &mut Props) -> Result<(), syn::Error> {
     let fv = syn::parse2::<FieldValue>(quote!(file: file!()))?;
-
     props.push(&fv, capture::default_fn_name(&fv), false, true)?;
 
     let fv = syn::parse2::<FieldValue>(quote!(line: line!()))?;
-
     props.push(&fv, capture::default_fn_name(&fv), false, true)?;
 
     Ok(())
@@ -107,7 +110,7 @@ fn compute_template(props: &Props) -> Result<Template, syn::Error> {
     let mut literal = String::new();
 
     let mut first = true;
-    for (name, _) in props.iter() {
+    for (name, key_value) in props.iter() {
         if !first {
             literal.push_str(", ");
         }
@@ -115,7 +118,13 @@ fn compute_template(props: &Props) -> Result<Template, syn::Error> {
 
         literal.push_str(name);
         literal.push_str(" = {");
-        literal.push_str(name);
+
+        // Attributes need to be applied to the template
+        let name = Ident::new(name, key_value.span());
+        let attrs = &key_value.attrs;
+
+        let _ = write!(&mut literal, "{}", quote!(#(#attrs)* #name));
+
         literal.push_str("}");
     }
 

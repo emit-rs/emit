@@ -1,0 +1,7 @@
+error: specify the template string literal before any properties
+ --> src/compile_fail/std/dbg_control_param.rs:2:5
+  |
+2 |     emit::dbg!(a: 42, "text");
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the macro `emit::dbg` (in Nightly builds, run with -Z macro-backtrace for more info)

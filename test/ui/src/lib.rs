@@ -1,7 +1,7 @@
 /*!
 Integration tests for `emit`'s macros.
 
-Compile-pass tests live in top-level modules here. Compile-fail tests live under the `compile_fail` module.
+Compile-pass tests mostly live in top-level modules here. Compile-fail tests live under the `compile_fail` module.
 */
 
 #![cfg(test)]
@@ -26,9 +26,17 @@ mod tpl;
 mod format;
 
 #[test]
-#[cfg(feature = "compile_fail")]
+#[cfg(feature = "compile")]
 #[rustversion::nightly]
 fn compile_fail_std() {
     let t = trybuild::TestCases::new();
     t.compile_fail("src/compile_fail/std/*.rs");
+}
+
+#[test]
+#[cfg(feature = "compile")]
+#[rustversion::nightly]
+fn compile_pass_std() {
+    let t = trybuild::TestCases::new();
+    t.pass("src/compile_pass/std/*.rs");
 }
