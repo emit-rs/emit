@@ -1,6 +1,6 @@
 # Quick debugging
 
-It can be useful when you're actively working on a piece of code to get a quick window into what it's doing by logging data at various points. This kind of diagnostic is useful in the short term, but if left becomes noise. `emit` provides the [`dbg`](https://docs.rs/emit/0.11.0-alpha.21/emit/macro.dbg.html) as a quick alternative to [first-class logging](./logging.md) for these temporary debugging aids.
+It can be useful when you're actively working on a piece of code to get a quick window into what it's doing by logging data at various points. This kind of diagnostic is useful in the short term, but if left becomes noise. `emit` provides the [`dbg!`](https://docs.rs/emit/0.11.0-alpha.21/emit/macro.dbg.html) macro as a quick alternative to [first-class logging](./logging.md) for these temporary debugging aids.
 
 ## The `dbg!` macro
 

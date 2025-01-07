@@ -47,6 +47,8 @@ The main properties you'll control when creating `ActiveSpan`s are annotated in 
 1. The [`Completion`](https://docs.rs/emit/0.11.0-alpha.21/emit/span/completion/trait.Completion.html) to use when the span is completed. Usually this will emit the span, but may also set a template or additional properties.
 2. The name of the span.
 
+Using `ActiveSpan`s is the recommended way to trace code with `emit`. It applies filtering for you, so the span is only created if it matches the configured filter. It also ensures a span is emitted even if the traced code panics or otherwise returns without explicitly completing.
+
 ## Creating spans without an `ActiveSpan`
 
 In cases where sampling or filtering aren't used, or when execution of a single span is split across multiple functions, you can create spans without using an `ActiveSpan`:

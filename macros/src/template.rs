@@ -26,14 +26,14 @@ pub fn parse2<A: Parse>(
     // Any field-values that aren't part of the template
     let mut extra_field_values: BTreeMap<_, _> = template
         .after_literal_field_values()
-        .map(|fv| Ok((fv.key_name(), fv)))
+        .map(|fv| Ok((fv.key_name()?, fv)))
         .collect::<Result<_, syn::Error>>()?;
 
     let mut props = Props::new();
 
     // Push the field-values that appear in the template
     for fv in template.literal_field_values() {
-        let k = fv.key_name();
+        let k = fv.key_name()?;
 
         // If the hole has a corresponding field-value outside the template
         // then it will be used as the source for the value and attributes
@@ -154,25 +154,28 @@ impl<'a> fv_template::LiteralVisitor for TemplateVisitor<'a> {
             return;
         };
 
-        let label = hole.key_name();
-        let hole = hole.key_expr();
+        if let Err(e) = (|| {
+            let label = hole.key_name()?;
+            let hole = hole.key_expr()?;
 
-        let field = self.props.get(&label).expect("missing prop");
+            let field = self.props.get(&label).expect("missing prop");
 
-        debug_assert!(field.interpolated);
+            debug_assert!(field.interpolated);
 
-        self.literal.push_str("{");
-        self.literal.push_str(&label);
-        self.literal.push_str("}");
+            self.literal.push_str("{");
+            self.literal.push_str(&label);
+            self.literal.push_str("}");
 
-        match fmt::template_hole_with_hook(&field.attrs, &hole, true, field.captured) {
-            Ok(hole_tokens) => match field.cfg_attr {
+            let hole_tokens =
+                fmt::template_hole_with_hook(&field.attrs, &hole, true, field.captured)?;
+            match field.cfg_attr {
                 Some(ref cfg_attr) => parts.push(quote!(#cfg_attr { #hole_tokens })),
                 _ => parts.push(quote!(#hole_tokens)),
-            },
-            Err(e) => {
-                self.parts = Err(e);
             }
+
+            Ok::<(), syn::Error>(())
+        })() {
+            self.parts = Err(e);
         }
     }
 

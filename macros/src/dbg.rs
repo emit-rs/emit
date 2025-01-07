@@ -1,7 +1,5 @@
-use std::fmt::Write as _;
-
 use proc_macro2::TokenStream;
-use syn::{parse::Parse, spanned::Spanned, FieldValue, Ident};
+use syn::{parse::Parse, spanned::Spanned, FieldValue};
 
 use crate::{
     args, capture,
@@ -118,13 +116,7 @@ fn compute_template(props: &Props) -> Result<Template, syn::Error> {
 
         literal.push_str(name);
         literal.push_str(" = {");
-
-        // Attributes need to be applied to the template
-        let name = Ident::new(name, key_value.span());
-        let attrs = &key_value.attrs;
-
-        let _ = write!(&mut literal, "{}", quote!(#(#attrs)* #name));
-
+        literal.push_str(&key_value.hole_tokens().to_string());
         literal.push_str("}");
     }
 
