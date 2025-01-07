@@ -28,6 +28,7 @@
         - [Time-series metrics](./producing-events/metrics/time-series-metrics.md)
         - [Reporting from sources](./producing-events/metrics/reporting-sources.md)
         - [Limitations](./producing-events/metrics/limitations.md)
+    - [Quick debugging](./producing-events/quick-debugging.md)
 - [Filtering events](./filtering-events.md)
 - [Working with events](./working-with-events.md)
 - [Emitting events](./emitting-events.md)

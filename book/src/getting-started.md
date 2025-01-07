@@ -70,7 +70,25 @@ async fn add_item(user: &str, item: &str) {
 
 Any diagnostics emitted within a traced function will be correlated with it. Any other traced functions it calls will form a trace hierarchy.
 
+## Quick debugging
+
+Use the [`dbg!`](https://docs.rs/emit/0.11.0-alpha.21/emit/macro.dbg.html) macro to help debug code as you're writing it:
+
+```rust
+# extern crate emit;
+#[emit::span("add {item} to {user} cart")]
+async fn add_item(user: &str, item: &str) {
+    emit::dbg!(user, item);
+
+    // Your code goes here
+}
+```
+
+It works a lot like the standard library's `dbg!` macro, and is meant to be used as a quick, temporary debugging aid.
+
 ## Next steps
+
+To learn more about configuring `emit`, see the [Emitting events](./emitting-events.md) section.
 
 To learn more about using `emit`, see the [Producing events](./producing-events.md) section.
 
