@@ -166,7 +166,7 @@ pub fn set_from_field_values<'a, const N: usize>(
     mut args: [&mut dyn ArgDef; N],
 ) -> Result<(), syn::Error> {
     'fields: for fv in field_values {
-        let key_name = fv.key_name();
+        let key_name = fv.key_name()?;
 
         for arg in &mut args {
             if arg.key() == key_name {

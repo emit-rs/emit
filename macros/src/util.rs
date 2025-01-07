@@ -5,30 +5,43 @@ use syn::{
     ext::IdentExt,
     parse::{self, Parse, ParseStream},
     punctuated::Punctuated,
-    Attribute, ExprLit, FieldValue, Lit, LitStr, MacroDelimiter, Member, Meta, MetaList,
+    spanned::Spanned,
+    Attribute, ExprLit, FieldValue, Ident, Lit, LitStr, MacroDelimiter, Member, Meta, MetaList,
 };
 
 pub trait FieldValueKey {
-    fn key_expr(&self) -> ExprLit;
+    fn key_ident(&self) -> Result<Ident, syn::Error>;
 
-    fn key_name(&self) -> String {
-        match self.key_expr().lit {
-            Lit::Str(s) => s.value(),
-            _ => panic!("invalid key expression"),
+    fn key_expr(&self) -> Result<ExprLit, syn::Error> {
+        let ident = self.key_ident()?;
+
+        Ok(ExprLit {
+            attrs: vec![],
+            lit: Lit::Str(LitStr::new(&ident.unraw().to_string(), ident.span())),
+        })
+    }
+
+    fn key_name(&self) -> Result<String, syn::Error> {
+        let expr = self.key_expr()?;
+
+        match expr.lit {
+            Lit::Str(s) => Ok(s.value()),
+            _ => Err(syn::Error::new(
+                expr.span(),
+                "key expressions must be string literals",
+            )),
         }
     }
 }
 
 impl FieldValueKey for FieldValue {
-    fn key_expr(&self) -> ExprLit {
-        ExprLit {
-            attrs: vec![],
-            lit: Lit::Str(match self.member {
-                Member::Named(ref member) => {
-                    LitStr::new(&member.unraw().to_string(), member.span())
-                }
-                Member::Unnamed(ref member) => LitStr::new(&member.index.to_string(), member.span),
-            }),
+    fn key_ident(&self) -> Result<Ident, syn::Error> {
+        match self.member {
+            Member::Named(ref member) => Ok(member.clone()),
+            Member::Unnamed(_) => Err(syn::Error::new(
+                self.span(),
+                "field values must used named identifiers",
+            )),
         }
     }
 }

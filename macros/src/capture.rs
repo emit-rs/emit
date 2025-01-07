@@ -37,7 +37,7 @@ pub fn key_value_with_hook(
     interpolated: bool,
     captured: bool,
 ) -> syn::Result<TokenStream> {
-    let key_expr = fv.key_expr();
+    let key_expr = fv.key_expr()?;
     let expr = &fv.expr;
 
     let interpolated_expr = if interpolated {
@@ -68,17 +68,21 @@ pub fn key_value_with_hook(
 }
 
 pub fn default_fn_name(fv: &FieldValue) -> TokenStream {
-    match &*fv.key_name() {
+    match fv.key_name().as_deref() {
         // Well-known properties
-        emit_core::well_known::KEY_LVL => quote_spanned!(fv.span()=> __private_capture_as_level),
-        emit_core::well_known::KEY_ERR => quote_spanned!(fv.span()=> __private_capture_as_error),
-        emit_core::well_known::KEY_SPAN_ID => {
+        Ok(emit_core::well_known::KEY_LVL) => {
+            quote_spanned!(fv.span()=> __private_capture_as_level)
+        }
+        Ok(emit_core::well_known::KEY_ERR) => {
+            quote_spanned!(fv.span()=> __private_capture_as_error)
+        }
+        Ok(emit_core::well_known::KEY_SPAN_ID) => {
             quote_spanned!(fv.span()=> __private_capture_as_span_id)
         }
-        emit_core::well_known::KEY_SPAN_PARENT => {
+        Ok(emit_core::well_known::KEY_SPAN_PARENT) => {
             quote_spanned!(fv.span()=> __private_capture_as_span_id)
         }
-        emit_core::well_known::KEY_TRACE_ID => {
+        Ok(emit_core::well_known::KEY_TRACE_ID) => {
             quote_spanned!(fv.span()=> __private_capture_as_trace_id)
         }
         // In other cases, capture using the default implementation

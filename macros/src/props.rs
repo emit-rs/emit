@@ -34,6 +34,7 @@ impl Parse for Props {
 pub struct KeyValue {
     match_bound_tokens: TokenStream,
     direct_bound_tokens: TokenStream,
+    label: Ident,
     span: Span,
     pub interpolated: bool,
     pub captured: bool,
@@ -44,6 +45,13 @@ pub struct KeyValue {
 impl KeyValue {
     pub fn span(&self) -> Span {
         self.span.clone()
+    }
+
+    pub fn hole_tokens(&self) -> TokenStream {
+        let label = &self.label;
+        let attrs = &self.attrs;
+
+        quote!(#(#attrs)* #label)
     }
 }
 
@@ -152,8 +160,6 @@ impl Props {
         self.match_binding_tokens
             .push(quote_spanned!(fv.span()=> #match_bound_ident));
 
-        let label = fv.key_name();
-
         if fv.colon_token.is_some() && !captured {
             return Err(syn::Error::new(
                 fv.span(),
@@ -163,11 +169,12 @@ impl Props {
 
         // Make sure keys aren't duplicated
         let previous = self.key_values.insert(
-            label.clone(),
+            fv.key_name()?,
             KeyValue {
                 match_bound_tokens: quote_spanned!(fv.span()=> #cfg_attr (#match_bound_ident.0, #match_bound_ident.1)),
                 direct_bound_tokens: quote_spanned!(fv.span()=> #key_value_tokens),
                 span: fv.span(),
+                label: fv.key_ident()?,
                 cfg_attr,
                 attrs,
                 captured,
