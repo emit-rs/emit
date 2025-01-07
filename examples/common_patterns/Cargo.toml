@@ -29,6 +29,10 @@ version = "1"
 features = ["derive"]
 
 [[example]]
+name = "dbg"
+path = "dbg.rs"
+
+[[example]]
 name = "emit"
 path = "emit.rs"
 

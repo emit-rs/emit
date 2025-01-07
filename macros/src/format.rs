@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream;
 use syn::{parse::Parse, spanned::Spanned, FieldValue};
 
-use crate::args;
+use crate::{args, capture};
 
 pub struct ExpandTokens {
     pub input: TokenStream,
@@ -34,7 +34,8 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
 
         let span = opts.input.span();
 
-        let (_, template, props) = template::parse2::<Args>(opts.input, true)?;
+        let (_, template, props) =
+            template::parse2::<Args>(opts.input, capture::default_fn_name, true)?;
 
         let template =
             template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;

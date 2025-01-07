@@ -3,6 +3,7 @@ use syn::{parse::Parse, spanned::Spanned, FieldValue};
 
 use crate::{
     args::{self, Arg},
+    capture,
     props::{check_evt_props, push_evt_props},
     template,
     util::{ToOptionTokens, ToRefTokens},
@@ -90,7 +91,8 @@ impl Parse for Args {
 pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     let span = opts.input.span();
 
-    let (args, template, mut props) = template::parse2::<Args>(opts.input, true)?;
+    let (args, template, mut props) =
+        template::parse2::<Args>(opts.input, capture::default_fn_name, true)?;
 
     check_evt_props(&props)?;
     push_evt_props(&mut props, opts.level)?;

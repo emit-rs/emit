@@ -36,6 +36,7 @@ use proc_macro2::TokenStream;
 mod args;
 mod build;
 mod capture;
+mod dbg;
 mod emit;
 mod filter;
 mod fmt;
@@ -604,6 +605,40 @@ See the [`macro@emit`] macro for syntax.
 #[proc_macro]
 pub fn error(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     base_emit(Some(quote!(emit::Level::Error)), TokenStream::from(item))
+}
+
+/**
+Emit a temporary debug event.
+
+# Syntax
+
+```text
+(property),*
+tpl, (property),*
+```
+
+where
+
+- `tpl`: A template string literal.
+- `property`: A Rust field-value for a property to capture.
+
+# Properties
+
+Properties that appear within the template or after it are added to the emitted event. The identifier of the property is its key. Property capturing can be adjusted through the `as_*` attribute macros.
+
+Unlike [`macro@debug`], this macro captures values using their [`std::fmt::Debug`] implementation by default.
+
+# When to use `dbg`
+
+This macro is a convenient way to pepper debug logs through code, but follows the same recommendations as the standard library's `dbg` macro.
+You shouldn't expect `dbg` statements to be long lived, and use the [`macro@debug`] macro instead with more deliberate data.
+*/
+#[proc_macro]
+pub fn dbg(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    dbg::expand_tokens(dbg::ExpandTokens {
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
 }
 
 /**
