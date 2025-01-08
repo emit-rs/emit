@@ -838,7 +838,7 @@ pub fn __private_begin_span<
     let name = name.into();
     let lvl_prop = lvl.and_then(|lvl| lvl.capture()).map(|lvl| (KEY_LVL, lvl));
 
-    ActiveSpan::start(
+    ActiveSpan::new(
         filter::from_fn(|evt| {
             FirstDefined(when, rt.filter())
                 .matches(evt.map_props(|props| props.and_props(&lvl_prop)))

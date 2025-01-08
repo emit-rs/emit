@@ -295,7 +295,7 @@ fn inject_sync(
     Ok(quote!({
         #setup_tokens
 
-        let (__span_guard, __ctxt) = emit::__private::__private_begin_span(
+        let (mut __span_guard, __ctxt) = emit::__private::__private_begin_span(
             #rt_tokens,
             #mdl_tokens,
             #span_name_tokens,
@@ -306,6 +306,8 @@ fn inject_sync(
         );
 
         __ctxt.call(move || {
+            __span_guard.start();
+
             let #span_guard = __span_guard;
 
             #body_tokens
@@ -381,6 +383,8 @@ fn inject_async(
         );
 
         __ctxt.in_future(async move {
+            __span_guard.start();
+
             let #span_guard = __span_guard;
             #body_tokens
         }).await
@@ -516,15 +520,15 @@ fn completion(
     })
 }
 
-pub struct ExpandStartTokens {
+pub struct ExpandNewTokens {
     pub level: Option<TokenStream>,
     pub input: TokenStream,
 }
 
 /**
-The `start_span!` macro.
+The `new_span!` macro.
 */
-pub fn expand_start_tokens(opts: ExpandStartTokens) -> Result<TokenStream, syn::Error> {
+pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Error> {
     let span = opts.input.span();
 
     let (args, template, ctxt_props) =

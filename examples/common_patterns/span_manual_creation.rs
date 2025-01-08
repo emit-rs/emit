@@ -9,14 +9,15 @@ This example differs from `span_manual_creation_full` in still using the same `A
 use std::time::Duration;
 
 fn example(i: i32) {
-    let (span, frame) = emit::start_span!("example");
+    let (mut span, frame) = emit::new_span!("example");
 
     // Execute our code within the context of the frame
     // If this function was async, then you would use `frame.in_future(..).await`
-    //
-    // NOTE: The `span` guard *must* be moved into this closure, otherwise your
-    // span will complete early
     frame.call(move || {
+        // Call `start` on the span to begin it
+        // This *must* be done in the body of `frame.call` or `frame.in_future`
+        span.start();
+
         let r = i + 1;
 
         if r == 4 {
@@ -24,10 +25,6 @@ fn example(i: i32) {
             span.complete_with(emit::span::completion::from_fn(|evt| {
                 emit::error!(evt, "Running an example failed with {r}")
             }));
-        } else {
-            // The span will complete when it goes out of scope, but it's good
-            // to have a call using `span` in the closure so `span` is moved into it
-            span.complete();
         }
     })
 }
