@@ -1,6 +1,6 @@
 [package]
 name = "emit_otlp"
-version = "0.11.0"
+version = "0.11.1"
 authors = ["emit contributors"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -16,13 +16,13 @@ gzip = ["flate2"]
 tls = ["tokio-rustls", "rustls-native-certs"]
 
 [dependencies.emit]
-version = "0.11.0"
+version = "0.11.1"
 path = "../../"
 features = ["std", "sval", "implicit_internal_rt"]
 default-features = false
 
 [dependencies.emit_batcher]
-version = "0.11.0"
+version = "0.11.1"
 path = "../../batcher"
 features = ["tokio"]
 
@@ -95,6 +95,6 @@ version = "1"
 features = ["full"]
 
 [dev-dependencies.emit]
-version = "0.11.0"
+version = "0.11.1"
 path = "../../"
 features = ["implicit_rt"]
