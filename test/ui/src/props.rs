@@ -40,17 +40,6 @@ fn props_external() {
 }
 
 #[test]
-fn props_ref() {
-    match emit::props! {
-        a: String::from("short lived"),
-    } {
-        props => {
-            assert_eq!("short lived", props.pull::<&str, _>("a").unwrap());
-        }
-    }
-}
-
-#[test]
 fn props_event_meta() {
     let _ = emit::props!(
         ts_start: "2024-01-01T00:00:00.000Z",
@@ -356,6 +345,18 @@ fn props_as_display() {
     };
 
     assert_eq!(format!("{}", Data), props.get("a").unwrap().to_string());
+}
+
+#[test]
+#[cfg(feature = "std")]
+fn props_ref() {
+    match emit::props! {
+        a: String::from("short lived"),
+    } {
+        props => {
+            assert_eq!("short lived", props.pull::<&str, _>("a").unwrap());
+        }
+    }
 }
 
 #[test]
