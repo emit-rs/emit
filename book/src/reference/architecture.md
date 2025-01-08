@@ -15,7 +15,7 @@ classDiagram
     emit_macros <.. emit
 
     class emit_macros {
-        emit_core = "0.17.0-alpha.17"
+        emit_core = "0.11.0"
         proc-macro2 = "1"
         quote = "1"
         syn = "2"
@@ -29,8 +29,8 @@ classDiagram
     emit <.. app : required
 
     class emit {
-        emit_core = "0.17.0-alpha.17"
-        emit_macros = "0.17.0-alpha.17"
+        emit_core = "0.11.0"
+        emit_macros = "0.11.0"
     }
 
     emit_term .. app : optional
@@ -39,26 +39,26 @@ classDiagram
     emit_custom .. app : optional
 
     class emit_term {
-        emit = "0.17.0-alpha.17"
+        emit = "0.11.0"
     }
 
     class emit_file {
-        emit = "0.17.0-alpha.17"
+        emit = "0.11.0"
     }
 
     class emit_otlp {
-        emit = "0.17.0-alpha.17"
+        emit = "0.11.0"
     }
 
     class emit_custom["other emitter"] {
-        emit = "0.17.0-alpha.17"
+        emit = "0.11.0"
     }
 
     class app["your app"] {
-        emit = "0.17.0-alpha.17"
-        emit_term = "0.17.0-alpha.17"*
-        emit_file = "0.17.0-alpha.17"*
-        emit_otlp = "0.17.0-alpha.17"*
+        emit = "0.11.0"
+        emit_term = "0.11.0"*
+        emit_file = "0.11.0"*
+        emit_otlp = "0.11.0"*
     }
 
     click emit_core href "https://docs.rs/emit_core/0.11.0/emit_core/index.html"

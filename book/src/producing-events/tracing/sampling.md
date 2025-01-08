@@ -35,7 +35,7 @@ fn main() {
 
 ## Using the OpenTelemetry SDK for sampling
 
-If you're using the OpenTelemetry SDK, [`emit_opentelemetry`](https://docs.rs/emit_opentelemetry/0.11.0/emit_opentelemetry/) will respect its sampling.
+If you're using the OpenTelemetry SDK, [`emit_opentelemetry`](https://docs.rs/emit_opentelemetry) will respect its sampling.
 
 ## Manual sampling
 

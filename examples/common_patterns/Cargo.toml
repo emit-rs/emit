@@ -77,6 +77,10 @@ name = "filter_per_emitter"
 path = "filter_per_emitter.rs"
 
 [[example]]
+name = "span"
+path = "span.rs"
+
+[[example]]
 name = "span_fallible_completion"
 path = "span_fallible_completion.rs"
 

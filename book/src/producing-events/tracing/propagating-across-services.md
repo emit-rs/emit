@@ -65,7 +65,7 @@ if traceparent.is_valid() {
 
 ## Using the OpenTelemetry SDK for propagation
 
-If you're using the OpenTelemetry SDK with [`emit_opentelemetry`](https://docs.rs/emit_opentelemetry/0.11.0/emit_opentelemetry/), it will handle propagation for you.
+If you're using the OpenTelemetry SDK with [`emit_opentelemetry`](https://docs.rs/emit_opentelemetry), it will handle propagation for you.
 
 ## Manual propagation
 

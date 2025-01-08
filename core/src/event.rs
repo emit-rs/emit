@@ -41,7 +41,7 @@ impl<'a, P> Event<'a, P> {
 
     Events are composed of:
 
-    - `mdl`: A [`Path`] to the module that produced the event. This will typically be a [`module_path!`].
+    - `mdl`: A [`Path`] to the module that produced the event. This will typically be `mdl!()` or `pkg!()`.
     - `tpl`: The [`Template`] of the event. This is the user-facing description of the event that can be rendered into a readable form.
     - `extent`: The [`Extent`] of the event. This is the point in time at which it occurred, or the timespan for which it was active.
     - `props`: The [`Props`] attached to the event, captured from the surrounding environment.

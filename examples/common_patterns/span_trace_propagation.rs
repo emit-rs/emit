@@ -3,7 +3,6 @@ An example of how to pull a W3C traceparent header from an incoming HTTP request
 
 This example doesn't use any specific web frameworks, so it stubs out a few bits. The key pieces are:
 
-- The `traceparent` module. This implements a simple parser and formatter for the traceparent header.
 - The `http::incoming` function. This demonstrates pulling a traceparent off an incoming HTTP request.
 - The `http::outgoing` function. This demonstrates pulling a traceparent off the current `emit` context and adding it to an outgoing request.
 
