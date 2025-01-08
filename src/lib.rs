@@ -90,7 +90,7 @@ extern crate core;
 /**
 Get a [`Path`] of the executing module for use in [`Event::mdl`].
 
-This defers uses the standard `module_path` macro.
+This macro uses the standard `module_path!` macro.
 */
 #[macro_export]
 macro_rules! mdl {
