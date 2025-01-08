@@ -9,7 +9,6 @@ description = "Internal proc macro crate for emit."
 keywords = ["logging", "tracing", "metrics", "observability"]
 categories = ["development-tools::debugging"]
 edition = "2021"
-build = "build.rs"
 
 [package.metadata.docs.rs]
 features = ["std", "sval", "serde", "implicit_rt"]
