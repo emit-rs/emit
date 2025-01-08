@@ -1991,7 +1991,7 @@ mod tests {
         let custom_complete_called = Cell::new(false);
         let default_complete_called = Cell::new(false);
 
-        let (guard, _) = ActiveSpan::new(
+        let (mut guard, _) = ActiveSpan::new(
             filter::from_fn(|_| true),
             &ctxt,
             &clock,
@@ -2006,6 +2006,8 @@ mod tests {
         );
 
         assert!(guard.is_enabled());
+
+        guard.start();
 
         guard.complete_with(completion::from_fn(|_| {
             custom_complete_called.set(true);
