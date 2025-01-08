@@ -480,6 +480,8 @@ pub fn error_span(
 /**
 Start a span.
 
+See the [`ActiveSpan::new`](https://docs.rs/emit/0.11.0-alpha.21/emit/span/struct.ActiveSpan.html#method.new) for details on starting and completing the returned span.
+
 # Syntax
 
 ```text
@@ -528,7 +530,7 @@ Start a debug span.
 See the [`macro@new_span`] macro for syntax.
 */
 #[proc_macro]
-pub fn start_debug_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn new_debug_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     span::expand_new_tokens(span::ExpandNewTokens {
         level: Some(quote!(emit::Level::Debug)),
         input: TokenStream::from(item),
@@ -544,7 +546,7 @@ Start an info span.
 See the [`macro@new_span`] macro for syntax.
 */
 #[proc_macro]
-pub fn start_info_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn new_info_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     span::expand_new_tokens(span::ExpandNewTokens {
         level: Some(quote!(emit::Level::Info)),
         input: TokenStream::from(item),
@@ -560,7 +562,7 @@ Start a warning span.
 See the [`macro@new_span`] macro for syntax.
 */
 #[proc_macro]
-pub fn start_warn_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn new_warn_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     span::expand_new_tokens(span::ExpandNewTokens {
         level: Some(quote!(emit::Level::Warn)),
         input: TokenStream::from(item),
@@ -576,7 +578,7 @@ Start an error span.
 See the [`macro@new_span`] macro for syntax.
 */
 #[proc_macro]
-pub fn start_error_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn new_error_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     span::expand_new_tokens(span::ExpandNewTokens {
         level: Some(quote!(emit::Level::Error)),
         input: TokenStream::from(item),

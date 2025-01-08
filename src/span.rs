@@ -809,13 +809,17 @@ An active span in a distributed trace.
 
 ## Creating active spans automatically
 
-This type is created by the [`macro@crate::span!`] macro with the `guard` control parameter. See the [`mod@crate::span`] module for details on creating spans.
+This type is created by the [`macro@crate::span!`] macro with the `guard` control parameter, or with the [`macro@crate::new_span!`] macro.
+
+
 
 Call [`ActiveSpan::complete_with`], or just drop the guard to complete it, passing the resulting [`Span`] to a [`Completion`].
 
 ## Creating active spans manually
 
-The [`ActiveSpan::start`] method can be used to construct an `ActiveSpan` and [`Frame`] manually.
+The [`ActiveSpan::new`] method can be used to construct an `ActiveSpan` and [`Frame`] manually.
+
+Call [`ActiveSpan::start`] in the closure of [`Frame::call`] or async block of [`Frame::in_future`] on the returned [`Frame`] to begin the span. Once the span is started, it will complete automatically on drop, or manually through [`ActiveSpan::complete`].
 
 **Make sure you pass ownership of the returned `ActiveSpan` into the closure in [`Frame::call`] or async block in [`Frame::in_future`]**. If you don't, the span will complete early, without its ambient context.
 */
@@ -865,9 +869,10 @@ impl<'a, T: Clock, P: Props, F: Completion> ActiveSpan<'a, T, P, F> {
 
     This method constructs a span based on the input properties and current context as follows:
 
-    1. A [`SpanCtxt`] for the span is generated using [`SpanCtxt::new_child`].
-    2. The filter is checked to see if the span should be enabled or disabled. The event passed to the filter is a [`Span`] carrying the generated span context, but without an extent.
-    3. A [`Frame`] carrying the generated [`SpanCtxt`] and `ctxt_props`, and an `ActiveSpan` for completing the span is returned.
+    - A [`SpanCtxt`] for the span is generated using [`SpanCtxt::new_child`].
+    - The filter is checked to see if the span should be enabled or disabled. The event passed to the filter is a [`Span`] carrying the generated span context, but without an extent.
+
+    This method returns a tuple of an `ActiveSpan` for starting and completing the span, and a [`Frame`] carrying the generated [`SpanCtxt`] and `ctxt_props`.
 
     Call [`ActiveSpan::start`] in the closure of [`Frame::call`] or async block of [`Frame::in_future`] on the returned [`Frame`] to begin the span. Once the span is started, it will complete automatically on drop, or manually through [`ActiveSpan::complete`].
 
