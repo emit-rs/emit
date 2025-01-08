@@ -800,16 +800,16 @@ pub fn __private_emit_event<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R:
 }
 
 #[track_caller]
-pub fn __private_evt<'a, B: Props + ?Sized, P: Props + ?Sized>(
-    mdl: &'a (impl MdlControlParam + ?Sized),
-    tpl: &'a (impl TplControlParam + ?Sized),
-    extent: &'a (impl ToExtent + ?Sized),
+pub fn __private_evt<'a, B: Props + ?Sized, P: Props>(
+    mdl: impl Into<Path<'a>>,
+    tpl: impl Into<Template<'a>>,
+    extent: impl ToExtent,
     base_props: &'a B,
-    props: &'a P,
-) -> Event<'a, And<&'a P, &'a B>> {
+    props: P,
+) -> Event<'a, And<P, &'a B>> {
     Event::new(
-        mdl.mdl_control_param(),
-        tpl.tpl_control_param(),
+        mdl.into(),
+        tpl.into(),
         extent.to_extent(),
         props.and_props(base_props),
     )
@@ -946,24 +946,15 @@ pub fn __private_complete_span_err<
 }
 
 #[repr(transparent)]
-pub struct __PrivateMacroProps<'a>([(Str<'a>, Option<Value<'a>>)]);
+pub struct __PrivateMacroProps<'a, const N: usize>([(Str<'a>, Option<Value<'a>>); N]);
 
-impl __PrivateMacroProps<'static> {
-    pub fn new(props: &'static [(Str<'static>, Option<Value<'static>>)]) -> &'static Self {
-        Self::new_ref(props)
+impl<'a, const N: usize> __PrivateMacroProps<'a, N> {
+    pub fn from_array(props: [(Str<'a>, Option<Value<'a>>); N]) -> Self {
+        __PrivateMacroProps(props)
     }
 }
 
-impl<'a> __PrivateMacroProps<'a> {
-    pub fn new_ref<'b>(props: &'b [(Str<'a>, Option<Value<'a>>)]) -> &'b Self {
-        // SAFETY: `__PrivateMacroProps` and the array have the same ABI
-        unsafe {
-            &*(props as *const [(Str<'a>, Option<Value<'a>>)] as *const __PrivateMacroProps<'a>)
-        }
-    }
-}
-
-impl<'a> Props for __PrivateMacroProps<'a> {
+impl<'a, const N: usize> Props for __PrivateMacroProps<'a, N> {
     fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
         &'kv self,
         mut for_each: F,
