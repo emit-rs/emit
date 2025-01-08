@@ -871,7 +871,8 @@ pub fn __private_complete_span<
     lvl: Option<&'b (impl CaptureLevel + ?Sized)>,
     panic_lvl: Option<&'b (impl CaptureLevel + ?Sized)>,
 ) {
-    let mut completion = span::completion::Default::new(rt.emitter(), rt.ctxt());
+    let mut completion =
+        span::completion::Default::new(rt.emitter(), rt.ctxt()).with_tpl(tpl.tpl_control_param());
 
     if let Some(lvl) = lvl.and_then(|lvl| lvl.capture()) {
         completion = completion.with_lvl(lvl);
@@ -881,7 +882,7 @@ pub fn __private_complete_span<
         completion = completion.with_panic_lvl(lvl);
     }
 
-    completion.complete(span.with_tpl(tpl.tpl_control_param()));
+    completion.complete(span);
 }
 
 #[track_caller]

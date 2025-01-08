@@ -208,6 +208,21 @@ impl<'a, P> Metric<'a, P> {
             props,
         }
     }
+
+    /**
+    Map the properties of the metric.
+    */
+    pub fn map_props<U>(self, map: impl FnOnce(P) -> U) -> Metric<'a, U> {
+        Metric {
+            mdl: self.mdl,
+            extent: self.extent,
+            tpl: self.tpl,
+            name: self.name,
+            agg: self.agg,
+            value: self.value,
+            props: map(self.props),
+        }
+    }
 }
 
 impl<'a, P: Props> ToEvent for Metric<'a, P> {

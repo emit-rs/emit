@@ -573,6 +573,19 @@ impl<'a, P: Props> Span<'a, P> {
     }
 
     /**
+    Map the properties of the span.
+    */
+    pub fn map_props<U>(self, map: impl FnOnce(P) -> U) -> Span<'a, U> {
+        Span {
+            mdl: self.mdl,
+            extent: self.extent,
+            name: self.name,
+            tpl: self.tpl,
+            props: map(self.props),
+        }
+    }
+
+    /**
     Get the template that will be used to render the span.
     */
     pub fn tpl(&self) -> &Template<'a> {
@@ -971,6 +984,7 @@ pub mod completion {
         empty::Empty,
         event::ToEvent,
         props::{ErasedProps, Props},
+        template::Template,
         value::{ToValue, Value},
         well_known::{KEY_ERR, KEY_LVL},
     };
@@ -1009,14 +1023,15 @@ pub mod completion {
 
     This type can be created directly, or via [`default`].
     */
-    pub struct Default<E, C, L = Level> {
+    pub struct Default<'a, E, C, L = Level> {
         emitter: E,
         ctxt: C,
+        tpl: Option<Template<'a>>,
         lvl: Option<L>,
         panic_lvl: Option<L>,
     }
 
-    impl<E: Emitter, C: Ctxt, L: ToValue> Completion for Default<E, C, L> {
+    impl<'a, E: Emitter, C: Ctxt, L: ToValue> Completion for Default<'a, E, C, L> {
         fn complete<P: Props>(&self, span: Span<P>) {
             struct PanicError;
 
@@ -1078,18 +1093,18 @@ pub mod completion {
                 ]
             };
 
-            emit_core::emit(
-                &self.emitter,
-                Empty,
-                &self.ctxt,
-                Empty,
-                span.to_event()
-                    .map_props(|span_props| completion_props.and_props(span_props)),
-            );
+            let tpl = self.tpl.as_ref().unwrap_or_else(|| span.tpl()).by_ref();
+
+            let evt = span
+                .to_event()
+                .with_tpl(tpl)
+                .map_props(|span_props| completion_props.and_props(span_props));
+
+            emit_core::emit(&self.emitter, Empty, &self.ctxt, Empty, evt);
         }
     }
 
-    impl<E, C, L> Default<E, C, L> {
+    impl<'a, E, C, L> Default<'a, E, C, L> {
         /**
         Wrap the given emitter and context.
         */
@@ -1097,6 +1112,7 @@ pub mod completion {
             Default {
                 emitter,
                 ctxt,
+                tpl: None,
                 lvl: None,
                 panic_lvl: None,
             }
@@ -1111,6 +1127,7 @@ pub mod completion {
             Default {
                 emitter: self.emitter,
                 ctxt: self.ctxt,
+                tpl: self.tpl,
                 lvl: Some(lvl),
                 panic_lvl: self.panic_lvl,
             }
@@ -1123,8 +1140,22 @@ pub mod completion {
             Default {
                 emitter: self.emitter,
                 ctxt: self.ctxt,
+                tpl: self.tpl,
                 lvl: self.lvl,
                 panic_lvl: Some(lvl),
+            }
+        }
+
+        /**
+        A template to use for the span on completion.
+        */
+        pub fn with_tpl<'b>(self, tpl: impl Into<Template<'b>>) -> Default<'b, E, C, L> {
+            Default {
+                emitter: self.emitter,
+                ctxt: self.ctxt,
+                tpl: Some(tpl.into()),
+                lvl: self.lvl,
+                panic_lvl: self.panic_lvl,
             }
         }
     }
@@ -1136,7 +1167,7 @@ pub mod completion {
 
     If the completion is called during a panic, it will attach an error to the span.
     */
-    pub const fn default<E: Emitter, C: Ctxt>(emitter: E, ctxt: C) -> Default<E, C> {
+    pub const fn default<'a, E: Emitter, C: Ctxt>(emitter: E, ctxt: C) -> Default<'a, E, C> {
         Default::new(emitter, ctxt)
     }
 
@@ -1315,6 +1346,26 @@ pub mod completion {
                 Empty,
             )
             .with_lvl(Level::Info);
+
+            completion.complete(Span::new(Path::new_raw("test"), "test", Empty, Empty));
+
+            assert!(called.get());
+        }
+
+        #[test]
+        fn default_completion_uses_tpl() {
+            let called = Cell::new(false);
+
+            let completion = default(
+                emitter::from_fn(|evt| {
+                    assert_eq!("test template", evt.msg().to_string());
+
+                    called.set(true);
+                }),
+                Empty,
+            )
+            .with_lvl(Level::Info)
+            .with_tpl(Template::literal("test template"));
 
             completion.complete(Span::new(Path::new_raw("test"), "test", Empty, Empty));
 
