@@ -46,28 +46,28 @@ fn new_span_basic() {
                 });
             }
             Some(emit::Level::Debug) => {
-                let (mut guard, frame) = emit::start_debug_span!(rt, "Hello, {user}");
+                let (mut guard, frame) = emit::new_debug_span!(rt, "Hello, {user}");
 
                 frame.call(move || {
                     guard.start();
                 });
             }
             Some(emit::Level::Info) => {
-                let (mut guard, frame) = emit::start_info_span!(rt, "Hello, {user}");
+                let (mut guard, frame) = emit::new_info_span!(rt, "Hello, {user}");
 
                 frame.call(move || {
                     guard.start();
                 });
             }
             Some(emit::Level::Warn) => {
-                let (mut guard, frame) = emit::start_warn_span!(rt, "Hello, {user}");
+                let (mut guard, frame) = emit::new_warn_span!(rt, "Hello, {user}");
 
                 frame.call(move || {
                     guard.start();
                 });
             }
             Some(emit::Level::Error) => {
-                let (mut guard, frame) = emit::start_error_span!(rt, "Hello, {user}");
+                let (mut guard, frame) = emit::new_error_span!(rt, "Hello, {user}");
 
                 frame.call(move || {
                     guard.start();
@@ -129,7 +129,7 @@ async fn new_span_basic_async() {
                     .await;
             }
             Some(emit::Level::Debug) => {
-                let (mut guard, frame) = emit::start_debug_span!(rt, "Hello, {user}");
+                let (mut guard, frame) = emit::new_debug_span!(rt, "Hello, {user}");
 
                 frame
                     .in_future(async move {
@@ -142,7 +142,7 @@ async fn new_span_basic_async() {
                     .await;
             }
             Some(emit::Level::Info) => {
-                let (mut guard, frame) = emit::start_info_span!(rt, "Hello, {user}");
+                let (mut guard, frame) = emit::new_info_span!(rt, "Hello, {user}");
 
                 frame
                     .in_future(async move {
@@ -155,7 +155,7 @@ async fn new_span_basic_async() {
                     .await;
             }
             Some(emit::Level::Warn) => {
-                let (mut guard, frame) = emit::start_warn_span!(rt, "Hello, {user}");
+                let (mut guard, frame) = emit::new_warn_span!(rt, "Hello, {user}");
 
                 frame
                     .in_future(async move {
@@ -168,7 +168,7 @@ async fn new_span_basic_async() {
                     .await;
             }
             Some(emit::Level::Error) => {
-                let (mut guard, frame) = emit::start_error_span!(rt, "Hello, {user}");
+                let (mut guard, frame) = emit::new_error_span!(rt, "Hello, {user}");
 
                 frame
                     .in_future(async move {
