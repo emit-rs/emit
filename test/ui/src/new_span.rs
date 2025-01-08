@@ -5,7 +5,7 @@ use emit::{Emitter, Props};
 use crate::util::{simple_runtime, Called};
 
 #[test]
-fn start_span_basic() {
+fn new_span_basic() {
     for lvl in [
         Some(emit::Level::Debug),
         Some(emit::Level::Info),
@@ -39,38 +39,38 @@ fn start_span_basic() {
 
         match lvl {
             None => {
-                let (guard, frame) = emit::start_span!(rt, "Hello, {user}");
+                let (mut guard, frame) = emit::new_span!(rt, "Hello, {user}");
 
                 frame.call(move || {
-                    guard.complete();
+                    guard.start();
                 });
             }
             Some(emit::Level::Debug) => {
-                let (guard, frame) = emit::start_debug_span!(rt, "Hello, {user}");
+                let (mut guard, frame) = emit::new_debug_span!(rt, "Hello, {user}");
 
                 frame.call(move || {
-                    guard.complete();
+                    guard.start();
                 });
             }
             Some(emit::Level::Info) => {
-                let (guard, frame) = emit::start_info_span!(rt, "Hello, {user}");
+                let (mut guard, frame) = emit::new_info_span!(rt, "Hello, {user}");
 
                 frame.call(move || {
-                    guard.complete();
+                    guard.start();
                 });
             }
             Some(emit::Level::Warn) => {
-                let (guard, frame) = emit::start_warn_span!(rt, "Hello, {user}");
+                let (mut guard, frame) = emit::new_warn_span!(rt, "Hello, {user}");
 
                 frame.call(move || {
-                    guard.complete();
+                    guard.start();
                 });
             }
             Some(emit::Level::Error) => {
-                let (guard, frame) = emit::start_error_span!(rt, "Hello, {user}");
+                let (mut guard, frame) = emit::new_error_span!(rt, "Hello, {user}");
 
                 frame.call(move || {
-                    guard.complete();
+                    guard.start();
                 });
             }
         }
@@ -82,7 +82,7 @@ fn start_span_basic() {
 }
 
 #[tokio::test]
-async fn start_span_basic_async() {
+async fn new_span_basic_async() {
     for lvl in [
         Some(emit::Level::Debug),
         Some(emit::Level::Info),
@@ -116,10 +116,12 @@ async fn start_span_basic_async() {
 
         match lvl {
             None => {
-                let (guard, frame) = emit::start_span!(rt, "Hello, {user}");
+                let (mut guard, frame) = emit::new_span!(rt, "Hello, {user}");
 
                 frame
                     .in_future(async move {
+                        guard.start();
+
                         tokio::time::sleep(Duration::from_micros(1)).await;
 
                         guard.complete();
@@ -127,10 +129,12 @@ async fn start_span_basic_async() {
                     .await;
             }
             Some(emit::Level::Debug) => {
-                let (guard, frame) = emit::start_debug_span!(rt, "Hello, {user}");
+                let (mut guard, frame) = emit::new_debug_span!(rt, "Hello, {user}");
 
                 frame
                     .in_future(async move {
+                        guard.start();
+
                         tokio::time::sleep(Duration::from_micros(1)).await;
 
                         guard.complete();
@@ -138,10 +142,12 @@ async fn start_span_basic_async() {
                     .await;
             }
             Some(emit::Level::Info) => {
-                let (guard, frame) = emit::start_info_span!(rt, "Hello, {user}");
+                let (mut guard, frame) = emit::new_info_span!(rt, "Hello, {user}");
 
                 frame
                     .in_future(async move {
+                        guard.start();
+
                         tokio::time::sleep(Duration::from_micros(1)).await;
 
                         guard.complete();
@@ -149,10 +155,12 @@ async fn start_span_basic_async() {
                     .await;
             }
             Some(emit::Level::Warn) => {
-                let (guard, frame) = emit::start_warn_span!(rt, "Hello, {user}");
+                let (mut guard, frame) = emit::new_warn_span!(rt, "Hello, {user}");
 
                 frame
                     .in_future(async move {
+                        guard.start();
+
                         tokio::time::sleep(Duration::from_micros(1)).await;
 
                         guard.complete();
@@ -160,10 +168,12 @@ async fn start_span_basic_async() {
                     .await;
             }
             Some(emit::Level::Error) => {
-                let (guard, frame) = emit::start_error_span!(rt, "Hello, {user}");
+                let (mut guard, frame) = emit::new_error_span!(rt, "Hello, {user}");
 
                 frame
                     .in_future(async move {
+                        guard.start();
+
                         tokio::time::sleep(Duration::from_micros(1)).await;
 
                         guard.complete();

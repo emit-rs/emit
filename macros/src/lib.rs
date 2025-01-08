@@ -389,7 +389,12 @@ pub fn span(
     args: proc_macro::TokenStream,
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
-    span::expand_tokens(span::ExpandTokens { level: None, input: TokenStream::from(args), item: TokenStream::from(item) }).unwrap_or_compile_error()
+    span::expand_tokens(span::ExpandTokens {
+        level: None,
+        input: TokenStream::from(args),
+        item: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
 }
 
 /**
@@ -404,7 +409,12 @@ pub fn debug_span(
     args: proc_macro::TokenStream,
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
-    span::expand_tokens(span::ExpandTokens { level: Some(quote!(emit::Level::Debug)), input: TokenStream::from(args), item: TokenStream::from(item) }).unwrap_or_compile_error()
+    span::expand_tokens(span::ExpandTokens {
+        level: Some(quote!(emit::Level::Debug)),
+        input: TokenStream::from(args),
+        item: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
 }
 
 /**
@@ -419,7 +429,12 @@ pub fn info_span(
     args: proc_macro::TokenStream,
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
-    span::expand_tokens(span::ExpandTokens { level: Some(quote!(emit::Level::Info)), input: TokenStream::from(args), item: TokenStream::from(item) }).unwrap_or_compile_error()
+    span::expand_tokens(span::ExpandTokens {
+        level: Some(quote!(emit::Level::Info)),
+        input: TokenStream::from(args),
+        item: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
 }
 
 /**
@@ -434,7 +449,12 @@ pub fn warn_span(
     args: proc_macro::TokenStream,
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
-    span::expand_tokens(span::ExpandTokens { level: Some(quote!(emit::Level::Warn)), input: TokenStream::from(args), item: TokenStream::from(item) }).unwrap_or_compile_error()
+    span::expand_tokens(span::ExpandTokens {
+        level: Some(quote!(emit::Level::Warn)),
+        input: TokenStream::from(args),
+        item: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
 }
 
 /**
@@ -449,11 +469,18 @@ pub fn error_span(
     args: proc_macro::TokenStream,
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
-    span::expand_tokens(span::ExpandTokens { level: Some(quote!(emit::Level::Error)), input: TokenStream::from(args), item: TokenStream::from(item) }).unwrap_or_compile_error()
+    span::expand_tokens(span::ExpandTokens {
+        level: Some(quote!(emit::Level::Error)),
+        input: TokenStream::from(args),
+        item: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
 }
 
 /**
 Start a span.
+
+See the [`ActiveSpan::new`](https://docs.rs/emit/0.11.0-alpha.21/emit/span/struct.ActiveSpan.html#method.new) for details on starting and completing the returned span.
 
 # Syntax
 
@@ -487,8 +514,8 @@ The template for the event. See the [`macro@tpl`] macro for syntax.
 Properties that appear within the template or after it are added to the emitted event. The identifier of the property is its key. Property capturing can be adjusted through the `as_*` attribute macros.
 */
 #[proc_macro]
-pub fn start_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    span::expand_start_tokens(span::ExpandStartTokens {
+pub fn new_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    span::expand_new_tokens(span::ExpandNewTokens {
         level: None,
         input: TokenStream::from(item),
     })
@@ -500,11 +527,11 @@ Start a debug span.
 
 # Syntax
 
-See the [`macro@start_span`] macro for syntax.
+See the [`macro@new_span`] macro for syntax.
 */
 #[proc_macro]
-pub fn start_debug_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    span::expand_start_tokens(span::ExpandStartTokens {
+pub fn new_debug_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    span::expand_new_tokens(span::ExpandNewTokens {
         level: Some(quote!(emit::Level::Debug)),
         input: TokenStream::from(item),
     })
@@ -516,11 +543,11 @@ Start an info span.
 
 # Syntax
 
-See the [`macro@start_span`] macro for syntax.
+See the [`macro@new_span`] macro for syntax.
 */
 #[proc_macro]
-pub fn start_info_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    span::expand_start_tokens(span::ExpandStartTokens {
+pub fn new_info_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    span::expand_new_tokens(span::ExpandNewTokens {
         level: Some(quote!(emit::Level::Info)),
         input: TokenStream::from(item),
     })
@@ -532,11 +559,11 @@ Start a warning span.
 
 # Syntax
 
-See the [`macro@start_span`] macro for syntax.
+See the [`macro@new_span`] macro for syntax.
 */
 #[proc_macro]
-pub fn start_warn_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    span::expand_start_tokens(span::ExpandStartTokens {
+pub fn new_warn_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    span::expand_new_tokens(span::ExpandNewTokens {
         level: Some(quote!(emit::Level::Warn)),
         input: TokenStream::from(item),
     })
@@ -548,11 +575,11 @@ Start an error span.
 
 # Syntax
 
-See the [`macro@start_span`] macro for syntax.
+See the [`macro@new_span`] macro for syntax.
 */
 #[proc_macro]
-pub fn start_error_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    span::expand_start_tokens(span::ExpandStartTokens {
+pub fn new_error_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    span::expand_new_tokens(span::ExpandNewTokens {
         level: Some(quote!(emit::Level::Error)),
         input: TokenStream::from(item),
     })
@@ -627,7 +654,11 @@ Properties that appear within the template or after it are added to the emitted 
 */
 #[proc_macro]
 pub fn emit(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    emit::expand_tokens(emit::ExpandTokens { level: None, input: TokenStream::from(item) }).unwrap_or_compile_error()
+    emit::expand_tokens(emit::ExpandTokens {
+        level: None,
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
 }
 
 /**
@@ -639,11 +670,15 @@ See the [`macro@emit`] macro for syntax.
 */
 #[proc_macro]
 pub fn debug(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    emit::expand_tokens(emit::ExpandTokens { level: Some(quote!(emit::Level::Debug)), input: TokenStream::from(item) }).unwrap_or_compile_error()
+    emit::expand_tokens(emit::ExpandTokens {
+        level: Some(quote!(emit::Level::Debug)),
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
 }
 
 /**
-Emit a info event.
+Emit an info event.
 
 # Syntax
 
@@ -651,7 +686,11 @@ See the [`macro@emit`] macro for syntax.
 */
 #[proc_macro]
 pub fn info(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    emit::expand_tokens(emit::ExpandTokens { level: Some(quote!(emit::Level::Info)), input: TokenStream::from(item) }).unwrap_or_compile_error()
+    emit::expand_tokens(emit::ExpandTokens {
+        level: Some(quote!(emit::Level::Info)),
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
 }
 
 /**
@@ -663,7 +702,11 @@ See the [`macro@emit`] macro for syntax.
 */
 #[proc_macro]
 pub fn warn(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    emit::expand_tokens(emit::ExpandTokens { level: Some(quote!(emit::Level::Warn)), input: TokenStream::from(item) }).unwrap_or_compile_error()
+    emit::expand_tokens(emit::ExpandTokens {
+        level: Some(quote!(emit::Level::Warn)),
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
 }
 
 /**
@@ -675,7 +718,11 @@ See the [`macro@emit`] macro for syntax.
 */
 #[proc_macro]
 pub fn error(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    emit::expand_tokens(emit::ExpandTokens { level: Some(quote!(emit::Level::Error)), input: TokenStream::from(item) }).unwrap_or_compile_error()
+    emit::expand_tokens(emit::ExpandTokens {
+        level: Some(quote!(emit::Level::Error)),
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
 }
 
 /**

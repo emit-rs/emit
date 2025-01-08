@@ -18,9 +18,9 @@ mod util;
 
 mod emit;
 mod event;
+mod new_span;
 mod props;
 mod span;
-mod start_span;
 mod tpl;
 
 #[cfg(feature = "std")]
