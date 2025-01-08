@@ -2,7 +2,7 @@
 
 ## Creating `ActiveSpan`s
 
-The `#[span]` attribute [includes a `guard` control parameter](./manual-span-completion.md) that gives you access to an [`ActiveSpan`](https://docs.rs/emit/0.11.0-alpha.21/emit/span/struct.ActiveSpan.html) to manually complete it. The `#[span]` attribute takes care of constructing the `ActiveSpan` for you and ensuring any ambient span properties are active in the body of your annotated function.
+The `#[span]` attribute [includes a `guard` control parameter](./manual-span-completion.md) that gives you access to an [`ActiveSpan`](https://docs.rs/emit/0.11.0/emit/span/struct.ActiveSpan.html) to manually complete it. The `#[span]` attribute takes care of constructing the `ActiveSpan` for you and ensuring any ambient span properties are active in the body of your annotated function.
 
 You can also create `ActiveSpan`s manually if you can't or don't want to use the `#[span]` attribute:
 
@@ -17,11 +17,11 @@ frame.call(move || {
 })
 ```
 
-The `new_span!` macro returns a tuple of [`ActiveSpan`](https://docs.rs/emit/0.11.0-alpha.21/emit/span/struct.ActiveSpan.html) for completing the span, and [`Frame`](https://docs.rs/emit/0.11.0-alpha.21/emit/frame/struct.Frame.html) for activating the span's ambient trace and span ids for correlation.
+The `new_span!` macro returns a tuple of [`ActiveSpan`](https://docs.rs/emit/0.11.0/emit/span/struct.ActiveSpan.html) for completing the span, and [`Frame`](https://docs.rs/emit/0.11.0/emit/frame/struct.Frame.html) for activating the span's ambient trace and span ids for correlation.
 
-The syntax accepted by the `new_span!` macro is the same as the [`#[span]`](https://docs.rs/emit/0.11.0-alpha.21/emit/attr.span.html) attribute.
+The syntax accepted by the `new_span!` macro is the same as the [`#[span]`](https://docs.rs/emit/0.11.0/emit/attr.span.html) attribute.
 
-**Make sure you call [`ActiveSpan::start`](https://docs.rs/emit/0.11.0-alpha.21/emit/span/struct.ActiveSpan.html#method.start) in the closure in [`Frame::call`](https://docs.rs/emit/0.11.0-alpha.21/emit/frame/struct.Frame.html#method.call) or async block in [`Frame::in_future`](https://docs.rs/emit/0.11.0-alpha.21/emit/frame/struct.Frame.html#method.in_future)**. If you don't call `ActiveSpan::start`, the span won't be emitted. If you don't call it within the frame, the span may be emitted early and without its ambient context.
+**Make sure you call [`ActiveSpan::start`](https://docs.rs/emit/0.11.0/emit/span/struct.ActiveSpan.html#method.start) in the closure in [`Frame::call`](https://docs.rs/emit/0.11.0/emit/frame/struct.Frame.html#method.call) or async block in [`Frame::in_future`](https://docs.rs/emit/0.11.0/emit/frame/struct.Frame.html#method.in_future)**. If you don't call `ActiveSpan::start`, the span won't be emitted. If you don't call it within the frame, the span may be emitted early and without its ambient context.
 
 Using `ActiveSpan`s is the recommended way to trace code with `emit`. It applies filtering for you, so the span is only created if it matches the configured filter. It also ensures a span is emitted even if the traced code panics or otherwise returns without explicitly completing.
 
