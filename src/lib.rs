@@ -159,6 +159,22 @@ pub mod setup;
 pub use setup::{setup, Setup};
 
 /**
+Get the shared emitter.
+
+This method will use the [`Emitter`] from [`runtime::shared()`].
+
+Calling `emitter::emit()` is different from `runtime::shared().emit()`:
+
+1. `emitter::emit()` won't apply the filter.
+2. `emitter::emit()` won't add a timestamp to events if they don't have one.
+3. `emitter::emit()` won't add ambient properties.
+*/
+#[cfg(feature = "implicit_rt")]
+pub fn emitter() -> runtime::AmbientEmitter<'static> {
+    *runtime::shared().emitter()
+}
+
+/**
 Get the shared filter.
 
 This method will use the [`Filter`] from [`runtime::shared()`].

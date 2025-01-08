@@ -30,7 +30,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     }
     #[cfg(feature = "std")]
     {
-        use crate::template;
+        use crate::{template, util::ToRefTokens};
 
         let span = opts.input.span();
 
@@ -42,7 +42,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
 
         let props_match_input_tokens = props.match_input_tokens();
         let props_match_binding_tokens = props.match_binding_tokens();
-        let props_tokens = props.match_bound_tokens();
+        let props_tokens = props.match_bound_tokens().to_ref_tokens();
 
         let template_tokens = template.template_tokens();
 

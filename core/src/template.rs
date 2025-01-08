@@ -81,14 +81,14 @@ impl Template<'static> {
     /**
     Create a template from a set of tokens.
     */
-    pub fn new(parts: &'static [Part<'static>]) -> Self {
+    pub const fn new(parts: &'static [Part<'static>]) -> Self {
         Template(TemplateKind::Parts(parts))
     }
 
     /**
     Create a template from a string literal with no holes.
     */
-    pub fn literal(text: &'static str) -> Self {
+    pub const fn literal(text: &'static str) -> Self {
         Template(TemplateKind::Literal([Part::text(text)]))
     }
 }
@@ -99,7 +99,7 @@ impl<'a> Template<'a> {
 
     The [`Template::new`] method should be preferred where possible.
     */
-    pub fn new_ref(parts: &'a [Part<'a>]) -> Self {
+    pub const fn new_ref(parts: &'a [Part<'a>]) -> Self {
         Template(TemplateKind::Parts(parts))
     }
 
@@ -108,7 +108,7 @@ impl<'a> Template<'a> {
 
     The [`Template::literal`] method should be preferred where possible.
     */
-    pub fn literal_ref(text: &'a str) -> Self {
+    pub const fn literal_ref(text: &'a str) -> Self {
         Template(TemplateKind::Literal([Part::text_ref(text)]))
     }
 
@@ -541,17 +541,16 @@ impl<'a> Part<'a> {
 
     This method only applies to [`Part::hole`]s. It's a no-op in other cases.
     */
-    pub fn with_formatter(self, formatter: Formatter) -> Self {
-        match self.0 {
-            PartKind::Hole {
-                label,
-                formatter: _,
-            } => Part(PartKind::Hole {
-                label,
-                formatter: Some(formatter),
-            }),
-            part => Part(part),
+    pub const fn with_formatter(mut self, formatter: Formatter) -> Self {
+        if let PartKind::Hole {
+            formatter: ref mut slot,
+            ..
+        } = self.0
+        {
+            *slot = Some(formatter);
         }
+
+        self
     }
 
     fn write(&self, mut writer: impl Write, props: impl Props) -> fmt::Result {
@@ -578,6 +577,35 @@ impl<'a> Part<'a> {
     }
 }
 
+// Work-around for const-fn in traits
+// Mirrors trait fns in `macro_hooks`
+#[doc(hidden)]
+impl Part<'static> {
+    pub const fn __private_interpolated(self) -> Self {
+        self
+    }
+
+    pub const fn __private_uninterpolated(self) -> Self {
+        self
+    }
+
+    pub const fn __private_captured(self) -> Self {
+        self
+    }
+
+    pub const fn __private_uncaptured(self) -> Self {
+        self
+    }
+
+    pub const fn __private_fmt_as_default(self) -> Self {
+        self
+    }
+
+    pub const fn __private_fmt_as(self, formatter: Formatter) -> Self {
+        self.with_formatter(formatter)
+    }
+}
+
 /**
 A specialized formatter for a [`Value`] interpolated into a [`Part::hole`].
 
@@ -594,7 +622,7 @@ impl Formatter {
 
     It's the responsibility of the function to actually write the value into the formatter.
     */
-    pub fn new(fmt: fn(Value, &mut fmt::Formatter) -> fmt::Result) -> Self {
+    pub const fn new(fmt: fn(Value, &mut fmt::Formatter) -> fmt::Result) -> Self {
         Formatter { fmt }
     }
 

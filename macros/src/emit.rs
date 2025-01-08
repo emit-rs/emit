@@ -99,7 +99,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
 
     let props_match_input_tokens = props.match_input_tokens();
     let props_match_binding_tokens = props.match_binding_tokens();
-    let props_tokens = props.match_bound_tokens();
+    let props_tokens = props.match_bound_tokens().to_ref_tokens();
 
     let rt_tokens = args.rt.to_tokens()?.to_ref_tokens();
     let when_tokens = args

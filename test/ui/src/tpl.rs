@@ -1,26 +1,16 @@
 #[test]
 fn tpl_basic() {
-    match emit::tpl!("Hello, {user}") {
-        tpl => {
-            let parts = tpl.parts().collect::<Vec<_>>();
+    let tpl = emit::tpl!("Hello, {user}");
 
-            assert_eq!("Hello, ", parts[0].as_text().unwrap());
-            assert_eq!("user", parts[1].label().unwrap());
-        }
-    }
+    let parts = tpl.parts().collect::<Vec<_>>();
+
+    assert_eq!("Hello, ", parts[0].as_text().unwrap());
+    assert_eq!("user", parts[1].label().unwrap());
 }
 
 #[test]
 fn tpl_event_meta() {
     let _ = emit::tpl!("{ts_start}..{ts} {mdl} {tpl} {msg}");
-}
-
-#[test]
-fn tpl_parts() {
-    let parts = emit::tpl_parts!("Hello, {user}");
-
-    assert_eq!("Hello, ", parts[0].as_text().unwrap());
-    assert_eq!("user", parts[1].label().unwrap());
 }
 
 #[test]
@@ -34,17 +24,15 @@ fn tpl_cfg() {
 
 #[test]
 fn tpl_fmt() {
-    match emit::tpl!(
+    let tpl = emit::tpl!(
         "Hello, {user}",
         #[emit::fmt("?")]
         user
-    ) {
-        tpl => {
-            let parts = tpl.parts().collect::<Vec<_>>();
+    );
 
-            assert_eq!("Hello, ", parts[0].as_text().unwrap());
-            assert_eq!("user", parts[1].label().unwrap());
-            assert!(parts[1].formatter().is_some());
-        }
-    }
+    let parts = tpl.parts().collect::<Vec<_>>();
+
+    assert_eq!("Hello, ", parts[0].as_text().unwrap());
+    assert_eq!("user", parts[1].label().unwrap());
+    assert!(parts[1].formatter().is_some());
 }

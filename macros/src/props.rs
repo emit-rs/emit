@@ -84,7 +84,7 @@ impl Props {
     fn sorted_props_tokens<'a>(
         key_values: impl Iterator<Item = &'a TokenStream> + 'a,
     ) -> TokenStream {
-        quote!(emit::__private::__PrivateMacroProps::new_ref(&[#(#key_values),*]))
+        quote!(emit::__private::__PrivateMacroProps::from_array([#(#key_values),*]))
     }
 
     fn next_match_binding_ident(&mut self, span: Span) -> Ident {

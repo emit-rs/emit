@@ -249,7 +249,7 @@ fn inject_sync(
     err_lvl_tokens: Option<TokenStream>,
     err_tokens: Option<TokenStream>,
 ) -> Result<TokenStream, syn::Error> {
-    let ctxt_props_tokens = ctxt_props.props_tokens();
+    let ctxt_props_tokens = ctxt_props.props_tokens().to_ref_tokens();
     let template_tokens = template.template_tokens().to_ref_tokens();
     let span_name_tokens = template.template_literal_tokens();
 
@@ -328,7 +328,7 @@ fn inject_async(
     err_lvl_tokens: Option<TokenStream>,
     err_tokens: Option<TokenStream>,
 ) -> Result<TokenStream, syn::Error> {
-    let ctxt_props_tokens = ctxt_props.props_tokens();
+    let ctxt_props_tokens = ctxt_props.props_tokens().to_ref_tokens();
     let template_tokens = template.template_tokens().to_ref_tokens();
     let span_name_tokens = template.template_literal_tokens();
 

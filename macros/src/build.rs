@@ -53,23 +53,6 @@ impl Parse for TplPartsArgs {
 }
 
 /**
-The `tpl_parts!` macro.
-*/
-pub fn expand_tpl_parts_tokens(opts: ExpandTplTokens) -> Result<TokenStream, syn::Error> {
-    let span = opts.input.span();
-
-    let (_, template, props) =
-        template::parse2::<TplPartsArgs>(opts.input, capture::default_fn_name, false)?;
-
-    let template =
-        template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;
-
-    validate_props(&props)?;
-
-    Ok(template.template_parts_tokens())
-}
-
-/**
 The `tpl!` macro.
 */
 pub fn expand_tpl_tokens(opts: ExpandTplTokens) -> Result<TokenStream, syn::Error> {
@@ -177,9 +160,9 @@ pub fn expand_evt_tokens(opts: ExpandEvtTokens) -> Result<TokenStream, syn::Erro
 
     let extent_tokens = args.extent.to_tokens().to_ref_tokens();
     let base_props_tokens = args.props.to_tokens().to_ref_tokens();
-    let template_tokens = template.template_tokens().to_ref_tokens();
-    let props_tokens = props.props_tokens().to_ref_tokens();
-    let mdl_tokens = args.mdl.to_tokens().to_ref_tokens();
+    let template_tokens = template.template_tokens();
+    let props_tokens = props.props_tokens();
+    let mdl_tokens = args.mdl.to_tokens();
 
     Ok(
         quote!(emit::__private::__private_evt(#mdl_tokens, #template_tokens, #extent_tokens, #base_props_tokens, #props_tokens)),

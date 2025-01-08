@@ -500,25 +500,6 @@ pub fn tpl(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 }
 
 /**
-Get the parts of a template.
-
-# Syntax
-
-See the [`macro@tpl`] macro for syntax.
-
-# Returns
-
-An `[emit::template::Part; N]` array.
-*/
-#[proc_macro]
-pub fn tpl_parts(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    build::expand_tpl_parts_tokens(build::ExpandTplTokens {
-        input: TokenStream::from(item),
-    })
-    .unwrap_or_compile_error()
-}
-
-/**
 Emit an event.
 
 # Syntax

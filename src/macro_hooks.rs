@@ -28,7 +28,7 @@ use crate::{frame::Frame, span::Span};
 use std::error::Error;
 
 use crate::{
-    span::{ActiveSpan, Completion, SpanId, TraceId},
+    span::{self, ActiveSpan, Completion, SpanId, TraceId},
     Level,
 };
 
@@ -665,25 +665,33 @@ impl<'a> __PrivateFmtHook<'a> for Part<'a> {
     }
 }
 
+pub struct Key(pub &'static str);
+
 pub trait __PrivateKeyHook {
-    fn __private_key_as_default(self) -> Self;
-    fn __private_key_as_static(self, key: &'static str) -> Self;
-    fn __private_key_as<K: Into<Self>>(self, key: K) -> Self
-    where
-        Self: Sized;
+    fn __private_key_as_default(self) -> Str<'static>;
+    fn __private_key_as(self, key: &'static str) -> Str<'static>;
 }
 
-impl<'a> __PrivateKeyHook for Str<'a> {
-    fn __private_key_as_default(self) -> Self {
-        self
+impl<'a> __PrivateKeyHook for Key {
+    fn __private_key_as_default(self) -> Str<'static> {
+        Str::new(self.0)
     }
 
-    fn __private_key_as_static(self, key: &'static str) -> Self {
+    fn __private_key_as(self, key: &'static str) -> Str<'static> {
         Str::new(key)
     }
+}
 
-    fn __private_key_as<K: Into<Self>>(self, key: K) -> Self {
-        key.into()
+// Work-around for const-fn in traits
+// Mirrors trait fns in `macro_hooks`
+#[doc(hidden)]
+impl Key {
+    pub const fn __private_key_as_default(self) -> Str<'static> {
+        Str::new(self.0)
+    }
+
+    pub const fn __private_key_as(self, key: &'static str) -> Str<'static> {
+        Str::new(key)
     }
 }
 
@@ -792,16 +800,16 @@ pub fn __private_emit_event<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R:
 }
 
 #[track_caller]
-pub fn __private_evt<'a, B: Props + ?Sized, P: Props + ?Sized>(
-    mdl: &'a (impl MdlControlParam + ?Sized),
-    tpl: &'a (impl TplControlParam + ?Sized),
-    extent: &'a (impl ToExtent + ?Sized),
+pub fn __private_evt<'a, B: Props + ?Sized, P: Props>(
+    mdl: impl Into<Path<'a>>,
+    tpl: impl Into<Template<'a>>,
+    extent: impl ToExtent,
     base_props: &'a B,
-    props: &'a P,
-) -> Event<'a, And<&'a P, &'a B>> {
+    props: P,
+) -> Event<'a, And<P, &'a B>> {
     Event::new(
-        mdl.mdl_control_param(),
-        tpl.tpl_control_param(),
+        mdl.into(),
+        tpl.into(),
         extent.to_extent(),
         props.and_props(base_props),
     )
@@ -863,71 +871,18 @@ pub fn __private_complete_span<
     lvl: Option<&'b (impl CaptureLevel + ?Sized)>,
     panic_lvl: Option<&'b (impl CaptureLevel + ?Sized)>,
 ) {
-    let completion_props = if is_panicking() {
-        [
-            panic_lvl
-                .and_then(|lvl| lvl.capture())
-                .or_else(|| Some(Value::from_any(&Level::Error)))
-                .map(|lvl| (KEY_LVL, lvl)),
-            Some((KEY_ERR, Value::from_any(&PanicError))),
-        ]
-    } else {
-        [
-            lvl.and_then(|lvl| lvl.capture()).map(|lvl| (KEY_LVL, lvl)),
-            None,
-        ]
-    };
+    let mut completion =
+        span::completion::Default::new(rt.emitter(), rt.ctxt()).with_tpl(tpl.tpl_control_param());
 
-    emit_core::emit(
-        rt.emitter(),
-        crate::Empty,
-        rt.ctxt(),
-        rt.clock(),
-        span.to_event()
-            .with_tpl(tpl.tpl_control_param())
-            .map_props(|span_props| completion_props.and_props(span_props)),
-    );
-}
-
-struct PanicError;
-
-impl fmt::Debug for PanicError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(self, f)
+    if let Some(lvl) = lvl.and_then(|lvl| lvl.capture()) {
+        completion = completion.with_lvl(lvl);
     }
-}
 
-impl fmt::Display for PanicError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "panicked")
+    if let Some(lvl) = panic_lvl.and_then(|lvl| lvl.capture()) {
+        completion = completion.with_panic_lvl(lvl);
     }
-}
 
-#[cfg(feature = "std")]
-impl std::error::Error for PanicError {}
-
-impl ToValue for PanicError {
-    fn to_value(&self) -> Value {
-        #[cfg(feature = "std")]
-        {
-            Value::capture_error(self)
-        }
-        #[cfg(not(feature = "std"))]
-        {
-            Value::capture_display(self)
-        }
-    }
-}
-
-fn is_panicking() -> bool {
-    #[cfg(feature = "std")]
-    {
-        std::thread::panicking()
-    }
-    #[cfg(not(feature = "std"))]
-    {
-        false
-    }
+    completion.complete(span);
 }
 
 #[track_caller]
@@ -991,24 +946,15 @@ pub fn __private_complete_span_err<
 }
 
 #[repr(transparent)]
-pub struct __PrivateMacroProps<'a>([(Str<'a>, Option<Value<'a>>)]);
+pub struct __PrivateMacroProps<'a, const N: usize>([(Str<'a>, Option<Value<'a>>); N]);
 
-impl __PrivateMacroProps<'static> {
-    pub fn new(props: &'static [(Str<'static>, Option<Value<'static>>)]) -> &'static Self {
-        Self::new_ref(props)
+impl<'a, const N: usize> __PrivateMacroProps<'a, N> {
+    pub fn from_array(props: [(Str<'a>, Option<Value<'a>>); N]) -> Self {
+        __PrivateMacroProps(props)
     }
 }
 
-impl<'a> __PrivateMacroProps<'a> {
-    pub fn new_ref<'b>(props: &'b [(Str<'a>, Option<Value<'a>>)]) -> &'b Self {
-        // SAFETY: `__PrivateMacroProps` and the array have the same ABI
-        unsafe {
-            &*(props as *const [(Str<'a>, Option<Value<'a>>)] as *const __PrivateMacroProps<'a>)
-        }
-    }
-}
-
-impl<'a> Props for __PrivateMacroProps<'a> {
+impl<'a, const N: usize> Props for __PrivateMacroProps<'a, N> {
     fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
         &'kv self,
         mut for_each: F,

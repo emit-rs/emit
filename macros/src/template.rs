@@ -84,29 +84,19 @@ pub fn parse2<A: Parse>(
         let template_parts = template_visitor.parts?;
         let literal = template_visitor.literal;
 
-        /*
-        Ideally this would be:
+        let parts_tokens = {
+            quote!({
+                const __TPL_PARTS: &[emit::template::Part] = &[
+                    #(#template_parts),*
+                ];
 
-        ```
-        {
-            const __TPL_PARTS: [emit::template::Part; #len] = [
-                #(#template_parts),*
-            ];
+                __TPL_PARTS
+            })
+        };
 
-            &__TPL_PARTS
-        }
-        ```
+        let literal_tokens = quote!(#literal);
 
-        but because of the use of trait bounds it can't be const-evaluated.
-        Once that is stable then we'll be able to use it here and avoid
-        "value doesn't live long enough" errors in `let x = tpl!(..);`.
-        */
-        (
-            quote!([
-                #(#template_parts),*
-            ]),
-            quote!(#literal),
-        )
+        (parts_tokens, literal_tokens)
     };
 
     let template = if template.has_literal() {
@@ -127,10 +117,6 @@ pub struct Template {
 }
 
 impl Template {
-    pub fn template_parts_tokens(&self) -> TokenStream {
-        self.template_parts_tokens.clone()
-    }
-
     pub fn template_literal_tokens(&self) -> TokenStream {
         self.template_literal_tokens.clone()
     }
@@ -138,7 +124,7 @@ impl Template {
     pub fn template_tokens(&self) -> TokenStream {
         let template_parts = &self.template_parts_tokens;
 
-        quote!(emit::Template::new_ref(&#template_parts))
+        quote!(emit::Template::new_ref(#template_parts))
     }
 }
 

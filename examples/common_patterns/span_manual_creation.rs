@@ -15,7 +15,7 @@ fn example(i: i32) {
         emit::clock(),
         emit::rng(),
         // The completion determines what happens to the span when it completes
-        emit::span::completion::from_fn(|evt| emit::emit!(evt, "Running an example")),
+        emit::span::completion::default(emit::emitter(), emit::ctxt()),
         // Any properties to put in ambient context along with trace/span ids
         emit::props! {},
         emit::mdl!(),
@@ -37,7 +37,7 @@ fn example(i: i32) {
         if r == 4 {
             // Emit a span event on completion
             span.complete_with(emit::span::completion::from_fn(|evt| {
-                emit::error!(evt, "Running an example failed with {r}",)
+                emit::error!(evt, "Running an example failed with {r}")
             }));
         } else {
             // The span will complete when it goes out of scope, but it's good
