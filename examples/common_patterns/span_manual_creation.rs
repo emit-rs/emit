@@ -9,22 +9,7 @@ This example differs from `span_manual_creation_full` in still using the same `A
 use std::time::Duration;
 
 fn example(i: i32) {
-    let (span, frame) = emit::span::ActiveSpan::start(
-        emit::filter(),
-        emit::ctxt(),
-        emit::clock(),
-        emit::rng(),
-        // The completion determines what happens to the span when it completes
-        emit::span::completion::default(emit::emitter(), emit::ctxt()),
-        // Any properties to put in ambient context along with trace/span ids
-        emit::props! {},
-        emit::mdl!(),
-        // The name of the span
-        "example",
-        // Any properties to associate with the span itself
-        // These aren't added to the ambient context
-        emit::props! {},
-    );
+    let (span, frame) = emit::start_span!("example");
 
     // Execute our code within the context of the frame
     // If this function was async, then you would use `frame.in_future(..).await`

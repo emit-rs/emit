@@ -20,6 +20,7 @@ mod emit;
 mod event;
 mod props;
 mod span;
+mod start_span;
 mod tpl;
 
 #[cfg(feature = "std")]

@@ -470,6 +470,113 @@ pub fn error_span(
 }
 
 /**
+Start a span.
+
+# Syntax
+
+```text
+(control_param),* tpl, (property),*
+```
+
+where
+
+- `control_param`: A Rust field-value with a pre-determined identifier (see below).
+- `tpl`: A template string literal.
+- `property`: A Rust field-value for a property to capture.
+
+# Control parameters
+
+This macro accepts the following optional control parameters:
+
+| name        | type                          | description                                                                                                                                                    |
+| ----------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rt`        | `impl emit::runtime::Runtime` | The runtime to emit the event through.                                                                                                                         |
+| `mdl`       | `impl Into<emit::Path>`       | The module the event belongs to. If unspecified the current module path is used.                                                                               |
+| `when`      | `impl emit::Filter`           | A filter to use instead of the one configured on the runtime.                                                                                                  |
+| `panic_lvl` | `str` or `emit::Level`        | Detect whether the function panics and use the given level if it does.                                                                                         |
+
+# Template
+
+The template for the event. See the [`macro@tpl`] macro for syntax.
+
+# Properties
+
+Properties that appear within the template or after it are added to the emitted event. The identifier of the property is its key. Property capturing can be adjusted through the `as_*` attribute macros.
+*/
+#[proc_macro]
+pub fn start_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    span::expand_start_tokens(span::ExpandStartTokens {
+        level: None,
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
+}
+
+/**
+Start a debug span.
+
+# Syntax
+
+See the [`macro@start_span`] macro for syntax.
+*/
+#[proc_macro]
+pub fn start_debug_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    span::expand_start_tokens(span::ExpandStartTokens {
+        level: Some(quote!(emit::Level::Debug)),
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
+}
+
+/**
+Start an info span.
+
+# Syntax
+
+See the [`macro@start_span`] macro for syntax.
+*/
+#[proc_macro]
+pub fn start_info_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    span::expand_start_tokens(span::ExpandStartTokens {
+        level: Some(quote!(emit::Level::Info)),
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
+}
+
+/**
+Start a warning span.
+
+# Syntax
+
+See the [`macro@start_span`] macro for syntax.
+*/
+#[proc_macro]
+pub fn start_warn_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    span::expand_start_tokens(span::ExpandStartTokens {
+        level: Some(quote!(emit::Level::Warn)),
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
+}
+
+/**
+Start an error span.
+
+# Syntax
+
+See the [`macro@start_span`] macro for syntax.
+*/
+#[proc_macro]
+pub fn start_error_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    span::expand_start_tokens(span::ExpandStartTokens {
+        level: Some(quote!(emit::Level::Error)),
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
+}
+
+/**
 Construct a template.
 
 Templates are text literals that include regular text with _holes_. A hole is a point in the template where a property should be interpolated in.

@@ -515,3 +515,94 @@ fn completion(
         default_completion_tokens,
     })
 }
+
+pub struct ExpandStartTokens {
+    pub level: Option<TokenStream>,
+    pub input: TokenStream,
+}
+
+/**
+The `start_span!` macro.
+*/
+pub fn expand_start_tokens(opts: ExpandStartTokens) -> Result<TokenStream, syn::Error> {
+    let span = opts.input.span();
+
+    let (args, template, ctxt_props) =
+        template::parse2::<Args>(opts.input, capture::default_fn_name, true)?;
+
+    let template =
+        template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;
+
+    check_evt_props(&ctxt_props)?;
+
+    let Args {
+        rt,
+        mdl,
+        when,
+        guard,
+        setup,
+        ok_lvl,
+        err_lvl,
+        panic_lvl,
+        err,
+    } = args;
+
+    ensure_missing("guard", guard)?;
+    ensure_missing("setup", setup)?;
+    ensure_missing("ok_lvl", ok_lvl)?;
+    ensure_missing("err_lvl", err_lvl)?;
+    ensure_missing("err", err)?;
+
+    let default_lvl_tokens = opts.level;
+    let panic_lvl_tokens = panic_lvl;
+
+    let rt_tokens = rt.to_tokens()?.to_ref_tokens();
+    let mdl_tokens = mdl.to_tokens();
+    let when_tokens = when
+        .to_tokens()
+        .map(|when| when.to_ref_tokens())
+        .to_option_tokens(quote!(&emit::Empty));
+
+    let ctxt_props_tokens = ctxt_props.props_tokens().to_ref_tokens();
+    let template_tokens = template.template_tokens().to_ref_tokens();
+    let span_name_tokens = template.template_literal_tokens();
+
+    let lvl_tokens = default_lvl_tokens
+        .map(|lvl| lvl.to_ref_tokens())
+        .to_option_tokens(quote!(&emit::Level));
+
+    let panic_lvl_tokens = panic_lvl_tokens
+        .map(|lvl| lvl.to_ref_tokens())
+        .to_option_tokens(quote!(&emit::Level));
+
+    Ok(quote!(
+        emit::__private::__private_begin_span(
+            #rt_tokens,
+            #mdl_tokens,
+            #span_name_tokens,
+            #lvl_tokens,
+            #when_tokens,
+            #ctxt_props_tokens,
+            emit::span::completion::from_fn(|span| {
+                emit::__private::__private_complete_span(
+                    #rt_tokens,
+                    span,
+                    #template_tokens,
+                    #lvl_tokens,
+                    #panic_lvl_tokens,
+                )
+            }),
+        )
+    ))
+}
+
+fn ensure_missing(name: &str, value: Option<impl Spanned>) -> Result<(), syn::Error> {
+    if let Some(value) = value {
+        return Err(syn::Error::new(
+            value.span(),
+            format!("the `{name}` control parameter is not supported"),
+        ));
+    }
+
+    Ok(())
+}
