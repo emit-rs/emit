@@ -77,8 +77,7 @@ Use the [`dbg!`](https://docs.rs/emit/0.11.0-alpha.21/emit/macro.dbg.html) macro
 ```rust
 # extern crate emit;
 # fn main() {
-let user = "user@example
-com";
+let user = "user@example.com";
 let id = 42;
 
 emit::dbg!(user, id);
