@@ -53,23 +53,6 @@ impl Parse for TplPartsArgs {
 }
 
 /**
-The `tpl_parts!` macro.
-*/
-pub fn expand_tpl_parts_tokens(opts: ExpandTplTokens) -> Result<TokenStream, syn::Error> {
-    let span = opts.input.span();
-
-    let (_, template, props) =
-        template::parse2::<TplPartsArgs>(opts.input, capture::default_fn_name, false)?;
-
-    let template =
-        template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;
-
-    validate_props(&props)?;
-
-    Ok(template.template_parts_tokens())
-}
-
-/**
 The `tpl!` macro.
 */
 pub fn expand_tpl_tokens(opts: ExpandTplTokens) -> Result<TokenStream, syn::Error> {

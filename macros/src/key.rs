@@ -15,7 +15,7 @@ pub fn key_with_hook(attrs: &[Attribute], key_expr: &ExprLit) -> TokenStream {
         #[allow(unused_imports)]
         {
             use emit::__private::__PrivateKeyHook as _;
-            emit::Str::new(#key_expr).__private_key_as_default()
+            emit::__private::Key(#key_expr).__private_key_as_default()
         }
     )
 }
@@ -81,7 +81,7 @@ pub fn rename_hook_tokens(opts: RenameHookTokens) -> Result<TokenStream, syn::Er
         predicate: |ident: &str| ident.starts_with("__private_key"),
         to: move |args: &Args, _: &Ident, _: &Punctuated<Expr, Comma>| {
             let (to_ident, to_arg) = match args.name {
-                Name::Str(ref name) => (quote!(__private_key_as_static), quote!(#name)),
+                Name::Str(ref name) => (quote!(__private_key_as), quote!(#name)),
                 Name::Any(ref name) => (quote!(__private_key_as), name.clone()),
             };
 

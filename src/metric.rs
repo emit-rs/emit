@@ -35,6 +35,7 @@ pub struct Metric<'a, P> {
     name: Str<'a>,
     agg: Str<'a>,
     extent: Option<Extent>,
+    tpl: Option<Template<'a>>,
     value: Value<'a>,
     props: P,
 }
@@ -63,6 +64,7 @@ impl<'a, P> Metric<'a, P> {
         Metric {
             mdl: mdl.into(),
             extent: extent.to_extent(),
+            tpl: None,
             name: name.into(),
             agg: agg.into(),
             value: value.into(),
@@ -171,6 +173,21 @@ impl<'a, P> Metric<'a, P> {
     }
 
     /**
+    Get the template that will be used to render the metric.
+    */
+    pub fn tpl(&self) -> &Template<'a> {
+        self.tpl.as_ref().unwrap_or(&TEMPLATE)
+    }
+
+    /**
+    Set the template of the metric.
+    */
+    pub fn with_tpl(mut self, tpl: impl Into<Template<'a>>) -> Self {
+        self.tpl = Some(tpl.into());
+        self
+    }
+
+    /**
     Get the additional properties associated with the sample.
     */
     pub fn props(&self) -> &P {
@@ -184,6 +201,7 @@ impl<'a, P> Metric<'a, P> {
         Metric {
             mdl: self.mdl,
             extent: self.extent,
+            tpl: self.tpl,
             name: self.name,
             agg: self.agg,
             value: self.value,
@@ -199,18 +217,9 @@ impl<'a, P: Props> ToEvent for Metric<'a, P> {
         Self: 'b;
 
     fn to_event<'b>(&'b self) -> Event<'b, Self::Props<'b>> {
-        // "{metric_agg} of {metric_name} is {metric_value}"
-        const TEMPLATE: &'static [template::Part<'static>] = &[
-            template::Part::hole("metric_agg"),
-            template::Part::text(" of "),
-            template::Part::hole("metric_name"),
-            template::Part::text(" is "),
-            template::Part::hole("metric_value"),
-        ];
-
         Event::new(
             self.mdl.by_ref(),
-            Template::new(TEMPLATE),
+            self.tpl().by_ref(),
             self.extent.clone(),
             self,
         )
@@ -225,6 +234,7 @@ impl<'a, P: Props> Metric<'a, P> {
         Metric {
             mdl: self.mdl.by_ref(),
             extent: self.extent.clone(),
+            tpl: self.tpl.as_ref().map(|tpl| tpl.by_ref()),
             name: self.name.by_ref(),
             agg: self.agg.by_ref(),
             value: self.value.by_ref(),
@@ -239,6 +249,7 @@ impl<'a, P: Props> Metric<'a, P> {
         Metric {
             mdl: self.mdl.by_ref(),
             extent: self.extent.clone(),
+            tpl: self.tpl.as_ref().map(|tpl| tpl.by_ref()),
             name: self.name.by_ref(),
             agg: self.agg.by_ref(),
             value: self.value.by_ref(),
@@ -266,6 +277,17 @@ impl<'a, P: Props> Props for Metric<'a, P> {
         self.props.for_each(for_each)
     }
 }
+
+// "{metric_agg} of {metric_name} is {metric_value}"
+const TEMPLATE_PARTS: &'static [template::Part<'static>] = &[
+    template::Part::hole("metric_agg"),
+    template::Part::text(" of "),
+    template::Part::hole("metric_name"),
+    template::Part::text(" is "),
+    template::Part::hole("metric_value"),
+];
+
+static TEMPLATE: Template<'static> = Template::new(TEMPLATE_PARTS);
 
 pub mod source {
     /*!
@@ -1135,6 +1157,25 @@ mod tests {
         assert_eq!(
             Kind::Metric,
             evt.props().pull::<Kind, _>(KEY_EVT_KIND).unwrap()
+        );
+    }
+
+    #[test]
+    fn metric_to_event_uses_tpl() {
+        assert_eq!(
+            "test",
+            Metric::new(
+                Path::new_raw("test"),
+                "my metric",
+                "count",
+                Timestamp::from_unix(Duration::from_secs(1)),
+                42,
+                ("metric_prop", true),
+            )
+            .with_tpl(Template::literal("test"))
+            .to_event()
+            .msg()
+            .to_string(),
         );
     }
 

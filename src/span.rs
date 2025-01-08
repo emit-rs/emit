@@ -456,6 +456,7 @@ pub struct Span<'a, P> {
     mdl: Path<'a>,
     name: Str<'a>,
     extent: Option<Extent>,
+    tpl: Option<Template<'a>>,
     props: P,
 }
 
@@ -480,6 +481,7 @@ impl<'a, P: Props> Span<'a, P> {
             mdl: mdl.into(),
             extent: extent.to_extent(),
             name: name.into(),
+            tpl: None,
             props,
         }
     }
@@ -492,6 +494,14 @@ impl<'a, P: Props> Span<'a, P> {
     }
 
     /**
+    Set the module of the span.
+    */
+    pub fn with_mdl(mut self, mdl: impl Into<Path<'a>>) -> Self {
+        self.mdl = mdl.into();
+        self
+    }
+
+    /**
     Get the name of the operation.
     */
     pub fn name(&self) -> &Str<'a> {
@@ -499,10 +509,26 @@ impl<'a, P: Props> Span<'a, P> {
     }
 
     /**
+    Set the name of the span.
+    */
+    pub fn with_name(mut self, name: impl Into<Str<'a>>) -> Self {
+        self.name = name.into();
+        self
+    }
+
+    /**
     Get the time the operation spent executing.
     */
     pub fn extent(&self) -> Option<&Extent> {
         self.extent.as_ref()
+    }
+
+    /**
+    Set the extent of the span.
+    */
+    pub fn with_extent(mut self, extent: impl ToExtent) -> Self {
+        self.extent = extent.to_extent();
+        self
     }
 
     /**
@@ -534,6 +560,34 @@ impl<'a, P: Props> Span<'a, P> {
     }
 
     /**
+    Set the properties of the span.
+    */
+    pub fn with_props<U>(self, props: U) -> Span<'a, U> {
+        Span {
+            mdl: self.mdl,
+            extent: self.extent,
+            name: self.name,
+            tpl: self.tpl,
+            props,
+        }
+    }
+
+    /**
+    Get the template that will be used to render the span.
+    */
+    pub fn tpl(&self) -> &Template<'a> {
+        self.tpl.as_ref().unwrap_or(&END_TEMPLATE)
+    }
+
+    /**
+    Set the template of the span.
+    */
+    pub fn with_tpl(mut self, tpl: impl Into<Template<'a>>) -> Self {
+        self.tpl = Some(tpl.into());
+        self
+    }
+
+    /**
     Get a type-erased span, borrowing data from this one.
     */
     pub fn erase<'b>(&'b self) -> Span<'b, &'b dyn ErasedProps> {
@@ -541,22 +595,27 @@ impl<'a, P: Props> Span<'a, P> {
             mdl: self.mdl.by_ref(),
             extent: self.extent.clone(),
             name: self.name.by_ref(),
+            tpl: self.tpl.as_ref().map(|tpl| tpl.by_ref()),
             props: &self.props,
         }
     }
 }
 
 // "{span_name} started"
-const START_TEMPLATE: &'static [template::Part<'static>] = &[
+const START_TEMPLATE_PARTS: &'static [template::Part<'static>] = &[
     template::Part::hole("span_name"),
     template::Part::text(" started"),
 ];
 
+static START_TEMPLATE: Template<'static> = Template::new(&START_TEMPLATE_PARTS);
+
 // "{span_name} completed"
-const END_TEMPLATE: &'static [template::Part<'static>] = &[
+const END_TEMPLATE_PARTS: &'static [template::Part<'static>] = &[
     template::Part::hole("span_name"),
     template::Part::text(" completed"),
 ];
+
+static END_TEMPLATE: Template<'static> = Template::new(&END_TEMPLATE_PARTS);
 
 impl<'a, P: Props> ToEvent for Span<'a, P> {
     type Props<'b>
@@ -567,7 +626,7 @@ impl<'a, P: Props> ToEvent for Span<'a, P> {
     fn to_event<'b>(&'b self) -> Event<'b, Self::Props<'b>> {
         Event::new(
             self.mdl.by_ref(),
-            Template::new(END_TEMPLATE),
+            self.tpl().by_ref(),
             self.extent.clone(),
             &self,
         )
@@ -825,7 +884,7 @@ impl<'a, T: Clock, P: Props, F: Completion> ActiveSpan<'a, T, P, F> {
                         .and_props(current_ctxt_props),
                 )
                 .to_event()
-                .with_tpl(Template::new(START_TEMPLATE)),
+                .with_tpl(START_TEMPLATE.by_ref()),
             )
         });
 
@@ -907,12 +966,18 @@ pub mod completion {
     */
 
     use emit_core::{
+        ctxt::Ctxt,
         emitter::Emitter,
         empty::Empty,
+        event::ToEvent,
         props::{ErasedProps, Props},
+        value::{ToValue, Value},
+        well_known::{KEY_ERR, KEY_LVL},
     };
 
-    use crate::span::Span;
+    use crate::{level::Level, span::Span};
+
+    use core::fmt;
 
     /**
     A receiver of [`Span`]s as they're completed by [`crate::span::ActiveSpan`]s.
@@ -932,6 +997,147 @@ pub mod completion {
 
     impl Completion for Empty {
         fn complete<P: Props>(&self, _: Span<P>) {}
+    }
+
+    /**
+    A default [`Completion`] that emits spans through an [`Emitter`].
+
+    This type is a more sophisticated variant of [`FromEmitter`] that will:
+
+    - Include ambient context from `C` on span events.
+    - Detect panics and assign an error if it observes one.
+
+    This type can be created directly, or via [`default`].
+    */
+    pub struct Default<E, C, L = Level> {
+        emitter: E,
+        ctxt: C,
+        lvl: Option<L>,
+        panic_lvl: Option<L>,
+    }
+
+    impl<E: Emitter, C: Ctxt, L: ToValue> Completion for Default<E, C, L> {
+        fn complete<P: Props>(&self, span: Span<P>) {
+            struct PanicError;
+
+            impl fmt::Debug for PanicError {
+                fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                    fmt::Display::fmt(self, f)
+                }
+            }
+
+            impl fmt::Display for PanicError {
+                fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                    write!(f, "panicked")
+                }
+            }
+
+            #[cfg(feature = "std")]
+            impl std::error::Error for PanicError {}
+
+            impl ToValue for PanicError {
+                fn to_value(&self) -> Value {
+                    #[cfg(feature = "std")]
+                    {
+                        Value::capture_error(self)
+                    }
+                    #[cfg(not(feature = "std"))]
+                    {
+                        Value::capture_display(self)
+                    }
+                }
+            }
+
+            fn is_panicking() -> bool {
+                #[cfg(feature = "std")]
+                {
+                    std::thread::panicking()
+                }
+                #[cfg(not(feature = "std"))]
+                {
+                    false
+                }
+            }
+
+            let completion_props = if is_panicking() {
+                [
+                    self.panic_lvl
+                        .as_ref()
+                        .map(|lvl| Value::from_any(lvl))
+                        .or_else(|| Some(Value::from_any(&Level::Error)))
+                        .map(|lvl| (KEY_LVL, lvl)),
+                    Some((KEY_ERR, Value::from_any(&PanicError))),
+                ]
+            } else {
+                [
+                    self.lvl
+                        .as_ref()
+                        .map(|lvl| Value::from_any(lvl))
+                        .map(|lvl| (KEY_LVL, lvl)),
+                    None,
+                ]
+            };
+
+            emit_core::emit(
+                &self.emitter,
+                Empty,
+                &self.ctxt,
+                Empty,
+                span.to_event()
+                    .map_props(|span_props| completion_props.and_props(span_props)),
+            );
+        }
+    }
+
+    impl<E, C, L> Default<E, C, L> {
+        /**
+        Wrap the given emitter and context.
+        */
+        pub const fn new(emitter: E, ctxt: C) -> Self {
+            Default {
+                emitter,
+                ctxt,
+                lvl: None,
+                panic_lvl: None,
+            }
+        }
+
+        /**
+        A level to assign to the span on completion.
+
+        If the completion is called outside of a panic, this level will be used.
+        */
+        pub fn with_lvl(self, lvl: L) -> Self {
+            Default {
+                emitter: self.emitter,
+                ctxt: self.ctxt,
+                lvl: Some(lvl),
+                panic_lvl: self.panic_lvl,
+            }
+        }
+
+        /**
+        A level to assign to the span on completion during a panic.
+        */
+        pub fn with_panic_lvl(self, lvl: L) -> Self {
+            Default {
+                emitter: self.emitter,
+                ctxt: self.ctxt,
+                lvl: self.lvl,
+                panic_lvl: Some(lvl),
+            }
+        }
+    }
+
+    /**
+    Create a default [`Completion`] from an [`Emitter`] and [`Ctxt`].
+
+    On completion, a [`Span`] will be emitted as an event using [`Span::to_event`].
+
+    If the completion is called during a panic, it will attach an error to the span.
+    */
+    pub const fn default<E: Emitter, C: Ctxt>(emitter: E, ctxt: C) -> Default<E, C> {
+        Default::new(emitter, ctxt)
     }
 
     /**
@@ -1046,7 +1252,7 @@ pub mod completion {
         use super::*;
         use std::cell::Cell;
 
-        use emit_core::path::Path;
+        use emit_core::{emitter, path::Path};
 
         #[test]
         fn from_fn_completion() {
@@ -1076,6 +1282,100 @@ pub mod completion {
             let completion = &completion as &dyn ErasedCompletion;
 
             completion.complete(Span::new(Path::new_raw("test"), "test", Empty, Empty));
+
+            assert!(called.get());
+        }
+
+        #[test]
+        fn default_completion() {
+            let called = Cell::new(false);
+
+            let completion = default(
+                emitter::from_fn(|_| {
+                    called.set(true);
+                }),
+                Empty,
+            );
+
+            completion.complete(Span::new(Path::new_raw("test"), "test", Empty, Empty));
+
+            assert!(called.get());
+        }
+
+        #[test]
+        fn default_completion_uses_lvl() {
+            let called = Cell::new(false);
+
+            let completion = default(
+                emitter::from_fn(|evt| {
+                    assert_eq!(Level::Info, evt.props().pull("lvl").unwrap());
+
+                    called.set(true);
+                }),
+                Empty,
+            )
+            .with_lvl(Level::Info);
+
+            completion.complete(Span::new(Path::new_raw("test"), "test", Empty, Empty));
+
+            assert!(called.get());
+        }
+
+        #[cfg(feature = "std")]
+        struct Guard<T: Completion>(T);
+
+        #[cfg(feature = "std")]
+        impl<T: Completion> Drop for Guard<T> {
+            fn drop(&mut self) {
+                self.0
+                    .complete(Span::new(Path::new_raw("test"), "test", Empty, Empty));
+            }
+        }
+
+        #[test]
+        #[cfg(feature = "std")]
+        fn default_completion_detects_panics() {
+            let called = Cell::new(false);
+
+            let completion = default(
+                emitter::from_fn(|evt| {
+                    assert_eq!(Level::Error, evt.props().pull("lvl").unwrap());
+                    assert!(evt.props().get("err").is_some());
+
+                    called.set(true);
+                }),
+                Empty,
+            );
+
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+                let _guard = Guard(completion);
+
+                panic!("explicit panic")
+            }));
+
+            assert!(called.get());
+        }
+
+        #[test]
+        #[cfg(feature = "std")]
+        fn default_completion_uses_panic_lvl() {
+            let called = Cell::new(false);
+
+            let completion = default(
+                emitter::from_fn(|evt| {
+                    assert_eq!(Level::Warn, evt.props().pull("lvl").unwrap());
+
+                    called.set(true);
+                }),
+                Empty,
+            )
+            .with_panic_lvl(Level::Warn);
+
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+                let _guard = Guard(completion);
+
+                panic!("explicit panic")
+            }));
 
             assert!(called.get());
         }
@@ -1360,6 +1660,23 @@ mod tests {
         assert_eq!(
             Kind::Span,
             evt.props().pull::<Kind, _>(KEY_EVT_KIND).unwrap()
+        );
+    }
+
+    #[test]
+    fn span_to_event_uses_tpl() {
+        assert_eq!(
+            "test",
+            Span::new(
+                Path::new_raw("test"),
+                "my span",
+                Timestamp::from_unix(Duration::from_secs(1)),
+                ("span_prop", true),
+            )
+            .with_tpl(Template::literal("test"))
+            .to_event()
+            .msg()
+            .to_string(),
         );
     }
 

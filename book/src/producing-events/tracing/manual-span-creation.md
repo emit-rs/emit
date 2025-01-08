@@ -19,7 +19,7 @@ let (span, frame) = emit::span::ActiveSpan::start(
     emit::rng(),
     // 1. What to do with the span when the guard completes
     //    Typically you'll want to emit it
-    emit::span::completion::from_fn(|evt| emit::emit!(evt)),
+    emit::span::completion::default(emit::emitter(), emit::ctxt()),
     // Any properties to put in the ambient context
     // This doesn't need to include any span or trace ids unless you want to
     // override whatever `ActiveSpan` generates for you
