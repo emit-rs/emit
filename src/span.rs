@@ -817,7 +817,7 @@ Call [`SpanGuard::complete_with`], or just drop the guard to complete it, passin
 
 ## Creating active spans manually
 
-The [`SpanGuard::new`] method can be used to construct an `SpanGuard` and [`Frame`] manually.
+The [`SpanGuard::new`] method can be used to construct a `SpanGuard` and [`Frame`] manually.
 
 Call [`SpanGuard::start`] in the closure of [`Frame::call`] or async block of [`Frame::in_future`] on the returned [`Frame`] to begin the span. Once the span is started, it will complete automatically on drop, or manually through [`SpanGuard::complete`].
 
@@ -877,7 +877,7 @@ impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
     - A [`SpanCtxt`] for the span is generated using [`SpanCtxt::new_child`].
     - The filter is checked to see if the span should be enabled or disabled. The event passed to the filter is a [`Span`] carrying the generated span context, but without an extent.
 
-    This method returns a tuple of an `SpanGuard` for starting and completing the span, and a [`Frame`] carrying the generated [`SpanCtxt`] and `ctxt_props`.
+    This method returns a tuple of a `SpanGuard` for starting and completing the span, and a [`Frame`] carrying the generated [`SpanCtxt`] and `ctxt_props`.
 
     Call [`SpanGuard::start`] in the closure of [`Frame::call`] or async block of [`Frame::in_future`] on the returned [`Frame`] to begin the span. Once the span is started, it will complete automatically on drop, or manually through [`SpanGuard::complete`].
 

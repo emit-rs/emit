@@ -2,7 +2,7 @@
 
 ## Creating `SpanGuard`s
 
-The `#[span]` attribute [includes a `guard` control parameter](./manual-span-completion.md) that gives you access to an [`SpanGuard`](https://docs.rs/emit/0.11.1/emit/span/struct.SpanGuard.html) to manually complete it. The `#[span]` attribute takes care of constructing the `SpanGuard` for you and ensuring any ambient span properties are active in the body of your annotated function.
+The `#[span]` attribute [includes a `guard` control parameter](./manual-span-completion.md) that gives you access to a [`SpanGuard`](https://docs.rs/emit/0.11.1/emit/span/struct.SpanGuard.html) to manually complete it. The `#[span]` attribute takes care of constructing the `SpanGuard` for you and ensuring any ambient span properties are active in the body of your annotated function.
 
 You can also create `SpanGuard`s manually if you can't or don't want to use the `#[span]` attribute:
 
@@ -25,9 +25,9 @@ The syntax accepted by the `new_span!` macro is the same as the [`#[span]`](http
 
 Using `SpanGuard`s is the recommended way to trace code with `emit`. It applies filtering for you, so the span is only created if it matches the configured filter. It also ensures a span is emitted even if the traced code panics or otherwise returns without explicitly completing.
 
-## Creating spans without an `SpanGuard`
+## Creating spans without a `SpanGuard`
 
-In cases where sampling or filtering aren't used, or when execution of a single span is split across multiple functions, you can create spans without using an `SpanGuard`:
+In cases where sampling or filtering aren't used, or when execution of a single span is split across multiple functions, you can create spans without using a `SpanGuard`:
 
 ```rust
 # extern crate emit;
