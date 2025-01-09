@@ -5,11 +5,11 @@ edition = "2021"
 publish = false
 
 [dependencies.emit]
-version = "0.11.1"
+version = "0.11.2"
 path = "../../"
 
 [dependencies.emit_otlp]
-version = "0.11.1"
+version = "0.11.2"
 path = "../../emitter/otlp"
 
 [dependencies.rand]
