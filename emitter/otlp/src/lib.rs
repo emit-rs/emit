@@ -36,10 +36,10 @@ Add `emit` and `emit_otlp` to your `Cargo.toml`:
 
 ```toml
 [dependencies.emit]
-version = "0.11.1"
+version = "0.11.2"
 
 [dependencies.emit_otlp]
-version = "0.11.1"
+version = "0.11.2"
 ```
 
 Initialize `emit` at the start of your `main.rs` using an OTLP emitter:

@@ -480,7 +480,7 @@ pub fn error_span(
 /**
 Start a span.
 
-See the [`SpanGuard::new`](https://docs.rs/emit/0.11.1/emit/span/struct.SpanGuard.html#method.new) for details on starting and completing the returned span.
+See the [`SpanGuard::new`](https://docs.rs/emit/0.11.2/emit/span/struct.SpanGuard.html#method.new) for details on starting and completing the returned span.
 
 # Syntax
 
