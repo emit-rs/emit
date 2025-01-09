@@ -3,7 +3,7 @@ This example demonstrates how to construct a span manually, without using `#[spa
 
 It can be useful in applications that use disconnected middleware that makes it difficult to pick a single point to introduce `#[span]` to.
 
-This example differs from `span_manual_creation` by not using any `ActiveSpan` guard type to manage the span's creation or completion.
+This example differs from `span_manual_creation` by not using any `SpanGuard` guard type to manage the span's creation or completion.
 */
 
 use std::time::Duration;

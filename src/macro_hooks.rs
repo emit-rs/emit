@@ -28,7 +28,7 @@ use crate::{frame::Frame, span::Span};
 use std::error::Error;
 
 use crate::{
-    span::{self, ActiveSpan, Completion, SpanId, TraceId},
+    span::{self, Completion, SpanGuard, SpanId, TraceId},
     Level,
 };
 
@@ -833,12 +833,12 @@ pub fn __private_begin_span<
     when: Option<&'b (impl Filter + ?Sized)>,
     span_ctxt_props: &'b (impl Props + ?Sized),
     default_complete: S,
-) -> (ActiveSpan<'static, &'a T, Empty, S>, Frame<&'a C>) {
+) -> (SpanGuard<'static, &'a T, Empty, S>, Frame<&'a C>) {
     let mdl = mdl.into();
     let name = name.into();
     let lvl_prop = lvl.and_then(|lvl| lvl.capture()).map(|lvl| (KEY_LVL, lvl));
 
-    ActiveSpan::new(
+    SpanGuard::new(
         filter::from_fn(|evt| {
             FirstDefined(when, rt.filter())
                 .matches(evt.map_props(|props| props.and_props(&lvl_prop)))

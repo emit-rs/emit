@@ -58,8 +58,8 @@ Event {
 
 Take care when completing spans manually that they always match the configured filter. This can be done using the `when` control parameter like in the above example. If a span is created it _must_ be emitted, otherwise the resulting trace will be incomplete.
 
-## Completing `ActiveSpan`s with `Completion`s
+## Completing `SpanGuard`s with `Completion`s
 
-The type of the identifier bound by `guard` is an [`ActiveSpan`](https://docs.rs/emit/0.11.1/emit/span/struct.ActiveSpan.html). When the guard goes out of scope or is manually completed, it constructs a [`Span`](https://docs.rs/emit/0.11.1/emit/span/struct.Span.html) and passes it to a [`Completion`](https://docs.rs/emit/0.11.1/emit/span/completion/trait.Completion.html). A completion that emits the span will be used by default, but a different completion can also be passed to [`complete_with`](https://docs.rs/emit/0.11.1/emit/span/struct.ActiveSpan.html#method.complete_with).
+The type of the identifier bound by `guard` is a [`SpanGuard`](https://docs.rs/emit/0.11.1/emit/span/struct.SpanGuard.html). When the guard goes out of scope or is manually completed, it constructs a [`Span`](https://docs.rs/emit/0.11.1/emit/span/struct.Span.html) and passes it to a [`Completion`](https://docs.rs/emit/0.11.1/emit/span/completion/trait.Completion.html). A completion that emits the span will be used by default, but a different completion can also be passed to [`complete_with`](https://docs.rs/emit/0.11.1/emit/span/struct.SpanGuard.html#method.complete_with).
 
 Completions can be created using the [`completion::from_fn`](https://docs.rs/emit/0.11.1/emit/span/completion/fn.from_fn.html) function, or by implementing the [`Completion`](https://docs.rs/emit/0.11.1/emit/span/completion/trait.Completion.html) trait.
