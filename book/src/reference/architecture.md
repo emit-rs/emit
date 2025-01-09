@@ -238,7 +238,7 @@ flowchart
 
     clock{{"`<code>Clock::now</code>`"}} --> ts["`<code>Timestamp</code>`"] --> extent["`<code>Extent::point</code>`"]
 
-    mdl_path["`<code>module_path!()</code>`"] --> mdl["`<code>Path('a::b::c')</code>`"]
+    mdl_path["`<code>mdl!()</code>`"] --> mdl["`<code>Path('a::b::c')</code>`"]
 
     event["`<code>Event</code>`"]
     props -- props --> event
@@ -283,3 +283,87 @@ When constructing an event, the runtime provides the current timestamp and any a
 Once an event is constructed, it no longer distinguishes properties attached directly from properties added by the ambient context.
 
 You don't need to use macros to construct events. You can also do it manually to get more control over the data they contain.
+
+## Span construction and emission
+
+When the [`span!`](https://docs.rs/emit/0.11.1/emit/attr.span.html) macro is called, the annotated function is instrumented using features of the runtime before being emitted through it. This is how it works:
+
+```mermaid
+flowchart
+    start((start)) --> macro["`<code>#[span('a {x}', y)]</code>`"]
+
+    macro --> tpl["`<code>Template('a {x}')</code>`"]
+    macro --> macro_props["`<code>Props { x, y }</code>`"]
+
+    ctxt{{"`<code>Ctxt</code>`"}}
+
+    span_ctxt["`<code>SpanCtxt</code>`"]
+
+    rng{{"`<code>Rng</code>`"}} -- new_child --> span_ctxt
+    ctxt -- current --> span_ctxt
+
+    clock{{"`<code>Clock</code>`"}} --> timer["`<code>Timer::start</code>`"]
+
+    emitter{{"`<code>Emitter</code>`"}}
+
+    completion["`<code>completion::Default</code>`"]
+    tpl --> completion
+    emitter --> completion
+    ctxt_2{{"`<code>Ctxt</code>`"}} --> completion
+
+    frame["`<code>Frame</code>`"]
+    ctxt --> frame
+    macro_props -- push --> frame
+    span_ctxt -- push --> frame
+
+    filter{"`<code>Filter::matches</code>`"}
+
+    timer --> active_span
+
+    active_span["`<code>ActiveSpan</code>`"]
+
+    active_span --> filter
+    frame --> filter
+
+    filter -- false --> filter_no(((disabled)))
+
+    filter -- true --> active_span_2
+    filter -- true --> frame_2
+
+    frame_2["<code>Frame::call</code>"]
+
+    active_span_2["`<code>ActiveSpan::complete</code>`"] -- produces --> span["`<code>Span</code>`"] --> completion
+    
+    completion --> END(((end)))
+
+    click macro href "https://docs.rs/emit/0.11.1/emit/attr.span.html"
+
+    click tpl href "https://docs.rs/emit/0.11.1/emit/struct.Template.html"
+
+    click macro_props href "https://docs.rs/emit/0.11.1/emit/trait.Props.html"
+
+    click span_ctxt href "https://docs.rs/emit/0.11.1/emit/span/struct.SpanCtxt.html"
+    click span href "https://docs.rs/emit/0.11.1/emit/span/struct.Span.html"
+    click timer href "https://docs.rs/emit/0.11.1/emit/timer/struct.Timer.html"
+
+    click frame href "https://docs.rs/emit/0.11.1/emit/frame/struct.Frame.html"
+    click frame_2 href "https://docs.rs/emit/0.11.1/emit/frame/struct.Frame.html"
+
+    click active_span href "https://docs.rs/emit/0.11.1/emit/span/struct.ActiveSpan.html"
+    click active_span_2 href "https://docs.rs/emit/0.11.1/emit/span/struct.ActiveSpan.html"
+
+    click completion href "https://docs.rs/emit/0.11.1/emit/span/completion/struct.Default.html"
+
+    click emitter href "https://docs.rs/emit/0.11.1/emit/trait.Emitter.html"
+    click filter href "https://docs.rs/emit/0.11.1/emit/trait.Filter.html"
+    click ctxt href "https://docs.rs/emit/0.11.1/emit/trait.Ctxt.html"
+    click ctxt_2 href "https://docs.rs/emit/0.11.1/emit/trait.Ctxt.html"
+    click clock href "https://docs.rs/emit/0.11.1/emit/trait.Clock.html"
+    click rng href "https://docs.rs/emit/0.11.1/emit/trait.Rng.html"
+```
+
+When constructing a span, the runtime generates random trace and span ids from the current ambient context and starts a timer using the clock.
+
+If the runtime filter doesn't match an event representing the start of the span then it's disabled and won't be completed. If it does, an active span guard managing the completion of the span, and a frame containing its ambient trace and span ids are constructed.
+
+At the end of the annotated function, the active span guard is completed, constructing a span event and passing it to its configured completion. From there, the event can be emitted back through the runtime.
