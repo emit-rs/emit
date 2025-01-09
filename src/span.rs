@@ -813,57 +813,62 @@ This type is created by the [`macro@crate::span!`] macro with the `guard` contro
 
 
 
-Call [`ActiveSpan::complete_with`], or just drop the guard to complete it, passing the resulting [`Span`] to a [`Completion`].
+Call [`SpanGuard::complete_with`], or just drop the guard to complete it, passing the resulting [`Span`] to a [`Completion`].
 
 ## Creating active spans manually
 
-The [`ActiveSpan::new`] method can be used to construct an `ActiveSpan` and [`Frame`] manually.
+The [`SpanGuard::new`] method can be used to construct an `SpanGuard` and [`Frame`] manually.
 
-Call [`ActiveSpan::start`] in the closure of [`Frame::call`] or async block of [`Frame::in_future`] on the returned [`Frame`] to begin the span. Once the span is started, it will complete automatically on drop, or manually through [`ActiveSpan::complete`].
+Call [`SpanGuard::start`] in the closure of [`Frame::call`] or async block of [`Frame::in_future`] on the returned [`Frame`] to begin the span. Once the span is started, it will complete automatically on drop, or manually through [`SpanGuard::complete`].
 
-**Make sure you pass ownership of the returned `ActiveSpan` into the closure in [`Frame::call`] or async block in [`Frame::in_future`]**. If you don't, the span will complete early, without its ambient context.
+**Make sure you pass ownership of the returned `SpanGuard` into the closure in [`Frame::call`] or async block in [`Frame::in_future`]**. If you don't, the span will complete early, without its ambient context.
 */
-pub struct ActiveSpan<'a, T: Clock, P: Props, F: Completion> {
-    state: ActiveSpanState<T>,
+pub struct SpanGuard<'a, T: Clock, P: Props, F: Completion> {
+    state: SpanGuardState<T>,
     // `data` is `None` if the span is completed
-    data: Option<ActiveSpanData<'a, P>>,
+    data: Option<SpanGuardData<'a, P>>,
     // `completion` is `None` if the span is disabled
     completion: Option<F>,
 }
 
-struct ActiveSpanData<'a, P: Props> {
+// NOTE: Deprecated; will be removed in `1.0.0`
+#[doc(hidden)]
+#[deprecated(note = "use `SpanGuard` instead")]
+pub type ActiveSpan<'a, T, P, F> = SpanGuard<'a, T, P, F>;
+
+struct SpanGuardData<'a, P: Props> {
     mdl: Path<'a>,
     name: Str<'a>,
     ctxt: SpanCtxt,
     props: P,
 }
 
-enum ActiveSpanState<T: Clock> {
+enum SpanGuardState<T: Clock> {
     Initial(T),
     Started(Timer<T>),
     Completed,
 }
 
-impl<T: Clock> ActiveSpanState<T> {
+impl<T: Clock> SpanGuardState<T> {
     fn take(&mut self) -> Self {
-        mem::replace(self, ActiveSpanState::Completed)
+        mem::replace(self, SpanGuardState::Completed)
     }
 }
 
-impl<'a, T: Clock, P: Props, F: Completion> Drop for ActiveSpan<'a, T, P, F> {
+impl<'a, T: Clock, P: Props, F: Completion> Drop for SpanGuard<'a, T, P, F> {
     fn drop(&mut self) {
         self.complete_default();
     }
 }
 
-impl<'a, T: Clock, P: Props, F: Completion> ActiveSpan<'a, T, P, F> {
+impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
     /**
     Create a new active span.
 
     This method takes a number of parameters to construct a span. They are:
 
     - `filter`, `ctxt`, `clock`, `rng`: These typically come from a [`crate::runtime::Runtime`], like [`crate::runtime::shared`].
-    - `completion`: A [`Completion`] that will be used by default when the returned `ActiveSpan` is completed.
+    - `completion`: A [`Completion`] that will be used by default when the returned `SpanGuard` is completed.
     - `ctxt_props`: A set of [`Props`] that will be pushed to the ambient context.
     - `span_mdl`, `span_name`, `span_props`: The input parameters to [`Span::new`] used to construct a span when the guard is completed.
 
@@ -872,11 +877,11 @@ impl<'a, T: Clock, P: Props, F: Completion> ActiveSpan<'a, T, P, F> {
     - A [`SpanCtxt`] for the span is generated using [`SpanCtxt::new_child`].
     - The filter is checked to see if the span should be enabled or disabled. The event passed to the filter is a [`Span`] carrying the generated span context, but without an extent.
 
-    This method returns a tuple of an `ActiveSpan` for starting and completing the span, and a [`Frame`] carrying the generated [`SpanCtxt`] and `ctxt_props`.
+    This method returns a tuple of an `SpanGuard` for starting and completing the span, and a [`Frame`] carrying the generated [`SpanCtxt`] and `ctxt_props`.
 
-    Call [`ActiveSpan::start`] in the closure of [`Frame::call`] or async block of [`Frame::in_future`] on the returned [`Frame`] to begin the span. Once the span is started, it will complete automatically on drop, or manually through [`ActiveSpan::complete`].
+    Call [`SpanGuard::start`] in the closure of [`Frame::call`] or async block of [`Frame::in_future`] on the returned [`Frame`] to begin the span. Once the span is started, it will complete automatically on drop, or manually through [`SpanGuard::complete`].
 
-    **Make sure you pass ownership of the returned `ActiveSpan` into the closure in [`Frame::call`] or async block in [`Frame::in_future`]**. If you don't, the span will complete early, without its ambient context.
+    **Make sure you pass ownership of the returned `SpanGuard` into the closure in [`Frame::call`] or async block in [`Frame::in_future`]**. If you don't, the span will complete early, without its ambient context.
     */
     pub fn new<C: Ctxt>(
         filter: impl Filter,
@@ -914,9 +919,9 @@ impl<'a, T: Clock, P: Props, F: Completion> ActiveSpan<'a, T, P, F> {
         // Create a guard for the span
         // This can be completed automatically by dropping
         // or manually through the `complete` method
-        let guard = ActiveSpan {
-            state: ActiveSpanState::Initial(clock),
-            data: Some(ActiveSpanData {
+        let guard = SpanGuard {
+            state: SpanGuardState::Initial(clock),
+            data: Some(SpanGuardData {
                 mdl: span_mdl,
                 ctxt: span_ctxt,
                 name: span_name,
@@ -945,36 +950,36 @@ impl<'a, T: Clock, P: Props, F: Completion> ActiveSpan<'a, T, P, F> {
     /**
     Start the span.
 
-    From this point the span can be completed by either dropping this value, or by calling [`ActiveSpan::complete`].
+    From this point the span can be completed by either dropping this value, or by calling [`SpanGuard::complete`].
     */
     pub fn start(&mut self) {
-        let state = mem::replace(&mut self.state, ActiveSpanState::Completed);
+        let state = mem::replace(&mut self.state, SpanGuardState::Completed);
 
-        let ActiveSpanState::Initial(clock) = state else {
+        let SpanGuardState::Initial(clock) = state else {
             self.state = state;
             return;
         };
 
-        self.state = ActiveSpanState::Started(Timer::start(clock));
+        self.state = SpanGuardState::Started(Timer::start(clock));
     }
 
     /**
     Whether the span will call its completion.
 
-    If the filter called in [`ActiveSpan::start`] evaluated to `false` then this method will also return `false`.
+    If the filter called in [`SpanGuard::start`] evaluated to `false` then this method will also return `false`.
     */
     pub fn is_enabled(&self) -> bool {
         self.completion.is_some()
     }
 
     /**
-    Set the default completion that will be called when the span is dropped or [`ActiveSpan::complete`] is called.
+    Set the default completion that will be called when the span is dropped or [`SpanGuard::complete`] is called.
     */
-    pub fn with_completion<U: Completion>(mut self, completion: U) -> ActiveSpan<'a, T, P, U> {
+    pub fn with_completion<U: Completion>(mut self, completion: U) -> SpanGuard<'a, T, P, U> {
         // Ensure this guard won't complete on drop
         self.completion.take();
 
-        ActiveSpan {
+        SpanGuard {
             state: self.state.take(),
             data: self.data.take(),
             completion: Some(completion),
@@ -1004,22 +1009,22 @@ impl<'a, T: Clock, P: Props, F: Completion> ActiveSpan<'a, T, P, F> {
     /**
     Set the properties of the span.
     */
-    pub fn with_props<U: Props>(self, props: U) -> ActiveSpan<'a, T, U, F> {
+    pub fn with_props<U: Props>(self, props: U) -> SpanGuard<'a, T, U, F> {
         self.map_props(|_| props)
     }
 
     /**
     Map the properties of the span.
     */
-    pub fn map_props<U: Props>(mut self, map: impl FnOnce(P) -> U) -> ActiveSpan<'a, T, U, F> {
-        let data = self.data.take().map(|data| ActiveSpanData {
+    pub fn map_props<U: Props>(mut self, map: impl FnOnce(P) -> U) -> SpanGuard<'a, T, U, F> {
+        let data = self.data.take().map(|data| SpanGuardData {
             mdl: data.mdl,
             name: data.name,
             ctxt: data.ctxt,
             props: map(data.props),
         });
 
-        ActiveSpan {
+        SpanGuard {
             state: self.state.take(),
             data,
             completion: self.completion.take(),
@@ -1036,7 +1041,7 @@ impl<'a, T: Clock, P: Props, F: Completion> ActiveSpan<'a, T, P, F> {
     }
 
     fn complete_default(&mut self) -> bool {
-        if let (ActiveSpanState::Started(timer), Some(data), Some(completion)) =
+        if let (SpanGuardState::Started(timer), Some(data), Some(completion)) =
             (self.state.take(), self.data.take(), self.completion.take())
         {
             completion.complete(Span::new(data.mdl, data.name, timer, data.props));
@@ -1053,7 +1058,7 @@ impl<'a, T: Clock, P: Props, F: Completion> ActiveSpan<'a, T, P, F> {
     If the span is disabled then the `complete` closure won't be called and this method will return `false`.
     */
     pub fn complete_with(mut self, completion: impl Completion) -> bool {
-        if let (ActiveSpanState::Started(timer), Some(data), Some(_)) =
+        if let (SpanGuardState::Started(timer), Some(data), Some(_)) =
             (self.state.take(), self.data.take(), self.completion.take())
         {
             completion.complete(Span::new(data.mdl, data.name, timer, data.props));
@@ -1069,7 +1074,7 @@ pub mod completion {
     /*!
     The [`Completion`] type.
 
-    A [`Completion`] is a visitor for a [`Span`] that's called by a [`crate::span::ActiveSpan`] when it completes.
+    A [`Completion`] is a visitor for a [`Span`] that's called by a [`crate::span::SpanGuard`] when it completes.
     */
 
     use emit_core::{
@@ -1088,7 +1093,7 @@ pub mod completion {
     use core::fmt;
 
     /**
-    A receiver of [`Span`]s as they're completed by [`crate::span::ActiveSpan`]s.
+    A receiver of [`Span`]s as they're completed by [`crate::span::SpanGuard`]s.
     */
     pub trait Completion {
         /**
@@ -1868,7 +1873,7 @@ mod tests {
 
         let complete_called = Cell::new(false);
 
-        let (mut guard, frame) = ActiveSpan::new(
+        let (mut guard, frame) = SpanGuard::new(
             filter::from_fn(|evt| {
                 assert_eq!(2, evt.props().pull::<usize, _>("ctxt_prop").unwrap());
 
@@ -1931,7 +1936,7 @@ mod tests {
 
         let complete_called = Cell::new(false);
 
-        let (guard, frame) = ActiveSpan::new(
+        let (guard, frame) = SpanGuard::new(
             filter::from_fn(|_| true),
             &ctxt,
             &clock,
@@ -1961,7 +1966,7 @@ mod tests {
 
         let complete_called = Cell::new(false);
 
-        let (mut guard, frame) = ActiveSpan::new(
+        let (mut guard, frame) = SpanGuard::new(
             filter::from_fn(|_| false),
             &ctxt,
             &clock,
@@ -1996,7 +2001,7 @@ mod tests {
         let custom_complete_called = Cell::new(false);
         let default_complete_called = Cell::new(false);
 
-        let (mut guard, _) = ActiveSpan::new(
+        let (mut guard, _) = SpanGuard::new(
             filter::from_fn(|_| true),
             &ctxt,
             &clock,
@@ -2031,7 +2036,7 @@ mod tests {
 
         let complete_called = Cell::new(false);
 
-        let (mut guard, frame) = ActiveSpan::new(
+        let (mut guard, frame) = SpanGuard::new(
             filter::from_fn(|_| true),
             &ctxt,
             &clock,

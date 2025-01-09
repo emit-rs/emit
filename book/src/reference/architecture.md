@@ -320,7 +320,7 @@ flowchart
 
     timer --> active_span
 
-    active_span["`<code>ActiveSpan</code>`"]
+    active_span["`<code>SpanGuard</code>`"]
 
     active_span --> filter
     frame --> filter
@@ -332,7 +332,7 @@ flowchart
 
     frame_2["<code>Frame::call</code>"]
 
-    active_span_2["`<code>ActiveSpan::complete</code>`"] -- produces --> span["`<code>Span</code>`"] --> completion
+    active_span_2["`<code>SpanGuard::complete</code>`"] -- produces --> span["`<code>Span</code>`"] --> completion
     
     completion --> END(((end)))
 
@@ -349,8 +349,8 @@ flowchart
     click frame href "https://docs.rs/emit/0.11.1/emit/frame/struct.Frame.html"
     click frame_2 href "https://docs.rs/emit/0.11.1/emit/frame/struct.Frame.html"
 
-    click active_span href "https://docs.rs/emit/0.11.1/emit/span/struct.ActiveSpan.html"
-    click active_span_2 href "https://docs.rs/emit/0.11.1/emit/span/struct.ActiveSpan.html"
+    click active_span href "https://docs.rs/emit/0.11.1/emit/span/struct.SpanGuard.html"
+    click active_span_2 href "https://docs.rs/emit/0.11.1/emit/span/struct.SpanGuard.html"
 
     click completion href "https://docs.rs/emit/0.11.1/emit/span/completion/struct.Default.html"
 

@@ -282,7 +282,7 @@ fn span_guard() {
 
     #[emit::span(rt: RT, guard: span, "test")]
     fn exec() {
-        let span: emit::span::ActiveSpan<_, _, _> = span;
+        let span: emit::span::SpanGuard<_, _, _> = span;
         span.complete();
     }
 
