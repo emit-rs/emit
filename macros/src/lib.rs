@@ -744,7 +744,7 @@ where
 
 Properties that appear within the template or after it are added to the emitted event. The identifier of the property is its key. Property capturing can be adjusted through the `as_*` attribute macros.
 
-Unlike [`macro@debug`], this macro captures values using their [`std::fmt::Debug`] implementation by default.
+Unlike [`macro@debug`], this macro captures values using their [`Debug`](https://doc.rust-lang.org/std/fmt/trait.Debug.html) implementation by default.
 
 # When to use `dbg`
 

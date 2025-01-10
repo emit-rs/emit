@@ -665,7 +665,7 @@ impl<'a, P: Props> Props for Span<'a, P> {
 }
 
 /**
-The trace id, span id, and parent parent span id of a span.
+The trace id, span id, and parent span id of a span.
 
 These ids can be used to identify the distributed trace a span belongs to, and to identify the span itself within that trace.
 
