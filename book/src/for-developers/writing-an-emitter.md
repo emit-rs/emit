@@ -35,4 +35,4 @@ A standard pattern for emitters is to expose a function called `metric_source` t
 
 ## Background processing
 
-Emitters should minimize their impact in calling code but offloading expensive processing to a background thread. You can use [`emit_batcher`](https://docs.rs/emit_batcher/0.11.3/emit_batcher/index.html) to implement a batching, retrying, asynchronous emitter.
+Emitters should minimize their impact in calling code by offloading expensive processing to a background thread. You can use [`emit_batcher`](https://docs.rs/emit_batcher/0.11.3/emit_batcher/index.html) to implement a batching, retrying, asynchronous emitter.
