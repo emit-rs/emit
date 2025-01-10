@@ -171,7 +171,7 @@ classDiagram
     <<Trait>> Emitter
 
     class Filter {
-        matches() bool*
+        matches(Event) bool*
     }
 
     <<Trait>> Filter
@@ -286,7 +286,7 @@ You don't need to use macros to construct events. You can also do it manually to
 
 ## Span construction and emission
 
-When the [`span!`](https://docs.rs/emit/0.11.3/emit/attr.span.html) macro is called, the annotated function is instrumented using features of the runtime before being emitted through it. This is how it works:
+When the [`#[span]`](https://docs.rs/emit/0.11.3/emit/attr.span.html) macro is called, the annotated function is instrumented using features of the runtime before a span representing its execution is emitted through it. This is how it works:
 
 ```mermaid
 flowchart

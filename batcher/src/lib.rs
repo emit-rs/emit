@@ -7,10 +7,6 @@ This library implements a channel that can be used to spawn background workers o
 - **Retries with backoff:** If the worker fails or panics then the batch can be retried up to some number of times, with backoff applied between retries. The worker can decide how much of a batch needs to be retried.
 - **Maximum size management:** If the worker can't keep up then the channel truncates to avoid runaway memory use. The alternative would be to apply backpressure, but that would affect system availability so isn't suitable for diagnostics.
 - **Flushing:** Callers can ask the worker to signal when all diagnostic events in the channel at the point they called are processed. This can be used for auditing and flushing on shutdown.
-
-# Status
-
-This library is still experimental, so its API may change.
 */
 
 #![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]
@@ -190,7 +186,7 @@ impl<T: Channel> Sender<T> {
     }
 
     /**
-    Send an item on the channel, blocking if it's currently full.
+    Send an item on the channel, returning it if it's currently full.
 
     The item will be processed at some future point by the [`Receiver`]. If pushing the item would overflow the maximum capacity of the channel then this method will return `Err`.
     */

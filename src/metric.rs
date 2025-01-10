@@ -610,7 +610,7 @@ mod alloc_support {
 
     1. Take the current timestamp, `now`, when sampling metrics.
     2. If the metric sample has no extent, or has a point extent, it will be replaced with `now`.
-    3. If the metric sample has a range extent, the end will be set to `now` and the start will be `now` minus the original length. If this would produce an invlaid range then the original is kept.
+    3. If the metric sample has a range extent, the end will be set to `now` and the start will be `now` minus the original length. If this would produce an invalid range then the original is kept.
 
     When the `std` Cargo feature is enabled this will be done automatically. In other cases, normalization won't happen unless it's configured by [`Reporter::normalize_with_clock`].
 

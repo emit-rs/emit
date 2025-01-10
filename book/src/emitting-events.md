@@ -168,4 +168,4 @@ fn main() {
 }
 ```
 
-Once the returned guard goes out of scope it'll call `blocking_flush` for you, even if a panic unwinds through your `main` function. **Make sure you give the guard an identifer like `_rt` and not `_`**, otherwise it will be dropped immediately and not at the end of your `main` function.
+Once the returned guard goes out of scope it'll call `blocking_flush` for you, even if a panic unwinds through your `main` function. **Make sure you give the guard an identifier like `_rt` and not `_`**, otherwise it will be dropped immediately and not at the end of your `main` function.
