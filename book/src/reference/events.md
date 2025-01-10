@@ -1,15 +1,15 @@
 # Event data model
 
-All diagnostics in `emit` are represented as an [`Event`](https://docs.rs/emit/0.11.2/emit/struct.Event.html).
+All diagnostics in `emit` are represented as an [`Event`](https://docs.rs/emit/0.11.3/emit/struct.Event.html).
 
 Each event is the combination of:
 
-- `mdl` ([`Path`](https://docs.rs/emit/0.11.2/emit/struct.Path.html)): The path of the component that generated the event.
-- `tpl` ([`Template`](https://docs.rs/emit/0.11.2/emit/struct.Template.html)): A lazily-rendered, user-facing description of the event.
-- `extent` ([`Extent`](https://docs.rs/emit/0.11.2/emit/struct.Extent.html)): The point in time that the event occurred at, or the span of time for which it was active.
-- `props` ([`Props`](https://docs.rs/emit/0.11.2/emit/trait.Props.html)): A set of key-value pairs associated with the event.
+- `mdl` ([`Path`](https://docs.rs/emit/0.11.3/emit/struct.Path.html)): The path of the component that generated the event.
+- `tpl` ([`Template`](https://docs.rs/emit/0.11.3/emit/struct.Template.html)): A lazily-rendered, user-facing description of the event.
+- `extent` ([`Extent`](https://docs.rs/emit/0.11.3/emit/struct.Extent.html)): The point in time that the event occurred at, or the span of time for which it was active.
+- `props` ([`Props`](https://docs.rs/emit/0.11.3/emit/trait.Props.html)): A set of key-value pairs associated with the event.
 
-Here's an example of an event created using the [`emit!`](https://docs.rs/emit/0.11.2/emit/macro.emit.html) macro:
+Here's an example of an event created using the [`emit!`](https://docs.rs/emit/0.11.3/emit/macro.emit.html) macro:
 
 ```rust
 # extern crate emit;
@@ -28,13 +28,13 @@ This event will have:
 
 ## Extensions
 
-The core event data model doesn't encode any specific diagnostic paradigm. It doesn't even include log levels. `emit` uses well-known properties to support extensions to its data model. A well-known property is a reserved name and set of allowed values that consumers of diagnostic data can use to treat an event as something more specific. See the [`well_known`](https://docs.rs/emit/0.11.2/emit/well_known/index.html) module for a complete list of well-known properties.
+The core event data model doesn't encode any specific diagnostic paradigm. It doesn't even include log levels. `emit` uses well-known properties to support extensions to its data model. A well-known property is a reserved name and set of allowed values that consumers of diagnostic data can use to treat an event as something more specific. See the [`well_known`](https://docs.rs/emit/0.11.3/emit/well_known/index.html) module for a complete list of well-known properties.
 
-The two main extensions to the event data model are [tracing](../producing-events/tracing/data-model.md), and [metrics](../producing-events/metrics/data-model.md). You can also define your own extensions. These extensions are both based on the [`evt_kind`](https://docs.rs/emit/0.11.2/emit/well_known/constant.KEY_EVT_KIND.html) well-known property. Consumers that aren't specially aware of it will treat unknown extended events as regular ones.
+The two main extensions to the event data model are [tracing](../producing-events/tracing/data-model.md), and [metrics](../producing-events/metrics/data-model.md). You can also define your own extensions. These extensions are both based on the [`evt_kind`](https://docs.rs/emit/0.11.3/emit/well_known/constant.KEY_EVT_KIND.html) well-known property. Consumers that aren't specially aware of it will treat unknown extended events as regular ones.
 
 ## Value data model
 
-The [`Value`](https://docs.rs/emit/0.11.2/emit/struct.Value.html) type is `emit`'s representation of an anonymous structured value based on the [`value_bag`](https://docs.rs/value_bag) library. `Value` is a concrete type rather than a trait to make working with them in [`Props`](https://docs.rs/emit/0.11.2/emit/trait.Props.html) easier. Internally, a value holds a direct reference or embedded primitive value for:
+The [`Value`](https://docs.rs/emit/0.11.3/emit/struct.Value.html) type is `emit`'s representation of an anonymous structured value based on the [`value_bag`](https://docs.rs/value_bag) library. `Value` is a concrete type rather than a trait to make working with them in [`Props`](https://docs.rs/emit/0.11.3/emit/trait.Props.html) easier. Internally, a value holds a direct reference or embedded primitive value for:
 
 - **Integers:** `i8`-`i128`, `u8`-`u128`.
 - **Binary floating points:** `f32`-`f64`.
@@ -51,7 +51,7 @@ A value can always be formatted or serialized using any of the above frameworks,
 
 ## Extents and timestamps
 
-The time-oriented part of an event is its [`Extent`](https://docs.rs/emit/0.11.2/emit/struct.Extent.html). Internally, an extent stores [`Timestamp`](https://docs.rs/emit/0.11.2/emit/struct.Timestamp.html)s. An extent can either store one or a pair of timestamps.
+The time-oriented part of an event is its [`Extent`](https://docs.rs/emit/0.11.3/emit/struct.Extent.html). Internally, an extent stores [`Timestamp`](https://docs.rs/emit/0.11.3/emit/struct.Timestamp.html)s. An extent can either store one or a pair of timestamps.
 
 An extent that stores a single timestamp is called a point. These are used by log events and other events that represent a point-in-time observation.
 
@@ -59,7 +59,7 @@ An extent that stores a pair of timestamps is called a range. These are used by 
 
 ## Constructing events without macros
 
-Events don't have to be constructed using macros. You can use the [`Event::new`](https://docs.rs/emit/0.11.2/emit/struct.Event.html#method.new) constructor manually:
+Events don't have to be constructed using macros. You can use the [`Event::new`](https://docs.rs/emit/0.11.3/emit/struct.Event.html#method.new) constructor manually:
 
 ```rust
 # extern crate emit;

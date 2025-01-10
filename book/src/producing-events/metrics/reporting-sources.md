@@ -1,6 +1,6 @@
 # Reporting metric sources
 
-The [`Source`](https://docs.rs/emit/0.11.2/emit/metric/source/trait.Source.html) trait represents some underlying data source that can be sampled to provide [`Metric`](https://docs.rs/emit/0.11.2/emit/metric/struct.Metric.html)s. You can sample sources directly, or combine them into a [`Reporter`](https://docs.rs/emit/0.11.2/emit/metric/struct.Reporter.html) to sample all the sources of metrics in your application together:
+The [`Source`](https://docs.rs/emit/0.11.3/emit/metric/source/trait.Source.html) trait represents some underlying data source that can be sampled to provide [`Metric`](https://docs.rs/emit/0.11.3/emit/metric/struct.Metric.html)s. You can sample sources directly, or combine them into a [`Reporter`](https://docs.rs/emit/0.11.3/emit/metric/struct.Reporter.html) to sample all the sources of metrics in your application together:
 
 ```rust
 # extern crate emit;
