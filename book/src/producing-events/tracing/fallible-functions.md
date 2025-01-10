@@ -90,7 +90,7 @@ let _ = wait_a_bit(100);
 let _ = wait_a_bit(1200);
 ```
 
-The `err` control parameter accepts an expression that implements `Fn(&E) -> U`, which can either be provided as a closure inline, or as an external function like [`emit::err::as_ref`](https://docs.rs/emit/0.11.3/emit/err/fn.as_ref.html) in the above example.
+The `err` control parameter accepts an expression that implements `Fn(&E) -> U`, which can either be provided as a closure inline, or as an external function like [`emit::err::as_ref`](https://docs.rs/emit/0.11.4/emit/err/fn.as_ref.html) in the above example.
 
 If your error type can't be mapped, you can also fall back to just providing a static string description as the error value:
 
