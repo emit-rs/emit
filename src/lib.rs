@@ -44,7 +44,7 @@ The [`setup()`] function configures `emit` with an [`Emitter`] to write [`Event`
 
 ## Crate features
 
-- `std` (default): Enable support for the standard library. Enable capturing properties as errors. Implies `alloc`
+- `std` (default): Enable support for the standard library. Enable capturing properties as errors. Implies `alloc`.
 - `alloc`: Enable APIs that require an allocator.
 - `implicit_rt` (default): Enable configuring the default shared runtime and calling [`macro@emit`] and [`macro@span`] without needing to specify a runtime manually.
 - `implicit_internal_rt` (default): Enable configuring the internal runtime for `emit`'s own diagnostics.
