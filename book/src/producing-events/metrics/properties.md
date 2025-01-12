@@ -35,7 +35,7 @@ Event {
 }
 ```
 
-The [`Metric`](https://docs.rs/emit/0.11.4/emit/metric/struct.Metric.html) type accepts additional properties as an argument to its constructor:
+The [`Metric`](https://docs.rs/emit/0.11.5/emit/metric/struct.Metric.html) type accepts additional properties as an argument to its constructor:
 
 ```rust
 # extern crate emit;
