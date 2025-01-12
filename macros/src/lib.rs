@@ -608,20 +608,21 @@ The following are all examples of templates:
 
 ```text
 "some text"
- ---------
+ ├───────┘
  text
 ```
 
 ```text
 "some text and {x}"
- -------------- -
+ ├────────────┘ │
  text           property
 ```
 
 ```text
 "some {{text}} and {x: 42} and {y}"
- ------------------ -----       _
- text               property    property
+ ├────────────────┘ ├───┘ └───┤ │
+ text               property  │ property
+                              text
 ```
 
 See [the guide](https://emit-rs.io/reference/templates.html) for more details and examples of templates.
