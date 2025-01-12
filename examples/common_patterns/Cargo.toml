@@ -19,7 +19,7 @@ path = "../../emitter/file"
 path = "../../traceparent"
 
 [dependencies.thiserror]
-version = "1"
+version = "2"
 
 [dependencies.anyhow]
 version = "1"
