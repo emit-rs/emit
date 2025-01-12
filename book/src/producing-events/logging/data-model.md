@@ -1,6 +1,6 @@
 # Logging data model
 
-The data model of logs is an extension of [`emit`'s events](../../reference/events.md). Log events include the following [well-known properties](https://docs.rs/emit/0.11.4/emit/well_known/index.html):
+The data model of logs is an extension of [`emit`'s events](../../reference/events.md). Log events include the following [well-known properties](https://docs.rs/emit/0.11.5/emit/well_known/index.html):
 
 - `lvl`: a severity level assigned to the event.
     - `"debug"`: a weakly informative event for live debugging.

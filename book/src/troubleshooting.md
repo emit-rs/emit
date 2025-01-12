@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Emitters write their own diagnostics to an alternative `emit` runtime, which you can configure via [`init_internal`](https://docs.rs/emit/0.11.4/emit/setup/struct.Setup.html#method.init_internal) to debug them:
+Emitters write their own diagnostics to an alternative `emit` runtime, which you can configure via [`init_internal`](https://docs.rs/emit/0.11.5/emit/setup/struct.Setup.html#method.init_internal) to debug them:
 
 ```rust
 # extern crate emit;
