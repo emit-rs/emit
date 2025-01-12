@@ -39,11 +39,23 @@ reporter.add_source(source_2);
 // so it observes cancellation etc, but works for this illustration.
 std::thread::spawn(move || {
     loop {
-        // You could also use `sample_metrics` here and tweak the extents of metrics
-        // to ensure they're all aligned together
+        // You could also use `sample_metrics` here instead of `emit_metrics`
+        // to do something else with the `Metric` values
         reporter.emit_metrics(emit::runtime::shared());
 
         std::thread::sleep(std::time::Duration::from_secs(30));
     }
 });
 ```
+
+## Normalization of timestamps
+
+The [`Reporter`](https://docs.rs/emit/0.11.4/emit/metric/struct.Reporter.html) type will attempt to normalize the extents of any metrics sampled from its sources. Normalization will:
+
+1. Take the current timestamp, `now`, when sampling metrics.
+2. If the metric sample has no extent, or has a point extent, it will be replaced with `now`.
+3. If the metric sample has a range extent, the end will be set to `now` and the start will be `now` minus the original length. If this would produce an invalid range then the original is kept.
+
+When the `std` Cargo feature is enabled this will be done automatically. In other cases, normalization won't happen unless it's configured by [`Reporter::normalize_with_clock`](https://docs.rs/emit/0.11.4/emit/metric/struct.Reporter.html#method.normalize_with_clock).
+
+Normalization can be disabled by calling [`Reporter::without_normalization`](https://docs.rs/emit/0.11.4/emit/metric/struct.Reporter.html#method.without_normalization).

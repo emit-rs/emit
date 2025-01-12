@@ -369,11 +369,11 @@ This macro accepts the following optional control parameters:
 | `rt`        | `impl emit::runtime::Runtime` | The runtime to emit the event through.                                                                                                                         |
 | `mdl`       | `impl Into<emit::Path>`       | The module the event belongs to. If unspecified the current module path is used.                                                                               |
 | `when`      | `impl emit::Filter`           | A filter to use instead of the one configured on the runtime.                                                                                                  |
-| `guard`     | -                             | An identifier to bind an `emit::Span` to in the body of the span for manual completion.                                                                        |
+| `guard`     | -                             | An identifier to bind an `emit::SpanGuard` to in the body of the span for manual completion.                                                                        |
 | `ok_lvl`    | `str` or `emit::Level`        | Assume the instrumented block returns a `Result`. Assign the event the given level when the result is `Ok`.                                                    |
 | `err_lvl`   | `str` or `emit::Level`        | Assume the instrumented block returns a `Result`. Assign the event the given level when the result is `Err` and attach the error as the `err` property.        |
 | `panic_lvl` | `str` or `emit::Level`        | Detect whether the function panics and use the given level if it does.                                                                                         |
-| `err`       | `impl Fn(&E) -> T`            | Assume the instrumented block returns a `Result`. Map the `Err` variant into a new type `U` that is `str`, `&(dyn Error + 'static)`, or `impl Error + 'static` |
+| `err`       | `impl Fn(&E) -> T`            | Assume the instrumented block returns a `Result`. Map the `Err` variant into a new type `T` that is `str`, `&(dyn Error + 'static)`, or `impl Error + 'static` |
 | `setup`     | `impl Fn() -> T`              | Invoke the expression before creating the span, binding the result to a value that's dropped at the end of the annotated function.                             |
 
 # Template
@@ -599,10 +599,32 @@ template_literal
 
 where
 
-- `template_literal`: `(text | hole)*`
+- `template_literal`: `"` `(text | hole)*` `"`
 - `text`: A fragment of plain text where `{` are escaped as `{{` and `}` are escaped as `}}`.
-- `hole`: `{property}`
-- `property`: A Rust field-value of a property to capture.
+- `hole`: `{` `property` `}`
+- `property`: A Rust field-value expression.
+
+The following are all examples of templates:
+
+```text
+"some text"
+ ---------
+ text
+```
+
+```text
+"some text and {x}"
+ -------------- -
+ text           property
+```
+
+```text
+"some {{text}} and {x: 42} and {y}"
+ ------------------ -----       _
+ text               property    property
+```
+
+See [the guide](https://emit-rs.io/reference/templates.html) for more details and examples of templates.
 
 # Returns
 
@@ -641,7 +663,7 @@ This macro accepts the following optional control parameters:
 | `mdl`     | `impl Into<emit::Path>`       | The module the event belongs to. If unspecified the current module path is used.                                                                                                               |
 | `extent`  | `impl emit::ToExtent`         | The extent to use on the event. If it resolves to `None` then the clock on the runtime will be used to assign a point extent.                                                                  |
 | `props`   | `impl emit::Props`            | A base set of properties to add to the event.                                                                                                                                                  |
-| `evt`     | `impl emit::event::ToEvent`   | A base event to emit. Any properties captured by the macro will be appended to the base event. If this control parameter is specified then `module`, `props`, and `extent` cannot also be set. |
+| `evt`     | `impl emit::event::ToEvent`   | A base event to emit. Any properties captured by the macro will be appended to the base event. If this control parameter is specified then `mdl`, `props`, and `extent` cannot also be set. |
 | `when`    | `impl emit::Filter`           | A filter to use instead of the one configured on the runtime.                                                                                                                                  |
 
 # Template
