@@ -576,18 +576,32 @@ impl Delay {
     }
 }
 
-const CAPACITY_WINDOW: usize = 16;
+const CAPACITY_WINDOW: usize = 32;
 
-struct Capacity([usize; CAPACITY_WINDOW], usize);
+struct Capacity {
+    rolling_values: [usize; CAPACITY_WINDOW],
+    idx: usize,
+}
 
 impl Capacity {
     fn new() -> Self {
-        Capacity([1; CAPACITY_WINDOW], 0)
+        Capacity {
+            rolling_values: [0; CAPACITY_WINDOW],
+            idx: 0,
+        }
     }
 
     fn next(&mut self, last_len: usize) -> usize {
-        self.0[self.1 % CAPACITY_WINDOW] = last_len;
-        self.0.iter().copied().max().unwrap()
+        self.rolling_values[self.idx % CAPACITY_WINDOW] = last_len;
+        self.idx = self.idx.wrapping_add(1);
+
+        let max_len = self.rolling_values.iter().copied().max().unwrap();
+
+        // Add some extra space to accommodate small shifts in size
+        // Note that this value is used for initial capacity, but is updated
+        // based on the actual length, so adding more space here doesn't mean
+        // the `max_len` value will always increase over time
+        max_len + cmp::max(1, max_len / 10)
     }
 }
 
@@ -728,3 +742,33 @@ pub use tokio::{blocking_flush, blocking_send};
 
 #[cfg(not(feature = "tokio"))]
 pub use sync::{blocking_flush, blocking_send};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn capacity() {
+        let mut capacity = Capacity::new();
+
+        let next = capacity.next(10);
+
+        assert_eq!(11, next);
+
+        let next = capacity.next(5);
+
+        assert_eq!(11, next);
+
+        let next = capacity.next(100);
+
+        assert_eq!(110, next);
+
+        for _ in 0..CAPACITY_WINDOW {
+            let _ = capacity.next(0);
+        }
+
+        let next = capacity.next(0);
+
+        assert_eq!(1, next);
+    }
+}
