@@ -601,7 +601,7 @@ impl Capacity {
         // Note that this value is used for initial capacity, but is updated
         // based on the actual length, so adding more space here doesn't mean
         // the `max_len` value will always increase over time
-        max_len + cmp::max(1, max_len / 10)
+        max_len.saturating_add(cmp::max(1, max_len / 10))
     }
 }
 
