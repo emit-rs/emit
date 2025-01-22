@@ -44,21 +44,27 @@ fn main() {
         .init();
 
     // Your app code goes here
-    greet(&User { id: 1, name: "Rust" });
+    {
+        // `emit` supports fully structured data
+        // See the `#[emit::as_serde]` attribute in our `greet` function below
+        #[derive(serde::Serialize)]
+        struct User<'a> {
+            id: u32,
+            name: &'a str,
+        }
+
+        // Annotate functions with `#[emit::span]` to produce traces
+        #[emit::span("Greet {user}", #[emit::as_serde] user)]
+        fn greet(user: &User) {
+            // Use `emit::info` to produce log events
+            emit::info!("Hello, {user: user.name}!");
+        }
+
+        greet(&User { id: 1, name: "Rust" });
+    }
 
     // Flush any remaining events before `main` returns
     rt.blocking_flush(std::time::Duration::from_secs(5));
-}
-
-#[derive(serde::Serialize)]
-pub struct User<'a> {
-    id: u32,
-    name: &'a str,
-}
-
-#[emit::span("Greet {user}", #[emit::as_serde] user)]
-fn greet(user: &User) {
-    emit::info!("Hello, {user: user.name}!");
 }
 ```
 
