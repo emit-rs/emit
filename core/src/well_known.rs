@@ -104,3 +104,10 @@ pub const METRIC_AGG_MIN: &'static str = "min";
 pub const METRIC_AGG_MAX: &'static str = "max";
 /** The sample is the last or most recent value. */
 pub const METRIC_AGG_LAST: &'static str = "last";
+
+/** Buckets in a histogram metric. */
+pub const KEY_BUCKET_VALUES: &'static str = "bucket_values";
+/** The bounds of buckets in a histogram metric. */
+pub const KEY_BUCKET_BOUNDS: &'static str = "bucket_bounds";
+/** The scale of buckets in a histogram metric. */
+pub const KEY_BUCKET_SCALE: &'static str = "bucket_scale";
