@@ -583,6 +583,295 @@ mod alloc_support {
         }
     }
 
+    #[cfg(feature = "sval")]
+    mod sval_support {
+        use super::*;
+
+        use core::{cmp, mem};
+
+        use sval::Value as _;
+
+        impl<'v> Value<'v> {
+            /**
+            Get a 2d sequence of binary floating points from a captured sequence of values.
+
+            This method has the same semantics as [`Value::as_f64_sequence`], but for sequences of sequences.
+
+            For more advanced or specific conversion cases, use `serde` or `sval`.
+            */
+            pub fn as_f64_sequence_2d(&self) -> Vec<Vec<f64>> {
+                struct Collect {
+                    depth: usize,
+                    capacity: usize,
+                    result: Vec<Vec<f64>>,
+                    current: Vec<f64>,
+                }
+
+                impl Collect {
+                    fn new() -> Self {
+                        Collect {
+                            depth: 0,
+                            capacity: 0,
+                            result: Vec::new(),
+                            current: Vec::new(),
+                        }
+                    }
+
+                    fn push_nan(&mut self) {
+                        match self.depth {
+                            1 => self.result.push(Vec::new()),
+                            2 => self.current.push(f64::NAN),
+                            _ => (),
+                        }
+                    }
+
+                    fn push(&mut self, f: f64) {
+                        match self.depth {
+                            1 => self.result.push(Vec::new()),
+                            2 => self.current.push(f),
+                            _ => (),
+                        }
+                    }
+
+                    fn begin(&mut self, len: Option<usize>) {
+                        self.depth += 1;
+
+                        if self.depth == 2 {
+                            self.current = Vec::with_capacity(len.unwrap_or(self.capacity));
+                        }
+                    }
+
+                    fn end(&mut self) {
+                        if self.depth == 2 {
+                            self.capacity = cmp::max(self.current.len(), self.capacity);
+
+                            self.result.push(mem::take(&mut self.current));
+                        }
+
+                        self.depth -= 1;
+                    }
+                }
+
+                impl<'sval> sval::Stream<'sval> for Collect {
+                    fn u8(&mut self, value: u8) -> sval::Result {
+                        self.push(value as f64);
+
+                        Ok(())
+                    }
+
+                    fn u16(&mut self, value: u16) -> sval::Result {
+                        self.push(value as f64);
+
+                        Ok(())
+                    }
+
+                    fn u32(&mut self, value: u32) -> sval::Result {
+                        self.push(value as f64);
+
+                        Ok(())
+                    }
+
+                    fn u64(&mut self, value: u64) -> sval::Result {
+                        self.push(value as f64);
+
+                        Ok(())
+                    }
+
+                    fn u128(&mut self, value: u128) -> sval::Result {
+                        self.push(value as f64);
+
+                        Ok(())
+                    }
+
+                    fn i8(&mut self, value: i8) -> sval::Result {
+                        self.push(value as f64);
+
+                        Ok(())
+                    }
+
+                    fn i16(&mut self, value: i16) -> sval::Result {
+                        self.push(value as f64);
+
+                        Ok(())
+                    }
+
+                    fn i32(&mut self, value: i32) -> sval::Result {
+                        self.push(value as f64);
+
+                        Ok(())
+                    }
+
+                    fn i64(&mut self, value: i64) -> sval::Result {
+                        self.push(value as f64);
+
+                        Ok(())
+                    }
+
+                    fn i128(&mut self, value: i128) -> sval::Result {
+                        self.push(value as f64);
+
+                        Ok(())
+                    }
+
+                    fn f32(&mut self, value: f32) -> sval::Result {
+                        self.push(value as f64);
+
+                        Ok(())
+                    }
+
+                    fn f64(&mut self, value: f64) -> sval::Result {
+                        self.push(value);
+
+                        Ok(())
+                    }
+
+                    fn seq_begin(&mut self, len: Option<usize>) -> sval::Result {
+                        self.begin(len);
+
+                        Ok(())
+                    }
+
+                    fn seq_value_begin(&mut self) -> sval::Result {
+                        Ok(())
+                    }
+
+                    fn seq_value_end(&mut self) -> sval::Result {
+                        Ok(())
+                    }
+
+                    fn seq_end(&mut self) -> sval::Result {
+                        self.end();
+
+                        Ok(())
+                    }
+
+                    fn null(&mut self) -> sval::Result {
+                        self.push_nan();
+
+                        Ok(())
+                    }
+
+                    fn bool(&mut self, _: bool) -> sval::Result {
+                        self.push_nan();
+
+                        Ok(())
+                    }
+
+                    fn text_begin(&mut self, _: Option<usize>) -> sval::Result {
+                        self.push_nan();
+
+                        Ok(())
+                    }
+
+                    fn text_fragment_computed(&mut self, _: &str) -> sval::Result {
+                        Ok(())
+                    }
+
+                    fn text_end(&mut self) -> sval::Result {
+                        Ok(())
+                    }
+
+                    fn binary_begin(&mut self, _: Option<usize>) -> sval::Result {
+                        self.push_nan();
+
+                        Ok(())
+                    }
+
+                    fn binary_fragment_computed(&mut self, _: &[u8]) -> sval::Result {
+                        Ok(())
+                    }
+
+                    fn binary_end(&mut self) -> sval::Result {
+                        Ok(())
+                    }
+
+                    fn map_begin(&mut self, _: Option<usize>) -> sval::Result {
+                        self.push_nan();
+                        self.depth += 1;
+
+                        Ok(())
+                    }
+
+                    fn map_key_begin(&mut self) -> sval::Result {
+                        Ok(())
+                    }
+
+                    fn map_key_end(&mut self) -> sval::Result {
+                        Ok(())
+                    }
+
+                    fn map_value_begin(&mut self) -> sval::Result {
+                        Ok(())
+                    }
+
+                    fn map_value_end(&mut self) -> sval::Result {
+                        Ok(())
+                    }
+
+                    fn map_end(&mut self) -> sval::Result {
+                        self.depth -= 1;
+
+                        Ok(())
+                    }
+                }
+
+                let mut stream = Collect::new();
+
+                let _ = self.stream(&mut stream);
+
+                stream.result
+            }
+        }
+
+        #[cfg(test)]
+        mod tests {
+            use super::*;
+
+            #[test]
+            fn as_sequence_2d() {
+                for (case, expected) in [
+                    (
+                        Value::from_sval(&[&[1.0, 2.0], &[3.0, 4.0]]),
+                        vec![vec![1.0, 2.0], vec![3.0, 4.0]],
+                    ),
+                    (
+                        Value::from(&[1.0, 2.0, 3.0, 4.0]),
+                        vec![vec![], vec![], vec![], vec![]],
+                    ),
+                    (Value::from(1.0), vec![]),
+                    (
+                        Value::from_sval(&[&[&[1.0], &[2.0]], &[&[3.0], &[4.0]]]),
+                        vec![vec![], vec![]],
+                    ),
+                    (
+                        Value::from_sval(&[&[1, 2], &[3, 4]]),
+                        vec![vec![1.0, 2.0], vec![3.0, 4.0]],
+                    ),
+                    (
+                        Value::from_sval(&[&[true, false], &[true, false]]),
+                        vec![vec![f64::NAN, f64::NAN], vec![f64::NAN, f64::NAN]],
+                    ),
+                ] {
+                    let actual = case.as_f64_sequence_2d();
+
+                    assert_eq!(expected.len(), actual.len());
+
+                    for (expected, actual) in expected.into_iter().zip(actual) {
+                        assert_eq!(expected.len(), actual.len());
+
+                        for (expected, actual) in expected.into_iter().zip(actual) {
+                            if f64::is_nan(expected) {
+                                assert!(f64::is_nan(actual));
+                            } else {
+                                assert_eq!(expected, actual);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -614,289 +903,6 @@ mod alloc_support {
 
 #[cfg(feature = "alloc")]
 pub use self::alloc_support::*;
-
-#[cfg(all(feature = "alloc", feature = "sval"))]
-mod sval_support {
-    use super::*;
-
-    use core::{cmp, mem};
-
-    use alloc::vec::Vec;
-
-    use sval::Value as _;
-
-    impl<'v> Value<'v> {
-        /**
-        Get a 2d sequence of binary floating points from a captured sequence of values.
-
-        This method has the same semantics as [`Value::as_f64_sequence`].
-
-        For more advanced or specific conversion cases, use `serde` or `sval`.
-        */
-        pub fn as_f64_sequence_2d(&self) -> Vec<Vec<f64>> {
-            struct Collect {
-                depth: usize,
-                capacity: usize,
-                result: Vec<Vec<f64>>,
-                current: Vec<f64>,
-            }
-
-            impl Collect {
-                fn new() -> Self {
-                    Collect {
-                        depth: 0,
-                        capacity: 0,
-                        result: Vec::new(),
-                        current: Vec::new(),
-                    }
-                }
-
-                fn push_nan(&mut self) {
-                    match self.depth {
-                        1 => self.result.push(Vec::new()),
-                        2 => self.current.push(f64::NAN),
-                        _ => (),
-                    }
-                }
-
-                fn push(&mut self, f: f64) {
-                    match self.depth {
-                        1 => self.result.push(Vec::new()),
-                        2 => self.current.push(f),
-                        _ => (),
-                    }
-                }
-
-                fn begin(&mut self, len: Option<usize>) {
-                    self.depth += 1;
-
-                    if self.depth == 2 {
-                        self.current = Vec::with_capacity(len.unwrap_or(self.capacity));
-                    }
-                }
-
-                fn end(&mut self) {
-                    if self.depth == 2 {
-                        self.capacity = cmp::max(self.current.len(), self.capacity);
-
-                        self.result.push(mem::take(&mut self.current));
-                    }
-
-                    self.depth -= 1;
-                }
-            }
-
-            impl<'sval> sval::Stream<'sval> for Collect {
-                fn u8(&mut self, value: u8) -> sval::Result {
-                    self.push(value as f64);
-
-                    Ok(())
-                }
-
-                fn u16(&mut self, value: u16) -> sval::Result {
-                    self.push(value as f64);
-
-                    Ok(())
-                }
-
-                fn u32(&mut self, value: u32) -> sval::Result {
-                    self.push(value as f64);
-
-                    Ok(())
-                }
-
-                fn u64(&mut self, value: u64) -> sval::Result {
-                    self.push(value as f64);
-
-                    Ok(())
-                }
-
-                fn u128(&mut self, value: u128) -> sval::Result {
-                    self.push(value as f64);
-
-                    Ok(())
-                }
-
-                fn i8(&mut self, value: i8) -> sval::Result {
-                    self.push(value as f64);
-
-                    Ok(())
-                }
-
-                fn i16(&mut self, value: i16) -> sval::Result {
-                    self.push(value as f64);
-
-                    Ok(())
-                }
-
-                fn i32(&mut self, value: i32) -> sval::Result {
-                    self.push(value as f64);
-
-                    Ok(())
-                }
-
-                fn i64(&mut self, value: i64) -> sval::Result {
-                    self.push(value as f64);
-
-                    Ok(())
-                }
-
-                fn i128(&mut self, value: i128) -> sval::Result {
-                    self.push(value as f64);
-
-                    Ok(())
-                }
-
-                fn f32(&mut self, value: f32) -> sval::Result {
-                    self.push(value as f64);
-
-                    Ok(())
-                }
-
-                fn f64(&mut self, value: f64) -> sval::Result {
-                    self.push(value);
-
-                    Ok(())
-                }
-
-                fn seq_begin(&mut self, len: Option<usize>) -> sval::Result {
-                    self.begin(len);
-
-                    Ok(())
-                }
-
-                fn seq_value_begin(&mut self) -> sval::Result {
-                    Ok(())
-                }
-
-                fn seq_value_end(&mut self) -> sval::Result {
-                    Ok(())
-                }
-
-                fn seq_end(&mut self) -> sval::Result {
-                    self.end();
-
-                    Ok(())
-                }
-
-                fn null(&mut self) -> sval::Result {
-                    self.push_nan();
-
-                    Ok(())
-                }
-
-                fn bool(&mut self, _: bool) -> sval::Result {
-                    self.push_nan();
-
-                    Ok(())
-                }
-
-                fn text_begin(&mut self, _: Option<usize>) -> sval::Result {
-                    self.push_nan();
-
-                    Ok(())
-                }
-
-                fn text_fragment_computed(&mut self, _: &str) -> sval::Result {
-                    Ok(())
-                }
-
-                fn text_end(&mut self) -> sval::Result {
-                    Ok(())
-                }
-
-                fn binary_begin(&mut self, _: Option<usize>) -> sval::Result {
-                    self.push_nan();
-
-                    Ok(())
-                }
-
-                fn binary_fragment_computed(&mut self, _: &[u8]) -> sval::Result {
-                    Ok(())
-                }
-
-                fn binary_end(&mut self) -> sval::Result {
-                    Ok(())
-                }
-
-                fn map_begin(&mut self, _: Option<usize>) -> sval::Result {
-                    self.push_nan();
-                    self.depth += 1;
-
-                    Ok(())
-                }
-
-                fn map_key_begin(&mut self) -> sval::Result {
-                    Ok(())
-                }
-
-                fn map_key_end(&mut self) -> sval::Result {
-                    Ok(())
-                }
-
-                fn map_value_begin(&mut self) -> sval::Result {
-                    Ok(())
-                }
-
-                fn map_value_end(&mut self) -> sval::Result {
-                    Ok(())
-                }
-
-                fn map_end(&mut self) -> sval::Result {
-                    self.depth -= 1;
-
-                    Ok(())
-                }
-            }
-
-            let mut stream = Collect::new();
-
-            let _ = self.stream(&mut stream);
-
-            stream.result
-        }
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use super::*;
-
-        #[test]
-        fn as_sequence_2d() {
-            for (case, expected) in [
-                (
-                    Value::from_sval(&[&[1.0, 2.0], &[3.0, 4.0]]),
-                    vec![vec![1.0, 2.0], vec![3.0, 4.0]],
-                ),
-                (
-                    Value::from(&[1.0, 2.0, 3.0, 4.0]),
-                    vec![vec![], vec![], vec![], vec![]],
-                ),
-                (Value::from(1.0), vec![]),
-                (
-                    Value::from_sval(&[&[&[1.0], &[2.0]], &[&[3.0], &[4.0]]]),
-                    vec![vec![], vec![]],
-                ),
-            ] {
-                let actual = case.as_f64_sequence_2d();
-
-                assert_eq!(expected.len(), actual.len());
-
-                for (expected, actual) in expected.into_iter().zip(actual) {
-                    assert_eq!(expected.len(), actual.len());
-
-                    for (expected, actual) in expected.into_iter().zip(actual) {
-                        if f64::is_nan(expected) {
-                            assert!(f64::is_nan(actual));
-                        } else {
-                            assert_eq!(expected, actual);
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {
