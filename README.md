@@ -12,7 +12,7 @@ This readme covers just enough to give you an idea of what `emit` is. For a prop
 
 - [the guide](https://emit-rs.io).
 - [a set of task-oriented examples](https://github.com/emit-rs/emit/tree/main/examples).
-- [the API docs](https://docs.rs/emit/0.11.6/emit/index.html).
+- [the API docs](https://docs.rs/emit/0.11.7/emit/index.html).
 
 ## Getting started
 
@@ -20,13 +20,13 @@ Add `emit` to your `Cargo.toml`:
 
 ```toml
 [dependencies.emit]
-version = "0.11.6"
+version = "0.11.7"
 # Optional
 features = ["serde"]
 
 # Optional
 [dependencies.emit_term]
-version = "0.11.6"
+version = "0.11.7"
 
 # Optional
 [dependencies.serde]
