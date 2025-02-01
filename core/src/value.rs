@@ -444,8 +444,30 @@ mod alloc_support {
 
         If the value is a sequence then each element will be converted into a `f64` in the same way as [`Value::as_f64`]. If the value is not a sequence then an empty result is returned, including if that value is itself an `f64`.
         */
+        #[deprecated(note = "use `to_f64_sequence` instead, which returns `None` if the value is not a sequence")]
         pub fn as_f64_sequence(&self) -> Vec<f64> {
             self.0.as_f64_seq()
+        }
+
+        /**
+        Get a sequence of binary floating points from a captured sequence of values.
+
+        If the value is a sequence then `Some` is returned. Each element will be converted into a `f64` in the same way as [`Value::as_f64`].
+        If the value is not a sequence then `None` is returned.
+
+        For more advanced or specific conversion cases, use `serde` or `sval`.
+        */
+        pub fn to_f64_sequence(&self) -> Option<Vec<f64>> {
+            #[derive(Default)]
+            struct Seq(Vec<f64>);
+
+            impl Extend<Option<f64>> for Seq {
+                fn extend<T: IntoIterator<Item = Option<f64>>>(&mut self, iter: T) {
+                    self.0.extend(iter.into_iter().map(|v| v.unwrap_or(f64::NAN)));
+                }
+            }
+
+            self.0.to_f64_seq::<Seq>().map(|seq| seq.0)
         }
     }
 
@@ -585,15 +607,21 @@ mod alloc_support {
         use super::*;
 
         #[test]
-        fn as_f64_sequence() {
+        fn to_f64_sequence() {
             for (case, expected) in [
-                (Value::from(&[0.0, 1.0, 2.0]), vec![0.0, 1.0, 2.0]),
-                (Value::from(0.0), vec![]),
-                (Value::from(&[0, 1, 2]), vec![0.0, 1.0, 2.0]),
-                (Value::from(&[] as &[f64; 0]), vec![]),
-                (Value::from(&[true, false]), vec![f64::NAN, f64::NAN]),
+                (Value::from(&[0.0, 1.0, 2.0]), Some(vec![0.0, 1.0, 2.0])),
+                (Value::from(0.0), None),
+                (Value::from(&[0, 1, 2]), Some(vec![0.0, 1.0, 2.0])),
+                (Value::from(&[] as &[f64; 0]), Some(vec![])),
+                (Value::from(&[true, false]), Some(vec![f64::NAN, f64::NAN])),
             ] {
-                let actual = case.as_f64_sequence();
+                let actual = case.to_f64_sequence();
+
+                assert_eq!(expected.is_some(), actual.is_some());
+
+                let (Some(expected), Some(actual)) = (expected, actual) else {
+                    continue;
+                };
 
                 assert_eq!(expected.len(), actual.len());
 
