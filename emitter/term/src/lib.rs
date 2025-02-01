@@ -247,7 +247,7 @@ fn write_event(buf: &mut Buffer, evt: emit::event::Event<impl emit::props::Props
     }
 
     if let Some(value) = evt.props().get(KEY_METRIC_VALUE) {
-        let buckets = value.as_f64_sequence();
+        let buckets = value.to_f64_sequence().unwrap_or_default();
 
         if !buckets.is_empty() {
             write_timeseries(buf, &buckets);
