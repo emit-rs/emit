@@ -32,6 +32,9 @@ mod traces;
 
 pub use self::{logs::*, metrics::*, traces::*};
 
+const DEFAULT_MAX_REQUEST_SIZE_BYTES: usize = 1024 * 1024; // 1MiB
+const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
 /**
 An [`emit::Emitter`] that sends diagnostic events via the OpenTelemetry Protocol (OTLP).
 
@@ -47,15 +50,15 @@ pub struct Otlp {
 struct OtlpInner {
     otlp_logs: Option<(
         ClientEventEncoder<LogsEventEncoder>,
-        emit_batcher::Sender<EncodedScopeItems>,
+        emit_batcher::Sender<Channel>,
     )>,
     otlp_traces: Option<(
         ClientEventEncoder<TracesEventEncoder>,
-        emit_batcher::Sender<EncodedScopeItems>,
+        emit_batcher::Sender<Channel>,
     )>,
     otlp_metrics: Option<(
         ClientEventEncoder<MetricsEventEncoder>,
-        emit_batcher::Sender<EncodedScopeItems>,
+        emit_batcher::Sender<Channel>,
     )>,
     metrics: Arc<InternalMetrics>,
     _handle: thread::JoinHandle<()>,
@@ -546,52 +549,75 @@ enum OtlpTransport<R> {
 }
 
 impl<R: data::RequestEncoder> OtlpTransport<R> {
-    #[emit::span(rt: emit::runtime::internal(), guard: span, "send OTLP batch of {batch_size} events", batch_size: batch.total_items())]
-    pub(crate) async fn send(
-        &self,
-        batch: EncodedScopeItems,
-    ) -> Result<(), BatchError<EncodedScopeItems>> {
+    pub(crate) async fn send(&self, mut channel: Channel) -> Result<(), BatchError<Channel>> {
         match self {
             OtlpTransport::Http {
                 ref http,
                 ref resource,
                 ref request_encoder,
             } => {
-                let uri = http.uri();
-                let batch_size = batch.total_items();
-
-                match http
-                    .send(request_encoder.encode_request(resource.as_ref(), &batch)?)
-                    .await
-                {
-                    Ok(res) => {
-                        span.complete_with(emit::span::completion::from_fn(|evt| {
-                            emit::debug!(
-                                rt: emit::runtime::internal(),
-                                evt,
-                                "OTLP batch of {batch_size} events to {uri}",
-                                batch_size,
-                            )
-                        }));
-
-                        res
+                // Process each request in the batch
+                while let Some(batch) = channel.requests.last() {
+                    match Self::send_batch(http, resource, request_encoder, batch).await {
+                        Ok(()) => {
+                            channel.requests.pop();
+                        }
+                        Err(e) => {
+                            return Err(e.map_retryable(|r| r.map(|_| channel)));
+                        }
                     }
-                    Err(err) => {
-                        span.complete_with(emit::span::completion::from_fn(|evt| {
-                            emit::warn!(
-                                rt: emit::runtime::internal(),
-                                evt,
-                                "OTLP batch of {batch_size} events to {uri} failed: {err}",
-                                batch_size,
-                                err,
-                            )
-                        }));
 
-                        return Err(BatchError::retry(err, batch));
-                    }
-                };
+                    channel.requests.pop();
+                }
             }
         }
+
+        Ok(())
+    }
+
+    #[emit::span(rt: emit::runtime::internal(), guard: span, "send OTLP batch of {batch_size} events", batch_size: batch.total_items())]
+    pub(crate) async fn send_batch(
+        http: &HttpConnection,
+        resource: &Option<EncodedPayload>,
+        request_encoder: &ClientRequestEncoder<R>,
+        batch: &EncodedScopeItems,
+    ) -> Result<(), BatchError<()>> {
+        let uri = http.uri();
+        let batch_size = batch.total_items();
+
+        match http
+            .send(
+                request_encoder.encode_request(resource.as_ref(), &batch)?,
+                DEFAULT_REQUEST_TIMEOUT,
+            )
+            .await
+        {
+            Ok(res) => {
+                span.complete_with(emit::span::completion::from_fn(|evt| {
+                    emit::debug!(
+                        rt: emit::runtime::internal(),
+                        evt,
+                        "OTLP batch of {batch_size} events to {uri}",
+                        batch_size,
+                    )
+                }));
+
+                res
+            }
+            Err(err) => {
+                span.complete_with(emit::span::completion::from_fn(|evt| {
+                    emit::warn!(
+                        rt: emit::runtime::internal(),
+                        evt,
+                        "OTLP batch of {batch_size} events to {uri} failed: {err}",
+                        batch_size,
+                        err,
+                    )
+                }));
+
+                return Err(BatchError::retry(err, ()));
+            }
+        };
 
         Ok(())
     }
@@ -612,20 +638,29 @@ impl emit::Emitter for OtlpInner {
         let evt = evt.to_event();
 
         if let Some((ref encoder, ref sender)) = self.otlp_metrics {
-            if let Some(encoded) = encoder.encode_event(&evt) {
-                return sender.send(encoded);
+            if let Some(event) = encoder.encode_event(&evt) {
+                return sender.send(ChannelItem {
+                    max_request_size_bytes: DEFAULT_MAX_REQUEST_SIZE_BYTES,
+                    event,
+                });
             }
         }
 
         if let Some((ref encoder, ref sender)) = self.otlp_traces {
-            if let Some(encoded) = encoder.encode_event(&evt) {
-                return sender.send(encoded);
+            if let Some(event) = encoder.encode_event(&evt) {
+                return sender.send(ChannelItem {
+                    max_request_size_bytes: DEFAULT_MAX_REQUEST_SIZE_BYTES,
+                    event,
+                });
             }
         }
 
         if let Some((ref encoder, ref sender)) = self.otlp_logs {
-            if let Some(encoded) = encoder.encode_event(&evt) {
-                return sender.send(encoded);
+            if let Some(event) = encoder.encode_event(&evt) {
+                return sender.send(ChannelItem {
+                    max_request_size_bytes: DEFAULT_MAX_REQUEST_SIZE_BYTES,
+                    event,
+                });
             }
         }
 
@@ -657,23 +692,61 @@ impl emit::Emitter for OtlpInner {
     }
 }
 
-impl emit_batcher::Channel for EncodedScopeItems {
-    type Item = EncodedEvent;
+#[derive(Default)]
+pub(crate) struct Channel {
+    requests: Vec<EncodedScopeItems>,
+    current_request_size_bytes: usize,
+    total_items: usize,
+}
+
+pub(crate) struct ChannelItem {
+    max_request_size_bytes: usize,
+    event: EncodedEvent,
+}
+
+impl emit_batcher::Channel for Channel {
+    type Item = ChannelItem;
 
     fn new() -> Self {
-        EncodedScopeItems::new()
+        Channel::default()
     }
 
     fn push(&mut self, item: Self::Item) {
-        self.push(item)
+        let incoming_size_bytes = item.event.payload.len();
+
+        // If the channel is empty or the current request is over its size limit then begin a new one
+        if self.requests.len() == 0
+            || self.current_request_size_bytes >= item.max_request_size_bytes
+        {
+            let mut request = EncodedScopeItems::new();
+            request.push(item.event);
+
+            self.requests.push(request);
+            self.current_request_size_bytes = incoming_size_bytes;
+        }
+        // If the current request still has capacity then push onto it
+        else {
+            self.requests.last_mut().unwrap().push(item.event);
+            self.current_request_size_bytes += incoming_size_bytes;
+        }
+
+        self.total_items += 1;
     }
 
     fn len(&self) -> usize {
-        self.total_items()
+        self.total_items
     }
 
     fn clear(&mut self) {
-        self.clear()
+        let Channel {
+            requests,
+            total_items,
+            current_request_size_bytes,
+        } = self;
+
+        requests.clear();
+        *total_items = 0;
+        *current_request_size_bytes = 0;
     }
 }
 
@@ -740,7 +813,7 @@ impl<R: data::RequestEncoder> ClientRequestEncoder<R> {
         &self,
         resource: Option<&EncodedPayload>,
         items: &EncodedScopeItems,
-    ) -> Result<EncodedPayload, BatchError<EncodedScopeItems>> {
+    ) -> Result<EncodedPayload, BatchError<()>> {
         match self.encoding {
             Encoding::Proto => self
                 .encoder
@@ -805,5 +878,32 @@ mod tests {
 
         // Ensure the background thread is torn down
         handle.join().unwrap();
+    }
+
+    #[test]
+    fn otlp_channel_splits_requests_by_size() {
+        use emit_batcher::Channel as _;
+
+        for (max_request_size_bytes, expected_len) in [(0, 100), (1, 100), (10, 20)] {
+            let mut channel = Channel::new();
+
+            for _ in 0..100 {
+                channel.push(ChannelItem {
+                    max_request_size_bytes,
+                    event: EncodedEvent {
+                        scope: emit::path!("a"),
+                        payload: EncodedPayload::Json(sval_json::JsonStr::boxed("{}")),
+                    },
+                });
+            }
+
+            assert_eq!(100, channel.total_items);
+
+            assert_eq!(
+                expected_len,
+                channel.requests.len(),
+                "{max_request_size_bytes} did not produce {expected_len} items"
+            );
+        }
     }
 }

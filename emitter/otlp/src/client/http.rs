@@ -5,6 +5,7 @@ use std::{
     pin::Pin,
     sync::{Arc, Mutex},
     task::{self, Context, Poll},
+    time::Duration,
 };
 
 use bytes::Buf;
@@ -304,43 +305,49 @@ impl HttpConnection {
         &self.uri
     }
 
-    pub async fn send(&self, body: EncodedPayload) -> Result<Vec<u8>, Error> {
-        let mut sender = match self.poison() {
-            Some(sender) => sender,
-            None => connect(&self.metrics, self.version, &self.uri).await?,
-        };
+    pub async fn send(&self, body: EncodedPayload, timeout: Duration) -> Result<Vec<u8>, Error> {
+        let res = tokio::time::timeout(timeout, async {
+            let mut sender = match self.poison() {
+                Some(sender) => sender,
+                None => connect(&self.metrics, self.version, &self.uri).await?,
+            };
 
-        let body = {
-            #[cfg(feature = "gzip")]
-            {
-                if self.allow_compression && !self.uri.is_https() {
-                    self.metrics.transport_request_compress_gzip.increment();
+            let body = {
+                #[cfg(feature = "gzip")]
+                {
+                    if self.allow_compression && !self.uri.is_https() {
+                        self.metrics.transport_request_compress_gzip.increment();
 
-                    HttpContent::gzip(body)?
-                } else {
+                        HttpContent::gzip(body)?
+                    } else {
+                        HttpContent::raw(body)
+                    }
+                }
+                #[cfg(not(feature = "gzip"))]
+                {
+                    let _ = self.allow_compression;
+
                     HttpContent::raw(body)
                 }
-            }
-            #[cfg(not(feature = "gzip"))]
-            {
-                let _ = self.allow_compression;
+            };
 
-                HttpContent::raw(body)
-            }
-        };
+            let res = send_request(
+                &self.metrics,
+                &mut sender,
+                &self.uri,
+                self.headers.iter().map(|(k, v)| (&**k, &**v)),
+                (self.request)(body)?,
+            )
+            .await?;
 
-        let res = send_request(
-            &self.metrics,
-            &mut sender,
-            &self.uri,
-            self.headers.iter().map(|(k, v)| (&**k, &**v)),
-            (self.request)(body)?,
-        )
-        .await?;
+            self.unpoison(sender);
 
-        self.unpoison(sender);
+            (self.response)(res).await
+        })
+        .await
+        .map_err(|e| Error::new("failed to send request within its timeout", e))?;
 
-        (self.response)(res).await
+        res
     }
 }
 
