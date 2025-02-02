@@ -1,4 +1,4 @@
-use crate::data::EncodedScopeItems;
+use crate::client::Channel;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
@@ -140,9 +140,9 @@ This type doesn't collect any OTLP metrics you emit, it includes metrics about t
 You can enumerate the metrics using the [`emit::metric::Source`] implementation. See [`emit::metric`] for details.
 */
 pub struct OtlpMetrics {
-    pub(crate) logs_channel_metrics: Option<emit_batcher::ChannelMetrics<EncodedScopeItems>>,
-    pub(crate) traces_channel_metrics: Option<emit_batcher::ChannelMetrics<EncodedScopeItems>>,
-    pub(crate) metrics_channel_metrics: Option<emit_batcher::ChannelMetrics<EncodedScopeItems>>,
+    pub(crate) logs_channel_metrics: Option<emit_batcher::ChannelMetrics<Channel>>,
+    pub(crate) traces_channel_metrics: Option<emit_batcher::ChannelMetrics<Channel>>,
+    pub(crate) metrics_channel_metrics: Option<emit_batcher::ChannelMetrics<Channel>>,
     pub(crate) metrics: Arc<InternalMetrics>,
 }
 

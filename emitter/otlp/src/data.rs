@@ -87,10 +87,6 @@ impl EncodedScopeItems {
     pub fn items(&self) -> impl Iterator<Item = (emit::Path, &[EncodedPayload])> {
         self.items.iter().map(|(k, v)| (k.by_ref(), &**v))
     }
-
-    pub fn clear(&mut self) {
-        self.items.clear()
-    }
 }
 
 fn stream_encoded_scope_items<'sval, S: sval::Stream<'sval> + ?Sized>(

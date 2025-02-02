@@ -136,10 +136,16 @@ pub fn bounded<T: Channel>(max_capacity: usize) -> (Sender<T>, Receiver<T>) {
             max_capacity,
             shared: shared.clone(),
         },
+        // NOTE: These should be made configurable via a `Builder`
+        // The defaults chosen here are not going to be optimal for all cases
+        // These defaults give a batch ~30 seconds to get through before it'll be dropped
         Receiver {
+            // The time the receiver will wait before checking for a batch of events to emit
             idle_delay: Delay::new(Duration::from_millis(1), Duration::from_millis(500)),
+            // The maximum number of times a retryable batch will be retried
             retry: Retry::new(10),
-            retry_delay: Delay::new(Duration::from_millis(300), Duration::from_secs(5)),
+            // The backoff applied to retries
+            retry_delay: Delay::new(Duration::from_millis(700), Duration::from_secs(10)),
             capacity: Capacity::new(),
             shared,
         },
