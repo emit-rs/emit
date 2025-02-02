@@ -139,7 +139,7 @@ pub fn bounded<T: Channel>(max_capacity: usize) -> (Sender<T>, Receiver<T>) {
         Receiver {
             idle_delay: Delay::new(Duration::from_millis(1), Duration::from_millis(500)),
             retry: Retry::new(10),
-            retry_delay: Delay::new(Duration::from_millis(50), Duration::from_secs(1)),
+            retry_delay: Delay::new(Duration::from_millis(300), Duration::from_secs(5)),
             capacity: Capacity::new(),
             shared,
         },

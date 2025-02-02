@@ -561,7 +561,10 @@ impl<R: data::RequestEncoder> OtlpTransport<R> {
                 let batch_size = batch.total_items();
 
                 match http
-                    .send(request_encoder.encode_request(resource.as_ref(), &batch)?)
+                    .send(
+                        request_encoder.encode_request(resource.as_ref(), &batch)?,
+                        Duration::from_secs(30),
+                    )
                     .await
                 {
                     Ok(res) => {
