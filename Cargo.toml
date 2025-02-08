@@ -65,7 +65,7 @@ optional = true
 default-features = false
 
 [dependencies.rand]
-version = "0.8"
+version = "0.9"
 optional = true
 
 [dev-dependencies.serde]
