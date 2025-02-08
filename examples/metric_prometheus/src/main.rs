@@ -23,7 +23,7 @@ fn main() {
 
     let mut bytes_written = 0usize;
     for _ in 0..60 {
-        bytes_written += rand::thread_rng().gen_range(0..750);
+        bytes_written += rand::rng().random_range(0..750);
 
         emit::emit!(evt: emit::Metric::new(emit::pkg!(), "bytes_written", "count", emit::clock().now(), bytes_written, emit::Empty));
 
