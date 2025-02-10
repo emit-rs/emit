@@ -82,10 +82,12 @@ use core::time::Duration;
 
 use emit_core::{
     and::And,
+    clock::Clock,
     ctxt::Ctxt,
     emitter::Emitter,
     empty::Empty,
     filter::Filter,
+    rng::Rng,
     runtime::{AmbientRuntime, AmbientSlot, InternalCtxt, InternalEmitter, InternalFilter},
 };
 
@@ -238,6 +240,30 @@ impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt> Setup<TEmitter, TFilter, T
             ctxt: map(self.ctxt),
             platform: self.platform,
         }
+    }
+
+    /**
+    Set the [`Clock`] used to assign timestamps and run timers.
+    */
+    pub fn with_clock(
+        mut self,
+        clock: impl Clock + Send + Sync + 'static,
+    ) -> Setup<TEmitter, TFilter, TCtxt> {
+        self.platform.with_clock(clock);
+
+        self
+    }
+
+    /**
+    Set the [`Rng`] used to assign trace and span ids.
+    */
+    pub fn with_rng(
+        mut self,
+        rng: impl Rng + Send + Sync + 'static,
+    ) -> Setup<TEmitter, TFilter, TCtxt> {
+        self.platform.with_rng(rng);
+
+        self
     }
 }
 

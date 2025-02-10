@@ -28,27 +28,42 @@ pub type DefaultRng = rand_rng::RandRng;
 mod std_support {
     use super::*;
 
-    use emit_core::{clock::ErasedClock, rng::ErasedRng, runtime::AssertInternal};
+    use emit_core::{
+        clock::{Clock, ErasedClock},
+        rng::{ErasedRng, Rng},
+        runtime::AssertInternal,
+    };
 
     /**
     The default [`crate::Clock`].
     */
-    #[cfg(feature = "std")]
+    #[cfg(not(all(
+        target_arch = "wasm32",
+        target_vendor = "unknown",
+        target_os = "unknown"
+    )))]
     pub type DefaultClock = system_clock::SystemClock;
+
+    /**
+    The default [`crate::Clock`].
+    */
+    #[cfg(all(
+        target_arch = "wasm32",
+        target_vendor = "unknown",
+        target_os = "unknown"
+    ))]
+    pub type DefaultClock = crate::Empty;
 
     /**
     The default [`crate::Ctxt`] to use in [`crate::setup()`].
     */
-    #[cfg(feature = "std")]
     pub type DefaultCtxt = thread_local_ctxt::ThreadLocalCtxt;
 
     /**
     A type-erased container for system services used when intiailizing runtimes.
     */
     pub(crate) struct Platform {
-        #[cfg(feature = "std")]
         pub(crate) clock: AssertInternal<Box<dyn ErasedClock + Send + Sync>>,
-        #[cfg(feature = "std")]
         pub(crate) rng: AssertInternal<Box<dyn ErasedRng + Send + Sync>>,
     }
 
@@ -61,11 +76,17 @@ mod std_support {
     impl Platform {
         pub fn new() -> Self {
             Platform {
-                #[cfg(feature = "std")]
                 clock: AssertInternal(Box::new(DefaultClock::default())),
-                #[cfg(feature = "std")]
                 rng: AssertInternal(Box::new(DefaultRng::default())),
             }
+        }
+
+        pub fn with_clock(&mut self, clock: impl Clock + Send + Sync + 'static) {
+            self.clock = AssertInternal(Box::new(clock));
+        }
+
+        pub fn with_rng(&mut self, rng: impl Rng + Send + Sync + 'static) {
+            self.rng = AssertInternal(Box::new(rng));
         }
     }
 }
