@@ -15,7 +15,7 @@ classDiagram
     emit_macros <.. emit
 
     class emit_macros {
-        emit_core = "0.11.9"
+        emit_core = "0.11.10"
         proc-macro2 = "1"
         quote = "1"
         syn = "2"
@@ -29,8 +29,8 @@ classDiagram
     emit <.. app : required
 
     class emit {
-        emit_core = "0.11.9"
-        emit_macros = "0.11.9"
+        emit_core = "0.11.10"
+        emit_macros = "0.11.10"
     }
 
     emit_term .. app : optional
@@ -39,51 +39,51 @@ classDiagram
     emit_custom .. app : optional
 
     class emit_term {
-        emit = "0.11.9"
+        emit = "0.11.10"
     }
 
     class emit_file {
-        emit = "0.11.9"
+        emit = "0.11.10"
     }
 
     class emit_otlp {
-        emit = "0.11.9"
+        emit = "0.11.10"
     }
 
     class emit_custom["other emitter"] {
-        emit = "0.11.9"
+        emit = "0.11.10"
     }
 
     class app["your app"] {
-        emit = "0.11.9"
-        emit_term = "0.11.9"*
-        emit_file = "0.11.9"*
-        emit_otlp = "0.11.9"*
+        emit = "0.11.10"
+        emit_term = "0.11.10"*
+        emit_file = "0.11.10"*
+        emit_otlp = "0.11.10"*
     }
 
-    click emit_core href "https://docs.rs/emit_core/0.11.9/emit_core/index.html"
-    click emit_macros href "https://docs.rs/emit_macros/0.11.9/emit_macros/index.html"
-    click emit href "https://docs.rs/emit/0.11.9/emit/index.html"
-    click emit_term href "https://docs.rs/emit_term/0.11.9/emit_term/index.html"
-    click emit_file href "https://docs.rs/emit_file/0.11.9/emit_file/index.html"
-    click emit_otlp href "https://docs.rs/emit_otlp/0.11.9/emit_otlp/index.html"
+    click emit_core href "https://docs.rs/emit_core/0.11.10/emit_core/index.html"
+    click emit_macros href "https://docs.rs/emit_macros/0.11.10/emit_macros/index.html"
+    click emit href "https://docs.rs/emit/0.11.10/emit/index.html"
+    click emit_term href "https://docs.rs/emit_term/0.11.10/emit_term/index.html"
+    click emit_file href "https://docs.rs/emit_file/0.11.10/emit_file/index.html"
+    click emit_otlp href "https://docs.rs/emit_otlp/0.11.10/emit_otlp/index.html"
 ```
 
-- [`emit`](https://docs.rs/emit/0.11.9/emit/index.html): The main library that re-exports `emit_core` and `emit_macros`. This is the one your applications depend on.
-- [`emit_core`](https://docs.rs/emit_core/0.11.9/emit_core/index.html): Just the fundamental APIs. It includes the `shared()` and `internal()` runtimes. The goal of this library is to remain stable, even if macro syntax evolves over time.
-- [`emit_macros`](https://docs.rs/emit_macros/0.11.9/emit_macros/index.html): `emit!`, `#[span]`, and other procedural macros.
+- [`emit`](https://docs.rs/emit/0.11.10/emit/index.html): The main library that re-exports `emit_core` and `emit_macros`. This is the one your applications depend on.
+- [`emit_core`](https://docs.rs/emit_core/0.11.10/emit_core/index.html): Just the fundamental APIs. It includes the `shared()` and `internal()` runtimes. The goal of this library is to remain stable, even if macro syntax evolves over time.
+- [`emit_macros`](https://docs.rs/emit_macros/0.11.10/emit_macros/index.html): `emit!`, `#[span]`, and other procedural macros.
 
 The `emit` library doesn't implement anywhere for you to send your diagnostics itself, but there are other libraries that do:
 
-- [`emit_term`](https://docs.rs/emit_term/0.11.9/emit_term/index.html): Writes to the console. See [Emitting to the console](../emitting-events/console.md) for details.
-- [`emit_file`](https://docs.rs/emit_file/0.11.9/emit_file/index.html): Writes to rolling files. See [Emitting to rolling files](../emitting-events/rolling-files.md) for details.
-- [`emit_otlp`](https://docs.rs/emit_otlp/0.11.9/emit_otlp/index.html): Writes OpenTelemetry's wire protocol. See [Emitting via OTLP](../emitting-events/otlp.md) for details.
+- [`emit_term`](https://docs.rs/emit_term/0.11.10/emit_term/index.html): Writes to the console. See [Emitting to the console](../emitting-events/console.md) for details.
+- [`emit_file`](https://docs.rs/emit_file/0.11.10/emit_file/index.html): Writes to rolling files. See [Emitting to rolling files](../emitting-events/rolling-files.md) for details.
+- [`emit_otlp`](https://docs.rs/emit_otlp/0.11.10/emit_otlp/index.html): Writes OpenTelemetry's wire protocol. See [Emitting via OTLP](../emitting-events/otlp.md) for details.
 
-You can also write your own emitters by implementing the [`Emitter`](https://docs.rs/emit/0.11.9/emit/trait.Emitter.html) trait. See [Writing an Emitter](../for-developers/writing-an-emitter.md) for details.
+You can also write your own emitters by implementing the [`Emitter`](https://docs.rs/emit/0.11.10/emit/trait.Emitter.html) trait. See [Writing an Emitter](../for-developers/writing-an-emitter.md) for details.
 
 ## Events
 
-[`Event`](https://docs.rs/emit/0.11.9/emit/struct.Event.html)s are the central data type in `emit` that all others hang off. They look like this:
+[`Event`](https://docs.rs/emit/0.11.10/emit/struct.Event.html)s are the central data type in `emit` that all others hang off. They look like this:
 
 ```mermaid
 classDiagram
@@ -117,28 +117,28 @@ classDiagram
         props() Props
     }
 
-    click Event href "https://docs.rs/emit/0.11.9/emit/struct.Event.html"
-    click Timestamp href "https://docs.rs/emit/0.11.9/emit/struct.Timestamp.html"
-    click Extent href "https://docs.rs/emit/0.11.9/emit/struct.Extent.html"
-    click Str href "https://docs.rs/emit/0.11.9/emit/struct.Str.html"
-    click Value href "https://docs.rs/emit/0.11.9/emit/struct.Value.html"
-    click Props href "https://docs.rs/emit/0.11.9/emit/trait.Props.html"
-    click Template href "https://docs.rs/emit/0.11.9/emit/struct.Template.html"
-    click Path href "https://docs.rs/emit/0.11.9/emit/struct.Path.html"
+    click Event href "https://docs.rs/emit/0.11.10/emit/struct.Event.html"
+    click Timestamp href "https://docs.rs/emit/0.11.10/emit/struct.Timestamp.html"
+    click Extent href "https://docs.rs/emit/0.11.10/emit/struct.Extent.html"
+    click Str href "https://docs.rs/emit/0.11.10/emit/struct.Str.html"
+    click Value href "https://docs.rs/emit/0.11.10/emit/struct.Value.html"
+    click Props href "https://docs.rs/emit/0.11.10/emit/trait.Props.html"
+    click Template href "https://docs.rs/emit/0.11.10/emit/struct.Template.html"
+    click Path href "https://docs.rs/emit/0.11.10/emit/struct.Path.html"
 ```
 
 Events include:
 
-- A [`Path`](https://docs.rs/emit/0.11.9/emit/struct.Path.html) for the component that generated them.
-- A [`Template`](https://docs.rs/emit/0.11.9/emit/struct.Template.html) for their human-readable description. Templates can also make good low-cardinality identifiers for a specific shape of event.
-- An [`Extent`](https://docs.rs/emit/0.11.9/emit/struct.Extent.html) for the time the event is relevant. The extent itself may be a single [`Timestamp`](https://docs.rs/emit/0.11.9/emit/struct.Timestamp.html) for a point in time, or a pair of timestamps representing an active time range.
-- [`Props`](https://docs.rs/emit/0.11.9/emit/trait.Props.html) for structured key-value pairs attached to the event. These can be lazily interpolated into the template.
+- A [`Path`](https://docs.rs/emit/0.11.10/emit/struct.Path.html) for the component that generated them.
+- A [`Template`](https://docs.rs/emit/0.11.10/emit/struct.Template.html) for their human-readable description. Templates can also make good low-cardinality identifiers for a specific shape of event.
+- An [`Extent`](https://docs.rs/emit/0.11.10/emit/struct.Extent.html) for the time the event is relevant. The extent itself may be a single [`Timestamp`](https://docs.rs/emit/0.11.10/emit/struct.Timestamp.html) for a point in time, or a pair of timestamps representing an active time range.
+- [`Props`](https://docs.rs/emit/0.11.10/emit/trait.Props.html) for structured key-value pairs attached to the event. These can be lazily interpolated into the template.
 
 See [Event data model](./events.md) for more details.
 
 ## Runtimes
 
-In `emit`, a diagnostic pipeline is an instance of a [`Runtime`](https://docs.rs/emit/0.11.9/emit/runtime/struct.Runtime.html). Each runtime is an isolated set of components that help construct and emit diagnostic events in your applications. It looks like this:
+In `emit`, a diagnostic pipeline is an instance of a [`Runtime`](https://docs.rs/emit/0.11.10/emit/runtime/struct.Runtime.html). Each runtime is an isolated set of components that help construct and emit diagnostic events in your applications. It looks like this:
 
 ```mermaid
 classDiagram
@@ -195,33 +195,33 @@ classDiagram
 
     <<Trait>> Rng
 
-    click Emitter href "https://docs.rs/emit/0.11.9/emit/trait.Emitter.html"
-    click Filter href "https://docs.rs/emit/0.11.9/emit/trait.Filter.html"
-    click Ctxt href "https://docs.rs/emit/0.11.9/emit/trait.Ctxt.html"
-    click Clock href "https://docs.rs/emit/0.11.9/emit/trait.Clock.html"
-    click Rng href "https://docs.rs/emit/0.11.9/emit/trait.Rng.html"
-    click Runtime href "https://docs.rs/emit/0.11.9/emit/runtime/struct.Runtime.html"
-    click AmbientSlot href "https://docs.rs/emit/0.11.9/emit/runtime/struct.AmbientSlot.html"
+    click Emitter href "https://docs.rs/emit/0.11.10/emit/trait.Emitter.html"
+    click Filter href "https://docs.rs/emit/0.11.10/emit/trait.Filter.html"
+    click Ctxt href "https://docs.rs/emit/0.11.10/emit/trait.Ctxt.html"
+    click Clock href "https://docs.rs/emit/0.11.10/emit/trait.Clock.html"
+    click Rng href "https://docs.rs/emit/0.11.10/emit/trait.Rng.html"
+    click Runtime href "https://docs.rs/emit/0.11.10/emit/runtime/struct.Runtime.html"
+    click AmbientSlot href "https://docs.rs/emit/0.11.10/emit/runtime/struct.AmbientSlot.html"
 ```
 
-A [`Runtime`](https://docs.rs/emit/0.11.9/emit/runtime/struct.Runtime.html) includes:
+A [`Runtime`](https://docs.rs/emit/0.11.10/emit/runtime/struct.Runtime.html) includes:
 
-- [`Emitter`](https://docs.rs/emit/0.11.9/emit/trait.Emitter.html): Responsible for sending events to some outside observer.
-- [`Filter`](https://docs.rs/emit/0.11.9/emit/trait.Filter.html): Responsible for determining whether an event should be emitted or not.
-- [`Ctxt`](https://docs.rs/emit/0.11.9/emit/trait.Ctxt.html): Responsible for storing ambient context that's appended to events as they're constructed.
-- [`Clock`](https://docs.rs/emit/0.11.9/emit/trait.Clock.html): Responsible for assigning timestamps to events and running timers.
-- [`Rng`](https://docs.rs/emit/0.11.9/emit/trait.Rng.html): Responsible for generating unique identifiers like trace and span ids.
+- [`Emitter`](https://docs.rs/emit/0.11.10/emit/trait.Emitter.html): Responsible for sending events to some outside observer.
+- [`Filter`](https://docs.rs/emit/0.11.10/emit/trait.Filter.html): Responsible for determining whether an event should be emitted or not.
+- [`Ctxt`](https://docs.rs/emit/0.11.10/emit/trait.Ctxt.html): Responsible for storing ambient context that's appended to events as they're constructed.
+- [`Clock`](https://docs.rs/emit/0.11.10/emit/trait.Clock.html): Responsible for assigning timestamps to events and running timers.
+- [`Rng`](https://docs.rs/emit/0.11.10/emit/trait.Rng.html): Responsible for generating unique identifiers like trace and span ids.
 
-An [`AmbientSlot`](https://docs.rs/emit/0.11.9/emit/runtime/struct.AmbientSlot.html) is a container for a `Runtime` that manages global initialization. `emit` includes two built-in ambient slots:
+An [`AmbientSlot`](https://docs.rs/emit/0.11.10/emit/runtime/struct.AmbientSlot.html) is a container for a `Runtime` that manages global initialization. `emit` includes two built-in ambient slots:
 
-- [`shared()`](https://docs.rs/emit/0.11.9/emit/runtime/fn.shared_slot.html): The runtime used by default when not otherwise specified.
-- [`internal()`](https://docs.rs/emit/0.11.9/emit/runtime/fn.internal_slot.html): The runtime used by other runtimes for self diagnostics.
+- [`shared()`](https://docs.rs/emit/0.11.10/emit/runtime/fn.shared_slot.html): The runtime used by default when not otherwise specified.
+- [`internal()`](https://docs.rs/emit/0.11.10/emit/runtime/fn.internal_slot.html): The runtime used by other runtimes for self diagnostics.
 
 You can also define your own `AmbientSlot`s or use `Runtime`s directly.
 
 ## Event construction and emission
 
-When the [`emit!`](https://docs.rs/emit/0.11.9/emit/macro.emit.html) macro is called, an event is constructed using features of the runtime before being emitted through it. This is how it works:
+When the [`emit!`](https://docs.rs/emit/0.11.10/emit/macro.emit.html) macro is called, an event is constructed using features of the runtime before being emitted through it. This is how it works:
 
 ```mermaid
 flowchart
@@ -257,25 +257,25 @@ flowchart
 
     emitter --> END(((end)))
 
-    click macro href "https://docs.rs/emit/0.11.9/emit/macro.emit.html"
+    click macro href "https://docs.rs/emit/0.11.10/emit/macro.emit.html"
 
-    click tpl href "https://docs.rs/emit/0.11.9/emit/struct.Template.html"
+    click tpl href "https://docs.rs/emit/0.11.10/emit/struct.Template.html"
 
-    click macro_props href "https://docs.rs/emit/0.11.9/emit/trait.Props.html"
-    click ctxt_props href "https://docs.rs/emit/0.11.9/emit/trait.Props.html"
-    click props href "https://docs.rs/emit/0.11.9/emit/trait.Props.html"
+    click macro_props href "https://docs.rs/emit/0.11.10/emit/trait.Props.html"
+    click ctxt_props href "https://docs.rs/emit/0.11.10/emit/trait.Props.html"
+    click props href "https://docs.rs/emit/0.11.10/emit/trait.Props.html"
 
-    click mdl href "https://docs.rs/emit/0.11.9/emit/struct.Path.html"
+    click mdl href "https://docs.rs/emit/0.11.10/emit/struct.Path.html"
 
-    click ts href "https://docs.rs/emit/0.11.9/emit/struct.Timestamp.html"
-    click extent href "https://docs.rs/emit/0.11.9/emit/struct.Extent.html"
+    click ts href "https://docs.rs/emit/0.11.10/emit/struct.Timestamp.html"
+    click extent href "https://docs.rs/emit/0.11.10/emit/struct.Extent.html"
 
-    click event href "https://docs.rs/emit/0.11.9/emit/struct.Event.html"
+    click event href "https://docs.rs/emit/0.11.10/emit/struct.Event.html"
 
-    click emitter href "https://docs.rs/emit/0.11.9/emit/trait.Emitter.html"
-    click filter href "https://docs.rs/emit/0.11.9/emit/trait.Filter.html"
-    click ctxt href "https://docs.rs/emit/0.11.9/emit/trait.Ctxt.html"
-    click clock href "https://docs.rs/emit/0.11.9/emit/trait.Clock.html"
+    click emitter href "https://docs.rs/emit/0.11.10/emit/trait.Emitter.html"
+    click filter href "https://docs.rs/emit/0.11.10/emit/trait.Filter.html"
+    click ctxt href "https://docs.rs/emit/0.11.10/emit/trait.Ctxt.html"
+    click clock href "https://docs.rs/emit/0.11.10/emit/trait.Clock.html"
 ```
 
 When constructing an event, the runtime provides the current timestamp and any ambient context. When emitting an event, the runtime filters out events to discard and emits the ones that remain.
@@ -286,7 +286,7 @@ You don't need to use macros to construct events. You can also do it manually to
 
 ## Span construction and emission
 
-When the [`#[span]`](https://docs.rs/emit/0.11.9/emit/attr.span.html) macro is called, the annotated function is instrumented using features of the runtime before a span representing its execution is emitted through it. This is how it works:
+When the [`#[span]`](https://docs.rs/emit/0.11.10/emit/attr.span.html) macro is called, the annotated function is instrumented using features of the runtime before a span representing its execution is emitted through it. This is how it works:
 
 ```mermaid
 flowchart
@@ -336,30 +336,30 @@ flowchart
     
     completion --> END(((end)))
 
-    click macro href "https://docs.rs/emit/0.11.9/emit/attr.span.html"
+    click macro href "https://docs.rs/emit/0.11.10/emit/attr.span.html"
 
-    click tpl href "https://docs.rs/emit/0.11.9/emit/struct.Template.html"
+    click tpl href "https://docs.rs/emit/0.11.10/emit/struct.Template.html"
 
-    click macro_props href "https://docs.rs/emit/0.11.9/emit/trait.Props.html"
+    click macro_props href "https://docs.rs/emit/0.11.10/emit/trait.Props.html"
 
-    click span_ctxt href "https://docs.rs/emit/0.11.9/emit/span/struct.SpanCtxt.html"
-    click span href "https://docs.rs/emit/0.11.9/emit/span/struct.Span.html"
-    click timer href "https://docs.rs/emit/0.11.9/emit/timer/struct.Timer.html"
+    click span_ctxt href "https://docs.rs/emit/0.11.10/emit/span/struct.SpanCtxt.html"
+    click span href "https://docs.rs/emit/0.11.10/emit/span/struct.Span.html"
+    click timer href "https://docs.rs/emit/0.11.10/emit/timer/struct.Timer.html"
 
-    click frame href "https://docs.rs/emit/0.11.9/emit/frame/struct.Frame.html"
-    click frame_2 href "https://docs.rs/emit/0.11.9/emit/frame/struct.Frame.html"
+    click frame href "https://docs.rs/emit/0.11.10/emit/frame/struct.Frame.html"
+    click frame_2 href "https://docs.rs/emit/0.11.10/emit/frame/struct.Frame.html"
 
-    click active_span href "https://docs.rs/emit/0.11.9/emit/span/struct.SpanGuard.html"
-    click active_span_2 href "https://docs.rs/emit/0.11.9/emit/span/struct.SpanGuard.html"
+    click active_span href "https://docs.rs/emit/0.11.10/emit/span/struct.SpanGuard.html"
+    click active_span_2 href "https://docs.rs/emit/0.11.10/emit/span/struct.SpanGuard.html"
 
-    click completion href "https://docs.rs/emit/0.11.9/emit/span/completion/struct.Default.html"
+    click completion href "https://docs.rs/emit/0.11.10/emit/span/completion/struct.Default.html"
 
-    click emitter href "https://docs.rs/emit/0.11.9/emit/trait.Emitter.html"
-    click filter href "https://docs.rs/emit/0.11.9/emit/trait.Filter.html"
-    click ctxt href "https://docs.rs/emit/0.11.9/emit/trait.Ctxt.html"
-    click ctxt_2 href "https://docs.rs/emit/0.11.9/emit/trait.Ctxt.html"
-    click clock href "https://docs.rs/emit/0.11.9/emit/trait.Clock.html"
-    click rng href "https://docs.rs/emit/0.11.9/emit/trait.Rng.html"
+    click emitter href "https://docs.rs/emit/0.11.10/emit/trait.Emitter.html"
+    click filter href "https://docs.rs/emit/0.11.10/emit/trait.Filter.html"
+    click ctxt href "https://docs.rs/emit/0.11.10/emit/trait.Ctxt.html"
+    click ctxt_2 href "https://docs.rs/emit/0.11.10/emit/trait.Ctxt.html"
+    click clock href "https://docs.rs/emit/0.11.10/emit/trait.Clock.html"
+    click rng href "https://docs.rs/emit/0.11.10/emit/trait.Rng.html"
 ```
 
 When constructing a span, the runtime generates random trace and span ids from the current ambient context and starts a timer using the clock.
