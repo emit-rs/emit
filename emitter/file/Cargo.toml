@@ -21,7 +21,7 @@ default_writer = ["emit/sval", "sval_json"]
 version = "0.11.9"
 path = "../../"
 default-features = false
-features = ["std", "implicit_internal_rt"]
+features = ["std", "rand", "implicit_internal_rt"]
 
 [dependencies.sval]
 version = "2"

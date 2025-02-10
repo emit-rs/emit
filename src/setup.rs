@@ -82,14 +82,17 @@ use core::time::Duration;
 
 use emit_core::{
     and::And,
+    clock::Clock,
     ctxt::Ctxt,
     emitter::Emitter,
     empty::Empty,
     filter::Filter,
-    runtime::{AmbientRuntime, AmbientSlot, InternalCtxt, InternalEmitter, InternalFilter},
+    rng::Rng,
+    runtime::{
+        AmbientRuntime, AmbientSlot, InternalClock, InternalCtxt, InternalEmitter, InternalFilter,
+        InternalRng,
+    },
 };
-
-use crate::platform::{self, Platform};
 
 /**
 Configure `emit` with [`Emitter`]s, [`Filter`]s, and [`Ctxt`].
@@ -100,7 +103,7 @@ pub fn setup() -> Setup {
     Setup::default()
 }
 
-pub use platform::{DefaultClock, DefaultCtxt, DefaultRng};
+pub use crate::platform::{DefaultClock, DefaultCtxt, DefaultRng};
 
 /**
 The default [`Emitter`] to use in [`setup()`].
@@ -116,11 +119,18 @@ pub type DefaultFilter = Empty;
 A configuration builder for an `emit` runtime.
 */
 #[must_use = "call `.init()` to finish setup"]
-pub struct Setup<TEmitter = DefaultEmitter, TFilter = DefaultFilter, TCtxt = DefaultCtxt> {
+pub struct Setup<
+    TEmitter = DefaultEmitter,
+    TFilter = DefaultFilter,
+    TCtxt = DefaultCtxt,
+    TClock = DefaultClock,
+    TRng = DefaultRng,
+> {
     emitter: TEmitter,
     filter: TFilter,
     ctxt: TCtxt,
-    platform: Platform,
+    clock: TClock,
+    rng: TRng,
 }
 
 impl Default for Setup {
@@ -138,21 +148,28 @@ impl Setup {
             emitter: Default::default(),
             filter: Default::default(),
             ctxt: Default::default(),
-            platform: Default::default(),
+            clock: Default::default(),
+            rng: Default::default(),
         }
     }
 }
 
-impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt> Setup<TEmitter, TFilter, TCtxt> {
+impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt, TClock: Clock, TRng: Rng>
+    Setup<TEmitter, TFilter, TCtxt, TClock, TRng>
+{
     /**
     Set the [`Emitter`] that will receive diagnostic events.
     */
-    pub fn emit_to<UEmitter: Emitter>(self, emitter: UEmitter) -> Setup<UEmitter, TFilter, TCtxt> {
+    pub fn emit_to<UEmitter: Emitter>(
+        self,
+        emitter: UEmitter,
+    ) -> Setup<UEmitter, TFilter, TCtxt, TClock, TRng> {
         Setup {
             emitter,
             filter: self.filter,
             ctxt: self.ctxt,
-            platform: self.platform,
+            clock: self.clock,
+            rng: self.rng,
         }
     }
 
@@ -162,12 +179,13 @@ impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt> Setup<TEmitter, TFilter, T
     pub fn and_emit_to<UEmitter: Emitter>(
         self,
         emitter: UEmitter,
-    ) -> Setup<And<TEmitter, UEmitter>, TFilter, TCtxt> {
+    ) -> Setup<And<TEmitter, UEmitter>, TFilter, TCtxt, TClock, TRng> {
         Setup {
             emitter: self.emitter.and_to(emitter),
             filter: self.filter,
             ctxt: self.ctxt,
-            platform: self.platform,
+            clock: self.clock,
+            rng: self.rng,
         }
     }
 
@@ -177,24 +195,29 @@ impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt> Setup<TEmitter, TFilter, T
     pub fn map_emitter<UEmitter: Emitter>(
         self,
         map: impl FnOnce(TEmitter) -> UEmitter,
-    ) -> Setup<UEmitter, TFilter, TCtxt> {
+    ) -> Setup<UEmitter, TFilter, TCtxt, TClock, TRng> {
         Setup {
             emitter: map(self.emitter),
             filter: self.filter,
             ctxt: self.ctxt,
-            platform: self.platform,
+            clock: self.clock,
+            rng: self.rng,
         }
     }
 
     /**
     Set the [`Filter`] that will be applied before diagnostic events are emitted.
     */
-    pub fn emit_when<UFilter: Filter>(self, filter: UFilter) -> Setup<TEmitter, UFilter, TCtxt> {
+    pub fn emit_when<UFilter: Filter>(
+        self,
+        filter: UFilter,
+    ) -> Setup<TEmitter, UFilter, TCtxt, TClock, TRng> {
         Setup {
             emitter: self.emitter,
             filter,
             ctxt: self.ctxt,
-            platform: self.platform,
+            clock: self.clock,
+            rng: self.rng,
         }
     }
 
@@ -204,24 +227,29 @@ impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt> Setup<TEmitter, TFilter, T
     pub fn and_emit_when<UFilter: Filter>(
         self,
         filter: UFilter,
-    ) -> Setup<TEmitter, And<TFilter, UFilter>, TCtxt> {
+    ) -> Setup<TEmitter, And<TFilter, UFilter>, TCtxt, TClock, TRng> {
         Setup {
             emitter: self.emitter,
             filter: self.filter.and_when(filter),
             ctxt: self.ctxt,
-            platform: self.platform,
+            clock: self.clock,
+            rng: self.rng,
         }
     }
 
     /**
     Set the [`Ctxt`] that will store ambient properties and attach them to diagnostic events.
     */
-    pub fn with_ctxt<UCtxt: Ctxt>(self, ctxt: UCtxt) -> Setup<TEmitter, TFilter, UCtxt> {
+    pub fn with_ctxt<UCtxt: Ctxt>(
+        self,
+        ctxt: UCtxt,
+    ) -> Setup<TEmitter, TFilter, UCtxt, TClock, TRng> {
         Setup {
             emitter: self.emitter,
             filter: self.filter,
             ctxt,
-            platform: self.platform,
+            clock: self.clock,
+            rng: self.rng,
         }
     }
 
@@ -231,12 +259,42 @@ impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt> Setup<TEmitter, TFilter, T
     pub fn map_ctxt<UCtxt: Ctxt>(
         self,
         map: impl FnOnce(TCtxt) -> UCtxt,
-    ) -> Setup<TEmitter, TFilter, UCtxt> {
+    ) -> Setup<TEmitter, TFilter, UCtxt, TClock, TRng> {
         Setup {
             emitter: self.emitter,
             filter: self.filter,
             ctxt: map(self.ctxt),
-            platform: self.platform,
+            clock: self.clock,
+            rng: self.rng,
+        }
+    }
+
+    /**
+    Set the [`Clock`] used to assign timestamps and run timers.
+    */
+    pub fn with_clock<UClock: Clock>(
+        self,
+        clock: UClock,
+    ) -> Setup<TEmitter, TFilter, TCtxt, UClock, TRng> {
+        Setup {
+            emitter: self.emitter,
+            filter: self.filter,
+            ctxt: self.ctxt,
+            clock,
+            rng: self.rng,
+        }
+    }
+
+    /**
+    Set the [`Rng`] used to assign trace and span ids.
+    */
+    pub fn with_rng<URng: Rng>(self, rng: URng) -> Setup<TEmitter, TFilter, TCtxt, TClock, URng> {
+        Setup {
+            emitter: self.emitter,
+            filter: self.filter,
+            ctxt: self.ctxt,
+            clock: self.clock,
+            rng,
         }
     }
 }
@@ -245,7 +303,9 @@ impl<
         TEmitter: Emitter + Send + Sync + 'static,
         TFilter: Filter + Send + Sync + 'static,
         TCtxt: Ctxt + Send + Sync + 'static,
-    > Setup<TEmitter, TFilter, TCtxt>
+        TClock: Clock + Send + Sync + 'static,
+        TRng: Rng + Send + Sync + 'static,
+    > Setup<TEmitter, TFilter, TCtxt, TClock, TRng>
 where
     TCtxt::Frame: Send + 'static,
 {
@@ -301,8 +361,8 @@ where
                 .with_emitter(self.emitter)
                 .with_filter(self.filter)
                 .with_ctxt(self.ctxt)
-                .with_clock(self.platform.clock)
-                .with_rng(self.platform.rng),
+                .with_clock(self.clock)
+                .with_rng(self.rng),
         )?;
 
         Some(Init {
@@ -317,7 +377,9 @@ impl<
         TEmitter: InternalEmitter + Send + Sync + 'static,
         TFilter: InternalFilter + Send + Sync + 'static,
         TCtxt: InternalCtxt + Send + Sync + 'static,
-    > Setup<TEmitter, TFilter, TCtxt>
+        TClock: InternalClock + Send + Sync + 'static,
+        TRng: InternalRng + Send + Sync + 'static,
+    > Setup<TEmitter, TFilter, TCtxt, TClock, TRng>
 where
     TCtxt::Frame: Send + 'static,
 {
@@ -353,8 +415,8 @@ where
                 .with_emitter(self.emitter)
                 .with_filter(self.filter)
                 .with_ctxt(self.ctxt)
-                .with_clock(self.platform.clock)
-                .with_rng(self.platform.rng),
+                .with_clock(self.clock)
+                .with_rng(self.rng),
         )?;
 
         Some(Init {
