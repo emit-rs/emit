@@ -28,12 +28,6 @@ pub type DefaultRng = rand_rng::RandRng;
 mod std_support {
     use super::*;
 
-    use emit_core::{
-        clock::{Clock, ErasedClock},
-        rng::{ErasedRng, Rng},
-        runtime::AssertInternal,
-    };
-
     /**
     The default [`crate::Clock`].
     */
@@ -58,37 +52,6 @@ mod std_support {
     The default [`crate::Ctxt`] to use in [`crate::setup()`].
     */
     pub type DefaultCtxt = thread_local_ctxt::ThreadLocalCtxt;
-
-    /**
-    A type-erased container for system services used when intiailizing runtimes.
-    */
-    pub(crate) struct Platform {
-        pub(crate) clock: AssertInternal<Box<dyn ErasedClock + Send + Sync>>,
-        pub(crate) rng: AssertInternal<Box<dyn ErasedRng + Send + Sync>>,
-    }
-
-    impl Default for Platform {
-        fn default() -> Self {
-            Self::new()
-        }
-    }
-
-    impl Platform {
-        pub fn new() -> Self {
-            Platform {
-                clock: AssertInternal(Box::new(DefaultClock::default())),
-                rng: AssertInternal(Box::new(DefaultRng::default())),
-            }
-        }
-
-        pub fn with_clock(&mut self, clock: impl Clock + Send + Sync + 'static) {
-            self.clock = AssertInternal(Box::new(clock));
-        }
-
-        pub fn with_rng(&mut self, rng: impl Rng + Send + Sync + 'static) {
-            self.rng = AssertInternal(Box::new(rng));
-        }
-    }
 }
 
 #[cfg(feature = "std")]
@@ -103,7 +66,7 @@ mod no_std_support {
     pub type DefaultClock = crate::Empty;
 
     /**
-    The default [`crate::Ctxt`]..
+    The default [`crate::Ctxt`].
     */
     #[cfg(not(feature = "std"))]
     pub type DefaultCtxt = crate::Empty;
