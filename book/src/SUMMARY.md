@@ -36,6 +36,7 @@
     - [Rolling files](./emitting-events/rolling-files.md)
     - [Via OTLP](./emitting-events/otlp.md)
 - [Advanced apps](./advanced-apps.md)
+    - [Instrumenting WebAssembly](./advanced-apps/web-assembly.md)
     - [Integrating with OpenTelemetry](./advanced-apps/integrating-with-open-telemetry.md)
     - [Setup outside of `main`](./advanced-apps/non-main-setup.md)
 - [For developers](./for-developers.md)

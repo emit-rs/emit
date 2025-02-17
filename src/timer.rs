@@ -1,7 +1,7 @@
 /*!
 The [`Timer`] type.
 
-Timers are a simple mechanism to track the start and end times of some operation. They're based on readings from a [`Clock`], which isn't monotonic. That means timers can give an approximate timespan based on its readings, but are susceptible to clock drift.
+Timers are a simple mechanism to track the start and end times of some operation. They're based on readings from a [`Clock`], which isn't guaranteed to be monotonic. That means timers can give an approximate timespan based on its readings, but are susceptible to clock drift.
 
 Timers are used by [`crate::Span`]s to produce the [`Extent`] on their events.
 */
@@ -40,7 +40,7 @@ impl<C: Clock> Timer<C> {
     }
 
     /**
-    Get the value of the timer as a span [`Extent`], using [`Clock::now`] as its final reading.
+    Get the value of the timer as an [`Extent`], using [`Clock::now`] as its final reading.
 
     If the underlying [`Clock`] is unable to produce a reading then this method will return `None`.
     */
@@ -57,6 +57,9 @@ impl<C: Clock> Timer<C> {
     Get the timespan between the initial reading and [`Clock::now`].
 
     If the underlying [`Clock`] is unable to produce a reading, or it shifts to before the initial reading, then this method will return `None`.
+
+    This method is not guaranteed to return the actual time elapsed since the timer was started.
+    It's based on the difference between two readings of the underlying [`Clock`], which is not guaranteed to be monotonic.
     */
     pub fn elapsed(&self) -> Option<Duration> {
         self.extent().and_then(|extent| extent.len())
