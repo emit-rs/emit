@@ -14,6 +14,16 @@ pub mod thread_local_ctxt;
 pub mod rand_rng;
 
 /**
+The default [`Emitter`].
+*/
+pub type DefaultEmitter = crate::Empty;
+
+/**
+The default [`Filter`].
+*/
+pub type DefaultFilter = crate::Empty;
+
+/**
 The default [`crate::Rng`].
 */
 #[cfg(not(feature = "rand"))]
