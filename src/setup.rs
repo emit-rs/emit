@@ -85,7 +85,6 @@ use emit_core::{
     clock::Clock,
     ctxt::Ctxt,
     emitter::Emitter,
-    empty::Empty,
     filter::Filter,
     rng::Rng,
     runtime::{
@@ -103,17 +102,7 @@ pub fn setup() -> Setup {
     Setup::default()
 }
 
-pub use crate::platform::{DefaultClock, DefaultCtxt, DefaultRng};
-
-/**
-The default [`Emitter`] to use in [`setup()`].
-*/
-pub type DefaultEmitter = Empty;
-
-/**
-The default [`Filter`] to use in [`setup()`].
-*/
-pub type DefaultFilter = Empty;
+pub use crate::platform::{DefaultEmitter, DefaultFilter, DefaultClock, DefaultCtxt, DefaultRng};
 
 /**
 A configuration builder for an `emit` runtime.
