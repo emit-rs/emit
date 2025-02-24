@@ -14,12 +14,12 @@ pub mod thread_local_ctxt;
 pub mod rand_rng;
 
 /**
-The default [`Emitter`].
+The default [`crate::Emitter`].
 */
 pub type DefaultEmitter = crate::Empty;
 
 /**
-The default [`Filter`].
+The default [`crate::Filter`].
 */
 pub type DefaultFilter = crate::Empty;
 
