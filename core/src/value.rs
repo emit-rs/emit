@@ -442,18 +442,6 @@ mod alloc_support {
         /**
         Get a sequence of binary floating points from a captured sequence of values.
 
-        If the value is a sequence then each element will be converted into a `f64` in the same way as [`Value::as_f64`]. If the value is not a sequence then an empty result is returned, including if that value is itself an `f64`.
-        */
-        #[deprecated(
-            note = "use `to_f64_sequence` instead, which returns `None` if the value is not a sequence"
-        )]
-        pub fn as_f64_sequence(&self) -> Vec<f64> {
-            self.0.as_f64_seq()
-        }
-
-        /**
-        Get a sequence of binary floating points from a captured sequence of values.
-
         If the value is a sequence then `Some` is returned. Each element will be converted into a `f64` in the same way as [`Value::as_f64`].
         If the value is not a sequence then `None` is returned.
 
