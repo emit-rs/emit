@@ -42,7 +42,7 @@ These goals result in some tradeoffs that may affect `emit`'s suitability for yo
 
 ## Stability
 
-`emit` follows the regular semver policy of other Rust libraries with the following additional considerations:
+`emit` has a complete and stable API that's suitable for production environments. `emit` follows the regular semver policy of other Rust libraries with the following additional considerations:
 
 - Changes to the interpretation of events, such as the use of new extensions, are considered breaking.
 - Breaking changes to `emit_core` are not planned.

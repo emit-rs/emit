@@ -105,3 +105,7 @@ emit::dbg!(&User { id: 1, name: "Rust" });
 ```
 
 See [the guide](https://emit-rs.io/producing-events/quick-debugging.html) for details.
+
+## Stability
+
+`emit` has a complete and stable API that's suitable for production environments.
