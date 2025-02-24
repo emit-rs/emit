@@ -15,6 +15,8 @@ default-features = false
 `emit` abstracts everything a diagnostic pipeline needs within a [`Runtime`](../reference/architecture.md#runtimes). Using runtimes, you can customize the clock and source of randomness in environments that don't have an obvious default, or disable them when there isn't one.
 
 ```rust
+# extern crate emit;
+# fn main() {}
 // Replace these with your own implementations, or leave as `emit::Empty`
 // if they're not supported in your target environment
 type Emitter = emit::Empty;
@@ -38,9 +40,12 @@ static MY_RUNTIME: emit::Runtime<Emitter, Filter, Ctxt, Clock, Rng> = emit::Runt
 Embedded environments need to specify a runtime explicitly in the [`emit!`](https://docs.rs/emit/1.0.0/emit/macro.emit.html) or [`#[span]`](https://docs.rs/emit/1.0.0/emit/attr.span.html) macros using the `rt` [control parameter](../reference/control-parameters.md):
 
 ```rust
+# extern crate emit;
 # static MY_RUNTIME: emit::Runtime<emit::Empty, emit::Empty, emit::Empty, emit::Empty, emit::Empty> = emit::Runtime::build(emit::Empty, emit::Empty, emit::Empty, emit::Empty, emit::Empty);
+# fn main() {
 let user = "Embedded";
 
 // Use the static runtime, `MY_RUNTIME`, defined previously
 emit::emit!(rt: MY_RUNTIME, "Hello, {user}");
+# }
 ```
