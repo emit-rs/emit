@@ -27,11 +27,11 @@ type Rng = emit::Empty;
 
 // Define a static runtime using the given components
 static MY_RUNTIME: emit::runtime::Runtime<Emitter, Filter, Ctxt, Clock, Rng> = emit::runtime::Runtime::build(
-    Emitter,
-    Filter,
-    Ctxt,
-    Clock,
-    Rng,
+    emit::Empty,
+    emit::Empty,
+    emit::Empty,
+    emit::Empty,
+    emit::Empty,
 );
 ```
 
