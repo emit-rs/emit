@@ -102,7 +102,7 @@ pub fn setup() -> Setup {
     Setup::default()
 }
 
-pub use crate::platform::{DefaultEmitter, DefaultFilter, DefaultClock, DefaultCtxt, DefaultRng};
+pub use crate::platform::{DefaultClock, DefaultCtxt, DefaultEmitter, DefaultFilter, DefaultRng};
 
 /**
 A configuration builder for an `emit` runtime.

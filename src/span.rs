@@ -831,11 +831,6 @@ pub struct SpanGuard<'a, T: Clock, P: Props, F: Completion> {
     completion: Option<F>,
 }
 
-// NOTE: Deprecated; will be removed in `1.0.0`
-#[doc(hidden)]
-#[deprecated(note = "use `SpanGuard` instead")]
-pub type ActiveSpan<'a, T, P, F> = SpanGuard<'a, T, P, F>;
-
 struct SpanGuardData<'a, P: Props> {
     mdl: Path<'a>,
     name: Str<'a>,
