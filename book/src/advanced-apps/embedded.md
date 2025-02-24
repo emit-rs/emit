@@ -26,7 +26,7 @@ type Clock = emit::Empty;
 type Rng = emit::Empty;
 
 // Define a static runtime using the given components
-static MY_RUNTIME: emit::Runtime<Emitter, Filter, Ctxt, Clock, Rng> = emit::Runtime::build(
+static MY_RUNTIME: emit::runtime::Runtime<Emitter, Filter, Ctxt, Clock, Rng> = emit::runtime::Runtime::build(
     Emitter,
     Filter,
     Ctxt,
@@ -41,7 +41,7 @@ Embedded environments need to specify a runtime explicitly in the [`emit!`](http
 
 ```rust
 # extern crate emit;
-# static MY_RUNTIME: emit::Runtime<emit::Empty, emit::Empty, emit::Empty, emit::Empty, emit::Empty> = emit::Runtime::build(emit::Empty, emit::Empty, emit::Empty, emit::Empty, emit::Empty);
+# static MY_RUNTIME: emit::runtime::Runtime<emit::Empty, emit::Empty, emit::Empty, emit::Empty, emit::Empty> = emit::runtime::Runtime::build(emit::Empty, emit::Empty, emit::Empty, emit::Empty, emit::Empty);
 # fn main() {
 let user = "Embedded";
 
