@@ -557,6 +557,20 @@ fn fmt_rfc3339(ts: Timestamp, f: &mut fmt::Formatter) -> fmt::Result {
     f.write_str(str::from_utf8(&buf[..=i]).expect("Conversion to utf8 failed"))
 }
 
+#[cfg(feature = "sval")]
+impl sval::Value for Timestamp {
+    fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(&'sval self, stream: &mut S) -> sval::Result {
+        sval::stream_display(stream, self)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for Timestamp {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -735,5 +749,15 @@ mod tests {
         ] {
             assert_eq!(expected, case.cast::<Timestamp>());
         }
+    }
+
+    #[cfg(feature = "sval")]
+    fn stream() {
+        todo!()
+    }
+
+    #[cfg(feature = "serde")]
+    fn serialize() {
+        todo!()
     }
 }

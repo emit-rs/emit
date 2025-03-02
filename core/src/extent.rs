@@ -6,8 +6,15 @@ An extent is the time for which an event is active. It may be either a point for
 Extents can be constructed directly, or generically through the [`ToExtent`] trait.
 */
 
-use crate::{empty::Empty, timestamp::Timestamp};
-use core::{fmt, ops::Range, time::Duration};
+use crate::{
+    empty::Empty,
+    props::Props,
+    str::{Str, ToStr},
+    timestamp::Timestamp,
+    value::{ToValue, Value},
+    well_known::{KEY_TS, KEY_TS_START},
+};
+use core::{fmt, ops::ControlFlow, ops::Range, time::Duration};
 
 /**
 Either a single [`Timestamp`] for a point in time, or a pair of [`Timestamp`]s for a range.
@@ -172,6 +179,20 @@ impl ToExtent for Range<Option<Timestamp>> {
     }
 }
 
+impl Props for Extent {
+    fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
+        &'kv self,
+        mut for_each: F,
+    ) -> ControlFlow<()> {
+        if let Some(range) = self.as_range() {
+            for_each(KEY_TS_START.to_str(), range.start.to_value())?;
+            for_each(KEY_TS.to_str(), range.end.to_value())
+        } else {
+            for_each(KEY_TS.to_str(), self.as_point().to_value())
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -231,5 +252,10 @@ mod tests {
         assert_eq!(&Timestamp::MIN, ts.as_point());
 
         assert!(ts.len().is_none());
+    }
+
+    #[test]
+    fn as_props() {
+        todo!()
     }
 }

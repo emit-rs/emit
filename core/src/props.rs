@@ -10,7 +10,7 @@ Properties, also called attributes in some systems, are the structured data asso
 Well-known properties described in [`crate::well_known`] are used to extend `emit`'s event model with different kinds of diagnostic data.
 */
 
-use core::{borrow::Borrow, ops::ControlFlow};
+use core::{borrow::Borrow, fmt, ops::ControlFlow};
 
 use crate::{
     and::And,
@@ -99,6 +99,16 @@ pub trait Props {
         Self: Sized,
     {
         And::new(self, other)
+    }
+
+    /**
+    Get an adapter that will serialize properties as a map.
+    */
+    fn as_map(&self) -> &AsMap<Self>
+    where
+        Self: Sized,
+    {
+        AsMap::new(self)
     }
 
     /**
@@ -428,6 +438,116 @@ mod std_support {
     }
 }
 
+/**
+The result of calling [`Props::as_map`].
+
+This type implements serialization traits, serializing properties as a map of key-value pairs.
+*/
+#[repr(transparent)]
+pub struct AsMap<P: ?Sized>(P);
+
+impl<P: ?Sized> AsMap<P> {
+    fn new<'a>(props: &'a P) -> &'a AsMap<P> {
+        // SAFETY: `AsMap<P>` and `P` have the same ABI
+        unsafe { &*(props as *const P as *const AsMap<P>) }
+    }
+}
+
+impl<P: Props + ?Sized> Props for AsMap<P> {
+    fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
+        &'kv self,
+        for_each: F,
+    ) -> ControlFlow<()> {
+        self.0.for_each(for_each)
+    }
+
+    fn get<'v, K: ToStr>(&'v self, key: K) -> Option<Value<'v>> {
+        self.0.get(key)
+    }
+
+    fn pull<'kv, V: FromValue<'kv>, K: ToStr>(&'kv self, key: K) -> Option<V> {
+        self.0.pull(key)
+    }
+
+    fn is_unique(&self) -> bool {
+        self.0.is_unique()
+    }
+}
+
+#[cfg(feature = "sval")]
+impl<P: Props + ?Sized> sval::Value for AsMap<P> {
+    fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(&'sval self, stream: &mut S) -> sval::Result {
+        stream.map_begin(None)?;
+
+        let mut r = Ok(());
+        let _ = self.for_each(|k, v| {
+            r = (|| {
+                stream.map_key_begin()?;
+                sval_ref::stream_ref(&mut *stream, k)?;
+                stream.map_key_end()?;
+
+                stream.map_value_begin()?;
+                sval_ref::stream_ref(&mut *stream, v)?;
+                stream.map_value_end()
+            })();
+
+            if r.is_ok() {
+                ControlFlow::Continue(())
+            } else {
+                ControlFlow::Break(())
+            }
+        });
+        r?;
+
+        stream.map_end()
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<P: Props + ?Sized> serde::Serialize for AsMap<P> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap as _;
+
+        let mut err = None;
+
+        let mut map = serializer.serialize_map(None)?;
+
+        let _ = self.for_each(|k, v| match map.serialize_entry(&k, &v) {
+            Ok(()) => ControlFlow::Continue(()),
+            Err(e) => {
+                err = Some(e);
+                ControlFlow::Break(())
+            }
+        });
+
+        if let Some(e) = err {
+            return Err(e);
+        }
+
+        map.end()
+    }
+}
+
+impl<P: Props + ?Sized> fmt::Debug for AsMap<P> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
+
+impl<P: Props + ?Sized> fmt::Display for AsMap<P> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut map = f.debug_map();
+
+        let _ = self.for_each(|k, v| {
+            map.entry(&k, &v);
+
+            ControlFlow::Continue(())
+        });
+
+        map.finish()
+    }
+}
+
 mod internal {
     use core::ops::ControlFlow;
 
@@ -578,5 +698,10 @@ mod tests {
         assert_eq!(3, props.pull::<i32, _>("c").unwrap());
 
         assert!(!props.is_unique());
+    }
+
+    #[test]
+    fn as_map() {
+        todo!()
     }
 }

@@ -745,6 +745,60 @@ mod alloc_support {
     }
 }
 
+#[cfg(feature = "sval")]
+impl<'k> sval::Value for Template<'k> {
+    fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(&'sval self, stream: &mut S) -> sval::Result {
+        use sval_ref::ValueRef as _;
+
+        self.stream_ref(stream)
+    }
+}
+
+#[cfg(feature = "sval")]
+impl<'k> sval_ref::ValueRef<'k> for Template<'k> {
+    fn stream_ref<S: sval::Stream<'k> + ?Sized>(&self, stream: &mut S) -> sval::Result {
+        if let Some(v) = self.as_literal() {
+            sval_ref::stream_ref(stream, v)
+        } else {
+            sval::stream_display(stream, self)
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'k> serde::Serialize for Template<'k> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+#[cfg(feature = "sval")]
+impl<'k, P: Props> sval::Value for Render<'k, P> {
+    fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(&'sval self, stream: &mut S) -> sval::Result {
+        use sval_ref::ValueRef as _;
+
+        self.stream_ref(stream)
+    }
+}
+
+#[cfg(feature = "sval")]
+impl<'k, P: Props> sval_ref::ValueRef<'k> for Render<'k, P> {
+    fn stream_ref<S: sval::Stream<'k> + ?Sized>(&self, stream: &mut S) -> sval::Result {
+        if let Some(v) = self.as_literal() {
+            sval_ref::stream_ref(stream, v)
+        } else {
+            sval::stream_display(stream, self)
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'k, P: Props> serde::Serialize for Render<'k, P> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -841,5 +895,15 @@ mod tests {
 
         assert_eq!("Hello, {greet}!", value.to_string());
         assert!(value.cast::<Str>().is_none());
+    }
+
+    #[cfg(feature = "sval")]
+    fn stream() {
+        todo!()
+    }
+
+    #[cfg(feature = "serde")]
+    fn serialize() {
+        todo!()
     }
 }
