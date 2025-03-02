@@ -256,6 +256,13 @@ mod tests {
 
     #[test]
     fn as_props() {
-        todo!()
+        let ts = Extent::point(Timestamp::MIN);
+
+        assert_eq!(Timestamp::MIN, ts.pull::<Timestamp, _>("ts").unwrap());
+
+        let ts = Extent::range(Timestamp::MIN..Timestamp::MAX);
+
+        assert_eq!(Timestamp::MAX, ts.pull::<Timestamp, _>("ts").unwrap());
+        assert_eq!(Timestamp::MIN, ts.pull::<Timestamp, _>("ts_start").unwrap());
     }
 }

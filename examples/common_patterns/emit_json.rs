@@ -36,6 +36,9 @@ fn main() {
             })
             .unwrap();
 
+            // Instead of printing to the console here we could use `emit_file` or any other
+            // `io::Write`. If that destination requires flushing, consider implementing
+            // `emit::Emitter` instead of using `from_fn` here
             println!("{json}");
         }))
         .init();

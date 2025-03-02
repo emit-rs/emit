@@ -898,12 +898,37 @@ mod tests {
     }
 
     #[cfg(feature = "sval")]
+    #[test]
     fn stream() {
-        todo!()
+        sval_test::assert_tokens(
+            &Template::new_ref(&[Part::text("Hello, "), Part::hole("greet"), Part::text("!")]),
+            &[
+                sval_test::Token::TextBegin(None),
+                sval_test::Token::TextFragmentComputed("Hello, ".to_owned()),
+                sval_test::Token::TextFragmentComputed("{".to_owned()),
+                sval_test::Token::TextFragmentComputed("greet".to_owned()),
+                sval_test::Token::TextFragmentComputed("}".to_owned()),
+                sval_test::Token::TextFragmentComputed("!".to_owned()),
+                sval_test::Token::TextEnd,
+            ],
+        );
+
+        sval_test::assert_tokens(
+            &Template::literal("Hello!"),
+            &[
+                sval_test::Token::TextBegin(Some(6)),
+                sval_test::Token::TextFragment("Hello!"),
+                sval_test::Token::TextEnd,
+            ],
+        );
     }
 
     #[cfg(feature = "serde")]
+    #[test]
     fn serialize() {
-        todo!()
+        serde_test::assert_ser_tokens(
+            &Template::new_ref(&[Part::text("Hello, "), Part::hole("greet"), Part::text("!")]),
+            &[serde_test::Token::Str("Hello, {greet}!")],
+        );
     }
 }

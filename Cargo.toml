@@ -75,3 +75,9 @@ features = ["derive"]
 [dev-dependencies.tokio]
 version = "1"
 features = ["full"]
+
+[dev-dependencies.sval_test]
+version = "2"
+
+[dev-dependencies.serde_test]
+version = "1"

@@ -83,6 +83,20 @@ impl<'v> FromValue<'v> for TraceId {
     }
 }
 
+#[cfg(feature = "sval")]
+impl sval::Value for TraceId {
+    fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(&'sval self, stream: &mut S) -> sval::Result {
+        sval::stream_display(stream, self)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for TraceId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
 impl TraceId {
     /**
     Create a random trace id.
@@ -232,6 +246,20 @@ impl<'v> FromValue<'v> for SpanId {
             .copied()
             .or_else(|| u64::from_value(value.by_ref()).and_then(SpanId::from_u64))
             .or_else(|| SpanId::try_from_hex(value).ok())
+    }
+}
+
+#[cfg(feature = "sval")]
+impl sval::Value for SpanId {
+    fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(&'sval self, stream: &mut S) -> sval::Result {
+        sval::stream_display(stream, self)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for SpanId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
     }
 }
 
@@ -1719,6 +1747,52 @@ mod tests {
             Value::from(0x0123456789abcdef0123456789abcdefu128)
                 .cast()
                 .unwrap()
+        );
+    }
+
+    #[cfg(feature = "sval")]
+    #[test]
+    fn span_id_stream() {
+        sval_test::assert_tokens(
+            &SpanId::from_u64(0x0123456789abcdef).unwrap(),
+            &[
+                sval_test::Token::TextBegin(None),
+                sval_test::Token::TextFragmentComputed("0123456789abcdef".to_owned()),
+                sval_test::Token::TextEnd,
+            ],
+        );
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn span_id_serialize() {
+        serde_test::assert_ser_tokens(
+            &SpanId::from_u64(0x0123456789abcdef).unwrap(),
+            &[serde_test::Token::Str("0123456789abcdef")],
+        );
+    }
+
+    #[cfg(feature = "sval")]
+    #[test]
+    fn trace_id_stream() {
+        sval_test::assert_tokens(
+            &TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+            &[
+                sval_test::Token::TextBegin(None),
+                sval_test::Token::TextFragmentComputed(
+                    "0123456789abcdef0123456789abcdef".to_owned(),
+                ),
+                sval_test::Token::TextEnd,
+            ],
+        );
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn trace_id_serialize() {
+        serde_test::assert_ser_tokens(
+            &TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+            &[serde_test::Token::Str("0123456789abcdef0123456789abcdef")],
         );
     }
 

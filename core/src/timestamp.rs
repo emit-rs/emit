@@ -752,12 +752,24 @@ mod tests {
     }
 
     #[cfg(feature = "sval")]
+    #[test]
     fn stream() {
-        todo!()
+        sval_test::assert_tokens(
+            &Timestamp::try_from_str("2024-01-01T00:13:00.000Z").unwrap(),
+            &[
+                sval_test::Token::TextBegin(None),
+                sval_test::Token::TextFragmentComputed("2024-01-01T00:13:00.000000000Z".to_owned()),
+                sval_test::Token::TextEnd,
+            ],
+        );
     }
 
     #[cfg(feature = "serde")]
+    #[test]
     fn serialize() {
-        todo!()
+        serde_test::assert_ser_tokens(
+            &Timestamp::try_from_str("2024-01-01T00:13:00.000Z").unwrap(),
+            &[serde_test::Token::Str("2024-01-01T00:13:00.000000000Z")],
+        );
     }
 }

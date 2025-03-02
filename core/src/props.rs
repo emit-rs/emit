@@ -702,6 +702,56 @@ mod tests {
 
     #[test]
     fn as_map() {
-        todo!()
+        let props = [("a", 1), ("b", 2)].as_map();
+
+        assert_eq!("{\"a\": 1, \"b\": 2}", props.to_string());
+    }
+
+    #[cfg(feature = "sval")]
+    #[test]
+    fn as_map_stream() {
+        let props = [("a", 1), ("b", 2)].as_map();
+
+        sval_test::assert_tokens(
+            &props,
+            &[
+                sval_test::Token::MapBegin(None),
+                sval_test::Token::MapKeyBegin,
+                sval_test::Token::TextBegin(Some(1)),
+                sval_test::Token::TextFragmentComputed("a".to_owned()),
+                sval_test::Token::TextEnd,
+                sval_test::Token::MapKeyEnd,
+                sval_test::Token::MapValueBegin,
+                sval_test::Token::I64(1),
+                sval_test::Token::MapValueEnd,
+                sval_test::Token::MapKeyBegin,
+                sval_test::Token::TextBegin(Some(1)),
+                sval_test::Token::TextFragmentComputed("b".to_owned()),
+                sval_test::Token::TextEnd,
+                sval_test::Token::MapKeyEnd,
+                sval_test::Token::MapValueBegin,
+                sval_test::Token::I64(2),
+                sval_test::Token::MapValueEnd,
+                sval_test::Token::MapEnd,
+            ],
+        );
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn as_map_serialize() {
+        let props = [("a", 1), ("b", 2)].as_map();
+
+        serde_test::assert_ser_tokens(
+            &props,
+            &[
+                serde_test::Token::Map { len: None },
+                serde_test::Token::Str("a"),
+                serde_test::Token::I64(1),
+                serde_test::Token::Str("b"),
+                serde_test::Token::I64(2),
+                serde_test::Token::MapEnd,
+            ],
+        );
     }
 }
