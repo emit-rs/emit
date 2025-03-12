@@ -6,7 +6,7 @@ Sampling and [propagation](./propagating-across-services.md) are tied together. 
 
 ## Using `emit_traceparent` for sampling
 
-[`emit_traceparent`](https://docs.rs/emit_traceparent/1.0.1/emit_traceparent/) is a library that implements trace sampling and propagation. Using `setup_with_sampler`, you can configure `emit` with a function that's run at the start of each trace to determine whether to emit it or not. Any other diagnostics produced within an unsampled trace will still be emitted, but won't be associated with that trace.
+[`emit_traceparent`](https://docs.rs/emit_traceparent/1.1.0/emit_traceparent/) is a library that implements trace sampling and propagation. Using `setup_with_sampler`, you can configure `emit` with a function that's run at the start of each trace to determine whether to emit it or not. Any other diagnostics produced within an unsampled trace will still be emitted, but won't be associated with that trace.
 
 This example is a simple sampler that includes one in every 10 traces:
 
