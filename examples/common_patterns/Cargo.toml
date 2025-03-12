@@ -28,6 +28,9 @@ version = "1"
 version = "1"
 features = ["derive"]
 
+[dependencies.serde_json]
+version = "1"
+
 [[example]]
 name = "dbg"
 path = "dbg.rs"
@@ -63,6 +66,10 @@ path = "emit_debug_values.rs"
 [[example]]
 name = "emit_serde_values"
 path = "emit_serde_values.rs"
+
+[[example]]
+name = "emit_json"
+path = "emit_json.rs"
 
 [[example]]
 name = "filter_by_level"

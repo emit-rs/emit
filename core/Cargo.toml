@@ -46,3 +46,9 @@ default-features = false
 version = "1"
 optional = true
 default-features = false
+
+[dev-dependencies.sval_test]
+version = "2"
+
+[dev-dependencies.serde_test]
+version = "1"

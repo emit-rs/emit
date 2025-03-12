@@ -557,6 +557,20 @@ fn fmt_rfc3339(ts: Timestamp, f: &mut fmt::Formatter) -> fmt::Result {
     f.write_str(str::from_utf8(&buf[..=i]).expect("Conversion to utf8 failed"))
 }
 
+#[cfg(feature = "sval")]
+impl sval::Value for Timestamp {
+    fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(&'sval self, stream: &mut S) -> sval::Result {
+        sval::stream_display(stream, self)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for Timestamp {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -735,5 +749,27 @@ mod tests {
         ] {
             assert_eq!(expected, case.cast::<Timestamp>());
         }
+    }
+
+    #[cfg(feature = "sval")]
+    #[test]
+    fn stream() {
+        sval_test::assert_tokens(
+            &Timestamp::try_from_str("2024-01-01T00:13:00.000Z").unwrap(),
+            &[
+                sval_test::Token::TextBegin(None),
+                sval_test::Token::TextFragmentComputed("2024-01-01T00:13:00.000000000Z".to_owned()),
+                sval_test::Token::TextEnd,
+            ],
+        );
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn serialize() {
+        serde_test::assert_ser_tokens(
+            &Timestamp::try_from_str("2024-01-01T00:13:00.000Z").unwrap(),
+            &[serde_test::Token::Str("2024-01-01T00:13:00.000000000Z")],
+        );
     }
 }
