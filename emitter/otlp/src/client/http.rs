@@ -406,7 +406,7 @@ impl HttpUri {
     }
 
     pub fn port(&self) -> u16 {
-        self.0.port_u16().unwrap_or(80)
+        self.0.port_u16().unwrap_or_else(|| if self.is_https() { 443 } else { 80 })
     }
 }
 
@@ -750,5 +750,22 @@ where
 {
     fn execute(&self, fut: F) {
         tokio::spawn(fut);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::client::http::HttpUri;
+
+    #[test]
+    fn default_http_port_is_80() {
+        let uri = HttpUri("http://example.com".parse().unwrap());
+        assert_eq!(80, uri.port());
+    }
+
+    #[test]
+    fn default_https_port_is_443() {
+        let uri = HttpUri("https://example.com".parse().unwrap());
+        assert_eq!(443, uri.port());
     }
 }
