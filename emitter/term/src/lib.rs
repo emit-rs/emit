@@ -102,6 +102,15 @@ pub fn stdout() -> Stdout {
 }
 
 /**
+Get an emitter that writes to `stderr`.
+
+Colors will be used if the terminal supports them.
+*/
+pub fn stderr() -> Stderr {
+    Stderr::new()
+}
+
+/**
 An emitter that writes to `stdout`.
 
 Use [`stdout`] to construct an emitter and pass the result to [`emit::Setup::emit_to`] to configure `emit` to use it:
@@ -119,7 +128,7 @@ fn main() {
 ```
 */
 pub struct Stdout {
-    writer: BufferWriter,
+    writer: Writer,
 }
 
 impl Stdout {
@@ -130,7 +139,9 @@ impl Stdout {
     */
     pub fn new() -> Self {
         Stdout {
-            writer: BufferWriter::stdout(ColorChoice::Auto),
+            writer: Writer {
+                writer: BufferWriter::stdout(ColorChoice::Auto),
+            },
         }
     }
 
@@ -141,9 +152,13 @@ impl Stdout {
     */
     pub fn colored(mut self, colored: bool) -> Self {
         if colored {
-            self.writer = BufferWriter::stdout(ColorChoice::Always);
+            self.writer = Writer {
+                writer: BufferWriter::stdout(ColorChoice::Always),
+            };
         } else {
-            self.writer = BufferWriter::stdout(ColorChoice::Never);
+            self.writer = Writer {
+                writer: BufferWriter::stdout(ColorChoice::Never),
+            };
         }
 
         self
@@ -151,6 +166,89 @@ impl Stdout {
 }
 
 impl emit::emitter::Emitter for Stdout {
+    fn emit<E: emit::event::ToEvent>(&self, evt: E) {
+        self.writer.emit(evt)
+    }
+
+    fn blocking_flush(&self, _: Duration) -> bool {
+        true
+    }
+}
+
+impl emit::runtime::InternalEmitter for Stdout {}
+
+/**
+An emitter that writes to `stderr`.
+
+Use [`stderr`] to construct an emitter and pass the result to [`emit::Setup::emit_to`] to configure `emit` to use it:
+
+```
+fn main() {
+    let rt = emit::setup()
+        .emit_to(emit_term::stderr())
+        .init();
+
+    // Your app code goes here
+
+    rt.blocking_flush(std::time::Duration::from_secs(30));
+}
+```
+*/
+pub struct Stderr {
+    writer: Writer,
+}
+
+impl Stderr {
+    /**
+    Get an emitter that writes to `stderr`.
+
+    Colors will be used if the terminal supports them.
+    */
+    pub fn new() -> Self {
+        Stderr {
+            writer: Writer {
+                writer: BufferWriter::stderr(ColorChoice::Auto),
+            },
+        }
+    }
+
+    /**
+    Whether to write using colors.
+
+    By default, colors will be used if the terminal supports them. You can explicitly enable or disable colors using this function. If `colored` is true then colors will always be used. If `colored` is false then colors will never be used.
+    */
+    pub fn colored(mut self, colored: bool) -> Self {
+        if colored {
+            self.writer = Writer {
+                writer: BufferWriter::stderr(ColorChoice::Always),
+            };
+        } else {
+            self.writer = Writer {
+                writer: BufferWriter::stderr(ColorChoice::Never),
+            };
+        }
+
+        self
+    }
+}
+
+impl emit::emitter::Emitter for Stderr {
+    fn emit<E: emit::event::ToEvent>(&self, evt: E) {
+        self.writer.emit(evt)
+    }
+
+    fn blocking_flush(&self, _: Duration) -> bool {
+        true
+    }
+}
+
+impl emit::runtime::InternalEmitter for Stderr {}
+
+struct Writer {
+    writer: BufferWriter,
+}
+
+impl Writer {
     fn emit<E: emit::event::ToEvent>(&self, evt: E) {
         let evt = evt.to_event();
 
@@ -160,13 +258,7 @@ impl emit::emitter::Emitter for Stdout {
             let _ = writer.print(buf);
         });
     }
-
-    fn blocking_flush(&self, _: Duration) -> bool {
-        true
-    }
 }
-
-impl emit::runtime::InternalEmitter for Stdout {}
 
 fn write_event(buf: &mut Buffer, evt: emit::event::Event<impl emit::props::Props>) {
     if let Some(span_id) = evt.props().pull::<emit::SpanId, _>(KEY_SPAN_ID) {
@@ -229,7 +321,7 @@ fn write_event(buf: &mut Buffer, evt: emit::event::Event<impl emit::props::Props
         }
     }
 
-    let _ = evt.msg().write(Writer { buf });
+    let _ = evt.msg().write(TokenWriter { buf });
     write_plain(buf, "\n");
 
     if let Some(err) = evt.props().get(KEY_ERR) {
@@ -382,11 +474,11 @@ fn write_duration(buf: &mut Buffer, duration: Duration) {
     write_fg(buf, unit, TEXT);
 }
 
-struct Writer<'a> {
+struct TokenWriter<'a> {
     buf: &'a mut Buffer,
 }
 
-impl<'a> sval_fmt::TokenWrite for Writer<'a> {
+impl<'a> sval_fmt::TokenWrite for TokenWriter<'a> {
     fn write_text_quote(&mut self) -> fmt::Result {
         Ok(())
     }
@@ -422,13 +514,13 @@ impl<'a> sval_fmt::TokenWrite for Writer<'a> {
     }
 }
 
-impl<'a> fmt::Write for Writer<'a> {
+impl<'a> fmt::Write for TokenWriter<'a> {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         write!(&mut self.buf, "{}", s).map_err(|_| fmt::Error)
     }
 }
 
-impl<'a> emit::template::Write for Writer<'a> {
+impl<'a> emit::template::Write for TokenWriter<'a> {
     fn write_hole_value(&mut self, _: &str, value: emit::Value) -> fmt::Result {
         sval_fmt::stream_to_token_write(self, value)
     }
@@ -507,7 +599,7 @@ fn write_plain(buf: &mut Buffer, v: impl fmt::Display) {
     let _ = write!(buf, "{}", v);
 }
 
-impl<'a> Writer<'a> {
+impl<'a> TokenWriter<'a> {
     fn write(&mut self, v: impl fmt::Display, color: Color) {
         write_fg(&mut *self.buf, v, color);
     }
