@@ -14,6 +14,7 @@ edition = "2021"
 default = ["tls", "gzip"]
 gzip = ["flate2"]
 tls = ["tokio-rustls", "rustls-native-certs"]
+tls-native = ["tls", "tokio-native-tls"]
 
 [dependencies.emit]
 version = "1.2.0"
@@ -72,6 +73,10 @@ features = ["ring"]
 
 [dependencies.rustls-native-certs]
 version = "0.8"
+optional = true
+
+[dependencies.tokio-native-tls]
+version = "0.3"
 optional = true
 
 [dependencies.flate2]
