@@ -1,10 +1,10 @@
 # Emitting to rolling files
 
-You can use [`emit_file`](https://docs.rs/emit_file/1.1.0/emit_file/index.html) to write diagnostic events to local rolling files:
+You can use [`emit_file`](https://docs.rs/emit_file/1.2.0/emit_file/index.html) to write diagnostic events to local rolling files:
 
 ```toml
 [dependencies.emit_file]
-version = "1.1.0"
+version = "1.2.0"
 ```
 
 ```rust
@@ -29,4 +29,4 @@ Events will be written in newline-delimited JSON by default:
 
 `emit_file` is a robust, asynchronous file writer that can recover from IO errors and manage the size of your retained logs on-disk.
 
-See [the crate docs](https://docs.rs/emit_file/1.1.0/emit_file/index.html) for more details.
+See [the crate docs](https://docs.rs/emit_file/1.2.0/emit_file/index.html) for more details.
