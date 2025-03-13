@@ -148,7 +148,7 @@ fn assert_exporter(output: &str, exporter: &str, id: &str) {
         output.contains(&exporter),
         "{exporter} not found in:\n{output}"
     );
-    assert!(output.contains(id), "{id} noot found in:\n{output}");
+    assert!(output.contains(id), "{id} not found in:\n{output}");
 }
 
 struct OtelCol(Child);
