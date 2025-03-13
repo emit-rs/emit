@@ -66,11 +66,7 @@ async fn tls_handshake(
 {
     use tokio_native_tls::{native_tls, TlsConnector};
 
-    let domain = uri.host().to_owned().try_into().map_err(|e| {
-        metrics.transport_conn_tls_failed.increment();
-
-        Error::new(format_args!("could not extract a DNS name from {uri}"), e)
-    })?;
+    let domain = uri.host();
 
     let connector = TlsConnector::from(
         native_tls::TlsConnector::new()
