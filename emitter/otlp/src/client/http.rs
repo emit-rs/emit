@@ -68,15 +68,17 @@ async fn tls_handshake(
 
     let domain = uri.host();
 
-    let connector = TlsConnector::from(
-        native_tls::TlsConnector::new()
-            .map_err(|e| Error::new("failed to create TLS connector", e))?,
-    );
+    let connector = TlsConnector::from(native_tls::TlsConnector::new().map_err(|e| {
+        metrics.transport_conn_tls_failed.increment();
 
-    let io = connector
-        .connect(domain, io)
-        .await
-        .map_err(|e| Error::new("failed to perform TLS handshake", e))?;
+        Error::new("failed to create TLS connector", e)
+    })?);
+
+    let io = connector.connect(domain, io).await.map_err(|e| {
+        metrics.transport_conn_tls_failed.increment();
+
+        Error::new("failed to perform TLS handshake", e)
+    })?;
 
     metrics.transport_conn_tls_handshake.increment();
 
