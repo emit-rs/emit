@@ -724,6 +724,18 @@ mod tests {
         );
 
         assert_eq!(
+            "outer (inner)",
+            Value::capture_error(&Error {
+                msg: "outer".into(),
+                source: Some(Box::new(Error {
+                    msg: "inner".into(),
+                    source: None,
+                })),
+            })
+            .to_string(),
+        );
+
+        assert_eq!(
             "outer (root)",
             Value::capture_error(&Error {
                 msg: "outer".into(),

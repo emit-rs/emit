@@ -198,7 +198,7 @@ mod tests {
             })),
         };
 
-        encode_event::<LogsEventEncoder>(emit::evt!("failed: {err}", err), |buf| {
+        encode_event::<LogsEventEncoder>(emit::evt!("failed: {err}"), |buf| {
             let de = logs::LogRecord::decode(buf).unwrap();
 
             assert_eq!(2, de.attributes.len());
@@ -223,7 +223,7 @@ mod tests {
             source: None,
         };
 
-        encode_event::<LogsEventEncoder>(emit::evt!("failed: {err}", err), |buf| {
+        encode_event::<LogsEventEncoder>(emit::evt!("failed: {err}"), |buf| {
             let de = logs::LogRecord::decode(buf).unwrap();
 
             assert_eq!(1, de.attributes.len());

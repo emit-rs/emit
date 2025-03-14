@@ -1,8 +1,10 @@
-use std::{fmt, marker::PhantomData};
+use std::marker::PhantomData;
 
 use sval_derive::Value;
 
-use crate::data::{stream_attributes, stream_field, AnyValue, KeyValue, Stacktrace};
+use crate::data::{
+    stream_attributes, stream_field, AnyValue, EmitValue, KeyValue, Stacktrace, TextValue,
+};
 
 #[derive(Value)]
 #[repr(i32)]
@@ -193,6 +195,8 @@ impl<
                 &SPAN_EVENTS_LABEL,
                 &SPAN_EVENTS_INDEX,
                 |stream| {
+                    let err = err.by_ref();
+
                     // If the error has a cause chain then write it into the exception.stacktrace attribute
                     // We need to duplicate the whole event because the type of its attributes collection
                     // changes depending on whether there's a stacktrace or not
@@ -204,15 +208,12 @@ impl<
                                 attributes: &[
                                     KeyValue {
                                         key: "exception.stacktrace",
-                                        value: AnyValue::<_>::String(&sval::Display::new(
-                                            &Stacktrace::new_borrowed(cause) as &dyn fmt::Display,
-                                        )),
+                                        value: &TextValue(Stacktrace::new_borrowed(cause))
+                                            as &dyn sval_dynamic::Value,
                                     },
                                     KeyValue {
                                         key: "exception.message",
-                                        value: AnyValue::<_>::String(&sval::Display::new(
-                                            &err as &dyn fmt::Display,
-                                        )),
+                                        value: &EmitValue(err) as &dyn sval_dynamic::Value,
                                     },
                                 ],
                             },
@@ -224,7 +225,7 @@ impl<
                             attributes: &InlineEventAttributes {
                                 attributes: &[KeyValue {
                                     key: "exception.message",
-                                    value: AnyValue::<_>::String(sval::Display::new_borrowed(&err)),
+                                    value: EmitValue(err),
                                 }],
                             },
                         }])

@@ -38,6 +38,9 @@ version = "2.10"
 version = "2.10"
 features = ["std", "flatten"]
 
+[dependencies.sval_dynamic]
+version = "2.10"
+
 [dependencies.sval_protobuf]
 version = "0.2"
 features = ["bytes"]
