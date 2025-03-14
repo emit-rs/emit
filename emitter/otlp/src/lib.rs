@@ -28,7 +28,9 @@ The emitter is based on an asynchronous, batching channel. A diagnostic event ma
 3. Put the serialized event into a channel. Each signal has its own internal queue in the channel.
 4. On a background worker, process the events in the channel by forming them up into OTLP export requests and sending them using the target protocol (HTTP/gRPC).
 
-This library is based on `hyper` with `tokio` for HTTP, and `rustls` with `ring` for TLS. These dependencies are not configurable and can't be swapped for alternative implementations.
+This library is based on [`hyper`](https://docs.rs/hyper) with [`tokio`](https://docs.rs/tokio) for HTTP, and [`rustls`](https://docs.rs/rustls) with [`ring`](https://docs.rs/ring) for TLS. Some of these dependencies can be configured using Cargo features:
+
+- `tls-native`: Use [`native-tls`](https://docs.rs/native-tls) instead of `rustls`.
 
 # Getting started
 
@@ -134,7 +136,9 @@ emit_otlp::new()
 
 # Configuring TLS
 
-If the `tls` Cargo feature is enabled, and the scheme of your endpoint uses the `https://` scheme then it will use TLS from `rustls` and `rustls-native-certs`.
+If the `tls` Cargo feature is enabled, and the scheme of your endpoint uses the `https://` scheme then it will use TLS from [`rustls`](https://docs.rs/rustls) and [`rustls-native-certs`](https://docs.rs/rustls-native-certs).
+
+You can specify the `tls-native` Cargo feature to use [`native-tls`](https://docs.rs/native-tls) instead of `rustls`.
 
 # Configuring compression
 
