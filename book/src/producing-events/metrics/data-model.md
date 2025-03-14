@@ -1,6 +1,6 @@
 # Metrics data model
 
-The data model of metrics is an extension of [`emit`'s events](../../reference/events.md). Metric events are points or buckets in a time-series. They don't model the underlying instruments collecting metrics like counters or gauges. They instead model the aggregation of readings from those instruments over their lifetime. Metric events include the following [well-known properties](https://docs.rs/emit/1.3.0/emit/well_known/index.html):
+The data model of metrics is an extension of [`emit`'s events](../../reference/events.md). Metric events are points or buckets in a time-series. They don't model the underlying instruments collecting metrics like counters or gauges. They instead model the aggregation of readings from those instruments over their lifetime. Metric events include the following [well-known properties](https://docs.rs/emit/1.3.1/emit/well_known/index.html):
 
 - `evt_kind`: with a value of `"metric"` to indicate that the event is a metric sample.
 - `metric_agg`: the aggregation over the underlying data stream that produced the sample.
