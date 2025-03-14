@@ -6,7 +6,7 @@ To use `emit` in an embedded environment, you'll need to disable default crate f
 
 ```toml
 [dependencies.emit]
-version = "1.3.0"
+version = "1.3.1"
 default-features = false
 ```
 
@@ -37,7 +37,7 @@ static MY_RUNTIME: emit::runtime::Runtime<Emitter, Filter, Ctxt, Clock, Rng> = e
 
 ## Using `emit!` and `#[span]`
 
-Embedded environments need to specify a runtime explicitly in the [`emit!`](https://docs.rs/emit/1.3.0/emit/macro.emit.html) or [`#[span]`](https://docs.rs/emit/1.3.0/emit/attr.span.html) macros using the `rt` [control parameter](../reference/control-parameters.md):
+Embedded environments need to specify a runtime explicitly in the [`emit!`](https://docs.rs/emit/1.3.1/emit/macro.emit.html) or [`#[span]`](https://docs.rs/emit/1.3.1/emit/attr.span.html) macros using the `rt` [control parameter](../reference/control-parameters.md):
 
 ```rust
 # extern crate emit;
