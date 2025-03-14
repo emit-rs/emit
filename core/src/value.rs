@@ -240,6 +240,29 @@ impl<'v> fmt::Debug for Value<'v> {
 
 impl<'v> fmt::Display for Value<'v> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        #[cfg(feature = "std")]
+        {
+            /*
+            If the value is an error then display it along with its root cause.
+
+            Rust errors are typically a chain of fragments, becoming more specific as they get closer
+            to the original failure. We display both the top and the bottom of the chain here so
+            the result is more likely to be useful.
+            */
+
+            use std::iter;
+
+            if let Some(err) = self.to_borrowed_error() {
+                return if let Some(root) =
+                    iter::successors(err.source(), |ref err| err.source()).last()
+                {
+                    write!(f, "{err} ({root})")
+                } else {
+                    fmt::Display::fmt(err, f)
+                };
+            }
+        }
+
         fmt::Display::fmt(&self.0, f)
     }
 }
@@ -666,5 +689,53 @@ mod tests {
                 assert_eq!(expected, case.as_f64());
             }
         }
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn error_display() {
+        #[derive(Debug)]
+        struct Error {
+            msg: String,
+            source: Option<Box<Error>>,
+        }
+
+        impl fmt::Display for Error {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                fmt::Display::fmt(&self.msg, f)
+            }
+        }
+
+        impl std::error::Error for Error {
+            fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+                self.source
+                    .as_ref()
+                    .map(|err| &**err as &(dyn std::error::Error + 'static))
+            }
+        }
+
+        assert_eq!(
+            "outer",
+            Value::capture_error(&Error {
+                msg: "outer".into(),
+                source: None,
+            })
+            .to_string(),
+        );
+
+        assert_eq!(
+            "outer (root)",
+            Value::capture_error(&Error {
+                msg: "outer".into(),
+                source: Some(Box::new(Error {
+                    msg: "inner".into(),
+                    source: Some(Box::new(Error {
+                        msg: "root".into(),
+                        source: None,
+                    })),
+                })),
+            })
+            .to_string(),
+        );
     }
 }
