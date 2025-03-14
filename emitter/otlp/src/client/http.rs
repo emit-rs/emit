@@ -54,12 +54,47 @@ async fn connect(
     }
 }
 
-#[cfg(feature = "tls")]
+/*
+TLS using the native platform
+*/
+#[cfg(all(feature = "tls", feature = "tls-native"))]
 async fn tls_handshake(
     metrics: &InternalMetrics,
     io: tokio::net::TcpStream,
     uri: &HttpUri,
-) -> Result<tokio_rustls::client::TlsStream<tokio::net::TcpStream>, Error> {
+) -> Result<impl tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin + 'static, Error>
+{
+    use tokio_native_tls::{native_tls, TlsConnector};
+
+    let domain = uri.host();
+
+    let connector = TlsConnector::from(native_tls::TlsConnector::new().map_err(|e| {
+        metrics.transport_conn_tls_failed.increment();
+
+        Error::new("failed to create TLS connector", e)
+    })?);
+
+    let io = connector.connect(domain, io).await.map_err(|e| {
+        metrics.transport_conn_tls_failed.increment();
+
+        Error::new("failed to perform TLS handshake", e)
+    })?;
+
+    metrics.transport_conn_tls_handshake.increment();
+
+    Ok(io)
+}
+
+/*
+TLS using `rustls`
+*/
+#[cfg(all(feature = "tls", not(feature = "tls-native")))]
+async fn tls_handshake(
+    metrics: &InternalMetrics,
+    io: tokio::net::TcpStream,
+    uri: &HttpUri,
+) -> Result<impl tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin + 'static, Error>
+{
     use tokio_rustls::{rustls, TlsConnector};
 
     let domain = uri.host().to_owned().try_into().map_err(|e| {
@@ -406,7 +441,9 @@ impl HttpUri {
     }
 
     pub fn port(&self) -> u16 {
-        self.0.port_u16().unwrap_or_else(|| if self.is_https() { 443 } else { 80 })
+        self.0
+            .port_u16()
+            .unwrap_or_else(|| if self.is_https() { 443 } else { 80 })
     }
 }
 

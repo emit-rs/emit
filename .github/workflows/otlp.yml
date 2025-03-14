@@ -7,7 +7,10 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout sources
         uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab
@@ -47,6 +50,9 @@ jobs:
       - name: Install Rust toolchain
         run: rustup default nightly
 
+      - name: Install cargo-hack
+        run: cargo install cargo-hack
+
       - name: Install certutil
         run: sudo apt-get update && sudo apt-get install -y libnss3-tools
 
@@ -66,7 +72,7 @@ jobs:
 
       - name: Integration Test
         working-directory: ./emitter/otlp/test/integration
-        run: cargo run
+        run: cargo hack run --feature-powerset
 
       - name: Throughput Test
         working-directory: ./emitter/otlp/test/throughput
