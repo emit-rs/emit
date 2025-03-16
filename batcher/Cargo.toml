@@ -24,19 +24,19 @@ version = "1"
 features = ["rt-multi-thread", "sync", "time"]
 optional = true
 
-[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.wasm-bindgen]
+[dependencies.wasm-bindgen]
 version = "0.2"
 optional = true
 
-[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.wasm-bindgen-futures]
+[dependencies.wasm-bindgen-futures]
 version = "0.4"
 optional = true
 
-[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.js-sys]
+[dependencies.js-sys]
 version = "0.3"
 optional = true
 
-[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.web-sys]
+[dependencies.web-sys]
 version = "0.3"
 optional = true
 features = [

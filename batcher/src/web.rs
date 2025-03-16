@@ -6,6 +6,7 @@ Run channels in a JavaScript runtime using a background promise.
 
 use std::{
     cell::RefCell,
+    cmp,
     future::Future,
     io, mem,
     pin::Pin,
@@ -29,9 +30,12 @@ pub fn spawn<
 where
     T::Item: Send + 'static,
 {
+    // Fire-and-forget promise
     let _ = future_to_promise(async move {
         // `exec` does not panic
-        receiver.exec(|delay| sleep(delay), on_batch).await;
+        receiver
+            .exec(|delay| Park::new(delay).await, on_batch)
+            .await;
 
         Ok(JsValue::UNDEFINED)
     });
@@ -39,31 +43,64 @@ where
     Ok(())
 }
 
-async fn sleep(delay: Duration) {
-    let f = Timeout {
-        delay: Some(delay),
-        complete: None,
-        state: Rc::new(RefCell::new(TimeoutState {
-            done: false,
-            wakers: Vec::new(),
-        })),
-    };
+/**
+Wait for approximately `delay`.
 
-    f.await
-}
+This is semantically more like `park_timeout` than `sleep` because the treatment of the delay itself is quite lax.
 
-struct Timeout {
+This function may wait for longer than `delay` if `delay` is a fractional number of milliseconds.
+This function may wait for less than `delay` if `window.setTimeout` cannot be called, or the future is dropped before the delay triggers.
+*/
+// NOTE: We'll want to be able to re-use this for `flush` timeout somehow
+struct Park {
+    // `Some` if the timeout hasn't been scheduled yet
     delay: Option<Duration>,
+    // `Some` if the timeout has been scheduled
     complete: Option<Closure<dyn Fn()>>,
-    state: Rc<RefCell<TimeoutState>>,
+    state: Rc<RefCell<ParkState>>,
 }
 
-struct TimeoutState {
+impl Drop for Park {
+    fn drop(&mut self) {
+        ParkState::wake(&self.state);
+    }
+}
+
+impl Park {
+    fn new(delay: Duration) -> Self {
+        Park {
+            delay: Some(delay),
+            complete: None,
+            state: Rc::new(RefCell::new(ParkState {
+                done: false,
+                wakers: Vec::new(),
+            })),
+        }
+    }
+}
+
+impl ParkState {
+    fn wake(state: &Rc<RefCell<Self>>) {
+        let mut state = state.borrow_mut();
+
+        state.done = true;
+        let wakers = mem::take(&mut state.wakers);
+
+        drop(state);
+
+        for waker in wakers {
+            waker.wake();
+        }
+    }
+}
+
+struct ParkState {
+    // `true` if the timeout has elapsed
     done: bool,
     wakers: Vec<Waker>,
 }
 
-impl Future for Timeout {
+impl Future for Park {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<()> {
@@ -92,25 +129,24 @@ impl Future for Timeout {
             let state = unpinned.state.clone();
 
             let complete = Closure::<dyn Fn()>::new(move || {
-                let mut state = state.borrow_mut();
-
-                state.done = true;
-                let wakers = mem::take(&mut state.wakers);
-
-                drop(state);
-
-                for waker in wakers {
-                    waker.wake();
-                }
+                ParkState::wake(&state);
             });
 
-            web_sys::window()
-                .unwrap()
-                .set_timeout_with_callback_and_timeout_and_arguments_0(
-                    complete.as_ref().unchecked_ref(),
-                    delay.as_millis() as i32,
-                )
-                .unwrap();
+            let Some(window) = web_sys::window() else {
+                ParkState::wake(&unpinned.state);
+
+                return Poll::Ready(());
+            };
+
+            // Set a timeout for at least 1ms that will trigger the wakeup
+            let Ok(_) = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+                complete.as_ref().unchecked_ref(),
+                cmp::max(1, delay.as_millis() as i32),
+            ) else {
+                ParkState::wake(&unpinned.state);
+
+                return Poll::Ready(());
+            };
 
             unpinned.complete = Some(complete);
         }
