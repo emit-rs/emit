@@ -21,11 +21,26 @@ This method spawns a background thread and runs [`Receiver::exec`] on it. The ha
 pub fn spawn<T: Channel + Send + 'static>(
     thread_name: impl Into<String>,
     receiver: Receiver<T>,
-    mut on_batch: impl FnMut(T) -> Result<(), BatchError<T>> + Send + 'static,
+    on_batch: impl FnMut(T) -> Result<(), BatchError<T>> + Send + 'static,
 ) -> io::Result<thread::JoinHandle<()>>
 where
     T::Item: Send + 'static,
 {
+    #![allow(unreachable_code)]
+
+    #[cfg(all(
+        target_arch = "wasm32",
+        target_vendor = "unknown",
+        target_os = "unknown"
+    ))]
+    {
+        let _ = (thread_name, receiver, on_batch);
+
+        panic!("blocking channel spawning is not supported on this platform");
+    }
+
+    let mut on_batch = on_batch;
+
     thread::Builder::new()
         .name(thread_name.into())
         .spawn(move || {
@@ -40,6 +55,19 @@ where
 Wait for a channel running on a regular OS thread to process all items active at the point this call was made.
 */
 pub fn blocking_flush<T: Channel>(sender: &Sender<T>, timeout: Duration) -> bool {
+    #![allow(unreachable_code)]
+
+    #[cfg(all(
+        target_arch = "wasm32",
+        target_vendor = "unknown",
+        target_os = "unknown"
+    ))]
+    {
+        let _ = (sender, timeout);
+
+        panic!("blocking flush is not supported on this platform");
+    }
+
     let notifier = Trigger::new();
 
     sender.when_flushed({
@@ -61,6 +89,19 @@ pub fn blocking_send<T: Channel>(
     msg: T::Item,
     timeout: Duration,
 ) -> Result<(), BatchError<T::Item>> {
+    #![allow(unreachable_code)]
+
+    #[cfg(all(
+        target_arch = "wasm32",
+        target_vendor = "unknown",
+        target_os = "unknown"
+    ))]
+    {
+        let _ = (sender, msg, timeout);
+
+        panic!("blocking send is not supported on this platform");
+    }
+
     block_on(sender.send_or_wait(msg, timeout, |sender, timeout| {
         let notifier = Trigger::new();
 

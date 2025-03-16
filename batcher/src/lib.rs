@@ -741,6 +741,9 @@ pub mod sync;
 #[cfg(feature = "tokio")]
 pub mod tokio;
 
+#[cfg(feature = "web")]
+pub mod web;
+
 // Re-export an appropriate implementation of blocking functions based on crate features
 
 #[cfg(feature = "tokio")]
