@@ -2,8 +2,6 @@
 Run channels in a JavaScript runtime using a background promise.
 */
 
-#![allow(missing_docs)]
-
 use std::{
     cell::RefCell,
     cmp,
@@ -18,8 +16,11 @@ use std::{
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 
-use crate::{BatchError, Channel, Receiver};
+use crate::{BatchError, Channel, Receiver, Sender};
 
+/**
+Run [`Receiver::exec`] in a fire-and-forget JavaScript promise.
+*/
 pub fn spawn<
     T: Channel + Send + 'static,
     F: Future<Output = Result<(), BatchError<T>>> + Send + 'static,
@@ -33,14 +34,49 @@ where
     // Fire-and-forget promise
     let _ = future_to_promise(async move {
         // `exec` does not panic
-        receiver
-            .exec(|delay| Park::new(delay).await, on_batch)
-            .await;
+        receiver.exec(|delay| Park::new(delay), on_batch).await;
 
         Ok(JsValue::UNDEFINED)
     });
 
     Ok(())
+}
+
+/**
+Wait for a channel running in a JavaScript promise to process all items active at the point this call was made.
+*/
+pub async fn flush<T: Channel>(sender: &Sender<T>, timeout: Duration) -> bool {
+    let (notifier, notified) = futures::channel::oneshot::channel();
+
+    sender.when_flushed(move || {
+        let _ = notifier.send(());
+    });
+
+    wait(notified, timeout).await
+}
+
+async fn wait(mut notified: futures::channel::oneshot::Receiver<()>, timeout: Duration) -> bool {
+    // If the trigger has already fired then return immediately
+    if notified.try_recv().is_ok() {
+        return true;
+    }
+
+    // If the timeout is 0 then return immediately
+    // The trigger hasn't already fired so there's no point waiting for it
+    if timeout == Duration::ZERO {
+        return false;
+    }
+
+    let timeout = Park::new(timeout);
+
+    match futures::future::select(notified, timeout).await {
+        // The notifier was triggered
+        futures::future::Either::Left((Ok(_), _)) => true,
+        // Unexpected hangup; this should mean the channel was closed
+        futures::future::Either::Left((Err(_), _)) => true,
+        // The timeout was reached instead
+        futures::future::Either::Right(((), _)) => false,
+    }
 }
 
 /**
@@ -51,7 +87,6 @@ This is semantically more like `park_timeout` than `sleep` because the treatment
 This function may wait for longer than `delay` if `delay` is a fractional number of milliseconds.
 This function may wait for less than `delay` if `window.setTimeout` cannot be called, or the future is dropped before the delay triggers.
 */
-// NOTE: We'll want to be able to re-use this for `flush` timeout somehow
 struct Park {
     // `Some` if the timeout hasn't been scheduled yet
     delay: Option<Duration>,
