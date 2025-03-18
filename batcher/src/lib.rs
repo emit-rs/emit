@@ -7,6 +7,12 @@ This library implements a channel that can be used to spawn background workers o
 - **Retries with backoff:** If the worker fails or panics then the batch can be retried up to some number of times, with backoff applied between retries. The worker can decide how much of a batch needs to be retried.
 - **Maximum size management:** If the worker can't keep up then the channel truncates to avoid runaway memory use. The alternative would be to apply backpressure, but that would affect system availability so isn't suitable for diagnostics.
 - **Flushing:** Callers can ask the worker to signal when all diagnostic events in the channel at the point they called are processed. This can be used for auditing and flushing on shutdown.
+
+# WebAssembly
+
+This library can be used on the `wasm32-unknown-unknown` target by enabling the `web` Cargo feature.
+Instead of spawning background threads to run the batching receiver, it will instead spawn a fire-and-forget promise.
+Blocking functions like `blocking_send` and `blocking_flush` are not available, but asynchronous `send` and `flush` variants are.
 */
 
 #![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]
