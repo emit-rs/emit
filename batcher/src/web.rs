@@ -13,33 +13,54 @@ use std::{
     time::Duration,
 };
 
+use js_sys::Promise;
 use wasm_bindgen::prelude::*;
-use wasm_bindgen_futures::future_to_promise;
+use wasm_bindgen_futures::{future_to_promise, JsFuture};
 
 use crate::{BatchError, Channel, Receiver, Sender};
 
 /**
 Run [`Receiver::exec`] in a fire-and-forget JavaScript promise.
 */
-pub fn spawn<
-    T: Channel + Send + 'static,
-    F: Future<Output = Result<(), BatchError<T>>> + Send + 'static,
->(
+pub fn spawn<T: Channel + 'static, F: Future<Output = Result<(), BatchError<T>>> + 'static>(
     receiver: Receiver<T>,
-    on_batch: impl FnMut(T) -> F + Send + 'static,
-) -> io::Result<()>
-where
-    T::Item: Send + 'static,
-{
+    on_batch: impl FnMut(T) -> F + 'static,
+) -> io::Result<SpawnHandle> {
     // Fire-and-forget promise
-    let _ = future_to_promise(async move {
+    let promise = future_to_promise(async move {
         // `exec` does not panic
         receiver.exec(|delay| Park::new(delay), on_batch).await;
 
         Ok(JsValue::UNDEFINED)
     });
 
-    Ok(())
+    Ok(SpawnHandle { promise })
+}
+
+/**
+A handle that can be used to join a spawned receiver.
+
+The receiver is a promise that will resolve when the channel is closed.
+*/
+pub struct SpawnHandle {
+    promise: Promise,
+}
+
+impl SpawnHandle {
+    /**
+    Convert this handle into a JavaScript promise.
+    */
+    pub fn into_promise(self) -> Promise {
+        self.promise
+    }
+
+    /**
+    Join the handle, waiting for it to complete.
+    */
+    pub async fn join(self) {
+        // The promise is infallible, so the return here isn't interesting
+        let _ = JsFuture::from(self.promise).await;
+    }
 }
 
 /**
@@ -57,7 +78,7 @@ pub async fn flush<T: Channel>(sender: &Sender<T>, timeout: Duration) -> bool {
 
 async fn wait(mut notified: futures::channel::oneshot::Receiver<()>, timeout: Duration) -> bool {
     // If the trigger has already fired then return immediately
-    if notified.try_recv().is_ok() {
+    if let Ok(Some(())) = notified.try_recv() {
         return true;
     }
 
@@ -91,7 +112,7 @@ struct Park {
     // `Some` if the timeout hasn't been scheduled yet
     delay: Option<Duration>,
     // `Some` if the timeout has been scheduled
-    complete: Option<Closure<dyn Fn()>>,
+    timeout: Option<Timeout>,
     state: Rc<RefCell<ParkState>>,
 }
 
@@ -105,7 +126,7 @@ impl Park {
     fn new(delay: Duration) -> Self {
         Park {
             delay: Some(delay),
-            complete: None,
+            timeout: None,
             state: Rc::new(RefCell::new(ParkState {
                 done: false,
                 wakers: Vec::new(),
@@ -126,6 +147,17 @@ impl ParkState {
         for waker in wakers {
             waker.wake();
         }
+    }
+}
+
+struct Timeout {
+    _closure: Closure<dyn Fn()>,
+    token: f64,
+}
+
+impl Drop for Timeout {
+    fn drop(&mut self) {
+        clear_timeout(self.token);
     }
 }
 
@@ -163,29 +195,128 @@ impl Future for Park {
         if let Some(delay) = unpinned.delay.take() {
             let state = unpinned.state.clone();
 
-            let complete = Closure::<dyn Fn()>::new(move || {
+            let closure = Closure::<dyn Fn()>::new(move || {
                 ParkState::wake(&state);
             });
 
-            let Some(window) = web_sys::window() else {
-                ParkState::wake(&unpinned.state);
+            let token = set_timeout(&closure, cmp::max(1, delay.as_millis() as u32));
 
-                return Poll::Ready(());
-            };
-
-            // Set a timeout for at least 1ms that will trigger the wakeup
-            let Ok(_) = window.set_timeout_with_callback_and_timeout_and_arguments_0(
-                complete.as_ref().unchecked_ref(),
-                cmp::max(1, delay.as_millis() as i32),
-            ) else {
-                ParkState::wake(&unpinned.state);
-
-                return Poll::Ready(());
-            };
-
-            unpinned.complete = Some(complete);
+            unpinned.timeout = Some(Timeout {
+                token,
+                _closure: closure,
+            });
         }
 
         Poll::Pending
+    }
+}
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_name = "setTimeout")]
+    fn set_timeout(closure: &Closure<dyn Fn()>, millis: u32) -> f64;
+
+    #[wasm_bindgen(js_name = "clearTimeout")]
+    fn clear_timeout(token: f64);
+}
+
+#[cfg(all(
+    test,
+    target_arch = "wasm32",
+    target_vendor = "unknown",
+    target_os = "unknown"
+))]
+mod tests {
+    use super::*;
+
+    use std::sync::{Arc, Mutex};
+
+    use wasm_bindgen_test::*;
+
+    #[wasm_bindgen_test]
+    async fn promise_resolves_on_sender_drop() {
+        let (sender, receiver) = crate::bounded::<Vec<i32>>(1024);
+
+        let handle = spawn(receiver, |batch| async move {
+            let _ = batch;
+
+            Ok(())
+        })
+        .unwrap();
+
+        drop(sender);
+
+        // Joining should now complete
+        handle.join().await;
+    }
+
+    #[wasm_bindgen_test]
+    async fn spawn_processes_batches() {
+        let (sender, receiver) = crate::bounded::<Vec<i32>>(1024);
+
+        let count = Arc::new(Mutex::new(0));
+
+        let handle = spawn(receiver, {
+            let count = count.clone();
+
+            move |batch| {
+                let count = count.clone();
+
+                async move {
+                    *count.lock().unwrap() = batch.len();
+
+                    Ok(())
+                }
+            }
+        })
+        .unwrap();
+
+        // Send a batch
+        // Since JavaScript is single threaded, these will all get processed together
+        for i in 0..100 {
+            sender.send(i);
+        }
+
+        drop(sender);
+        handle.join().await;
+
+        assert_eq!(100, *count.lock().unwrap());
+    }
+
+    #[wasm_bindgen_test]
+    async fn flush_waits_for_completion() {
+        let (sender, receiver) = crate::bounded::<Vec<i32>>(1024);
+
+        let total = Arc::new(Mutex::new(0));
+
+        let handle = spawn(receiver, {
+            let total = total.clone();
+
+            move |batch| {
+                let total = total.clone();
+
+                async move {
+                    *total.lock().unwrap() += batch.len();
+
+                    Ok(())
+                }
+            }
+        })
+        .unwrap();
+
+        for i in 0..100 {
+            sender.send(i);
+        }
+
+        assert_eq!(0, *total.lock().unwrap());
+
+        let flushed = flush(&sender, Duration::from_secs(1)).await;
+        assert!(flushed);
+
+        // After flushing all events should be processed
+        assert_eq!(100, *total.lock().unwrap());
+
+        drop(sender);
+        handle.join().await;
     }
 }

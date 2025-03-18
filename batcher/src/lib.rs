@@ -738,7 +738,14 @@ impl Watchers {
 
 pub mod sync;
 
-#[cfg(feature = "tokio")]
+#[cfg(all(
+    feature = "tokio",
+    not(all(
+        target_arch = "wasm32",
+        target_vendor = "unknown",
+        target_os = "unknown"
+    ))
+))]
 pub mod tokio;
 
 #[cfg(feature = "web")]
@@ -746,10 +753,24 @@ pub mod web;
 
 // Re-export an appropriate implementation of blocking functions based on crate features
 
-#[cfg(feature = "tokio")]
+#[cfg(all(
+    feature = "tokio",
+    not(all(
+        target_arch = "wasm32",
+        target_vendor = "unknown",
+        target_os = "unknown"
+    ))
+))]
 pub use tokio::{blocking_flush, blocking_send};
 
-#[cfg(not(feature = "tokio"))]
+#[cfg(not(all(
+    feature = "tokio",
+    not(all(
+        target_arch = "wasm32",
+        target_vendor = "unknown",
+        target_os = "unknown"
+    ))
+)))]
 pub use sync::{blocking_flush, blocking_send};
 
 #[cfg(test)]
