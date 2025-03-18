@@ -28,7 +28,8 @@ pub fn spawn<T: Channel + 'static, F: Future<Output = Result<(), BatchError<T>>>
 ) -> io::Result<SpawnHandle> {
     // Fire-and-forget promise
     let promise = future_to_promise(async move {
-        // `exec` does not panic
+        // `exec` attempts to catch panics, but since they can't be caught in wasm,
+        // there's not much we can do here to prevent them propagating if they happen
         receiver.exec(|delay| Park::new(delay), on_batch).await;
 
         Ok(JsValue::UNDEFINED)
@@ -315,6 +316,25 @@ mod tests {
 
         // After flushing all events should be processed
         assert_eq!(100, *total.lock().unwrap());
+
+        drop(sender);
+        handle.join().await;
+    }
+
+    #[wasm_bindgen_test]
+    async fn failing_receiver_does_not_cause_havoc() {
+        let (sender, receiver) = crate::bounded::<Vec<()>>(1024);
+
+        // NOTE: Can't really test panics here, because they _do_ cause havoc
+        let handle = spawn(receiver, |_| async move {
+            Err(BatchError::no_retry(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "explicit failure",
+            )))
+        })
+        .unwrap();
+
+        sender.send(());
 
         drop(sender);
         handle.join().await;
