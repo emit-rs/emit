@@ -311,11 +311,48 @@ mod tests {
 
         assert_eq!(0, *total.lock().unwrap());
 
-        let flushed = flush(&sender, Duration::from_secs(1)).await;
+        let flushed = flush(&sender, Duration::from_millis(10)).await;
         assert!(flushed);
 
         // After flushing all events should be processed
         assert_eq!(100, *total.lock().unwrap());
+
+        drop(sender);
+        handle.join().await;
+    }
+
+    #[wasm_bindgen_test]
+    async fn flush_times_out() {
+        let (sender, receiver) = crate::bounded::<Vec<i32>>(1024);
+
+        let total = Arc::new(Mutex::new(0));
+
+        let handle = spawn(receiver, {
+            let total = total.clone();
+
+            move |batch| {
+                let total = total.clone();
+
+                async move {
+                    // Take a while to process the batch
+                    Park::new(Duration::from_millis(50)).await;
+
+                    *total.lock().unwrap() += batch.len();
+
+                    Ok(())
+                }
+            }
+        })
+        .unwrap();
+
+        for i in 0..100 {
+            sender.send(i);
+        }
+
+        assert_eq!(0, *total.lock().unwrap());
+
+        let flushed = flush(&sender, Duration::from_millis(1)).await;
+        assert!(!flushed);
 
         drop(sender);
         handle.join().await;
