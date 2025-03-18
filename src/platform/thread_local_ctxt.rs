@@ -93,7 +93,7 @@ impl Ctxt for ThreadLocalCtxt {
     fn open_root<P: Props>(&self, props: P) -> Self::Frame {
         let mut span = HashMap::new();
 
-        props.for_each(|k, v| {
+        let _ = props.for_each(|k, v| {
             span.insert(k.to_shared(), v.to_shared());
             ControlFlow::Continue(())
         });
@@ -112,7 +112,7 @@ impl Ctxt for ThreadLocalCtxt {
 
         let span_props = Arc::make_mut(span.props.as_mut().unwrap());
 
-        props.for_each(|k, v| {
+        let _ = props.for_each(|k, v| {
             span_props.insert(k.to_shared(), v.to_shared());
             ControlFlow::Continue(())
         });

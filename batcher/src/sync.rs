@@ -115,21 +115,28 @@ pub fn blocking_send<T: Channel>(
         )));
     }
 
-    block_on(sender.send_or_wait(msg, timeout, |sender, timeout| {
-        let notifier = Trigger::new();
+    let start = Instant::now();
 
-        sender.when_empty({
-            let notifier = notifier.clone();
+    block_on(sender.send_or_wait(
+        msg,
+        timeout,
+        || start.elapsed(),
+        |sender, timeout| {
+            let notifier = Trigger::new();
 
-            move || {
-                let _ = notifier.trigger();
-            }
-        });
+            sender.when_empty({
+                let notifier = notifier.clone();
 
-        notifier.wait_timeout(timeout);
+                move || {
+                    let _ = notifier.trigger();
+                }
+            });
 
-        future::ready(())
-    }))
+            notifier.wait_timeout(timeout);
+
+            future::ready(())
+        },
+    ))
 }
 
 #[derive(Clone)]

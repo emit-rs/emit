@@ -2,7 +2,11 @@
 Run channels in a `tokio` runtime.
 */
 
-use std::{future::Future, io, thread, time::Duration};
+use std::{
+    future::Future,
+    io, thread,
+    time::{Duration, Instant},
+};
 
 use crate::{sync, BatchError, Channel, Receiver, Sender};
 
@@ -94,16 +98,23 @@ pub async fn send<T: Channel>(
     msg: T::Item,
     timeout: Duration,
 ) -> Result<(), BatchError<T::Item>> {
+    let start = Instant::now();
+
     sender
-        .send_or_wait(msg, timeout, |sender, timeout| async move {
-            let (notifier, notified) = tokio::sync::oneshot::channel();
+        .send_or_wait(
+            msg,
+            timeout,
+            || start.elapsed(),
+            |sender, timeout| async move {
+                let (notifier, notified) = tokio::sync::oneshot::channel();
 
-            sender.when_empty(move || {
-                let _ = notifier.send(());
-            });
+                sender.when_empty(move || {
+                    let _ = notifier.send(());
+                });
 
-            wait(notified, timeout).await;
-        })
+                wait(notified, timeout).await;
+            },
+        )
         .await
 }
 

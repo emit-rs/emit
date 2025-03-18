@@ -201,7 +201,7 @@ impl<'a, P: Props> fmt::Debug for Event<'a, P> {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 let mut f = f.debug_map();
 
-                self.0.for_each(|k, v| {
+                let _ = self.0.for_each(|k, v| {
                     f.key(&k.get());
                     f.value(&v);
 

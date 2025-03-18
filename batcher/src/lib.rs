@@ -22,7 +22,7 @@ use std::{
     pin::Pin,
     sync::{Arc, Mutex},
     task::{Context, Poll},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 mod internal_metrics;
@@ -217,6 +217,7 @@ impl<T: Channel> Sender<T> {
         &'a self,
         msg: T::Item,
         timeout: Duration,
+        elapsed: impl Fn() -> Duration,
         mut wait_until_empty: impl FnMut(&'a Self, Duration) -> FWait,
     ) -> Result<(), BatchError<T::Item>> {
         match self.try_send(msg) {
@@ -226,10 +227,14 @@ impl<T: Channel> Sender<T> {
             Err(mut err) => {
                 self.shared.metrics.queue_full_blocked.increment();
 
-                let now = Instant::now();
+                loop {
+                    let elapsed = elapsed();
 
-                while now.elapsed() < timeout {
-                    wait_until_empty(self, timeout.saturating_sub(now.elapsed())).await;
+                    if elapsed > timeout {
+                        return Err(err);
+                    }
+
+                    wait_until_empty(self, timeout.saturating_sub(elapsed)).await;
 
                     // NOTE: Between being triggered and calling, we may have filled up again
                     match self.try_send(err.try_into_retryable()?) {
@@ -240,8 +245,6 @@ impl<T: Channel> Sender<T> {
                         }
                     }
                 }
-
-                Err(err)
             }
         }
     }
@@ -479,6 +482,7 @@ An error encountered processing a batch.
 
 The error may contain part of the batch to retry.
 */
+#[derive(Debug)]
 pub struct BatchError<T> {
     retryable: Option<T>,
 }

@@ -174,7 +174,7 @@ impl Ctxt for SimpleCtxt {
     fn open_root<P: Props>(&self, props: P) -> Self::Frame {
         let mut serialized = HashMap::new();
 
-        props.for_each(|k, v| {
+        let _ = props.for_each(|k, v| {
             if !serialized.contains_key(k.get()) {
                 serialized.insert(k.get().into(), v.to_string());
             }

@@ -615,7 +615,7 @@ fn default_writer(
             sval::stream_display(&mut *stream, self.0.tpl())?;
             stream.record_value_end(None, &sval::Label::new(KEY_TPL))?;
 
-            self.0.props().dedup().for_each(|k, v| {
+            let _ = self.0.props().dedup().for_each(|k, v| {
                 match (|| {
                     stream.record_value_begin(None, &sval::Label::new_computed(k.get()))?;
                     stream.value_computed(&v)?;

@@ -87,7 +87,7 @@ impl EventEncoder for MetricsEventEncoder {
             let mut metric_unit = None;
             let mut attributes = Vec::new();
 
-            evt.props().for_each(|k, v| match k.get() {
+            let _ = evt.props().for_each(|k, v| match k.get() {
                 KEY_METRIC_UNIT => {
                     metric_unit = Some(v);
 
