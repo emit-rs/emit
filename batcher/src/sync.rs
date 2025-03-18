@@ -17,6 +17,8 @@ use crate::{BatchError, Channel, Receiver, Sender};
 Run the receiver synchronously.
 
 This method spawns a background thread and runs [`Receiver::exec`] on it. The handle will join when the [`Sender`] is dropped.
+
+This method will return an error on the `wasm32-unknown-unknown` target.
 */
 pub fn spawn<T: Channel + Send + 'static>(
     thread_name: impl Into<String>,
@@ -36,7 +38,10 @@ where
     {
         let _ = (thread_name, receiver, on_batch);
 
-        panic!("blocking channel spawning is not supported on this platform");
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            "blocking channel spawning is not supported on this platform",
+        ));
     }
 
     let mut on_batch = on_batch;
@@ -53,6 +58,9 @@ where
 
 /**
 Wait for a channel running on a regular OS thread to process all items active at the point this call was made.
+
+This method returns `true` if the flush succeeded, or `false` if it failed or timed out.
+This method will always immediately return `false` on the `wasm32-unknown-unknown` target.
 */
 pub fn blocking_flush<T: Channel>(sender: &Sender<T>, timeout: Duration) -> bool {
     #![allow(unreachable_code)]
@@ -65,7 +73,7 @@ pub fn blocking_flush<T: Channel>(sender: &Sender<T>, timeout: Duration) -> bool
     {
         let _ = (sender, timeout);
 
-        panic!("blocking flush is not supported on this platform");
+        return false;
     }
 
     let notifier = Trigger::new();
@@ -83,6 +91,8 @@ pub fn blocking_flush<T: Channel>(sender: &Sender<T>, timeout: Duration) -> bool
 
 /**
 Wait for a channel to send a message, blocking if the channel is at capacity.
+
+This method will return an error on the `wasm32-unknown-unknown` target.
 */
 pub fn blocking_send<T: Channel>(
     sender: &Sender<T>,
@@ -99,7 +109,10 @@ pub fn blocking_send<T: Channel>(
     {
         let _ = (sender, msg, timeout);
 
-        panic!("blocking send is not supported on this platform");
+        return Err(BatchError::no_retry(io::Error::new(
+            io::ErrorKind::Other,
+            "blocking send is not supported on this platform",
+        )));
     }
 
     block_on(sender.send_or_wait(msg, timeout, |sender, timeout| {
