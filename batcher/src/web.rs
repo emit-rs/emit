@@ -78,11 +78,7 @@ pub async fn send<T: Channel>(
         .send_or_wait(
             msg,
             timeout,
-            || {
-                let now = performance_now();
-
-                now.saturating_sub(start)
-            },
+            || performance_now().saturating_sub(start),
             |sender, timeout| async move {
                 let (notifier, notified) = futures::channel::oneshot::channel();
 

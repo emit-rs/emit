@@ -236,7 +236,7 @@ impl<T: Channel> Sender<T> {
                 loop {
                     let elapsed = elapsed();
 
-                    if elapsed > timeout {
+                    if elapsed >= timeout {
                         return Err(err);
                     }
 
