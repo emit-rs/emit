@@ -171,7 +171,7 @@ impl OtlpBuilder {
             attributes: HashMap::new(),
         };
 
-        attributes.for_each(|k, v| {
+        let _ = attributes.for_each(|k, v| {
             resource.attributes.insert(k.to_owned(), v.to_owned());
 
             std::ops::ControlFlow::Continue(())

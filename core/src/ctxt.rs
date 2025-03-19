@@ -606,7 +606,7 @@ mod tests {
             fn open_root<P: Props>(&self, props: P) -> Self::Frame {
                 let mut count = 0;
 
-                props.for_each(|_, _| {
+                let _ = props.for_each(|_, _| {
                     count += 1;
                     ControlFlow::Continue(())
                 });

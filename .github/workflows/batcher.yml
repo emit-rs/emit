@@ -37,3 +37,23 @@ jobs:
       - name: Minimal versions
         working-directory: ./batcher
         run: cargo hack test --feature-powerset --lib -Z minimal-versions
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab
+
+      - name: Install Rust toolchain
+        run: rustup default nightly
+
+      - name: Install
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Default features
+        working-directory: ./batcher
+        run: wasm-pack test --node
+
+      - name: Web
+        working-directory: ./batcher
+        run: wasm-pack test --node --features web

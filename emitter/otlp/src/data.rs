@@ -288,7 +288,7 @@ pub(crate) fn stream_attributes<'sval, S: sval::Stream<'sval> + ?Sized>(
 ) -> sval::Result {
     stream.seq_begin(None)?;
 
-    props.dedup().for_each(|k, v| {
+    let _ = props.dedup().for_each(|k, v| {
         for_each(AttributeStream(&mut *stream), k, v)
             .map(|_| ControlFlow::Continue(()))
             .unwrap_or(ControlFlow::Break(()))?;

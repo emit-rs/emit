@@ -58,7 +58,7 @@ pub trait Props {
         let key = key.to_str();
         let mut value = None;
 
-        self.for_each(|k, v| {
+        let _ = self.for_each(|k, v| {
             if k == key {
                 value = Some(v);
 
@@ -282,7 +282,8 @@ mod alloc_support {
 
             let mut seen = alloc::collections::BTreeMap::new();
 
-            self.0.for_each(|key, value| {
+            // Ignore any break from this iteration
+            let _ = self.0.for_each(|key, value| {
                 seen.entry(key).or_insert(value);
 
                 ControlFlow::Continue(())
@@ -361,7 +362,7 @@ mod alloc_support {
             let mut ac = 0;
             let mut bc = 0;
 
-            deduped.for_each(|k, v| {
+            let _ = deduped.for_each(|k, v| {
                 match k.get() {
                     "a" => {
                         assert_eq!(1, v.cast::<i32>().unwrap());

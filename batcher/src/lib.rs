@@ -7,6 +7,12 @@ This library implements a channel that can be used to spawn background workers o
 - **Retries with backoff:** If the worker fails or panics then the batch can be retried up to some number of times, with backoff applied between retries. The worker can decide how much of a batch needs to be retried.
 - **Maximum size management:** If the worker can't keep up then the channel truncates to avoid runaway memory use. The alternative would be to apply backpressure, but that would affect system availability so isn't suitable for diagnostics.
 - **Flushing:** Callers can ask the worker to signal when all diagnostic events in the channel at the point they called are processed. This can be used for auditing and flushing on shutdown.
+
+# WebAssembly
+
+This library can be used on the `wasm32-unknown-unknown` target by enabling the `web` Cargo feature.
+Instead of spawning background threads to run the batching receiver, it will instead spawn a fire-and-forget promise.
+Blocking functions like `blocking_send` and `blocking_flush` are not available, but asynchronous `send` and `flush` variants are.
 */
 
 #![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]
@@ -22,7 +28,7 @@ use std::{
     pin::Pin,
     sync::{Arc, Mutex},
     task::{Context, Poll},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 mod internal_metrics;
@@ -217,6 +223,7 @@ impl<T: Channel> Sender<T> {
         &'a self,
         msg: T::Item,
         timeout: Duration,
+        elapsed: impl Fn() -> Duration,
         mut wait_until_empty: impl FnMut(&'a Self, Duration) -> FWait,
     ) -> Result<(), BatchError<T::Item>> {
         match self.try_send(msg) {
@@ -226,10 +233,14 @@ impl<T: Channel> Sender<T> {
             Err(mut err) => {
                 self.shared.metrics.queue_full_blocked.increment();
 
-                let now = Instant::now();
+                loop {
+                    let elapsed = elapsed();
 
-                while now.elapsed() < timeout {
-                    wait_until_empty(self, timeout.saturating_sub(now.elapsed())).await;
+                    if elapsed >= timeout {
+                        return Err(err);
+                    }
+
+                    wait_until_empty(self, timeout.saturating_sub(elapsed)).await;
 
                     // NOTE: Between being triggered and calling, we may have filled up again
                     match self.try_send(err.try_into_retryable()?) {
@@ -240,8 +251,6 @@ impl<T: Channel> Sender<T> {
                         }
                     }
                 }
-
-                Err(err)
             }
         }
     }
@@ -479,6 +488,7 @@ An error encountered processing a batch.
 
 The error may contain part of the batch to retry.
 */
+#[derive(Debug)]
 pub struct BatchError<T> {
     retryable: Option<T>,
 }
@@ -738,15 +748,39 @@ impl Watchers {
 
 pub mod sync;
 
-#[cfg(feature = "tokio")]
+#[cfg(all(
+    feature = "tokio",
+    not(all(
+        target_arch = "wasm32",
+        target_vendor = "unknown",
+        target_os = "unknown"
+    ))
+))]
 pub mod tokio;
+
+#[cfg(feature = "web")]
+pub mod web;
 
 // Re-export an appropriate implementation of blocking functions based on crate features
 
-#[cfg(feature = "tokio")]
+#[cfg(all(
+    feature = "tokio",
+    not(all(
+        target_arch = "wasm32",
+        target_vendor = "unknown",
+        target_os = "unknown"
+    ))
+))]
 pub use tokio::{blocking_flush, blocking_send};
 
-#[cfg(not(feature = "tokio"))]
+#[cfg(not(all(
+    feature = "tokio",
+    not(all(
+        target_arch = "wasm32",
+        target_vendor = "unknown",
+        target_os = "unknown"
+    ))
+)))]
 pub use sync::{blocking_flush, blocking_send};
 
 #[cfg(test)]
