@@ -50,6 +50,8 @@ wait_a_bit(1200).await;
 # }
 ```
 
+To learn more about `emit`'s macro syntax, see [Template syntax and rendering](../reference/templates.md).
+
 ## Spans with levels
 
 `emit` also defines macros for emitting spans at different levels for filtering:

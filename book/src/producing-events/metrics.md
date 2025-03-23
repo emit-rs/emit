@@ -36,6 +36,8 @@ Event {
 }
 ```
 
+To learn more about `emit`'s macro syntax, see [Template syntax and rendering](../reference/templates.md).
+
 -----
 
 ![an example metric in Prometheus](../asset/metric-prometheus.png)

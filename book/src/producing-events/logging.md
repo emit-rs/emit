@@ -36,6 +36,8 @@ Event {
 
 See [Levels](./logging/levels.md) for details.
 
+To learn more about `emit`'s macro syntax, see [Template syntax and rendering](../reference/templates.md).
+
 -----
 
 ![an example log rendered to the console](../asset/term-err.png)
