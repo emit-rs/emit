@@ -70,6 +70,8 @@ fn main() {
 
 ![The output of running the above program](https://github.com/emit-rs/emit/blob/main/asset/emit_term.png?raw=true)
 
+`emit` has a capable syntax for writing events that's different from the standard `format!` trait. You can read more about it in [the guide](https://emit-rs.io/reference/templates.html).
+
 ## Tracing
 
 `emit` can also produce trace data that's compatible with standard tracing tools, like Zipkin.
