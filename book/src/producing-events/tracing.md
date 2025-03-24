@@ -56,10 +56,10 @@ To learn more about `emit`'s macro syntax, see [Template syntax and rendering](.
 
 `emit` also defines macros for emitting spans at different levels for filtering:
 
-- [`#[debug_span]`](https://docs.rs/emit/1.3.1/emit/attr.debug_span.html)
-- [`#[info_span]`](https://docs.rs/emit/1.3.1/emit/attr.info_span.html)
-- [`#[warn_span]`](https://docs.rs/emit/1.3.1/emit/attr.warn_span.html)
-- [`#[error_span]`](https://docs.rs/emit/1.3.1/emit/attr.error_span.html)
+- [`#[debug_span]`](https://docs.rs/emit/1.4.0/emit/attr.debug_span.html)
+- [`#[info_span]`](https://docs.rs/emit/1.4.0/emit/attr.info_span.html)
+- [`#[warn_span]`](https://docs.rs/emit/1.4.0/emit/attr.warn_span.html)
+- [`#[error_span]`](https://docs.rs/emit/1.4.0/emit/attr.error_span.html)
 
 The level of a span may also depend on its execution. See [Fallible functions](./tracing/fallible-functions.md) and [Manual span completion](./tracing/manual-span-completion.md) for details.
 
