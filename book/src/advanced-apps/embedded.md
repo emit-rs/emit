@@ -35,6 +35,8 @@ static MY_RUNTIME: emit::runtime::Runtime<Emitter, Filter, Ctxt, Clock, Rng> = e
 );
 ```
 
+Static runtimes can also be used in other environments to avoid dynamic dispatch and improve performance.
+
 ## Using `emit!` and `#[span]`
 
 Embedded environments need to specify a runtime explicitly in the [`emit!`](https://docs.rs/emit/1.4.0/emit/macro.emit.html) or [`#[span]`](https://docs.rs/emit/1.4.0/emit/attr.span.html) macros using the `rt` [control parameter](../reference/control-parameters.md):
