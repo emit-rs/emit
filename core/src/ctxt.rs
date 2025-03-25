@@ -289,23 +289,19 @@ mod internal {
 
 #[cfg(feature = "alloc")]
 mod alloc_support {
-    use alloc::boxed::Box;
-    use core::any::Any;
-
     use crate::props::ErasedProps;
 
     use super::*;
 
     mod internal {
-        use core::{marker::PhantomData, mem, ops::ControlFlow};
+        use alloc::boxed::Box;
+        use core::{marker::PhantomData, mem, mem::MaybeUninit, ops::ControlFlow, ptr};
 
         use crate::{
             props::{ErasedProps, Props},
             str::Str,
             value::Value,
         };
-
-        use super::ErasedFrame;
 
         pub trait DispatchCtxt {
             fn dispatch_with_current(&self, with: &mut dyn FnMut(&ErasedCurrent));
@@ -351,12 +347,107 @@ mod alloc_support {
                 self.get().for_each(for_each)
             }
         }
-    }
 
-    /**
-    An object-safe [`Ctxt::Frame`].
-    */
-    pub struct ErasedFrame(Box<dyn Any + Send>);
+        // NOTE: This type uses the same approach as `erased-serde` does for erasing
+        // small values without needing to allocate for them. We have enough local space
+        // to store a value up to 16 bytes, with an alignment up to 8 bytes, inline.
+        //
+        // The variant here is a bit simpler than `erased-serde`'s, because we already
+        // constraint `T` to be `Send + 'static`.
+
+        pub struct ErasedFrame {
+            data: RawErasedFrame,
+            vtable: RawErasedFrameVTable,
+        }
+
+        // SAFETY: `ErasedFrame` can only be constructed from `T: Send`
+        unsafe impl Send for ErasedFrame {}
+
+        impl Drop for ErasedFrame {
+            fn drop(&mut self) {
+                // SAFETY: This frame was created from `T`
+                unsafe { (self.vtable.drop)(&mut self.data) }
+            }
+        }
+
+        union RawErasedFrame {
+            boxed: *mut (),
+            inline: MaybeUninit<[usize; 2]>,
+        }
+
+        struct RawErasedFrameVTable {
+            drop: unsafe fn(&mut RawErasedFrame),
+        }
+
+        impl ErasedFrame {
+            /**
+            Whether a value of type `T` can be stored inline.
+            */
+            pub(super) fn inline<T: Send + 'static>() -> bool {
+                mem::size_of::<T>() <= mem::size_of::<RawErasedFrame>()
+                    && mem::align_of::<T>() <= mem::align_of::<RawErasedFrame>()
+            }
+
+            /**
+            Erase a value, storing it inline if it's small enough.
+            */
+            pub(super) fn new<T: Send + 'static>(value: T) -> Self {
+                if Self::inline::<T>() {
+                    let mut data = RawErasedFrame {
+                        inline: MaybeUninit::uninit(),
+                    };
+
+                    unsafe { ptr::write(data.inline.as_mut_ptr() as *mut T, value) };
+
+                    unsafe fn vdrop<T>(data: &mut RawErasedFrame) {
+                        // SAFETY: This frame is storing `T` inline
+                        ptr::drop_in_place(data.inline.as_mut_ptr() as *mut T)
+                    }
+
+                    let vtable = RawErasedFrameVTable { drop: vdrop::<T> };
+
+                    ErasedFrame { data, vtable }
+                } else {
+                    let data = RawErasedFrame {
+                        boxed: Box::into_raw(Box::new(value)) as *mut (),
+                    };
+
+                    unsafe fn vdrop<T>(data: &mut RawErasedFrame) {
+                        // SAFETY: This frame is storing a boxed `T`
+                        drop(unsafe { Box::from_raw(data.boxed as *mut T) });
+                    }
+
+                    let vtable = RawErasedFrameVTable { drop: vdrop::<T> };
+
+                    ErasedFrame { data, vtable }
+                }
+            }
+
+            // SAFETY: This frame must have been created from `T`
+            pub(super) unsafe fn get_mut<T: Send + 'static>(&mut self) -> &mut T {
+                if Self::inline::<T>() {
+                    &mut *(self.data.inline.as_mut_ptr() as *mut T)
+                } else {
+                    &mut *(self.data.boxed as *mut T)
+                }
+            }
+
+            // SAFETY: This frame must have been created from `T`
+            pub(super) unsafe fn into_inner<T: Send + 'static>(mut self) -> T {
+                if Self::inline::<T>() {
+                    let data = ptr::read(self.data.inline.as_mut_ptr() as *mut T);
+                    mem::forget(self);
+
+                    data
+                } else {
+                    let data = Box::from_raw(self.data.boxed as *mut T);
+                    mem::forget(self);
+
+                    *data
+                }
+            }
+        }
+    }
 
     /**
     An object-safe [`Ctxt`].
@@ -381,47 +472,39 @@ mod alloc_support {
         C::Frame: Send + 'static,
     {
         fn dispatch_with_current(&self, with: &mut dyn FnMut(&internal::ErasedCurrent)) {
-            // SAFETY: The borrow passed to `with` is arbitarily short, so `ErasedCurrent::get`
+            // SAFETY: The borrow passed to `with` is arbitarily short, so `internal::ErasedCurrent::get`
             // cannot outlive `props`
             self.with_current(move |props| with(&unsafe { internal::ErasedCurrent::new(&props) }))
         }
 
-        fn dispatch_open_root(&self, props: &dyn ErasedProps) -> ErasedFrame {
-            ErasedFrame(Box::new(self.open_root(props)))
+        fn dispatch_open_root(&self, props: &dyn ErasedProps) -> internal::ErasedFrame {
+            internal::ErasedFrame::new(self.open_root(props))
         }
 
-        fn dispatch_open_push(&self, props: &dyn ErasedProps) -> ErasedFrame {
-            // TODO: For pointer-sized frames we could consider inlining
-            // to avoid boxing
-            ErasedFrame(Box::new(self.open_push(props)))
+        fn dispatch_open_push(&self, props: &dyn ErasedProps) -> internal::ErasedFrame {
+            internal::ErasedFrame::new(self.open_push(props))
         }
 
-        fn dispatch_open_disabled(&self, props: &dyn ErasedProps) -> ErasedFrame {
-            ErasedFrame(Box::new(self.open_disabled(props)))
+        fn dispatch_open_disabled(&self, props: &dyn ErasedProps) -> internal::ErasedFrame {
+            internal::ErasedFrame::new(self.open_disabled(props))
         }
 
-        fn dispatch_enter(&self, span: &mut ErasedFrame) {
-            if let Some(span) = span.0.downcast_mut() {
-                self.enter(span)
-            }
+        fn dispatch_enter(&self, span: &mut internal::ErasedFrame) {
+            self.enter(unsafe { span.get_mut::<C::Frame>() })
         }
 
-        fn dispatch_exit(&self, span: &mut ErasedFrame) {
-            if let Some(span) = span.0.downcast_mut() {
-                self.exit(span)
-            }
+        fn dispatch_exit(&self, span: &mut internal::ErasedFrame) {
+            self.exit(unsafe { span.get_mut::<C::Frame>() })
         }
 
-        fn dispatch_close(&self, span: ErasedFrame) {
-            if let Ok(span) = span.0.downcast() {
-                self.close(*span)
-            }
+        fn dispatch_close(&self, span: internal::ErasedFrame) {
+            self.close(unsafe { span.into_inner::<C::Frame>() })
         }
     }
 
     impl<'a> Ctxt for dyn ErasedCtxt + 'a {
         type Current = internal::ErasedCurrent;
-        type Frame = ErasedFrame;
+        type Frame = internal::ErasedFrame;
 
         fn with_current<R, F: FnOnce(&Self::Current) -> R>(&self, with: F) -> R {
             let mut f = Some(with);
@@ -551,6 +634,36 @@ mod alloc_support {
 
             ctxt.close(frame);
         }
+    }
+
+    #[test]
+    fn erased_frame_inline() {
+        struct Data(usize);
+
+        impl Drop for Data {
+            fn drop(&mut self) {}
+        }
+
+        assert!(internal::ErasedFrame::inline::<Data>());
+        let mut frame = internal::ErasedFrame::new(Data(42));
+
+        assert_eq!(42, unsafe { frame.get_mut::<Data>() }.0);
+
+        let data = unsafe { frame.into_inner::<Data>() };
+
+        assert_eq!(42, data.0);
+    }
+
+    #[test]
+    fn erased_frame_boxed() {
+        assert!(!internal::ErasedFrame::inline::<String>());
+        let mut frame = internal::ErasedFrame::new(String::from("some data"));
+
+        assert_eq!("some data", unsafe { frame.get_mut::<String>() });
+
+        let data = unsafe { frame.into_inner::<String>() };
+
+        assert_eq!("some data", data);
     }
 }
 

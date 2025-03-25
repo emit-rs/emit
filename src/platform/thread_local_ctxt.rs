@@ -15,8 +15,10 @@ use emit_core::{
     props::Props,
     runtime::InternalCtxt,
     str::Str,
-    value::{OwnedValue, Value},
+    value::{OwnedValue, ToValue, Value},
 };
+
+use crate::span::{SpanId, TraceId};
 
 /**
 A [`Ctxt`] that stores ambient state in thread local storage.
@@ -55,7 +57,41 @@ A [`Ctxt::Frame`] on a [`ThreadLocalCtxt`].
 */
 #[derive(Clone)]
 pub struct ThreadLocalCtxtFrame {
-    props: Option<Arc<HashMap<Str<'static>, OwnedValue>>>,
+    props: Option<Arc<HashMap<Str<'static>, ThreadLocalValue>>>,
+}
+
+#[derive(Clone)]
+enum ThreadLocalValue {
+    TraceId(TraceId),
+    SpanId(SpanId),
+    Any(OwnedValue),
+}
+
+impl ThreadLocalValue {
+    fn from_value(value: Value) -> Self {
+        // Specialize a few common value types
+
+        if let Some(trace_id) = value.downcast_ref() {
+            return ThreadLocalValue::TraceId(*trace_id);
+        }
+
+        if let Some(span_id) = value.downcast_ref() {
+            return ThreadLocalValue::SpanId(*span_id);
+        }
+
+        // Fall back to buffering
+        ThreadLocalValue::Any(value.to_shared())
+    }
+}
+
+impl ToValue for ThreadLocalValue {
+    fn to_value(&self) -> Value {
+        match self {
+            ThreadLocalValue::TraceId(ref value) => value.to_value(),
+            ThreadLocalValue::SpanId(ref value) => value.to_value(),
+            ThreadLocalValue::Any(ref value) => value.to_value(),
+        }
+    }
 }
 
 impl Props for ThreadLocalCtxtFrame {
@@ -65,7 +101,7 @@ impl Props for ThreadLocalCtxtFrame {
     ) -> ControlFlow<()> {
         if let Some(ref props) = self.props {
             for (k, v) in &**props {
-                for_each(k.by_ref(), v.by_ref())?;
+                for_each(k.by_ref(), v.to_value())?;
             }
         }
 
@@ -94,7 +130,8 @@ impl Ctxt for ThreadLocalCtxt {
         let mut span = HashMap::new();
 
         let _ = props.for_each(|k, v| {
-            span.insert(k.to_shared(), v.to_shared());
+            span.insert(k.to_shared(), ThreadLocalValue::from_value(v));
+
             ControlFlow::Continue(())
         });
 
@@ -113,7 +150,8 @@ impl Ctxt for ThreadLocalCtxt {
         let span_props = Arc::make_mut(span.props.as_mut().unwrap());
 
         let _ = props.for_each(|k, v| {
-            span_props.insert(k.to_shared(), v.to_shared());
+            span_props.insert(k.to_shared(), ThreadLocalValue::from_value(v));
+
             ControlFlow::Continue(())
         });
 
@@ -176,12 +214,28 @@ mod tests {
     use std::thread;
 
     impl ThreadLocalCtxtFrame {
-        fn props(&self) -> HashMap<Str<'static>, OwnedValue> {
+        fn props(&self) -> HashMap<Str<'static>, ThreadLocalValue> {
             self.props
                 .as_ref()
                 .map(|props| (**props).clone())
                 .unwrap_or_default()
         }
+    }
+
+    #[test]
+    fn can_inline() {
+        use std::mem;
+
+        // Mirrors the impl of `ErasedFrame`
+        union RawErasedFrame {
+            _data: *mut (),
+            _inline: mem::MaybeUninit<[usize; 2]>,
+        }
+
+        assert!(
+            mem::size_of::<ThreadLocalCtxt>() <= mem::size_of::<RawErasedFrame>()
+                && mem::align_of::<ThreadLocalCtxt>() <= mem::align_of::<RawErasedFrame>()
+        );
     }
 
     #[test]
@@ -209,7 +263,7 @@ mod tests {
             let props = props.props();
 
             assert_eq!(1, props.len());
-            assert_eq!(1, props["a"].by_ref().cast::<i32>().unwrap());
+            assert_eq!(1, props["a"].to_value().cast::<i32>().unwrap());
         });
 
         ctxt.clone().enter(&mut inner);
@@ -218,8 +272,8 @@ mod tests {
             let props = props.props();
 
             assert_eq!(2, props.len());
-            assert_eq!(2, props["a"].by_ref().cast::<i32>().unwrap());
-            assert_eq!(1, props["b"].by_ref().cast::<i32>().unwrap());
+            assert_eq!(2, props["a"].to_value().cast::<i32>().unwrap());
+            assert_eq!(1, props["b"].to_value().cast::<i32>().unwrap());
         });
 
         ctxt.clone().exit(&mut inner);
