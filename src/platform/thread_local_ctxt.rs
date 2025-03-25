@@ -185,6 +185,22 @@ mod tests {
     }
 
     #[test]
+    fn can_inline() {
+        use std::mem;
+
+        // Mirrors the impl of `ErasedFrame`
+        union RawErasedFrame {
+            _data: *mut (),
+            _inline: mem::MaybeUninit<[usize; 2]>,
+        }
+
+        assert!(
+            mem::size_of::<ThreadLocalCtxt>() <= mem::size_of::<RawErasedFrame>()
+                && mem::align_of::<ThreadLocalCtxt>() <= mem::align_of::<RawErasedFrame>()
+        );
+    }
+
+    #[test]
     fn push_props() {
         let ctxt = ThreadLocalCtxt::new();
 
