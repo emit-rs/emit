@@ -637,6 +637,21 @@ mod alloc_support {
     }
 
     #[test]
+    fn erased_frame_zero_sized() {
+        #[derive(PartialEq, Eq, Debug)]
+        struct Data;
+
+        assert!(internal::ErasedFrame::inline::<Data>());
+        let mut frame = internal::ErasedFrame::new(Data);
+
+        assert_eq!(Data, *unsafe { frame.get_mut::<Data>() });
+
+        let data = unsafe { frame.into_inner::<Data>() };
+
+        assert_eq!(Data, data);
+    }
+
+    #[test]
     fn erased_frame_inline() {
         struct Data(usize);
 
