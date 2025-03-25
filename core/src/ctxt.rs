@@ -349,7 +349,11 @@ mod alloc_support {
         }
 
         // NOTE: This type uses the same approach as `erased-serde` does for erasing
-        // small values without needing to allocate for them
+        // small values without needing to allocate for them. We have enough local space
+        // to store a value up to 16 bytes, with an alignment up to 8 bytes, inline.
+        //
+        // The variant here is a bit simpler than `erased-serde`'s, because we already
+        // constraint `T` to be `Send + 'static`.
 
         pub struct ErasedFrame {
             data: RawErasedFrame,
@@ -640,7 +644,7 @@ mod alloc_support {
             fn drop(&mut self) {}
         }
 
-        assert!(internal::ErasedFrame::inline::<usize>());
+        assert!(internal::ErasedFrame::inline::<Data>());
         let mut frame = internal::ErasedFrame::new(Data(42));
 
         assert_eq!(42, unsafe { frame.get_mut::<Data>() }.0);
