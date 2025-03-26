@@ -1,6 +1,6 @@
 [package]
 name = "emit_macros"
-version = "1.4.0"
+version = "1.4.1"
 authors = ["emit contributors"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -33,7 +33,7 @@ version = "2"
 features = ["full", "extra-traits", "visit-mut"]
 
 [dependencies.emit_core]
-version = "1.4.0"
+version = "1.4.1"
 path = "../core"
 
 [dependencies.fv-template]
