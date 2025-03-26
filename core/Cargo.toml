@@ -20,8 +20,8 @@ implicit_rt = ["implicit_internal_rt"]
 implicit_internal_rt = []
 
 [dependencies.value-bag]
-version = "1"
-features = ["inline-i128", "seq"]
+version = "1.11"
+features = ["inline-i128", "inline-str", "seq"]
 default-features = false
 
 [dependencies.unicode-ident]
