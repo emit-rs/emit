@@ -51,9 +51,6 @@ version = "1.4.0"
 path = "core"
 default-features = false
 
-[dependencies.value-bag]
-version = "1"
-
 [dependencies.sval]
 version = "2"
 optional = true
