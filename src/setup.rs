@@ -89,7 +89,7 @@ use emit_core::{
     rng::Rng,
     runtime::{
         AmbientRuntime, AmbientSlot, InternalClock, InternalCtxt, InternalEmitter, InternalFilter,
-        InternalRng,
+        InternalRng, Runtime,
     },
 };
 
@@ -286,6 +286,13 @@ impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt, TClock: Clock, TRng: Rng>
             rng,
         }
     }
+
+    /**
+    Initialize a standalone runtime.
+    */
+    pub fn init_runtime(self) -> Runtime<TEmitter, TFilter, TCtxt, TClock, TRng> {
+        Runtime::build(self.emitter, self.filter, self.ctxt, self.clock, self.rng)
+    }
 }
 
 impl<
@@ -346,7 +353,7 @@ where
     #[must_use = "call `flush_on_drop` or call `blocking_flush` at the end of `main` to ensure events are flushed."]
     pub fn try_init_slot<'a>(self, slot: &'a AmbientSlot) -> Option<Init<'a, TEmitter, TCtxt>> {
         let ambient = slot.init(
-            emit_core::runtime::Runtime::new()
+            Runtime::new()
                 .with_emitter(self.emitter)
                 .with_filter(self.filter)
                 .with_ctxt(self.ctxt)
@@ -400,7 +407,7 @@ where
         let slot = emit_core::runtime::internal_slot();
 
         let ambient = slot.init(
-            emit_core::runtime::Runtime::new()
+            Runtime::new()
                 .with_emitter(self.emitter)
                 .with_filter(self.filter)
                 .with_ctxt(self.ctxt)

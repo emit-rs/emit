@@ -134,7 +134,7 @@ Also see [Filtering events](./filtering-events.md) for more details on filtering
 
 ## Flushing
 
-Events may be processed asynchronously, so to ensure they're fulling flushed before your `main` returns, you can call [`blocking_flush`](https://docs.rs/emit/1.5.0/emit/setup/struct.Init.html#method.blocking_flush) at the end of your `main` function:
+Events may be processed asynchronously, so to ensure they're fully flushed before your `main` returns, you can call [`blocking_flush`](https://docs.rs/emit/1.5.0/emit/setup/struct.Init.html#method.blocking_flush) at the end of your `main` function:
 
 ```rust
 # extern crate emit;
