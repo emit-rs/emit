@@ -250,7 +250,7 @@ fn inject_sync(
     err_tokens: Option<TokenStream>,
 ) -> Result<TokenStream, syn::Error> {
     let ctxt_props_tokens = ctxt_props.props_tokens().to_ref_tokens();
-    let template_tokens = template.template_tokens().to_ref_tokens();
+    let template_tokens = template.template_tokens();
     let span_name_tokens = template.template_literal_tokens();
 
     let Completion {
@@ -331,7 +331,7 @@ fn inject_async(
     err_tokens: Option<TokenStream>,
 ) -> Result<TokenStream, syn::Error> {
     let ctxt_props_tokens = ctxt_props.props_tokens().to_ref_tokens();
-    let template_tokens = template.template_tokens().to_ref_tokens();
+    let template_tokens = template.template_tokens();
     let span_name_tokens = template.template_literal_tokens();
 
     let Completion {
@@ -427,14 +427,11 @@ fn result_completion(
 
         quote!(
             Ok(__ok) => {
-                #span_guard.complete_with(emit::span::completion::from_fn(|span| {
-                    emit::__private::__private_complete_span_ok(
-                        #rt_tokens,
-                        span,
-                        #template_tokens,
-                        #lvl_tokens,
-                    )
-                }));
+                #span_guard.complete_with(emit::__private::__private_complete_span_ok(
+                    #rt_tokens,
+                    #template_tokens,
+                    #lvl_tokens,
+                ));
 
                 Ok(__ok)
             }
@@ -459,15 +456,12 @@ fn result_completion(
 
         quote!(
             Err(__err) => {
-                #span_guard.complete_with(emit::span::completion::from_fn(|span| {
-                    emit::__private::__private_complete_span_err(
-                        #rt_tokens,
-                        span,
-                        #template_tokens,
-                        #lvl_tokens,
-                        #err_tokens,
-                    )
-                }));
+                #span_guard.complete_with(emit::__private::__private_complete_span_err(
+                    #rt_tokens,
+                    #template_tokens,
+                    #lvl_tokens,
+                    #err_tokens,
+                ));
 
                 Err(__err)
             }
@@ -503,15 +497,12 @@ fn completion(
         .map(|lvl| lvl.to_ref_tokens())
         .to_option_tokens(quote!(&emit::Level));
 
-    let default_completion_tokens = quote!(emit::span::completion::from_fn(|span| {
-        emit::__private::__private_complete_span(
-            #rt_tokens,
-            span,
-            #template_tokens,
-            #lvl_tokens,
-            #panic_lvl_tokens,
-        )
-    }));
+    let default_completion_tokens = quote!(emit::__private::__private_complete_span(
+        #rt_tokens,
+        #template_tokens,
+        #lvl_tokens,
+        #panic_lvl_tokens,
+    ));
 
     Ok(Completion {
         body_tokens,
@@ -568,7 +559,7 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
         .to_option_tokens(quote!(&emit::Empty));
 
     let ctxt_props_tokens = ctxt_props.props_tokens().to_ref_tokens();
-    let template_tokens = template.template_tokens().to_ref_tokens();
+    let template_tokens = template.template_tokens();
     let span_name_tokens = template.template_literal_tokens();
 
     let lvl_tokens = default_lvl_tokens
@@ -587,15 +578,12 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
             #lvl_tokens,
             #when_tokens,
             #ctxt_props_tokens,
-            emit::span::completion::from_fn(|span| {
-                emit::__private::__private_complete_span(
-                    #rt_tokens,
-                    span,
-                    #template_tokens,
-                    #lvl_tokens,
-                    #panic_lvl_tokens,
-                )
-            }),
+            emit::__private::__private_complete_span(
+                #rt_tokens,
+                #template_tokens,
+                #lvl_tokens,
+                #panic_lvl_tokens,
+            ),
         )
     ))
 }
