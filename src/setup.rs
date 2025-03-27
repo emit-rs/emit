@@ -7,7 +7,7 @@ You can implement your own runtime, providing your own implementations of the am
 
 ```toml
 [dependencies.emit]
-version = "1.4.1"
+version = "1.5.0"
 default-features = false
 features = ["std"]
 ```

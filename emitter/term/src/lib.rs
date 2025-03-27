@@ -9,10 +9,10 @@ Add `emit` and `emit_term` to your `Cargo.toml`:
 
 ```toml
 [dependencies.emit]
-version = "1.4.1"
+version = "1.5.0"
 
 [dependencies.emit_term]
-version = "1.4.1"
+version = "1.5.0"
 ```
 
 Initialize `emit` using `emit_term`:
