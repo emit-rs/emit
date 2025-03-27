@@ -15,7 +15,7 @@ members = [
     "examples/opentelemetry/direct_otlp",
     "examples/trace_zipkin",
     "examples/metric_prometheus",
-    "test/ui", "examples/trace_zipkin", "examples/metric_prometheus",
+    "test/ui",
 ]
 
 [package]
@@ -78,3 +78,6 @@ version = "2"
 
 [dev-dependencies.serde_test]
 version = "1"
+
+[profile.release]
+debug = true
