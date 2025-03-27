@@ -18,6 +18,7 @@ fn main() {
     let rt = emit::setup()
         .emit_to({
             let emitter = emit_otlp::new()
+                .traces(emit_otlp::traces_grpc_proto("http://localhost:44319"))
                 .logs(emit_otlp::logs_grpc_proto("http://localhost:44319"))
                 .spawn();
 
@@ -34,9 +35,7 @@ fn main() {
     let count = 10_000;
     let start = emit::clock().now().unwrap();
 
-    for i in 0..count {
-        emit::info!("test event {i}");
-    }
+    root(count);
 
     rt.blocking_flush(Duration::from_secs(30));
 
@@ -49,13 +48,25 @@ fn main() {
 
     stdout.emit(&emit::evt!(
         extent: start..end,
-        "emitted {count} events ({per_event}ns per event)",
+        "emitted {count} events ({per_event}ns per run)",
         evt_kind: "span",
     ));
 
     reporter.emit_metrics(&stdout);
 
     drop(otelcol);
+}
+
+#[emit::span("test root")]
+fn root(count: usize) {
+    for i in 0..count {
+        run(i);
+    }
+}
+
+#[emit::span("test span {i}")]
+fn run(i: usize) {
+    emit::info!("test event {i}");
 }
 
 struct OtelCol(Child);
