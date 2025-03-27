@@ -8,7 +8,7 @@ Each signal (logs, traces, metrics) implements `EventEncoder` and `ReceiverEncod
 Each protocol (protobuf and JSON) implements [`RawEncoder`]. This manages the difference between trace/span id encoding between them.
 */
 
-use std::{collections::HashMap, fmt, ops::ControlFlow};
+use std::{cell::RefCell, collections::HashMap, fmt, ops::ControlFlow};
 
 use bytes::Buf;
 use sval_derive::Value;
@@ -140,7 +140,54 @@ impl RawEncoder for Proto {
     type SpanId = BinarySpanId;
 
     fn encode<V: sval::Value>(value: V) -> EncodedPayload {
-        EncodedPayload::Proto(sval_protobuf::stream_to_protobuf(value))
+        // Where possible, we want to pre-allocate buffers for protobuf encoding
+        // Log data tends to be fairly normalized, so we can get a reasonable idea
+        // of what to pre-allocate by watching the sizes of events as they run through
+
+        const WINDOW_SIZE: usize = 8;
+
+        struct LocalCapacity {
+            window: [sval_protobuf::Capacity; WINDOW_SIZE],
+            counter: usize,
+            reuse: Option<sval_protobuf::ProtoBufStreamReusable>,
+        }
+
+        thread_local! {
+            static LOCAL_CAPACITY: RefCell<LocalCapacity> = RefCell::new(LocalCapacity {
+                window: [sval_protobuf::Capacity::new(); WINDOW_SIZE],
+                counter: 0,
+                reuse: None,
+            })
+        };
+
+        let payload = LOCAL_CAPACITY.with(|lc| {
+            // Get re-usable allocations, if there are any
+            let reuse = {
+                let mut lc = lc.borrow_mut();
+
+                let reuse = lc.reuse.take().unwrap_or_default();
+                reuse.with_capacity(sval_protobuf::Capacity::next(&lc.window))
+            };
+
+            // NOTE: protobuf encoding is infallible
+            let mut stream = sval_protobuf::ProtoBufStream::new_reuse(reuse);
+            value.stream(&mut stream).unwrap();
+            let (payload, reuse) = stream.freeze_reuse();
+
+            // Restore re-usable allocations
+            {
+                let mut lc = lc.borrow_mut();
+                let lc = &mut *lc;
+
+                lc.counter += 1;
+                lc.window[lc.counter % lc.window.len()] = reuse.capacity();
+                lc.reuse = Some(reuse);
+            }
+
+            payload
+        });
+
+        EncodedPayload::Proto(payload)
     }
 }
 
