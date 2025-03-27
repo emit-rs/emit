@@ -7,11 +7,17 @@ This project doesn't prove much except what the on-thread cost of event serializ
 use emit::Emitter;
 
 use std::{
+    env,
     process::{Child, Command},
     time::Duration,
 };
 
 fn main() {
+    let stdout = emit_term::stdout();
+
+    let spawn = env::args().any(|a| a == "--spawn");
+    let flush = env::args().any(|a| a == "--flush");
+
     let mut reporter = emit::metric::Reporter::new();
 
     // Set up `emit_otlp`
@@ -28,8 +34,7 @@ fn main() {
         })
         .init();
 
-    // Spawn a collector
-    let otelcol = OtelCol::spawn();
+    let otelcol = if spawn { Some(OtelCol::spawn()) } else { None };
 
     // Emit our events
     let count = 10_000;
@@ -37,18 +42,18 @@ fn main() {
 
     root(count);
 
-    rt.blocking_flush(Duration::from_secs(30));
+    if flush {
+        rt.blocking_flush(Duration::from_secs(30));
+    }
 
     let end = emit::clock().now().unwrap();
 
     // Write the results
     let per_event = (end - start).as_nanos() as f64 / count as f64;
 
-    let stdout = emit_term::stdout();
-
     stdout.emit(&emit::evt!(
         extent: start..end,
-        "emitted {count} events ({per_event}ns per run)",
+        "emitted {count} events ({per_event}ns per run) with spawn {spawn} and flush {flush}",
         evt_kind: "span",
     ));
 

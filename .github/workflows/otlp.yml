@@ -76,4 +76,4 @@ jobs:
 
       - name: Throughput Test
         working-directory: ./emitter/otlp/test/throughput
-        run: cargo run --release
+        run: cargo run --release -- --spawn --flush
