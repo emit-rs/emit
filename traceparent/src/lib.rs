@@ -28,10 +28,10 @@ Add `emit` and `emit_traceparent` to your `Cargo.toml`:
 
 ```toml
 [dependencies.emit]
-version = "1.4.1"
+version = "1.5.0"
 
 [dependencies.emit_traceparent]
-version = "1.4.1"
+version = "1.5.0"
 ```
 
 Initialize `emit` using the [`setup`] or [`setup_with_sampler`] functions from this library:

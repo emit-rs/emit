@@ -4,7 +4,7 @@ This guide introduces `emit`. You may also want to look at:
 
 - [the source on GitHub](https://github.com/emit-rs/emit).
 - [a set of task-oriented examples](https://github.com/emit-rs/emit/tree/main/examples).
-- [the API docs](https://docs.rs/emit/1.4.1/emit/index.html).
+- [the API docs](https://docs.rs/emit/1.5.0/emit/index.html).
 
 ## What is `emit`?
 
