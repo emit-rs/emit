@@ -2,9 +2,9 @@
 
 You can use [`emit_otlp`](https://docs.rs/emit_otlp/1.5.0/emit_otlp/index.html) to emit diagnostic events to remote OpenTelemetry-compatible services.
 
-OpenTelemtry defines a wire protocol for exchanging diagnostic data called [OTLP](https://opentelemetry.io/docs/specs/otlp/). If you're using a modern telemetry backend then chances are it supports OTLP either directly or through [OpenTelemetry's Collector](https://opentelemetry.io/docs/collector/).
+OpenTelemetry defines a wire protocol for exchanging diagnostic data called [OTLP](https://opentelemetry.io/docs/specs/otlp/). If you're using a modern telemetry backend then chances are it supports OTLP either directly or through [OpenTelemetry's Collector](https://opentelemetry.io/docs/collector/).
 
-`emit_otlp` is an independent implementation of OTLP that maps `emit`'s events onto the OpenTelemetry data model. `emit_otlp` doesn't rely on the OpenTelemtry SDK or any gRPC or protobuf tooling, so can be added to any Rust application without requiring changes to your build process.
+`emit_otlp` is an independent implementation of OTLP that maps `emit`'s events onto the OpenTelemetry data model. `emit_otlp` doesn't rely on the OpenTelemetry SDK or any gRPC or protobuf tooling, so can be added to any Rust application without requiring changes to your build process.
 
 ```toml
 [dependencies.emit_otlp]

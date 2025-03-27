@@ -2,7 +2,7 @@
 
 ## Creating `SpanGuard`s
 
-The `#[span]` attribute [includes a `guard` control parameter](./manual-span-completion.md) that gives you access to a [`SpanGuard`](https://docs.rs/emit/1.5.0/emit/span/struct.SpanGuard.html) to manually complete it. The `#[span]` attribute takes care of constructing the `SpanGuard` for you and ensuring any ambient span properties are active in the body of your annotated function.
+The `#[span]` attribute [includes a `guard` control parameter](./manual-span-completion.md) that gives you access to a [`SpanGuard`](https://docs.rs/emit/1.5.0/emit/span/struct.SpanGuard.html) to manually complete it. The `#[span]` attribute takes care of constructing the `SpanGuard` for you and ensuring any ambient span properties are active in the body of your annotated function. See [Manual span completion](./manual-span-completion.md) for more details.
 
 You can also create `SpanGuard`s manually if you can't or don't want to use the `#[span]` attribute:
 

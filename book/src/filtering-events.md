@@ -123,6 +123,8 @@ fn main() {
 }
 ```
 
+Events in this filter are matched by prefix, using the most specific relevant path. In the above example, `noisy_module::important_sub_module` will match `Info` and higher, but `noisy_module::other_sub_module` will match `Warn` and higher.
+
 See [the crate docs](https://docs.rs/emit/1.5.0/emit/level/struct.MinLevelPathMap.html) for more details.
 
 ## Filtering spans
