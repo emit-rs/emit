@@ -17,9 +17,9 @@ or scoped threads:
 # fn my_operation() {}
 let ctxt = emit::Frame::current(emit::ctxt());
 std::thread::scope(|s| {
-    frame.call(|| {
-        s.spawn(emit::Frame::current(emit::ctxt()).in_fn(|| {/* frame active here */}))
-        s.spawn(emit::Frame::current(emit::ctxt()).in_fn(|| {/* frame active here */}))
+    ctxt.call(|| {
+        s.spawn(emit::Frame::current(emit::ctxt()).in_fn(|| {/* frame active here */}));
+        s.spawn(emit::Frame::current(emit::ctxt()).in_fn(|| {/* frame active here */}));
 
         // Also active here
     })
