@@ -28,7 +28,7 @@ impl<C: Ctxt> Frame<C> {
     Get a frame with the current set of ambient properties.
     */
     #[track_caller]
-    #[must_use = "call `enter`, `call`, or `in_future` to make the pushed properties active"]
+    #[must_use = "call `enter`, `call`, `in_fn` or `in_future` to make the pushed properties active"]
     pub fn current(ctxt: C) -> Self {
         Self::push(ctxt, crate::empty::Empty)
     }
@@ -37,7 +37,7 @@ impl<C: Ctxt> Frame<C> {
     Get a frame with the given `props` pushed to the current set.
     */
     #[track_caller]
-    #[must_use = "call `enter`, `call`, or `in_future` to make the pushed properties active"]
+    #[must_use = "call `enter`, `call`, `in_fn`, or `in_future` to make the pushed properties active"]
     pub fn push(ctxt: C, props: impl Props) -> Self {
         let scope = ctxt.open_push(props);
 
@@ -48,7 +48,7 @@ impl<C: Ctxt> Frame<C> {
     Get a frame for just the properties in `props`.
     */
     #[track_caller]
-    #[must_use = "call `enter`, `call`, or `in_future` to make the properties active"]
+    #[must_use = "call `enter`, `call`, `in_fn`, or `in_future` to make the properties active"]
     pub fn root(ctxt: C, props: impl Props) -> Self {
         let scope = ctxt.open_root(props);
 
@@ -61,7 +61,7 @@ impl<C: Ctxt> Frame<C> {
     The properties in `props` will not be visible when the frame is entered. This method should be used when `props` could have been pushed, but were filtered out.
     */
     #[track_caller]
-    #[must_use = "call `enter`, `call`, or `in_future` to make the properties active"]
+    #[must_use = "call `enter`, `call`, `in_fn`, or `in_future` to make the properties active"]
     pub fn disabled(ctxt: C, props: impl Props) -> Self {
         let scope = ctxt.open_disabled(props);
 
@@ -100,6 +100,19 @@ impl<C: Ctxt> Frame<C> {
     pub fn call<R>(mut self, scope: impl FnOnce() -> R) -> R {
         let __guard = self.enter();
         scope()
+    }
+
+    /**
+    Get a [`FnOnce`] that will activate this frame when invoked.
+
+    The properties in this frame will be visible while `scope` is executing.
+
+    Similar to [`Self::call()`], except that it returns a function which can be passed
+    to some other function, e.g.: [`std::thread::spawn`].
+    */
+    #[track_caller]
+    pub fn in_fn<R>(self, scope: impl FnOnce() -> R) -> impl FnOnce() -> R {
+        || self.call(scope)
     }
 
     /**
@@ -258,6 +271,22 @@ mod tests {
         });
 
         drop(frame);
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn frame_in_fn() {
+        let ctxt = crate::platform::thread_local_ctxt::ThreadLocalCtxt::new();
+
+        let frame = Frame::push(&ctxt, ("a", 1));
+
+        let f = frame.in_fn(|| {
+            Frame::current(&ctxt).with(|props| {
+                assert_eq!(1, props.pull::<i32, _>("a").unwrap());
+            });
+        });
+
+        f();
     }
 
     #[cfg(all(feature = "std", not(miri)))]

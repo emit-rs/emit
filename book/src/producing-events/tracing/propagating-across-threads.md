@@ -5,11 +5,23 @@ Ambient span properties are not shared across threads by default. This context n
 ```rust
 # extern crate emit;
 # fn my_operation() {}
-std::thread::spawn({
-    let ctxt = emit::Frame::current(emit::ctxt());
+std::thread::spawn(emit::Frame::current(emit::ctxt()).in_fn(||{
+    // Your code goes here
+}));
+```
 
-    move || ctxt.call(|| {
-        // Your code goes here
+or scoped threads:
+
+```rust
+# extern crate emit;
+# fn my_operation() {}
+let ctxt = emit::Frame::current(emit::ctxt());
+std::thread::scope(|s| {
+    frame.call(|| {
+        s.spawn(emit::Frame::current(emit::ctxt()).in_fn(|| {/* frame active here */}))
+        s.spawn(emit::Frame::current(emit::ctxt()).in_fn(|| {/* frame active here */}))
+
+        // Also active here
     })
 });
 ```
