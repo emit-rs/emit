@@ -9,7 +9,7 @@ use emit_core::{
     emitter::Emitter,
     event::ToEvent,
     extent::ToExtent,
-    filter::{self, Filter},
+    filter::Filter,
     path::Path,
     props::Props,
     rng::Rng,
@@ -836,13 +836,9 @@ pub fn __private_begin_span<
 ) -> (SpanGuard<'static, &'a T, Empty, S>, Frame<&'a C>) {
     let mdl = mdl.into();
     let name = name.into();
-    let lvl_prop = lvl.and_then(|lvl| lvl.capture()).map(|lvl| (KEY_LVL, lvl));
 
     SpanGuard::new(
-        filter::from_fn(|evt| {
-            FirstDefined(when, rt.filter())
-                .matches(evt.map_props(|props| props.and_props(&lvl_prop)))
-        }),
+        __PrivateBeginSpanFilter { rt, when, lvl },
         rt.ctxt(),
         rt.clock(),
         rt.rng(),
@@ -854,95 +850,171 @@ pub fn __private_begin_span<
     )
 }
 
-#[track_caller]
-pub fn __private_complete_span<
-    'a,
-    'b,
-    E: Emitter,
-    F: Filter,
-    C: Ctxt,
-    T: Clock,
-    R: Rng,
-    P: Props,
->(
+pub struct __PrivateBeginSpanFilter<'a, 'b, E, F, C, T, R, W: ?Sized, CL: ?Sized> {
     rt: &'a Runtime<E, F, C, T, R>,
-    span: Span<'b, P>,
-    tpl: &'b (impl TplControlParam + ?Sized),
-    lvl: Option<&'b (impl CaptureLevel + ?Sized)>,
-    panic_lvl: Option<&'b (impl CaptureLevel + ?Sized)>,
-) {
-    let mut completion =
-        span::completion::Default::new(rt.emitter(), rt.ctxt()).with_tpl(tpl.tpl_control_param());
-
-    if let Some(lvl) = lvl.and_then(|lvl| lvl.capture()) {
-        completion = completion.with_lvl(lvl);
-    }
-
-    if let Some(lvl) = panic_lvl.and_then(|lvl| lvl.capture()) {
-        completion = completion.with_panic_lvl(lvl);
-    }
-
-    completion.complete(span);
+    when: Option<&'b W>,
+    lvl: Option<&'b CL>,
 }
 
-#[track_caller]
-pub fn __private_complete_span_ok<
-    'a,
-    'b,
-    E: Emitter,
-    F: Filter,
-    C: Ctxt,
-    T: Clock,
-    R: Rng,
-    P: Props,
->(
-    rt: &'a Runtime<E, F, C, T, R>,
-    span: Span<'b, P>,
-    tpl: &'b (impl TplControlParam + ?Sized),
-    lvl: Option<&'b (impl CaptureLevel + ?Sized)>,
-) {
-    let lvl_prop = lvl.and_then(|lvl| lvl.capture()).map(|lvl| (KEY_LVL, lvl));
+impl<'a, 'b, E, F: Filter, C, T, R, W: Filter + ?Sized, CL: CaptureLevel + ?Sized> Filter
+    for __PrivateBeginSpanFilter<'a, 'b, E, F, C, T, R, W, CL>
+{
+    fn matches<ET: ToEvent>(&self, evt: ET) -> bool {
+        let evt = evt.to_event();
 
-    emit_core::emit(
-        rt.emitter(),
-        crate::Empty,
-        rt.ctxt(),
-        rt.clock(),
-        span.to_event()
-            .with_tpl(tpl.tpl_control_param())
-            .map_props(|span_props| lvl_prop.and_props(span_props)),
-    );
+        let lvl_prop = self
+            .lvl
+            .and_then(|lvl| lvl.capture())
+            .map(|lvl| (KEY_LVL, lvl));
+
+        FirstDefined(self.when, self.rt.filter())
+            .matches(evt.map_props(|props| props.and_props(&lvl_prop)))
+    }
 }
 
-#[track_caller]
-pub fn __private_complete_span_err<
-    'a,
-    'b,
+pub fn __private_complete_span<'a, 'b, E, F, C, T, R, CL: ?Sized, CLP: ?Sized>(
+    rt: &'a Runtime<E, F, C, T, R>,
+    tpl: impl Into<Template<'b>>,
+    lvl: Option<&'b CL>,
+    panic_lvl: Option<&'b CLP>,
+) -> __PrivateCompleteSpan<'a, 'b, E, F, C, T, R, CL, CLP> {
+    __PrivateCompleteSpan {
+        rt,
+        tpl: tpl.into(),
+        lvl,
+        panic_lvl,
+    }
+}
+
+pub struct __PrivateCompleteSpan<'a, 'b, E, F, C, T, R, CL: ?Sized, CLP: ?Sized> {
+    rt: &'a Runtime<E, F, C, T, R>,
+    tpl: Template<'b>,
+    lvl: Option<&'b CL>,
+    panic_lvl: Option<&'b CLP>,
+}
+
+impl<'a, 'b, E, F, C, T, R, CL, CLP> crate::span::completion::Completion
+    for __PrivateCompleteSpan<'a, 'b, E, F, C, T, R, CL, CLP>
+where
     E: Emitter,
     F: Filter,
     C: Ctxt,
     T: Clock,
     R: Rng,
-    P: Props,
->(
-    rt: &'a Runtime<E, F, C, T, R>,
-    span: Span<'b, P>,
-    tpl: &'b (impl TplControlParam + ?Sized),
-    lvl: &'b (impl CaptureLevel + ?Sized),
-    err: &'b (impl CaptureAsError + ?Sized),
-) {
-    let lvl_prop = lvl.capture().map(|lvl| (KEY_LVL, lvl));
-    let err_prop = err.capture().map(|err| (KEY_ERR, err));
+    CL: CaptureLevel + ?Sized,
+    CLP: CaptureLevel + ?Sized,
+{
+    #[track_caller]
+    fn complete<P: Props>(&self, span: Span<P>) {
+        let mut completion = span::completion::Default::new(self.rt.emitter(), self.rt.ctxt())
+            .with_tpl(self.tpl.by_ref());
 
-    emit_core::emit(
-        rt.emitter(),
-        crate::Empty,
-        rt.ctxt(),
-        rt.clock(),
-        span.to_event()
-            .with_tpl(tpl.tpl_control_param())
-            .map_props(|span_props| [lvl_prop, err_prop].and_props(span_props)),
-    );
+        if let Some(lvl) = self.lvl.and_then(|lvl| lvl.capture()) {
+            completion = completion.with_lvl(lvl);
+        }
+
+        if let Some(lvl) = self.panic_lvl.and_then(|lvl| lvl.capture()) {
+            completion = completion.with_panic_lvl(lvl);
+        }
+
+        completion.complete(span);
+    }
+}
+
+pub fn __private_complete_span_ok<'a, 'b, E, F, C, T, R, CL: ?Sized>(
+    rt: &'a Runtime<E, F, C, T, R>,
+    tpl: impl Into<Template<'b>>,
+    lvl: Option<&'b CL>,
+) -> __PrivateCompleteSpanOk<'a, 'b, E, F, C, T, R, CL> {
+    __PrivateCompleteSpanOk {
+        rt,
+        tpl: tpl.into(),
+        lvl,
+    }
+}
+
+pub struct __PrivateCompleteSpanOk<'a, 'b, E, F, C, T, R, CL: ?Sized> {
+    rt: &'a Runtime<E, F, C, T, R>,
+    tpl: Template<'b>,
+    lvl: Option<&'b CL>,
+}
+
+impl<'a, 'b, E, F, C, T, R, CL> crate::span::completion::Completion
+    for __PrivateCompleteSpanOk<'a, 'b, E, F, C, T, R, CL>
+where
+    E: Emitter,
+    F: Filter,
+    C: Ctxt,
+    T: Clock,
+    R: Rng,
+    CL: CaptureLevel + ?Sized,
+{
+    #[track_caller]
+    fn complete<P: Props>(&self, span: Span<P>) {
+        let lvl_prop = self
+            .lvl
+            .and_then(|lvl| lvl.capture())
+            .map(|lvl| (KEY_LVL, lvl));
+
+        emit_core::emit(
+            self.rt.emitter(),
+            crate::Empty,
+            self.rt.ctxt(),
+            self.rt.clock(),
+            span.to_event()
+                .with_tpl(self.tpl.by_ref())
+                .map_props(|span_props| lvl_prop.and_props(span_props)),
+        );
+    }
+}
+
+pub fn __private_complete_span_err<'a, 'b, E, F, C, T, R, CL: ?Sized, CE: ?Sized>(
+    rt: &'a Runtime<E, F, C, T, R>,
+    tpl: impl Into<Template<'b>>,
+    lvl: &'b CL,
+    err: &'b CE,
+) -> __PrivateCompleteSpanErr<'a, 'b, E, F, C, T, R, CL, CE> {
+    __PrivateCompleteSpanErr {
+        rt,
+        tpl: tpl.into(),
+        lvl,
+        err,
+    }
+}
+
+pub struct __PrivateCompleteSpanErr<'a, 'b, E, F, C, T, R, CL: ?Sized, CE: ?Sized> {
+    rt: &'a Runtime<E, F, C, T, R>,
+    tpl: Template<'b>,
+    lvl: &'b CL,
+    err: &'b CE,
+}
+
+impl<'a, 'b, E, F, C, T, R, CL, CE> crate::span::completion::Completion
+    for __PrivateCompleteSpanErr<'a, 'b, E, F, C, T, R, CL, CE>
+where
+    E: Emitter,
+    F: Filter,
+    C: Ctxt,
+    T: Clock,
+    R: Rng,
+    CL: CaptureLevel + ?Sized,
+    CE: CaptureAsError + ?Sized,
+{
+    #[track_caller]
+    fn complete<P: Props>(&self, span: Span<P>) {
+        let lvl_prop = self.lvl.capture().map(|lvl| (KEY_LVL, lvl));
+        let err_prop = self.err.capture().map(|err| (KEY_ERR, err));
+
+        emit_core::emit(
+            self.rt.emitter(),
+            crate::Empty,
+            self.rt.ctxt(),
+            self.rt.clock(),
+            span.to_event()
+                .with_tpl(self.tpl.by_ref())
+                .map_props(|span_props| [lvl_prop, err_prop].and_props(span_props)),
+        );
+    }
 }
 
 #[repr(transparent)]
