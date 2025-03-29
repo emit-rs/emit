@@ -194,11 +194,17 @@ evt.props().dedup().for_each(|k, v| {
 
 ### Formatting properties
 
-The  [`Value`](https://docs.rs/emit/1.6.0/emit/value/struct.Value.html) type always implements [`Debug`](https://doc.rust-lang.org/std/fmt/trait.Debug.html) and [`Display`](https://doc.rust-lang.org/std/fmt/trait.Display.html) with a useful representation, regardless of the kind of value it holds internally.
+The [`Value`](https://docs.rs/emit/1.6.0/emit/value/struct.Value.html) type always implements [`Debug`](https://doc.rust-lang.org/std/fmt/trait.Debug.html) and [`Display`](https://doc.rust-lang.org/std/fmt/trait.Display.html) with a useful representation, regardless of the kind of value it holds internally.
+
+#### Formatting errors
+
+The [`Value`](https://docs.rs/emit/1.6.0/emit/value/struct.Value.html) type specializes its display implementation for errors. If the error has a source (from the [`Error::source()`](https://doc.rust-lang.org/std/error/trait.Error.html#method.source) method), then the lowest-level source will be formatted in parenthesis after the error itself. This is done to make the default stringification of errors more descriptive.
+
+This only applies when formatting the `Value` containing the error, it doesn't affect the format of the error returned by [`Value::to_borrowed_error()`](https://docs.rs/emit/1.6.0/emit/struct.Value.html#method.to_borrowed_error).
 
 ### Serializing properties
 
-When the `serde` Cargo feature is enabled, the  [`Value`](https://docs.rs/emit/1.6.0/emit/value/struct.Value.html) type always implements [`serde::Serialize`](https://docs.rs/serde/latest/serde/trait.Serialize.html) trait in the most structure-preserving way, regardless of the kind of value it holds internally. The same is true of the `sval` Cargo feature and [`sval::Value`](https://docs.rs/sval/latest/sval/trait.Value.html).
+When the `serde` Cargo feature is enabled, the [`Value`](https://docs.rs/emit/1.6.0/emit/value/struct.Value.html) type always implements [`serde::Serialize`](https://docs.rs/serde/latest/serde/trait.Serialize.html) trait in the most structure-preserving way, regardless of the kind of value it holds internally. The same is true of the `sval` Cargo feature and [`sval::Value`](https://docs.rs/sval/latest/sval/trait.Value.html).
 
 ## Data model
 
