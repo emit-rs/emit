@@ -1122,8 +1122,10 @@ Diagnostics include when batches are emitted, and any failures observed along th
 
 #[macro_use]
 mod internal_metrics;
+mod baggage;
 mod client;
 mod data;
+mod env;
 mod error;
 
 pub use self::{client::*, error::*, internal_metrics::*};
@@ -1316,4 +1318,12 @@ pub(crate) mod util {
     pub(crate) fn ts(unix_time: u64) -> emit::Timestamp {
         emit::Timestamp::from_unix(Duration::from_secs(unix_time)).unwrap()
     }
+}
+
+fn push_path(url: &mut String, path: &str) {
+    if !url.ends_with("/") && !path.starts_with("/") {
+        url.push('/');
+    }
+
+    url.push_str(&path);
 }
