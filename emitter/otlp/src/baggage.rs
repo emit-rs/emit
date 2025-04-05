@@ -4,7 +4,7 @@ Support for the [W3C baggage](https://www.w3.org/TR/baggage/) format.
 
 use crate::Error;
 
-use std::ops::Range;
+use std::{borrow::Cow, ops::Range};
 
 /**
 Parse [W3C baggage](https://www.w3.org/TR/baggage/).
@@ -40,9 +40,9 @@ pub(crate) fn parse(input: &str) -> Result<Vec<(&str, Value)>, Error> {
 
             Value::List(properties)
         } else if escaped {
-            Value::Owned(unescape(value.trim_ascii(), &mut state))
+            Value::Single(Cow::Owned(unescape(value.trim_ascii(), &mut state)))
         } else {
-            Value::Borrowed(value.trim_ascii())
+            Value::Single(Cow::Borrowed(value.trim_ascii()))
         };
 
         results.push((key, value));
@@ -60,8 +60,7 @@ A baggage value.
 */
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Value<'a> {
-    Borrowed(&'a str),
-    Owned(String),
+    Single(Cow<'a, str>),
     List(Vec<(&'a str, Property<'a>)>),
 }
 
@@ -71,8 +70,7 @@ A nested property value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Property<'a> {
     None,
-    Borrowed(&'a str),
-    Owned(String),
+    Single(Cow<'a, str>),
 }
 
 struct State {
@@ -157,9 +155,9 @@ fn parse_properties<'a>(
             state.i += 1;
 
             if escaped {
-                Property::Owned(unescape(value.trim_ascii(), state))
+                Property::Single(Cow::Owned(unescape(value.trim_ascii(), state)))
             } else {
-                Property::Borrowed(value.trim_ascii())
+                Property::Single(Cow::Borrowed(value.trim_ascii()))
             }
         } else {
             Property::None
@@ -300,21 +298,21 @@ mod tests {
     fn parse_valid() {
         for (case, expected) in [
             ("", Vec::<(&str, Value)>::new()),
-            ("a=b", vec![("a", Value::Borrowed("b"))]),
-            ("a = b", vec![("a", Value::Borrowed("b"))]),
-            ("a=b,c=d", vec![("a", Value::Borrowed("b")), ("c", Value::Borrowed("d"))]),
-            ("a=b,", vec![("a", Value::Borrowed("b"))]),
-            ("a=b=c", vec![("a", Value::List(vec![("b", Property::Borrowed("c"))]))]),
+            ("a=b", vec![("a", Value::Single(Cow::Borrowed("b")))]),
+            ("a = b", vec![("a", Value::Single(Cow::Borrowed("b")))]),
+            ("a=b,c=d", vec![("a", Value::Single(Cow::Borrowed("b"))), ("c", Value::Single(Cow::Borrowed("d")))]),
+            ("a=b,", vec![("a", Value::Single(Cow::Borrowed("b")))]),
+            ("a=b=c", vec![("a", Value::List(vec![("b", Property::Single(Cow::Borrowed("c")))]))]),
             (
                 "a=b;c=d",
-                vec![("a", Value::List(vec![("b", Property::None), ("c", Property::Borrowed("d"))]))],
+                vec![("a", Value::List(vec![("b", Property::None), ("c", Property::Single(Cow::Borrowed("d")))]))],
             ),
             (
                 "a = b; c = d",
-                vec![("a", Value::List(vec![("b", Property::None), ("c", Property::Borrowed("d"))]))],
+                vec![("a", Value::List(vec![("b", Property::None), ("c", Property::Single(Cow::Borrowed("d")))]))],
             ),
             ("a=b;", vec![("a", Value::List(vec![("b", Property::None)]))]),
-            ("a=b%20", vec![("a", Value::Owned("b ".into()))]),
+            ("a=b%20", vec![("a", Value::Single(Cow::Owned("b ".into())))]),
             (
                 "key1=value1;property1;property2 , key2 = value2, key3=value3; propertyKey=property%20Value",
                 vec![
@@ -326,12 +324,12 @@ mod tests {
                             ("property2", Property::None),
                         ]),
                     ),
-                    ("key2", Value::Borrowed("value2")),
+                    ("key2", Value::Single(Cow::Borrowed("value2"))),
                     (
                         "key3",
                         Value::List(vec![
                             ("value3", Property::None),
-                            ("propertyKey", Property::Owned("property Value".into())),
+                            ("propertyKey", Property::Single(Cow::Owned("property Value".into()))),
                         ]),
                     ),
                 ],

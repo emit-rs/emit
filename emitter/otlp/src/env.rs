@@ -9,7 +9,7 @@ All signal-specific variables override generic ones, except for headers, where t
 Header values defined in a signal-specific value override values defined in the generic one.
 */
 
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, ops::ControlFlow};
 
 use sval_derive::Value;
 
@@ -247,8 +247,7 @@ fn read_headers(v: &str) -> HashMap<String, Vec<String>> {
         Ok(baggage) => {
             for (k, v) in baggage {
                 let v = match v {
-                    baggage::Value::Borrowed(v) => v.to_owned(),
-                    baggage::Value::Owned(v) => v,
+                    baggage::Value::Single(v) => v.into_owned(),
                     baggage::Value::List(_) => {
                         emit::warn!(rt: emit::runtime::internal(), "ignoring list-valued property {header: k}");
 
@@ -278,6 +277,115 @@ fn read_timeout(v: &str) -> Option<u64> {
             None
         }
     }
+}
+
+fn read_resource<'a>(v: &'a str) -> impl emit::Props + 'a {
+    struct Props<'a>(Vec<(&'a str, baggage::Value<'a>)>);
+
+    impl<'a> emit::Props for Props<'a> {
+        fn for_each<'kv, F: FnMut(emit::Str<'kv>, emit::Value<'kv>) -> ControlFlow<()>>(
+            &'kv self,
+            mut for_each: F,
+        ) -> ControlFlow<()> {
+            for (k, v) in &self.0 {
+                match v {
+                    baggage::Value::Single(v) => {
+                        for_each(
+                            emit::Str::new_ref(k),
+                            match read_resource_value(v) {
+                                OtlpValue::Integer(v) => emit::Value::from(v),
+                                OtlpValue::Double(v) => emit::Value::from(v),
+                                OtlpValue::Boolean(v) => emit::Value::from(v),
+                                OtlpValue::String(v) => emit::Value::from(v),
+                            },
+                        )?;
+                    }
+                    baggage::Value::List(v) => {
+                        for_each(emit::Str::new_ref(k), read_resource_map(&v))?;
+                    }
+                }
+            }
+
+            ControlFlow::Continue(())
+        }
+    }
+
+    let v = trim(v);
+
+    match baggage::parse(v) {
+        Ok(baggage) => Props(baggage),
+        Err(err) => {
+            emit::warn!(rt: emit::runtime::internal(), "failed to parse resource: {err}");
+
+            Props(Vec::new())
+        }
+    }
+}
+
+enum OtlpValue<'a> {
+    Integer(u64),
+    Double(f64),
+    Boolean(bool),
+    String(&'a str),
+}
+
+fn read_resource_value(v: &str) -> OtlpValue {
+    if let Ok(integer) = v.parse::<u64>() {
+        return OtlpValue::Integer(integer);
+    }
+
+    if let Ok(double) = v.parse::<f64>() {
+        return OtlpValue::Double(double);
+    }
+
+    if let Ok(boolean) = v.parse::<bool>() {
+        return OtlpValue::Boolean(boolean);
+    }
+
+    OtlpValue::String(v)
+}
+
+fn read_resource_map<'a>(v: &'a Vec<(&'a str, baggage::Property<'a>)>) -> emit::Value<'a> {
+    #[repr(transparent)]
+    struct Map<'a>(Vec<(&'a str, baggage::Property<'a>)>);
+
+    impl<'a> Map<'a> {
+        fn new_ref(v: &'a Vec<(&'a str, baggage::Property<'a>)>) -> &'a Self {
+            // SAFETY: `Vec<(&'a str, baggage::Property<'a>)>` and `Map<'a>` have the same ABI
+            unsafe { &*(v as *const Vec<(&'a str, baggage::Property<'a>)> as *const Map<'a>) }
+        }
+    }
+
+    impl<'a> sval::Value for Map<'a> {
+        fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(
+            &'sval self,
+            stream: &mut S,
+        ) -> sval::Result {
+            stream.map_begin(Some(self.0.len()))?;
+
+            for (k, v) in &self.0 {
+                stream.map_key_begin()?;
+                stream.value(k)?;
+                stream.map_key_end()?;
+
+                stream.map_value_begin()?;
+                match v {
+                    baggage::Property::None => stream.bool(true)?,
+                    baggage::Property::Single(v) => match read_resource_value(v) {
+                        OtlpValue::Integer(v) => stream.u64(v)?,
+                        OtlpValue::Double(v) => stream.f64(v)?,
+                        OtlpValue::Boolean(v) => stream.bool(v)?,
+                        OtlpValue::String(v) => stream.value(v)?,
+                    },
+                }
+                stream.map_value_end()?;
+            }
+
+            stream.map_end()
+        }
+    }
+
+    emit::Value::from_sval(Map::new_ref(v))
 }
 
 fn trim(v: &str) -> &str {
