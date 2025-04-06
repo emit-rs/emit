@@ -30,23 +30,17 @@ const OTEL_EXPORTER_OTLP_TRACES_HEADERS: &'static str = "OTEL_EXPORTER_OTLP_TRAC
 const OTEL_EXPORTER_OTLP_METRICS_HEADERS: &'static str = "OTEL_EXPORTER_OTLP_METRICS_HEADERS";
 const OTEL_EXPORTER_OTLP_LOGS_HEADERS: &'static str = "OTEL_EXPORTER_OTLP_LOGS_HEADERS";
 
-const OTEL_EXPORTER_OTLP_TIMEOUT: &'static str = "OTEL_EXPORTER_OTLP_TIMEOUT";
-const OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: &'static str = "OTEL_EXPORTER_OTLP_TRACES_TIMEOUT";
-const OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: &'static str = "OTEL_EXPORTER_OTLP_METRICS_TIMEOUT";
-const OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: &'static str = "OTEL_EXPORTER_OTLP_LOGS_TIMEOUT";
-
 const OTEL_SERVICE_NAME: &'static str = "OTEL_SERVICE_NAME";
 
 const OTEL_RESOURCE_ATTRIBUTES: &'static str = "OTEL_RESOURCE_ATTRIBUTES";
 
-#[derive(Value, Default)]
+#[derive(Value, Default, Debug)]
 struct OtlpConfig {
     base: SignalConfig,
     logs: SignalConfig,
     traces: SignalConfig,
     metrics: SignalConfig,
     resource: HashMap<emit::Str<'static>, emit::value::OwnedValue>,
-    service_name: Option<String>,
 }
 
 impl OtlpConfig {
@@ -107,19 +101,6 @@ impl OtlpConfig {
             headers
         }
 
-        fn timeout(v: &str) -> Option<u64> {
-            let v = trim(v);
-
-            match v.parse() {
-                Ok(timeout) => Some(timeout),
-                Err(err) => {
-                    emit::warn!(rt: emit::runtime::internal(), "failed to parse timeout: {err}");
-
-                    None
-                }
-            }
-        }
-
         fn service_name(v: &str) -> Option<String> {
             let v = trim(v);
 
@@ -127,6 +108,7 @@ impl OtlpConfig {
         }
 
         let mut config = OtlpConfig::default();
+        let mut config_service_name = None;
 
         for (k, v) in env {
             let k = k.as_ref();
@@ -197,32 +179,10 @@ impl OtlpConfig {
                 continue;
             }
 
-            // Timeout
-
-            if k.eq_ignore_ascii_case(OTEL_EXPORTER_OTLP_TIMEOUT) {
-                config.base.timeout = timeout(v.as_ref());
-                continue;
-            }
-
-            if k.eq_ignore_ascii_case(OTEL_EXPORTER_OTLP_LOGS_TIMEOUT) {
-                config.logs.timeout = timeout(v.as_ref());
-                continue;
-            }
-
-            if k.eq_ignore_ascii_case(OTEL_EXPORTER_OTLP_TRACES_TIMEOUT) {
-                config.traces.timeout = timeout(v.as_ref());
-                continue;
-            }
-
-            if k.eq_ignore_ascii_case(OTEL_EXPORTER_OTLP_METRICS_TIMEOUT) {
-                config.metrics.timeout = timeout(v.as_ref());
-                continue;
-            }
-
             // Service name
 
             if k.eq_ignore_ascii_case(OTEL_SERVICE_NAME) {
-                config.service_name = service_name(v.as_ref());
+                config_service_name = service_name(v.as_ref());
                 continue;
             }
 
@@ -248,19 +208,25 @@ impl OtlpConfig {
             }
         }
 
+        if let Some(service_name) = config_service_name {
+            config.resource.insert(
+                emit::Str::new("service.name"),
+                emit::Value::from(&service_name).to_owned(),
+            );
+        }
+
         config
     }
 }
 
-#[derive(Value, Default)]
+#[derive(Value, Default, Debug, PartialEq)]
 struct SignalConfig {
     protocol: Option<ProtocolConfig>,
     endpoint: Option<String>,
     headers: HashMap<String, Vec<String>>,
-    timeout: Option<u64>,
 }
 
-#[derive(Value, Clone, Copy)]
+#[derive(Value, Clone, Copy, Debug, PartialEq)]
 enum ProtocolConfig {
     #[sval(label = "grpc")]
     Grpc,
@@ -310,10 +276,6 @@ impl SignalConfig {
             .filter(|&(k, _)| !self.headers.contains_key(k))
             .chain(self.headers.iter())
             .flat_map(|(k, v)| v.iter().map(|v| (&**k, &**v)))
-    }
-
-    fn timeout(&self, base: &Self) -> u64 {
-        self.timeout.or(base.timeout).unwrap_or(10_000)
     }
 }
 
@@ -435,4 +397,95 @@ impl<'a> emit::Props for ResourceConfig<'a> {
 
 fn trim(v: &str) -> &str {
     v.trim()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_from_env_empty() {
+        let env = Vec::<(String, String)>::new();
+
+        let config = OtlpConfig::from_env(env.into_iter());
+
+        assert_eq!(SignalConfig::default(), config.base);
+        assert_eq!(SignalConfig::default(), config.logs);
+        assert_eq!(SignalConfig::default(), config.traces);
+        assert_eq!(SignalConfig::default(), config.metrics);
+
+        assert_eq!(0, config.resource.len());
+    }
+
+    #[test]
+    fn config_from_env() {
+        let env = vec![
+            ("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf"),
+            ("OTEL_EXPORTER_OTLP_TRACES_PROTOCOL", "grpc"),
+            ("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "http://traces.local"),
+            ("OTEL_EXPORTER_OTLP_HEADERS", "X-ApiKey=Api-46D99F4427AB40069F573B7C9032827B,X-Service=myhost"),
+            ("OTEL_EXPORTER_OTLP_TRACES_HEADERS", "X-ApiKey=tracekey,X-TraceKind=server"),
+            ("OTEL_SERVICE_NAME", "myservice"),
+            ("OTEL_RESOURCE_ATTRIBUTES", "service.namespace=tutorial,service.version=1.0,service.instance.id=46D99F44-27AB-4006-9F57-3B7C9032827B,host.name=myhost,host.type=arm64,os.name=linux,os.version=6.0"),
+        ];
+
+        let config = OtlpConfig::from_env(env.into_iter());
+
+        assert_eq!("tutorial", config.resource["service.namespace"].to_string());
+        // TODO: Need to ensure we don't parse integers with decimals
+        // assert_eq!("1.0", config.resource["service.version"].to_string());
+        assert_eq!(
+            "46D99F44-27AB-4006-9F57-3B7C9032827B",
+            config.resource["service.instance.id"].to_string()
+        );
+        assert_eq!("myhost", config.resource["host.name"].to_string());
+        assert_eq!("arm64", config.resource["host.type"].to_string());
+        assert_eq!("linux", config.resource["os.name"].to_string());
+        // assert_eq!("6.0", config.resource["os.version"].to_string());
+
+        assert_eq!(
+            ProtocolConfig::HttpProtobuf,
+            config.logs.protocol(&config.base)
+        );
+
+        assert_eq!(ProtocolConfig::Grpc, config.traces.protocol(&config.base));
+
+        assert_eq!(
+            "http://localhost:4318/v1/logs",
+            config.logs.endpoint(&config.base, "v1/logs")
+        );
+
+        assert_eq!(
+            "http://traces.local",
+            config.traces.endpoint(&config.base, "v1/traces")
+        );
+
+        assert_eq!(
+            {
+                let mut map = HashMap::new();
+
+                map.insert("X-ApiKey", "Api-46D99F4427AB40069F573B7C9032827B");
+                map.insert("X-Service", "myhost");
+
+                map
+            },
+            config.logs.headers(&config.base).collect::<HashMap<_, _>>(),
+        );
+
+        assert_eq!(
+            {
+                let mut map = HashMap::new();
+
+                map.insert("X-ApiKey", "tracekey");
+                map.insert("X-Service", "myhost");
+                map.insert("X-TraceKind", "server");
+
+                map
+            },
+            config
+                .traces
+                .headers(&config.base)
+                .collect::<HashMap<_, _>>(),
+        );
+    }
 }
