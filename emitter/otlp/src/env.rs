@@ -9,7 +9,7 @@ All signal-specific variables override generic ones, except for headers, where t
 Header values defined in a signal-specific value override values defined in the generic one.
 */
 
-use std::{borrow::Cow, collections::HashMap, ops::ControlFlow, str::FromStr};
+use std::{borrow::Cow, collections::HashMap, ops::ControlFlow};
 
 use sval_derive::Value;
 
@@ -301,32 +301,6 @@ impl<'a> emit::Props for ResourceConfig<'a> {
         &'kv self,
         mut for_each: F,
     ) -> ControlFlow<()> {
-        enum ResourceValue {
-            Integer(u64),
-            Double(f64),
-            Boolean(bool),
-        }
-
-        impl FromStr for ResourceValue {
-            type Err = ();
-
-            fn from_str(v: &str) -> Result<Self, Self::Err> {
-                if let Ok(integer) = v.parse::<u64>() {
-                    return Ok(ResourceValue::Integer(integer));
-                }
-
-                if let Ok(double) = v.parse::<f64>() {
-                    return Ok(ResourceValue::Double(double));
-                }
-
-                if let Ok(boolean) = v.parse::<bool>() {
-                    return Ok(ResourceValue::Boolean(boolean));
-                }
-
-                Err(())
-            }
-        }
-
         #[repr(transparent)]
         struct ResourceValueMap<'a>(Vec<(&'a str, baggage::Property<'a>)>);
 
@@ -355,12 +329,7 @@ impl<'a> emit::Props for ResourceConfig<'a> {
                     stream.map_value_begin()?;
                     match v {
                         baggage::Property::None => stream.bool(true)?,
-                        baggage::Property::Single(v) => match v.parse::<ResourceValue>() {
-                            Ok(ResourceValue::Integer(v)) => stream.u64(v)?,
-                            Ok(ResourceValue::Double(v)) => stream.f64(v)?,
-                            Ok(ResourceValue::Boolean(v)) => stream.bool(v)?,
-                            Err(()) => stream.value(&**v)?,
-                        },
+                        baggage::Property::Single(v) => stream.value(&**v)?,
                     }
                     stream.map_value_end()?;
                 }
@@ -372,15 +341,7 @@ impl<'a> emit::Props for ResourceConfig<'a> {
         for (k, v) in &self.0 {
             match v {
                 baggage::Value::Single(v) => {
-                    for_each(
-                        emit::Str::new_ref(k),
-                        match v.parse::<ResourceValue>() {
-                            Ok(ResourceValue::Integer(v)) => emit::Value::from(v),
-                            Ok(ResourceValue::Double(v)) => emit::Value::from(v),
-                            Ok(ResourceValue::Boolean(v)) => emit::Value::from(v),
-                            Err(()) => emit::Value::from(v),
-                        },
-                    )?;
+                    for_each(emit::Str::new_ref(k), emit::Value::from(v))?;
                 }
                 baggage::Value::List(v) => {
                     for_each(
@@ -432,8 +393,7 @@ mod tests {
         let config = OtlpConfig::from_env(env.into_iter());
 
         assert_eq!("tutorial", config.resource["service.namespace"].to_string());
-        // TODO: Need to ensure we don't parse integers with decimals
-        // assert_eq!("1.0", config.resource["service.version"].to_string());
+        assert_eq!("1.0", config.resource["service.version"].to_string());
         assert_eq!(
             "46D99F44-27AB-4006-9F57-3B7C9032827B",
             config.resource["service.instance.id"].to_string()
@@ -441,7 +401,7 @@ mod tests {
         assert_eq!("myhost", config.resource["host.name"].to_string());
         assert_eq!("arm64", config.resource["host.type"].to_string());
         assert_eq!("linux", config.resource["os.name"].to_string());
-        // assert_eq!("6.0", config.resource["os.version"].to_string());
+        assert_eq!("6.0", config.resource["os.version"].to_string());
 
         assert_eq!(
             ProtocolConfig::HttpProtobuf,
