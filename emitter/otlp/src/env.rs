@@ -9,11 +9,14 @@ All signal-specific variables override generic ones, except for headers, where t
 Header values defined in a signal-specific value override values defined in the generic one.
 */
 
-use std::{borrow::Cow, collections::HashMap, ops::ControlFlow};
+use std::{borrow::Cow, collections::HashMap, env, ops::ControlFlow, sync::LazyLock};
 
 use sval_derive::Value;
 
-use crate::{baggage, Error};
+use crate::{
+    baggage, Error, OtlpBuilder, OtlpLogsBuilder, OtlpMetricsBuilder, OtlpTracesBuilder,
+    OtlpTransportBuilder,
+};
 
 const OTEL_EXPORTER_OTLP_PROTOCOL: &'static str = "OTEL_EXPORTER_OTLP_PROTOCOL";
 const OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: &'static str = "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL";
@@ -34,8 +37,86 @@ const OTEL_SERVICE_NAME: &'static str = "OTEL_SERVICE_NAME";
 
 const OTEL_RESOURCE_ATTRIBUTES: &'static str = "OTEL_RESOURCE_ATTRIBUTES";
 
+impl OtlpBuilder {
+    /**
+    Create a builder with configuration from OpenTelemetry's environment variables.
+    */
+    pub fn from_env() -> Self {
+        let config = &*CONFIG;
+
+        OtlpBuilder::new()
+            .resource(&config.resource)
+            .logs(OtlpLogsBuilder::from_env())
+            .traces(OtlpTracesBuilder::from_env())
+            .metrics(OtlpMetricsBuilder::from_env())
+    }
+}
+
+impl OtlpLogsBuilder {
+    /**
+    Create a builder with configuration from OpenTelemetry's environment variables.
+    */
+    pub fn from_env() -> OtlpLogsBuilder {
+        let config = &*CONFIG;
+
+        let transport = transport(&config.logs, &config.base, "v1/logs");
+
+        match config.logs.protocol(&config.base) {
+            ProtocolConfig::Grpc => OtlpLogsBuilder::proto(transport),
+            ProtocolConfig::HttpProtobuf => OtlpLogsBuilder::proto(transport),
+            ProtocolConfig::HttpJson => OtlpLogsBuilder::json(transport),
+        }
+    }
+}
+
+impl OtlpTracesBuilder {
+    /**
+    Create a builder with configuration from OpenTelemetry's environment variables.
+    */
+    pub fn from_env() -> OtlpTracesBuilder {
+        let config = &*CONFIG;
+
+        let transport = transport(&config.traces, &config.base, "v1/traces");
+
+        match config.traces.protocol(&config.base) {
+            ProtocolConfig::Grpc => OtlpTracesBuilder::proto(transport),
+            ProtocolConfig::HttpProtobuf => OtlpTracesBuilder::proto(transport),
+            ProtocolConfig::HttpJson => OtlpTracesBuilder::json(transport),
+        }
+    }
+}
+
+impl OtlpMetricsBuilder {
+    /**
+    Create a builder with configuration from OpenTelemetry's environment variables.
+    */
+    pub fn from_env() -> OtlpMetricsBuilder {
+        let config = &*CONFIG;
+
+        let transport = transport(&config.metrics, &config.base, "v1/metrics");
+
+        match config.metrics.protocol(&config.base) {
+            ProtocolConfig::Grpc => OtlpMetricsBuilder::proto(transport),
+            ProtocolConfig::HttpProtobuf => OtlpMetricsBuilder::proto(transport),
+            ProtocolConfig::HttpJson => OtlpMetricsBuilder::json(transport),
+        }
+    }
+}
+
+fn transport(signal: &SignalConfig, base: &SignalConfig, path: &str) -> OtlpTransportBuilder {
+    let transport = match signal.protocol(&base) {
+        ProtocolConfig::Grpc => OtlpTransportBuilder::grpc(signal.endpoint(&base, path)),
+        ProtocolConfig::HttpProtobuf => OtlpTransportBuilder::http(signal.endpoint(&base, path)),
+        ProtocolConfig::HttpJson => OtlpTransportBuilder::http(signal.endpoint(&base, path)),
+    };
+
+    transport.headers(signal.headers(&base))
+}
+
+static CONFIG: LazyLock<OtlpConfig> = LazyLock::new(|| OtlpConfig::from_env(env::vars()));
+
 #[derive(Value, Default, Debug)]
-struct OtlpConfig {
+pub(crate) struct OtlpConfig {
     base: SignalConfig,
     logs: SignalConfig,
     traces: SignalConfig,
@@ -44,7 +125,9 @@ struct OtlpConfig {
 }
 
 impl OtlpConfig {
-    fn from_env<K: AsRef<str>, V: AsRef<str>>(env: impl Iterator<Item = (K, V)>) -> OtlpConfig {
+    pub(crate) fn from_env<K: AsRef<str>, V: AsRef<str>>(
+        env: impl Iterator<Item = (K, V)>,
+    ) -> OtlpConfig {
         fn endpoint(v: &str) -> Option<String> {
             let v = trim(v);
 
