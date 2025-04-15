@@ -68,7 +68,7 @@ fn main() {
 }
 ```
 
-The [`new`] method returns an [`OtlpBuilder`], which can be configured with endpoints for the desired signals through its [`OtlpBuilder::logs`], [`OtlpBuilder::traces`], and [`OtlpBuilder::metrics`] methods.
+The [`new`] function returns an [`OtlpBuilder`], which can be configured with endpoints for the desired signals through its [`OtlpBuilder::logs`], [`OtlpBuilder::traces`], and [`OtlpBuilder::metrics`] methods.
 
 You don't need to configure all signals, but you should at least configure [`OtlpBuilder::logs`].
 
@@ -78,7 +78,7 @@ Once the builder is configured, call [`OtlpBuilder::spawn`] and pass the resulti
 
 The [`Otlp`] emitter doesn't do any work directly. That's all handled by a background worker created through [`OtlpBuilder::spawn`]. The worker will spawn on a background thread with a single-threaded `tokio` executor on it.
 
-## Configuring for gRPC+protobuf
+# Configuring for gRPC+protobuf
 
 The [`logs_grpc_proto`], [`traces_grpc_proto`], and [`metrics_grpc_proto`] functions produce builders for gRPC+protobuf:
 
@@ -203,6 +203,38 @@ emit_otlp::new()
     })
 # }
 ```
+
+# Configuring from environment variables
+
+You can configure `emit_otlp` from OpenTelemetry's environment variables using the [`from_env`] function:
+
+```
+# fn build() -> emit_otlp::Otlp {
+emit_otlp::from_env().spawn()
+# }
+```
+
+The following table documents the supported environment variables:
+
+| Variable Name | Default Value | Valid Values | Notes |
+| ------------- | ------------- | ------------ | ----- |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `grpc` | `grpc`, `http/proto`, `http/json` | - |
+| `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `OTEL_EXPORTER_OTLP_PROTOCOL` | `grpc`, `http/proto`, `http/json` | - |
+| `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL` | `OTEL_EXPORTER_OTLP_PROTOCOL` | `grpc`, `http/proto`, `http/json` | - |
+| `OTEL_EXPORTER_OTLP_METRICS_PROTOCOL` | `OTEL_EXPORTER_OTLP_PROTOCOL` | `grpc`, `http/proto`, `http/json` | - |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4317` when `OTEL_EXPORTER_OTLP_PROTOCOL` is `grpc`, `http://localhost:4318` when `OTEL_EXPORTER_OTLP_PROTOCOL` is `http` | Any valid HTTP/S URI | - |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | `http://localhost:4317` when `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` is `grpc`, `http://localhost:4318` when `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` is `http` | Any valid HTTP/S URI | - |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | `http://localhost:4317` when `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL` is `grpc`, `http://localhost:4318` when `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL` is `http` | Any valid HTTP/S URI | - |
+| `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | `http://localhost:4317` when `OTEL_EXPORTER_OTLP_METRICS_PROTOCOL` is `grpc`, `http://localhost:4318` when `OTEL_EXPORTER_OTLP_METRICS_PROTOCOL` is `http` | Any valid HTTP/S URI | - |
+| `OTEL_EXPORTER_OTLP_HEADERS` | Empty | W3C Baggage | - |
+| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | `OTEL_EXPORTER_OTLP_HEADERS` | W3C Baggage | If defined, headers are merged with `OTEL_EXPORTER_OTLP_HEADERS`, preferring those in `OTEL_EXPORTER_OTLP_LOGS_HEADERS` |
+| `OTEL_EXPORTER_OTLP_TRACES_HEADERS` | `OTEL_EXPORTER_OTLP_HEADERS` | W3C Baggage | If defined, headers are merged with `OTEL_EXPORTER_OTLP_HEADERS`, preferring those in `OTEL_EXPORTER_OTLP_TRACES_HEADERS` |
+| `OTEL_EXPORTER_OTLP_METRICS_HEADERS` | `OTEL_EXPORTER_OTLP_HEADERS` | W3C Baggage | If defined, headers are merged with `OTEL_EXPORTER_OTLP_HEADERS`, preferring those in `OTEL_EXPORTER_OTLP_METRICS_HEADERS` |
+| `OTEL_SERVICE_NAME` | `unknown_service` | Any string | When set, the service name sets the `service.name` property in `OTEL_RESOURCE_ATTRIBUTES`, overriding any that's already there |
+| `OTEL_RESOURCE_ATTRIBUTES` | Empty | W3C Baggage | - |
+
+If a variable is missing, then a default value is used.
+New environment variables may be added in the future.
 
 # Logs
 
@@ -1162,6 +1194,19 @@ See the crate root documentation for more details.
 */
 pub fn new() -> OtlpBuilder {
     OtlpBuilder::new()
+}
+
+/**
+Start a builder for an [`Otlp`] emitter with configuration from OpenTelemetry's environment variables.
+
+See the crate docs for details on what variables are supported.
+
+Once the builder is configured, call [`OtlpBuilder::spawn`] to complete it, passing the resulting [`Otlp`] to [`emit::Setup::emit_to`].
+
+See the crate root documentation for more details.
+*/
+pub fn from_env() -> OtlpBuilder {
+    OtlpBuilder::from_env()
 }
 
 /**

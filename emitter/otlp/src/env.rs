@@ -296,6 +296,11 @@ impl OtlpConfig {
                 emit::Str::new("service.name"),
                 emit::Value::from(&service_name).to_owned(),
             );
+        } else if config.resource.get("service.name").is_none() {
+            config.resource.insert(
+                emit::Str::new("service.name"),
+                emit::Value::from("unknown_service").to_owned(),
+            );
         }
 
         config
@@ -529,6 +534,18 @@ mod tests {
                 .traces
                 .headers(&config.base)
                 .collect::<HashMap<_, _>>(),
+        );
+    }
+
+    #[test]
+    fn config_from_env_default() {
+        let env = Vec::<(String, String)>::new();
+
+        let config = OtlpConfig::from_env(env.into_iter());
+
+        assert_eq!(
+            "unknown_service",
+            config.resource["service.name"].to_string()
         );
     }
 }
