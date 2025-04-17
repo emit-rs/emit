@@ -231,10 +231,9 @@ The following table documents the supported environment variables:
 | `OTEL_EXPORTER_OTLP_TRACES_HEADERS` | `OTEL_EXPORTER_OTLP_HEADERS` | W3C Baggage | If defined, headers are merged with `OTEL_EXPORTER_OTLP_HEADERS`, preferring those in `OTEL_EXPORTER_OTLP_TRACES_HEADERS` |
 | `OTEL_EXPORTER_OTLP_METRICS_HEADERS` | `OTEL_EXPORTER_OTLP_HEADERS` | W3C Baggage | If defined, headers are merged with `OTEL_EXPORTER_OTLP_HEADERS`, preferring those in `OTEL_EXPORTER_OTLP_METRICS_HEADERS` |
 | `OTEL_SERVICE_NAME` | `unknown_service` | Any string | When set, the service name sets the `service.name` property in `OTEL_RESOURCE_ATTRIBUTES`, overriding any that's already there |
-| `OTEL_RESOURCE_ATTRIBUTES` | Empty | W3C Baggage | - |
+| `OTEL_RESOURCE_ATTRIBUTES` | Empty | W3C Baggage | The resource will also include values for `telemetry.sdk.name`, `telemetry.sdk.version`, and `telemetry.sdk.language`. |
 
-If a variable is missing, then a default value is used.
-New environment variables may be added in the future.
+New environment variables that affect configuration may be added in the future.
 
 # Logs
 
@@ -1160,7 +1159,7 @@ mod data;
 mod env;
 mod error;
 
-pub use self::{client::*, error::*, internal_metrics::*};
+pub use self::{client::*, env::*, error::*, internal_metrics::*};
 
 /**
 A value to use as `telemetry.sdk.name` in [`OtlpBuilder::resource`].
@@ -1275,6 +1274,13 @@ pub fn logs_json(transport: OtlpTransportBuilder) -> OtlpLogsBuilder {
 }
 
 /**
+Get a logs signal builder from OpenTelemetry's environment variables.
+*/
+pub fn logs_from_env() -> OtlpLogsBuilder {
+    OtlpLogsBuilder::from_env()
+}
+
+/**
 Get a traces signal builder for gRPC+protobuf.
 
 The `dst` argument should include just the root of the target gRPC service, like `http://localhost:4319`.
@@ -1316,6 +1322,13 @@ pub fn traces_json(transport: OtlpTransportBuilder) -> OtlpTracesBuilder {
 }
 
 /**
+Get a traces signal builder from OpenTelemetry's environment variables.
+*/
+pub fn traces_from_env() -> OtlpTracesBuilder {
+    OtlpTracesBuilder::from_env()
+}
+
+/**
 Get a metrics signal builder for gRPC+protobuf.
 
 The `dst` argument should include just the root of the target gRPC service, like `http://localhost:4319`.
@@ -1354,6 +1367,13 @@ Get a metrics signal builder for the given transport with JSON encoding.
 */
 pub fn metrics_json(transport: OtlpTransportBuilder) -> OtlpMetricsBuilder {
     OtlpMetricsBuilder::json(transport)
+}
+
+/**
+Get a metrics signal builder from OpenTelemetry's environment variables.
+*/
+pub fn metrics_from_env() -> OtlpMetricsBuilder {
+    OtlpMetricsBuilder::from_env()
 }
 
 #[cfg(test)]

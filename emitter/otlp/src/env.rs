@@ -14,8 +14,8 @@ use std::{borrow::Cow, collections::HashMap, env, ops::ControlFlow, sync::LazyLo
 use sval_derive::Value;
 
 use crate::{
-    baggage, Error, OtlpBuilder, OtlpLogsBuilder, OtlpMetricsBuilder, OtlpTracesBuilder,
-    OtlpTransportBuilder,
+    baggage, telemetry_sdk_language, telemetry_sdk_name, telemetry_sdk_version, Error, OtlpBuilder,
+    OtlpLogsBuilder, OtlpMetricsBuilder, OtlpTracesBuilder, OtlpTransportBuilder,
 };
 
 const OTEL_EXPORTER_OTLP_PROTOCOL: &'static str = "OTEL_EXPORTER_OTLP_PROTOCOL";
@@ -101,6 +101,15 @@ impl OtlpMetricsBuilder {
             ProtocolConfig::HttpJson => OtlpMetricsBuilder::json(transport),
         }
     }
+}
+
+/**
+Read resource attributes from OpenTelemetry's environment variables.
+*/
+pub fn resource_from_env() -> impl emit::Props {
+    let config = &*CONFIG;
+
+    &config.resource
 }
 
 fn transport(signal: &SignalConfig, base: &SignalConfig, path: &str) -> OtlpTransportBuilder {
@@ -291,17 +300,32 @@ impl OtlpConfig {
             }
         }
 
+        // Set resource values
+
         if let Some(service_name) = config_service_name {
             config.resource.insert(
                 emit::Str::new("service.name"),
                 emit::Value::from(&service_name).to_owned(),
             );
-        } else if config.resource.get("service.name").is_none() {
-            config.resource.insert(
-                emit::Str::new("service.name"),
-                emit::Value::from("unknown_service").to_owned(),
-            );
+        } else {
+            config
+                .resource
+                .entry(emit::Str::new("service.name"))
+                .or_insert_with(|| emit::Value::from("unknown_service").to_owned());
         }
+
+        config
+            .resource
+            .entry(emit::Str::new("telemetry.sdk.name"))
+            .or_insert_with(|| emit::Value::from(telemetry_sdk_name()).to_owned());
+        config
+            .resource
+            .entry(emit::Str::new("telemetry.sdk.version"))
+            .or_insert_with(|| emit::Value::from(telemetry_sdk_version()).to_owned());
+        config
+            .resource
+            .entry(emit::Str::new("telemetry.sdk.language"))
+            .or_insert_with(|| emit::Value::from(telemetry_sdk_language()).to_owned());
 
         config
     }
@@ -463,33 +487,143 @@ mod tests {
         assert_eq!(SignalConfig::default(), config.traces);
         assert_eq!(SignalConfig::default(), config.metrics);
 
-        assert_eq!(0, config.resource.len());
+        assert_eq!(
+            {
+                let mut map = HashMap::new();
+
+                map.insert("service.name".to_string(), "unknown_service".to_string());
+                map.insert("telemetry.sdk.name".to_string(), "emit_otlp".to_string());
+                map.insert(
+                    "telemetry.sdk.version".to_string(),
+                    telemetry_sdk_version().to_string(),
+                );
+                map.insert("telemetry.sdk.language".to_string(), "rust".to_string());
+
+                map
+            },
+            config
+                .resource
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect::<HashMap<_, _>>(),
+        );
     }
 
     #[test]
-    fn config_from_env() {
+    fn config_from_env_resource() {
         let env = vec![
-            ("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf"),
-            ("OTEL_EXPORTER_OTLP_TRACES_PROTOCOL", "grpc"),
-            ("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "http://traces.local"),
-            ("OTEL_EXPORTER_OTLP_HEADERS", "X-ApiKey=Api-46D99F4427AB40069F573B7C9032827B,X-Service=myhost"),
-            ("OTEL_EXPORTER_OTLP_TRACES_HEADERS", "X-ApiKey=tracekey,X-TraceKind=server"),
-            ("OTEL_SERVICE_NAME", "myservice"),
             ("OTEL_RESOURCE_ATTRIBUTES", "service.namespace=tutorial,service.version=1.0,service.instance.id=46D99F44-27AB-4006-9F57-3B7C9032827B,host.name=myhost,host.type=arm64,os.name=linux,os.version=6.0"),
         ];
 
         let config = OtlpConfig::from_env(env.into_iter());
 
-        assert_eq!("tutorial", config.resource["service.namespace"].to_string());
-        assert_eq!("1.0", config.resource["service.version"].to_string());
         assert_eq!(
-            "46D99F44-27AB-4006-9F57-3B7C9032827B",
-            config.resource["service.instance.id"].to_string()
+            {
+                let mut map = HashMap::new();
+
+                map.insert("service.name".to_string(), "unknown_service".to_string());
+                map.insert("telemetry.sdk.name".to_string(), "emit_otlp".to_string());
+                map.insert(
+                    "telemetry.sdk.version".to_string(),
+                    telemetry_sdk_version().to_string(),
+                );
+                map.insert("telemetry.sdk.language".to_string(), "rust".to_string());
+
+                map.insert("service.namespace".to_string(), "tutorial".to_string());
+                map.insert("service.version".to_string(), "1.0".to_string());
+                map.insert(
+                    "service.instance.id".to_string(),
+                    "46D99F44-27AB-4006-9F57-3B7C9032827B".to_string(),
+                );
+                map.insert("host.name".to_string(), "myhost".to_string());
+                map.insert("host.type".to_string(), "arm64".to_string());
+                map.insert("os.name".to_string(), "linux".to_string());
+                map.insert("os.version".to_string(), "6.0".to_string());
+
+                map
+            },
+            config
+                .resource
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect::<HashMap<_, _>>(),
         );
-        assert_eq!("myhost", config.resource["host.name"].to_string());
-        assert_eq!("arm64", config.resource["host.type"].to_string());
-        assert_eq!("linux", config.resource["os.name"].to_string());
-        assert_eq!("6.0", config.resource["os.version"].to_string());
+    }
+
+    #[test]
+    fn config_from_env_service_name() {
+        let env = vec![
+            ("OTEL_SERVICE_NAME", "myservice"),
+            ("OTEL_RESOURCE_ATTRIBUTES", "service.name=notmyservice"),
+        ];
+
+        let config = OtlpConfig::from_env(env.into_iter());
+
+        assert_eq!("myservice", config.resource["service.name"].to_string());
+    }
+
+    #[test]
+    fn config_from_env_protocol_grpc_default() {
+        let env = vec![("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")];
+
+        let config = OtlpConfig::from_env(env.into_iter());
+
+        assert_eq!(
+            ProtocolConfig::HttpProtobuf,
+            config.logs.protocol(&config.base)
+        );
+
+        assert_eq!(
+            "http://localhost:4318/v1/logs",
+            config.logs.endpoint(&config.base, "v1/logs")
+        );
+
+        assert_eq!(
+            "http://localhost:4318/v1/traces",
+            config.traces.endpoint(&config.base, "v1/traces")
+        );
+
+        assert_eq!(
+            "http://localhost:4318/v1/metrics",
+            config.metrics.endpoint(&config.base, "v1/metrics")
+        );
+    }
+
+    #[test]
+    fn config_from_env_protocol_http_default() {
+        let env = vec![("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")];
+
+        let config = OtlpConfig::from_env(env.into_iter());
+
+        assert_eq!(
+            ProtocolConfig::HttpProtobuf,
+            config.logs.protocol(&config.base)
+        );
+
+        assert_eq!(
+            "http://localhost:4318/v1/logs",
+            config.logs.endpoint(&config.base, "v1/logs")
+        );
+
+        assert_eq!(
+            "http://localhost:4318/v1/traces",
+            config.traces.endpoint(&config.base, "v1/traces")
+        );
+
+        assert_eq!(
+            "http://localhost:4318/v1/metrics",
+            config.metrics.endpoint(&config.base, "v1/metrics")
+        );
+    }
+
+    #[test]
+    fn config_from_env_protocol_override() {
+        let env = vec![
+            ("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf"),
+            ("OTEL_EXPORTER_OTLP_TRACES_PROTOCOL", "grpc"),
+        ];
+
+        let config = OtlpConfig::from_env(env.into_iter());
 
         assert_eq!(
             ProtocolConfig::HttpProtobuf,
@@ -504,9 +638,37 @@ mod tests {
         );
 
         assert_eq!(
+            "http://localhost:4317",
+            config.traces.endpoint(&config.base, "v1/traces")
+        );
+    }
+
+    #[test]
+    fn config_from_env_endpoint_override() {
+        let env = vec![("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "http://traces.local")];
+
+        let config = OtlpConfig::from_env(env.into_iter());
+
+        assert_eq!(
             "http://traces.local",
             config.traces.endpoint(&config.base, "v1/traces")
         );
+    }
+
+    #[test]
+    fn config_from_env_headers() {
+        let env = vec![
+            (
+                "OTEL_EXPORTER_OTLP_HEADERS",
+                "X-ApiKey=Api-46D99F4427AB40069F573B7C9032827B,X-Service=myhost",
+            ),
+            (
+                "OTEL_EXPORTER_OTLP_TRACES_HEADERS",
+                "X-ApiKey=tracekey,X-TraceKind=server",
+            ),
+        ];
+
+        let config = OtlpConfig::from_env(env.into_iter());
 
         assert_eq!(
             {
@@ -534,18 +696,6 @@ mod tests {
                 .traces
                 .headers(&config.base)
                 .collect::<HashMap<_, _>>(),
-        );
-    }
-
-    #[test]
-    fn config_from_env_default() {
-        let env = Vec::<(String, String)>::new();
-
-        let config = OtlpConfig::from_env(env.into_iter());
-
-        assert_eq!(
-            "unknown_service",
-            config.resource["service.name"].to_string()
         );
     }
 }
