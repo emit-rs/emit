@@ -40,6 +40,8 @@ const OTEL_RESOURCE_ATTRIBUTES: &'static str = "OTEL_RESOURCE_ATTRIBUTES";
 impl OtlpBuilder {
     /**
     Create a builder with configuration from OpenTelemetry's environment variables.
+
+    See [Configuring from environment variables](index.html#configuring-from-environment-variables) for details.
     */
     pub fn from_env() -> Self {
         let config = &*CONFIG;
@@ -55,6 +57,8 @@ impl OtlpBuilder {
 impl OtlpLogsBuilder {
     /**
     Create a builder with configuration from OpenTelemetry's environment variables.
+
+    See [Configuring from environment variables](index.html#configuring-from-environment-variables) for details.
     */
     pub fn from_env() -> OtlpLogsBuilder {
         let config = &*CONFIG;
@@ -72,6 +76,8 @@ impl OtlpLogsBuilder {
 impl OtlpTracesBuilder {
     /**
     Create a builder with configuration from OpenTelemetry's environment variables.
+
+    See [Configuring from environment variables](index.html#configuring-from-environment-variables) for details.
     */
     pub fn from_env() -> OtlpTracesBuilder {
         let config = &*CONFIG;
@@ -89,6 +95,8 @@ impl OtlpTracesBuilder {
 impl OtlpMetricsBuilder {
     /**
     Create a builder with configuration from OpenTelemetry's environment variables.
+
+    See [Configuring from environment variables](index.html#configuring-from-environment-variables) for details.
     */
     pub fn from_env() -> OtlpMetricsBuilder {
         let config = &*CONFIG;
@@ -105,6 +113,10 @@ impl OtlpMetricsBuilder {
 
 /**
 Read resource attributes from OpenTelemetry's environment variables.
+
+This function will return [`emit::Props`] containing attributes from the environment, as well as standard attributes for `telemetry.sdk`.
+
+See [Configuring from environment variables](index.html#configuring-from-environment-variables) for details.
 */
 pub fn resource_from_env() -> impl emit::Props {
     let config = &*CONFIG;

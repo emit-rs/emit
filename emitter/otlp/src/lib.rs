@@ -214,7 +214,21 @@ emit_otlp::from_env().spawn()
 # }
 ```
 
-The following table documents the supported environment variables:
+The [`from_env`] function will create a builder with configuration for all signals and a resource.
+You can also configure individual signals from the environment if you want to further tweak them, or only configure a subset:
+
+```
+# fn build() -> emit_otlp::Otlp {
+emit_otlp::new()
+    .logs(emit_otlp::logs_from_env())
+    .traces(emit_otlp::traces_from_env())
+    .metrics(emit_otlp::metrics_from_env())
+    .resource(emit_otlp::resource_from_env())
+    .spawn()
+# }
+```
+
+The following table lists currently supported environment variables:
 
 | Variable Name | Default Value | Valid Values | Notes |
 | ------------- | ------------- | ------------ | ----- |
@@ -1196,9 +1210,9 @@ pub fn new() -> OtlpBuilder {
 }
 
 /**
-Start a builder for an [`Otlp`] emitter with configuration from OpenTelemetry's environment variables.
+Start a builder for an [`Otlp`] emitter with configuration from OpenTelemetry's environment variables for all signals.
 
-See the crate docs for details on what variables are supported.
+See [Configuring from environment variables](index.html#configuring-from-environment-variables) for details.
 
 Once the builder is configured, call [`OtlpBuilder::spawn`] to complete it, passing the resulting [`Otlp`] to [`emit::Setup::emit_to`].
 
@@ -1275,6 +1289,8 @@ pub fn logs_json(transport: OtlpTransportBuilder) -> OtlpLogsBuilder {
 
 /**
 Get a logs signal builder from OpenTelemetry's environment variables.
+
+See [Configuring from environment variables](index.html#configuring-from-environment-variables) for details.
 */
 pub fn logs_from_env() -> OtlpLogsBuilder {
     OtlpLogsBuilder::from_env()
@@ -1323,6 +1339,8 @@ pub fn traces_json(transport: OtlpTransportBuilder) -> OtlpTracesBuilder {
 
 /**
 Get a traces signal builder from OpenTelemetry's environment variables.
+
+See [Configuring from environment variables](index.html#configuring-from-environment-variables) for details.
 */
 pub fn traces_from_env() -> OtlpTracesBuilder {
     OtlpTracesBuilder::from_env()
@@ -1371,6 +1389,8 @@ pub fn metrics_json(transport: OtlpTransportBuilder) -> OtlpMetricsBuilder {
 
 /**
 Get a metrics signal builder from OpenTelemetry's environment variables.
+
+See [Configuring from environment variables](index.html#configuring-from-environment-variables) for details.
 */
 pub fn metrics_from_env() -> OtlpMetricsBuilder {
     OtlpMetricsBuilder::from_env()
