@@ -4,7 +4,7 @@ Support for the [W3C baggage](https://www.w3.org/TR/baggage/) format.
 
 use crate::Error;
 
-use std::{borrow::Cow, ops::Range};
+use std::{borrow::Cow, ops::Range, str};
 
 /**
 Parse [W3C baggage](https://www.w3.org/TR/baggage/).
