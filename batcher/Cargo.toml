@@ -1,6 +1,6 @@
 [package]
 name = "emit_batcher"
-version = "1.6.0"
+version = "1.7.0"
 authors = ["emit contributors"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -15,7 +15,7 @@ features = ["tokio"]
 web = ["dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:js-sys", "dep:futures"]
 
 [dependencies.emit]
-version = "1.6.0"
+version = "1.7.0"
 path = "../"
 default-features = false
 
