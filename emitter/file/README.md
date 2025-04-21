@@ -2,6 +2,6 @@
 
 [![file](https://github.com/emit-rs/emit/actions/workflows/file.yml/badge.svg)](https://github.com/emit-rs/emit/actions/workflows/file.yml)
 
-[Current docs](https://docs.rs/emit_file/1.6.0/emit_file/index.html)
+[Current docs](https://docs.rs/emit_file/1.7.0/emit_file/index.html)
 
 Emit diagnostic events to rolling files.
