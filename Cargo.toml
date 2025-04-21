@@ -10,7 +10,6 @@ members = [
     "emitter/otlp/gen",
     "emitter/otlp/test/integration",
     "emitter/otlp/test/throughput",
-    "emitter/otlp/fuzz",
     "macros",
     "examples/common_patterns",
     "examples/opentelemetry/direct_otlp",

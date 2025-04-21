@@ -9,17 +9,14 @@ mod baggage;
 use self::error::*;
 
 fn main() {
-    #[cfg(feature = "afl")]
-    {
-        afl::fuzz!(|data: &[u8]| {
-            let Ok(s) = std::str::from_utf8(data) else {
-                return;
-            };
+    afl::fuzz!(|data: &[u8]| {
+        let Ok(s) = std::str::from_utf8(data) else {
+            return;
+        };
 
-            // Just ensure we don't panic
-            let _ = baggage::parse(s);
-        });
-    }
+        // Just ensure we don't panic
+        let _ = baggage::parse(s);
+    });
 }
 
 #[cfg(test)]
