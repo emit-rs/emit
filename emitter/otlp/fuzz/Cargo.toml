@@ -6,3 +6,4 @@ publish = false
 
 [dependencies.afl]
 version = "0.15"
+optional = true
