@@ -1,0 +1,10 @@
+[package]
+name = "emit_otlp_fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies.afl]
+version = "0.15"

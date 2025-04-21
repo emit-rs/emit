@@ -403,11 +403,7 @@ impl OtlpTransportBuilder {
         let mut url = self.url_base;
 
         if let Some(path) = self.url_path {
-            if !url.ends_with("/") && !path.starts_with("/") {
-                url.push('/');
-            }
-
-            url.push_str(&path);
+            crate::push_path(&mut url, path);
         }
 
         Ok(match self.protocol {

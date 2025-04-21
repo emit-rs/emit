@@ -64,3 +64,7 @@ Events in `emit`'s [metrics data model](../producing-events/metrics/data-model.m
 ## HTTP headers
 
 `emit_otlp` supports custom HTTP headers per endpoint. See [the crate docs](https://docs.rs/emit_otlp/1.6.0/emit_otlp/index.html#customizing-http-headers) for details.
+
+## Environment variables
+
+`emit_otlp` supports configuration from some of OpenTelemetry's environment variables. See [the crate docs](https://docs.rs/emit_otlp/1.6.0/emit_otlp/index.html#configuring-from-environment-variables) for details.
