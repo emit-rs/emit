@@ -146,9 +146,7 @@ pub(crate) struct OtlpConfig {
 }
 
 impl OtlpConfig {
-    pub(crate) fn from_env<K: AsRef<str>, V: AsRef<str>>(
-        env: impl Iterator<Item = (K, V)>,
-    ) -> OtlpConfig {
+    fn from_env<K: AsRef<str>, V: AsRef<str>>(env: impl Iterator<Item = (K, V)>) -> OtlpConfig {
         fn endpoint(v: &str) -> Option<String> {
             let v = trim(v);
 
@@ -425,54 +423,12 @@ impl<'a> emit::Props for ResourceConfig<'a> {
         &'kv self,
         mut for_each: F,
     ) -> ControlFlow<()> {
-        #[repr(transparent)]
-        struct ResourceValueMap<'a>(Vec<(&'a str, baggage::Property<'a>)>);
-
-        impl<'a> ResourceValueMap<'a> {
-            fn new_ref(v: &'a Vec<(&'a str, baggage::Property<'a>)>) -> &'a Self {
-                // SAFETY: `Vec<(&'a str, baggage::Property<'a>)>` and `ResourceValueMap<'a>` have the same ABI
-                unsafe {
-                    &*(v as *const Vec<(&'a str, baggage::Property<'a>)>
-                        as *const ResourceValueMap<'a>)
-                }
-            }
-        }
-
-        impl<'a> sval::Value for ResourceValueMap<'a> {
-            fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(
-                &'sval self,
-                stream: &mut S,
-            ) -> sval::Result {
-                stream.map_begin(Some(self.0.len()))?;
-
-                for (k, v) in &self.0 {
-                    stream.map_key_begin()?;
-                    stream.value(k)?;
-                    stream.map_key_end()?;
-
-                    stream.map_value_begin()?;
-                    match v {
-                        baggage::Property::None => stream.bool(true)?,
-                        baggage::Property::Single(v) => stream.value(&**v)?,
-                    }
-                    stream.map_value_end()?;
-                }
-
-                stream.map_end()
-            }
-        }
-
         for (k, v) in &self.0 {
             match v {
                 baggage::Value::Single(v) => {
                     for_each(emit::Str::new_ref(k), emit::Value::from(v))?;
                 }
-                baggage::Value::List(v) => {
-                    for_each(
-                        emit::Str::new_ref(k),
-                        emit::Value::from_sval(ResourceValueMap::new_ref(v)),
-                    )?;
-                }
+                baggage::Value::List(_) => (),
             }
         }
 
@@ -560,6 +516,27 @@ mod tests {
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect::<HashMap<_, _>>(),
         );
+    }
+
+    #[test]
+    fn config_from_env_resource_ignores_list_valued_properties() {
+        let env = vec![
+            ("OTEL_RESOURCE_ATTRIBUTES", "service.namespace=tutorial;service.version=1.0;service.instance.id=46D99F44-27AB-4006-9F57-3B7C9032827B,host.name=myhost"),
+        ];
+
+        let config = OtlpConfig::from_env(env.into_iter());
+
+        let resource = config
+            .resource
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect::<HashMap<_, _>>();
+
+        assert!(resource.get("service.namespace").is_none());
+        assert!(resource.get("service.version").is_none());
+        assert!(resource.get("service.instance.id").is_none());
+
+        assert!(resource.get("host.name").is_some());
     }
 
     #[test]
@@ -709,5 +686,22 @@ mod tests {
                 .headers(&config.base)
                 .collect::<HashMap<_, _>>(),
         );
+    }
+
+    #[test]
+    fn config_from_env_headers_ignores_list_valued_properties() {
+        let env = vec![
+            (
+                "OTEL_EXPORTER_OTLP_HEADERS",
+                "X-ApiKey=Api-46D99F4427AB40069F573B7C9032827B;X-ApiEndpoint=localhost,X-Service=myhost",
+            ),
+        ];
+
+        let config = OtlpConfig::from_env(env.into_iter());
+
+        let headers = config.logs.headers(&config.base).collect::<HashMap<_, _>>();
+
+        assert!(headers.get("X-ApiKey").is_none());
+        assert!(headers.get("X-Service").is_some());
     }
 }
