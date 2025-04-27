@@ -22,6 +22,7 @@ Extensions to the data model are signaled by the well-known [`KEY_EVT_KIND`] pro
 
 - Tracing [`KEY_EVT_KIND`] = [`EVENT_KIND_SPAN`]:
     - [`KEY_SPAN_NAME`]: The informative name of the span.
+    - [`KEY_SPAN_KIND`]: The kind of the span.
     - [`KEY_TRACE_ID`]: The trace id.
     - [`KEY_SPAN_ID`]: The span id.
     - [`KEY_SPAN_PARENT`]: The parent span id.
@@ -77,6 +78,8 @@ pub const KEY_ERR: &'static str = "err";
 // Trace
 /** The informative name of the span. */
 pub const KEY_SPAN_NAME: &'static str = "span_name";
+/** The kind of the span. */
+pub const KEY_SPAN_KIND: &'static str = "span_kind";
 /** The trace id. */
 pub const KEY_TRACE_ID: &'static str = "trace_id";
 /** The span id. */

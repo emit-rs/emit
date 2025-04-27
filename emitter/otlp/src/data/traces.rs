@@ -1,7 +1,10 @@
 mod export_trace_service;
 mod span;
 
-use emit::{well_known::KEY_SPAN_NAME, Filter, Props};
+use emit::{
+    well_known::{KEY_SPAN_KIND, KEY_SPAN_NAME},
+    Filter, Props,
+};
 
 use crate::Error;
 
@@ -14,12 +17,14 @@ use super::{
 
 pub(crate) struct TracesEventEncoder {
     pub name: Box<MessageFormatter>,
+    pub kind: Box<KindExtractor>,
 }
 
 impl Default for TracesEventEncoder {
     fn default() -> Self {
         TracesEventEncoder {
             name: default_name_formatter(),
+            kind: default_kind_extractor(),
         }
     }
 }
@@ -32,6 +37,14 @@ fn default_name_formatter() -> Box<MessageFormatter> {
             write!(f, "{}", evt.msg())
         }
     })
+}
+
+type KindExtractor = dyn Fn(&emit::event::Event<&dyn emit::props::ErasedProps>) -> Option<emit::span::SpanKind>
+    + Send
+    + Sync;
+
+fn default_kind_extractor() -> Box<KindExtractor> {
+    Box::new(|evt| evt.props().pull(KEY_SPAN_KIND))
 }
 
 impl EventEncoder for TracesEventEncoder {
@@ -66,7 +79,9 @@ impl EventEncoder for TracesEventEncoder {
                     end_time_unix_nano,
                     evt.props(),
                 ),
-                kind: SpanKind::Unspecified,
+                kind: (self.kind)(&evt.erase())
+                    .map(Into::into)
+                    .unwrap_or(SpanKind::Unspecified),
             }),
         })
     }
@@ -137,6 +152,16 @@ mod tests {
                 assert_eq!("test", de.name);
             },
         );
+    }
+
+    #[test]
+    fn encode_span_name() {
+        todo!()
+    }
+
+    #[test]
+    fn encode_span_kind() {
+        todo!()
     }
 
     #[test]

@@ -833,13 +833,88 @@ impl Props for SpanCtxt {
 }
 
 /**
+An error encountered attempting to parse a [`TraceId`] or [`SpanId`].
+*/
+#[derive(Debug)]
+pub struct ParseKindError {}
+
+impl fmt::Display for ParseKindError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "the input was not a valid kind")
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for ParseKindError {}
+
+/**
+A hint about the way a span and its child are linked.
+*/
+#[non_exhaustive]
+#[derive(Clone, Copy)]
+pub enum SpanKind {
+    /**
+    Internal spans represent operations which do not cross a process boundary.
+    */
+    Internal,
+    /**
+    Server-side handling of an RPC or other remote network request.
+
+    Paired with a `Client`.
+    */
+    Server,
+    /**
+    A request to some remote service.
+
+    Paired with a `Server`.
+    */
+    Client,
+    /**
+    A producer sending a message to a broker.
+
+    Paired with a `Consumer`.
+    */
+    Producer,
+    /**
+    A consumer receiving a message from a broker.
+
+    Paired with a `Producer`.
+    */
+    Consumer,
+}
+
+impl FromStr for SpanKind {
+    type Err = ParseKindError;
+
+    fn from_str(v: &str) -> Result<Self, Self::Err> {
+        todo!()
+    }
+}
+
+impl fmt::Display for SpanKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        todo!()
+    }
+}
+
+impl ToValue for SpanKind {
+    fn to_value(&self) -> Value {
+        todo!()
+    }
+}
+
+impl<'v> FromValue<'v> for SpanKind {
+    fn from_value(v: Value<'v>) -> Option<Self> {
+        todo!()
+    }
+}
+
+/**
 An active span in a distributed trace.
 
 ## Creating active spans automatically
 
 This type is created by the [`macro@crate::span!`] macro with the `guard` control parameter, or with the [`macro@crate::new_span!`] macro.
-
-
 
 Call [`SpanGuard::complete_with`], or just drop the guard to complete it, passing the resulting [`Span`] to a [`Completion`].
 
@@ -1794,6 +1869,28 @@ mod tests {
             &TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
             &[serde_test::Token::Str("0123456789abcdef0123456789abcdef")],
         );
+    }
+
+    #[test]
+    fn span_kind_parse() {
+        todo!()
+    }
+
+    #[test]
+    fn span_kind_roundtrip() {
+        todo!()
+    }
+
+    #[cfg(feature = "sval")]
+    #[test]
+    fn span_kind_stream() {
+        todo!()
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn span_kind_serialize() {
+        todo!()
     }
 
     #[test]

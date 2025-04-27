@@ -19,6 +19,24 @@ pub enum StatusCode {
 #[sval(unlabeled_variants)]
 pub enum SpanKind {
     Unspecified = 0,
+    Internal = 1,
+    Server = 2,
+    Client = 3,
+    Producer = 4,
+    Consumer = 5,
+}
+
+impl From<emit::span::SpanKind> for SpanKind {
+    fn from(kind: emit::span::SpanKind) -> SpanKind {
+        match kind {
+            emit::span::SpanKind::Internal => SpanKind::Internal,
+            emit::span::SpanKind::Server => SpanKind::Server,
+            emit::span::SpanKind::Client => SpanKind::Client,
+            emit::span::SpanKind::Producer => SpanKind::Producer,
+            emit::span::SpanKind::Consumer => SpanKind::Consumer,
+            _ => SpanKind::Unspecified,
+        }
+    }
 }
 
 #[derive(Value)]
@@ -124,6 +142,7 @@ impl<
                 stream_attributes(stream, &self.props, |mut stream, k, v| match k.get() {
                     emit::well_known::KEY_EVT_KIND => Ok(()),
                     emit::well_known::KEY_SPAN_NAME => Ok(()),
+                    emit::well_known::KEY_SPAN_KIND => Ok(()),
                     emit::well_known::KEY_LVL => {
                         level = v.by_ref().cast().unwrap_or_default();
                         Ok(())
