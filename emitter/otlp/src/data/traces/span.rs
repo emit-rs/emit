@@ -140,9 +140,7 @@ impl<
             &SPAN_ATTRIBUTES_INDEX,
             |stream| {
                 stream_attributes(stream, &self.props, |mut stream, k, v| match k.get() {
-                    emit::well_known::KEY_EVT_KIND => Ok(()),
-                    emit::well_known::KEY_SPAN_NAME => Ok(()),
-                    emit::well_known::KEY_SPAN_KIND => Ok(()),
+                    // Well-known fields
                     emit::well_known::KEY_LVL => {
                         level = v.by_ref().cast().unwrap_or_default();
                         Ok(())
@@ -172,6 +170,11 @@ impl<
                         has_err = true;
                         Ok(())
                     }
+                    // Ignored
+                    emit::well_known::KEY_EVT_KIND
+                    | emit::well_known::KEY_SPAN_NAME
+                    | emit::well_known::KEY_SPAN_KIND => Ok(()),
+                    // Regular attributes
                     _ => stream.stream_attribute(k, v),
                 })
             },

@@ -24,7 +24,10 @@ use emit_core::{
     template::{self, Template},
     timestamp::Timestamp,
     value::FromValue,
-    well_known::{KEY_EVT_KIND, KEY_SPAN_ID, KEY_SPAN_NAME, KEY_SPAN_PARENT, KEY_TRACE_ID},
+    well_known::{
+        KEY_EVT_KIND, KEY_SPAN_ID, KEY_SPAN_NAME, KEY_SPAN_PARENT, KEY_TRACE_ID, SPAN_KIND_CLIENT,
+        SPAN_KIND_CONSUMER, SPAN_KIND_INTERNAL, SPAN_KIND_PRODUCER, SPAN_KIND_SERVER,
+    },
 };
 
 use crate::{
@@ -883,29 +886,75 @@ pub enum SpanKind {
     Consumer,
 }
 
+impl SpanKind {
+    /**
+    Try parse a span kind from a formatted representation.
+    */
+    pub fn try_from_str(s: &str) -> Result<Self, ParseKindError> {
+        s.parse()
+    }
+}
+
 impl FromStr for SpanKind {
     type Err = ParseKindError;
 
-    fn from_str(v: &str) -> Result<Self, Self::Err> {
-        todo!()
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.trim();
+
+        if s.eq_ignore_ascii_case(SPAN_KIND_INTERNAL) {
+            return Ok(SpanKind::Internal);
+        }
+
+        if s.eq_ignore_ascii_case(SPAN_KIND_SERVER) {
+            return Ok(SpanKind::Server);
+        }
+
+        if s.eq_ignore_ascii_case(SPAN_KIND_CLIENT) {
+            return Ok(SpanKind::Client);
+        }
+
+        if s.eq_ignore_ascii_case(SPAN_KIND_PRODUCER) {
+            return Ok(SpanKind::Producer);
+        }
+
+        if s.eq_ignore_ascii_case(SPAN_KIND_CONSUMER) {
+            return Ok(SpanKind::Consumer);
+        }
+
+        Err(ParseKindError {})
+    }
+}
+
+impl fmt::Debug for SpanKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "\"{}\"", self)
     }
 }
 
 impl fmt::Display for SpanKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        todo!()
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SpanKind::Internal => f.write_str(SPAN_KIND_INTERNAL),
+            SpanKind::Server => f.write_str(SPAN_KIND_SERVER),
+            SpanKind::Client => f.write_str(SPAN_KIND_CLIENT),
+            SpanKind::Producer => f.write_str(SPAN_KIND_PRODUCER),
+            SpanKind::Consumer => f.write_str(SPAN_KIND_CONSUMER),
+        }
     }
 }
 
 impl ToValue for SpanKind {
     fn to_value(&self) -> Value {
-        todo!()
+        Value::capture_display(self)
     }
 }
 
 impl<'v> FromValue<'v> for SpanKind {
-    fn from_value(v: Value<'v>) -> Option<Self> {
-        todo!()
+    fn from_value(value: Value<'v>) -> Option<Self> {
+        value
+            .downcast_ref::<SpanKind>()
+            .copied()
+            .or_else(|| value.parse())
     }
 }
 

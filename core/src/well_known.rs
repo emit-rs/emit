@@ -87,6 +87,17 @@ pub const KEY_SPAN_ID: &'static str = "span_id";
 /** The parent span id. */
 pub const KEY_SPAN_PARENT: &'static str = "span_parent";
 
+/** Internal spans represent operations which do not cross a process boundary. */
+pub const SPAN_KIND_INTERNAL: &'static str = "internal";
+/** Server-side handling of an RPC or other remote network request. */
+pub const SPAN_KIND_SERVER: &'static str = "server";
+/** A request to some remote service. */
+pub const SPAN_KIND_CLIENT: &'static str = "client";
+/** A producer sending a message to a broker. */
+pub const SPAN_KIND_PRODUCER: &'static str = "producer";
+/** A consumer receiving a message from a broker. */
+pub const SPAN_KIND_CONSUMER: &'static str = "consumer";
+
 // Metric
 /** The name of the underlying data source. */
 pub const KEY_METRIC_NAME: &'static str = "metric_name";

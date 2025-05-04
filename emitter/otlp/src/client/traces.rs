@@ -94,6 +94,20 @@ impl OtlpTracesBuilder {
         self
     }
 
+    /**
+    Use the given `extractor` function to format the span kind of the OTLP span for a given [`emit::Event`].
+    */
+    pub fn kind(
+        mut self,
+        extractor: impl Fn(&emit::event::Event<&dyn emit::props::ErasedProps>) -> Option<emit::span::SpanKind>
+            + Send
+            + Sync
+            + 'static,
+    ) -> Self {
+        self.event_encoder.kind = Box::new(extractor);
+        self
+    }
+
     pub(in crate::client) fn build(
         self,
         metrics: Arc<InternalMetrics>,
