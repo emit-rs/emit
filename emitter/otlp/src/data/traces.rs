@@ -143,6 +143,7 @@ mod tests {
                 user: "test",
                 evt_kind: "span",
                 span_name: "test",
+                span_kind: "server",
                 trace_id: "00000000000000000000000000000001",
                 span_id: "0000000000000001"
             ),
@@ -150,6 +151,7 @@ mod tests {
                 let de = trace::Span::decode(buf).unwrap();
 
                 assert_eq!("test", de.name);
+                assert_eq!(trace::span::SpanKind::Server as i32, de.kind);
             },
         );
     }
