@@ -11,7 +11,7 @@ A timestamp can be converted into a point [`crate::extent::Extent`]. A pair of t
 /*
 Parts of this file are adapted from other libraries:
 
-Post:
+Prost:
 https://github.com/tokio-rs/prost/blob/master/prost-types/src/datetime.rs
 Licensed under Apache 2.0
 
