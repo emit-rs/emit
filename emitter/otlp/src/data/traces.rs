@@ -156,12 +156,54 @@ mod tests {
 
     #[test]
     fn encode_span_name() {
-        todo!()
+        let encoder = TracesEventEncoder {
+            name: Box::new(|_, f| f.write_str("custom name")),
+            kind: default_kind_extractor(),
+        };
+
+        encode_event_with(
+            encoder,
+            emit::evt!(
+                extent: ts(1)..ts(13),
+                "greet {user}",
+                user: "test",
+                evt_kind: "span",
+                span_name: "test",
+                trace_id: "00000000000000000000000000000001",
+                span_id: "0000000000000001"
+            ),
+            |buf| {
+                let de = trace::Span::decode(buf).unwrap();
+
+                assert_eq!("custom name", de.name);
+            },
+        );
     }
 
     #[test]
     fn encode_span_kind() {
-        todo!()
+        let encoder = TracesEventEncoder {
+            name: default_name_formatter(),
+            kind: Box::new(|_| Some(emit::span::SpanKind::Server)),
+        };
+
+        encode_event_with(
+            encoder,
+            emit::evt!(
+                extent: ts(1)..ts(13),
+                "greet {user}",
+                user: "test",
+                evt_kind: "span",
+                span_name: "test",
+                trace_id: "00000000000000000000000000000001",
+                span_id: "0000000000000001"
+            ),
+            |buf| {
+                let de = trace::Span::decode(buf).unwrap();
+
+                assert_eq!(trace::span::SpanKind::Server as i32, de.kind);
+            },
+        );
     }
 
     #[test]
