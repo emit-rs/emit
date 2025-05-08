@@ -854,7 +854,7 @@ impl std::error::Error for ParseKindError {}
 A hint about the way a span and its child are linked.
 */
 #[non_exhaustive]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SpanKind {
     /**
     Internal spans represent operations which do not cross a process boundary.
@@ -892,6 +892,19 @@ impl SpanKind {
     */
     pub fn try_from_str(s: &str) -> Result<Self, ParseKindError> {
         s.parse()
+    }
+
+    /**
+    Get the value of the span kind as a string.
+    */
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SpanKind::Internal => SPAN_KIND_INTERNAL,
+            SpanKind::Server => SPAN_KIND_SERVER,
+            SpanKind::Client => SPAN_KIND_CLIENT,
+            SpanKind::Producer => SPAN_KIND_PRODUCER,
+            SpanKind::Consumer => SPAN_KIND_CONSUMER,
+        }
     }
 }
 
@@ -933,13 +946,21 @@ impl fmt::Debug for SpanKind {
 
 impl fmt::Display for SpanKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            SpanKind::Internal => f.write_str(SPAN_KIND_INTERNAL),
-            SpanKind::Server => f.write_str(SPAN_KIND_SERVER),
-            SpanKind::Client => f.write_str(SPAN_KIND_CLIENT),
-            SpanKind::Producer => f.write_str(SPAN_KIND_PRODUCER),
-            SpanKind::Consumer => f.write_str(SPAN_KIND_CONSUMER),
-        }
+        f.write_str(self.as_str())
+    }
+}
+
+#[cfg(feature = "sval")]
+impl sval::Value for SpanKind {
+    fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(&'sval self, stream: &mut S) -> sval::Result {
+        stream.value(self.as_str())
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for SpanKind {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.as_str().serialize(serializer)
     }
 }
 
@@ -1922,24 +1943,51 @@ mod tests {
 
     #[test]
     fn span_kind_parse() {
-        todo!()
+        for (case, expected) in [
+            ("internal", Some(SpanKind::Internal)),
+            (" internal ", Some(SpanKind::Internal)),
+            ("server", Some(SpanKind::Server)),
+            ("client", Some(SpanKind::Client)),
+            ("producer", Some(SpanKind::Producer)),
+            ("consumer", Some(SpanKind::Consumer)),
+            ("", None),
+            ("int", None),
+            ("internalx", None),
+        ] {
+            assert_eq!(expected, SpanKind::try_from_str(case).ok());
+        }
     }
 
     #[test]
     fn span_kind_roundtrip() {
-        todo!()
+        for case in [
+            SpanKind::Internal,
+            SpanKind::Server,
+            SpanKind::Client,
+            SpanKind::Producer,
+            SpanKind::Consumer,
+        ] {
+            assert_eq!(case, SpanKind::try_from_str(&case.to_string()).unwrap());
+        }
     }
 
     #[cfg(feature = "sval")]
     #[test]
     fn span_kind_stream() {
-        todo!()
+        sval_test::assert_tokens(
+            &SpanKind::Internal,
+            &[
+                sval_test::Token::TextBegin(Some(8)),
+                sval_test::Token::TextFragment("internal"),
+                sval_test::Token::TextEnd,
+            ],
+        );
     }
 
     #[cfg(feature = "serde")]
     #[test]
     fn span_kind_serialize() {
-        todo!()
+        serde_test::assert_ser_tokens(&SpanKind::Internal, &[serde_test::Token::Str("internal")]);
     }
 
     #[test]
