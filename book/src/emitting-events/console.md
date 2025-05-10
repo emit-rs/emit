@@ -1,10 +1,10 @@
 # Emitting to the console
 
-You can use [`emit_term`](https://docs.rs/emit_term/1.7.0/emit_term/index.html) to write diagnostic events to the console in a human-readable format:
+You can use [`emit_term`](https://docs.rs/emit_term/1.8.0/emit_term/index.html) to write diagnostic events to the console in a human-readable format:
 
 ```toml
 [dependencies.emit_term]
-version = "1.7.0"
+version = "1.8.0"
 ```
 
 ```rust
@@ -19,7 +19,7 @@ fn main() {
 }
 ```
 
-See [the crate docs](https://docs.rs/emit_term/1.7.0/emit_term/index.html) for more details.
+See [the crate docs](https://docs.rs/emit_term/1.8.0/emit_term/index.html) for more details.
 
 ## Format
 
