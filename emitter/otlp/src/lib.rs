@@ -315,6 +315,26 @@ http://localhost:4318/v1/logs
 }
 ```
 
+## Configuring the log record body
+
+By default, [`emit::Event::msg`] is used as the body of the OTLP log record.
+
+The [`OtlpLogsBuilder::body`] method can be used to customize the `body`.
+This method accepts an [`emit::Event`] and a `Formatter` to write the body into.
+
+In this example, the body is customized to use the [`emit::Event::tpl`] instead:
+
+```
+# fn build() -> emit_otlp::Otlp {
+emit_otlp::new()
+    .logs(emit_otlp::logs_grpc_proto("http://localhost:4318")
+        .body(|evt, f| write!(f, "{}", evt.tpl())))
+    .spawn()
+# }
+```
+
+## Fallback for traces
+
 When the traces signal is not configured, diagnostic events for spans are represented as regular OTLP log records. The following diagnostic:
 
 ```
@@ -431,6 +451,8 @@ http://localhost:4318/v1/logs
    ]
 }
 ```
+
+## Fallback for metrics
 
 When the metrics signal is not configured, diagnostic events for metric samples are represented as regular OTLP log records. The following diagnostic:
 
@@ -675,7 +697,9 @@ http://localhost:4318/v1/logs
 }
 ```
 
-If the [`emit::well_known::KEY_ERR`] property is set, then the resulting OTLP span will carry the semantic exception event:
+## Errors
+
+If the event contains an `err` property, then the resulting OTLP span will carry the semantic exception event:
 
 ```
 #[emit::span(guard: span, "Compute {a} + {b}")]
@@ -779,6 +803,44 @@ http://localhost:4318/v1/traces
 }
 ```
 
+## Customizing span names
+
+By default, if an event contains a property called `span_name` then it will be used as the `name` field on the resulting OTLP span.
+If there's no `span_name` property on the event, then [`emit::Event::msg`] is used instead.
+
+The [`OtlpTracesBuilder::name`] method can be used to customize the `name`.
+This method accepts an [`emit::Event`] and a `Formatter` to write the name into.
+
+In this example, the body is customized to use the [`emit::Event::tpl`] instead:
+
+```
+# fn build() -> emit_otlp::Otlp {
+emit_otlp::new()
+    .traces(emit_otlp::traces_grpc_proto("http://localhost:4318")
+        .name(|evt, f| write!(f, "{}", evt.tpl())))
+    .spawn()
+# }
+```
+
+## Customizing span kinds
+
+By default, if an event contains a property called `span_kind` with a parsable [`emit::span::SpanKind`] then it will be used as the `kind` field on the resulting OTLP span.
+If there's no `span_kind`, or it's not a valid `SpanKind`, then it's left unspecified.
+
+The [`OtlpTracesBuilder::kind`] method can be used to customize the `kind`.
+This method accepts an [`emit::Event`] and returns an optional [`emit::span::SpanKind`].
+
+In this example, the kind is customized to always be internal:
+
+```
+# fn build() -> emit_otlp::Otlp {
+emit_otlp::new()
+    .traces(emit_otlp::traces_grpc_proto("http://localhost:4318")
+        .kind(|_| Some(emit::span::SpanKind::Internal)))
+    .spawn()
+# }
+```
+
 # Metrics
 
 When the metrics signal is configured, [`emit::Event`]s can be represented as OTLP metrics so long as they satisfy the following conditions:
@@ -803,6 +865,8 @@ emit_otlp::new()
     .spawn()
 # }
 ```
+
+## Counts
 
 If the metric aggregation is `"count"` then the resulting OTLP metric is a monotonic sum:
 
@@ -876,6 +940,8 @@ http://localhost:4318/v1/metrics
 }
 ```
 
+## Sums
+
 If the metric aggregation is `"sum"` then the resulting OTLP metric is a non-monotonic sum:
 
 ```
@@ -948,6 +1014,8 @@ http://localhost:4318/v1/metrics
 }
 ```
 
+## Gauges
+
 Any other aggregation will be represented as an OTLP gauge:
 
 ```
@@ -1017,6 +1085,8 @@ http://localhost:4318/v1/metrics
    ]
 }
 ```
+
+## Sequences
 
 If the metric aggregation is `"count"` or `"sum"`, and value is a sequence, then each value will be summed to produce a single data point:
 
