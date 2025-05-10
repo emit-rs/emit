@@ -93,6 +93,18 @@ impl Level {
     pub fn try_from_str(s: &str) -> Result<Self, ParseLevelError> {
         s.parse()
     }
+
+    /**
+    Get the value of the level as a string.
+    */
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Level::Info => LVL_INFO,
+            Level::Error => LVL_ERROR,
+            Level::Warn => LVL_WARN,
+            Level::Debug => LVL_DEBUG,
+        }
+    }
 }
 
 impl Default for Level {
@@ -109,12 +121,21 @@ impl fmt::Debug for Level {
 
 impl fmt::Display for Level {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Level::Info => LVL_INFO,
-            Level::Error => LVL_ERROR,
-            Level::Warn => LVL_WARN,
-            Level::Debug => LVL_DEBUG,
-        })
+        f.write_str(self.as_str())
+    }
+}
+
+#[cfg(feature = "sval")]
+impl sval::Value for Level {
+    fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(&'sval self, stream: &mut S) -> sval::Result {
+        stream.value(self.as_str())
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for Level {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.as_str().serialize(serializer)
     }
 }
 
@@ -604,6 +625,25 @@ mod tests {
                 assert_eq!(lvl, parsed, "{}", fmt);
             }
         }
+    }
+
+    #[cfg(feature = "sval")]
+    #[test]
+    fn level_stream() {
+        sval_test::assert_tokens(
+            &Level::Warn,
+            &[
+                sval_test::Token::TextBegin(Some(4)),
+                sval_test::Token::TextFragment("warn"),
+                sval_test::Token::TextEnd,
+            ],
+        );
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn level_serialize() {
+        serde_test::assert_ser_tokens(&Level::Warn, &[serde_test::Token::Str("warn")]);
     }
 
     #[test]

@@ -1,7 +1,10 @@
 mod export_trace_service;
 mod span;
 
-use emit::{well_known::KEY_SPAN_NAME, Filter, Props};
+use emit::{
+    well_known::{KEY_SPAN_KIND, KEY_SPAN_NAME},
+    Filter, Props,
+};
 
 use crate::Error;
 
@@ -14,12 +17,14 @@ use super::{
 
 pub(crate) struct TracesEventEncoder {
     pub name: Box<MessageFormatter>,
+    pub kind: Box<KindExtractor>,
 }
 
 impl Default for TracesEventEncoder {
     fn default() -> Self {
         TracesEventEncoder {
             name: default_name_formatter(),
+            kind: default_kind_extractor(),
         }
     }
 }
@@ -32,6 +37,14 @@ fn default_name_formatter() -> Box<MessageFormatter> {
             write!(f, "{}", evt.msg())
         }
     })
+}
+
+type KindExtractor = dyn Fn(&emit::event::Event<&dyn emit::props::ErasedProps>) -> Option<emit::span::SpanKind>
+    + Send
+    + Sync;
+
+fn default_kind_extractor() -> Box<KindExtractor> {
+    Box::new(|evt| evt.props().pull(KEY_SPAN_KIND))
 }
 
 impl EventEncoder for TracesEventEncoder {
@@ -66,7 +79,9 @@ impl EventEncoder for TracesEventEncoder {
                     end_time_unix_nano,
                     evt.props(),
                 ),
-                kind: SpanKind::Unspecified,
+                kind: (self.kind)(&evt.erase())
+                    .map(Into::into)
+                    .unwrap_or(SpanKind::Unspecified),
             }),
         })
     }
@@ -128,6 +143,7 @@ mod tests {
                 user: "test",
                 evt_kind: "span",
                 span_name: "test",
+                span_kind: "server",
                 trace_id: "00000000000000000000000000000001",
                 span_id: "0000000000000001"
             ),
@@ -135,6 +151,59 @@ mod tests {
                 let de = trace::Span::decode(buf).unwrap();
 
                 assert_eq!("test", de.name);
+                assert_eq!(trace::span::SpanKind::Server as i32, de.kind);
+            },
+        );
+    }
+
+    #[test]
+    fn encode_span_name() {
+        let encoder = TracesEventEncoder {
+            name: Box::new(|_, f| f.write_str("custom name")),
+            kind: default_kind_extractor(),
+        };
+
+        encode_event_with(
+            encoder,
+            emit::evt!(
+                extent: ts(1)..ts(13),
+                "greet {user}",
+                user: "test",
+                evt_kind: "span",
+                span_name: "test",
+                trace_id: "00000000000000000000000000000001",
+                span_id: "0000000000000001"
+            ),
+            |buf| {
+                let de = trace::Span::decode(buf).unwrap();
+
+                assert_eq!("custom name", de.name);
+            },
+        );
+    }
+
+    #[test]
+    fn encode_span_kind() {
+        let encoder = TracesEventEncoder {
+            name: default_name_formatter(),
+            kind: Box::new(|_| Some(emit::span::SpanKind::Server)),
+        };
+
+        encode_event_with(
+            encoder,
+            emit::evt!(
+                extent: ts(1)..ts(13),
+                "greet {user}",
+                user: "test",
+                evt_kind: "span",
+                span_name: "test",
+                trace_id: "00000000000000000000000000000001",
+                span_id: "0000000000000001"
+            ),
+            |buf| {
+                let de = trace::Span::decode(buf).unwrap();
+
+                assert_eq!(trace::span::SpanKind::Server as i32, de.kind);
             },
         );
     }

@@ -24,7 +24,10 @@ use emit_core::{
     template::{self, Template},
     timestamp::Timestamp,
     value::FromValue,
-    well_known::{KEY_EVT_KIND, KEY_SPAN_ID, KEY_SPAN_NAME, KEY_SPAN_PARENT, KEY_TRACE_ID},
+    well_known::{
+        KEY_EVT_KIND, KEY_SPAN_ID, KEY_SPAN_NAME, KEY_SPAN_PARENT, KEY_TRACE_ID, SPAN_KIND_CLIENT,
+        SPAN_KIND_CONSUMER, SPAN_KIND_INTERNAL, SPAN_KIND_PRODUCER, SPAN_KIND_SERVER,
+    },
 };
 
 use crate::{
@@ -833,13 +836,155 @@ impl Props for SpanCtxt {
 }
 
 /**
+An error encountered attempting to parse a [`TraceId`] or [`SpanId`].
+*/
+#[derive(Debug)]
+pub struct ParseKindError {}
+
+impl fmt::Display for ParseKindError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "the input was not a valid kind")
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for ParseKindError {}
+
+/**
+A hint about the way a span and its child are linked.
+*/
+#[non_exhaustive]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum SpanKind {
+    /**
+    Internal spans represent operations which do not cross a process boundary.
+    */
+    Internal,
+    /**
+    Server-side handling of an RPC or other remote network request.
+
+    Paired with a `Client`.
+    */
+    Server,
+    /**
+    A request to some remote service.
+
+    Paired with a `Server`.
+    */
+    Client,
+    /**
+    A producer sending a message to a broker.
+
+    Paired with a `Consumer`.
+    */
+    Producer,
+    /**
+    A consumer receiving a message from a broker.
+
+    Paired with a `Producer`.
+    */
+    Consumer,
+}
+
+impl SpanKind {
+    /**
+    Try parse a span kind from a formatted representation.
+    */
+    pub fn try_from_str(s: &str) -> Result<Self, ParseKindError> {
+        s.parse()
+    }
+
+    /**
+    Get the value of the span kind as a string.
+    */
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SpanKind::Internal => SPAN_KIND_INTERNAL,
+            SpanKind::Server => SPAN_KIND_SERVER,
+            SpanKind::Client => SPAN_KIND_CLIENT,
+            SpanKind::Producer => SPAN_KIND_PRODUCER,
+            SpanKind::Consumer => SPAN_KIND_CONSUMER,
+        }
+    }
+}
+
+impl FromStr for SpanKind {
+    type Err = ParseKindError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.trim();
+
+        if s.eq_ignore_ascii_case(SPAN_KIND_INTERNAL) {
+            return Ok(SpanKind::Internal);
+        }
+
+        if s.eq_ignore_ascii_case(SPAN_KIND_SERVER) {
+            return Ok(SpanKind::Server);
+        }
+
+        if s.eq_ignore_ascii_case(SPAN_KIND_CLIENT) {
+            return Ok(SpanKind::Client);
+        }
+
+        if s.eq_ignore_ascii_case(SPAN_KIND_PRODUCER) {
+            return Ok(SpanKind::Producer);
+        }
+
+        if s.eq_ignore_ascii_case(SPAN_KIND_CONSUMER) {
+            return Ok(SpanKind::Consumer);
+        }
+
+        Err(ParseKindError {})
+    }
+}
+
+impl fmt::Debug for SpanKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "\"{}\"", self)
+    }
+}
+
+impl fmt::Display for SpanKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[cfg(feature = "sval")]
+impl sval::Value for SpanKind {
+    fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(&'sval self, stream: &mut S) -> sval::Result {
+        stream.value(self.as_str())
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for SpanKind {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.as_str().serialize(serializer)
+    }
+}
+
+impl ToValue for SpanKind {
+    fn to_value(&self) -> Value {
+        Value::capture_display(self)
+    }
+}
+
+impl<'v> FromValue<'v> for SpanKind {
+    fn from_value(value: Value<'v>) -> Option<Self> {
+        value
+            .downcast_ref::<SpanKind>()
+            .copied()
+            .or_else(|| value.parse())
+    }
+}
+
+/**
 An active span in a distributed trace.
 
 ## Creating active spans automatically
 
 This type is created by the [`macro@crate::span!`] macro with the `guard` control parameter, or with the [`macro@crate::new_span!`] macro.
-
-
 
 Call [`SpanGuard::complete_with`], or just drop the guard to complete it, passing the resulting [`Span`] to a [`Completion`].
 
@@ -1794,6 +1939,55 @@ mod tests {
             &TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
             &[serde_test::Token::Str("0123456789abcdef0123456789abcdef")],
         );
+    }
+
+    #[test]
+    fn span_kind_parse() {
+        for (case, expected) in [
+            ("internal", Some(SpanKind::Internal)),
+            (" internal ", Some(SpanKind::Internal)),
+            ("server", Some(SpanKind::Server)),
+            ("client", Some(SpanKind::Client)),
+            ("producer", Some(SpanKind::Producer)),
+            ("consumer", Some(SpanKind::Consumer)),
+            ("", None),
+            ("int", None),
+            ("internalx", None),
+        ] {
+            assert_eq!(expected, SpanKind::try_from_str(case).ok());
+        }
+    }
+
+    #[test]
+    fn span_kind_roundtrip() {
+        for case in [
+            SpanKind::Internal,
+            SpanKind::Server,
+            SpanKind::Client,
+            SpanKind::Producer,
+            SpanKind::Consumer,
+        ] {
+            assert_eq!(case, SpanKind::try_from_str(&case.to_string()).unwrap());
+        }
+    }
+
+    #[cfg(feature = "sval")]
+    #[test]
+    fn span_kind_stream() {
+        sval_test::assert_tokens(
+            &SpanKind::Internal,
+            &[
+                sval_test::Token::TextBegin(Some(8)),
+                sval_test::Token::TextFragment("internal"),
+                sval_test::Token::TextEnd,
+            ],
+        );
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn span_kind_serialize() {
+        serde_test::assert_ser_tokens(&SpanKind::Internal, &[serde_test::Token::Str("internal")]);
     }
 
     #[test]

@@ -22,6 +22,7 @@ Extensions to the data model are signaled by the well-known [`KEY_EVT_KIND`] pro
 
 - Tracing [`KEY_EVT_KIND`] = [`EVENT_KIND_SPAN`]:
     - [`KEY_SPAN_NAME`]: The informative name of the span.
+    - [`KEY_SPAN_KIND`]: The kind of the span.
     - [`KEY_TRACE_ID`]: The trace id.
     - [`KEY_SPAN_ID`]: The span id.
     - [`KEY_SPAN_PARENT`]: The parent span id.
@@ -77,12 +78,25 @@ pub const KEY_ERR: &'static str = "err";
 // Trace
 /** The informative name of the span. */
 pub const KEY_SPAN_NAME: &'static str = "span_name";
+/** The kind of the span. */
+pub const KEY_SPAN_KIND: &'static str = "span_kind";
 /** The trace id. */
 pub const KEY_TRACE_ID: &'static str = "trace_id";
 /** The span id. */
 pub const KEY_SPAN_ID: &'static str = "span_id";
 /** The parent span id. */
 pub const KEY_SPAN_PARENT: &'static str = "span_parent";
+
+/** Internal spans represent operations which do not cross a process boundary. */
+pub const SPAN_KIND_INTERNAL: &'static str = "internal";
+/** Server-side handling of an RPC or other remote network request. */
+pub const SPAN_KIND_SERVER: &'static str = "server";
+/** A request to some remote service. */
+pub const SPAN_KIND_CLIENT: &'static str = "client";
+/** A producer sending a message to a broker. */
+pub const SPAN_KIND_PRODUCER: &'static str = "producer";
+/** A consumer receiving a message from a broker. */
+pub const SPAN_KIND_CONSUMER: &'static str = "consumer";
 
 // Metric
 /** The name of the underlying data source. */

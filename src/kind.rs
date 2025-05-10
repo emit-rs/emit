@@ -62,6 +62,16 @@ impl Kind {
     pub fn try_from_str(s: &str) -> Result<Self, ParseKindError> {
         s.parse()
     }
+
+    /**
+    Get the value of the kind as a string.
+    */
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Kind::Span => EVENT_KIND_SPAN,
+            Kind::Metric => EVENT_KIND_METRIC,
+        }
+    }
 }
 
 impl fmt::Debug for Kind {
@@ -72,10 +82,21 @@ impl fmt::Debug for Kind {
 
 impl fmt::Display for Kind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Kind::Span => f.write_str(EVENT_KIND_SPAN),
-            Kind::Metric => f.write_str(EVENT_KIND_METRIC),
-        }
+        f.write_str(self.as_str())
+    }
+}
+
+#[cfg(feature = "sval")]
+impl sval::Value for Kind {
+    fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(&'sval self, stream: &mut S) -> sval::Result {
+        stream.value(self.as_str())
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for Kind {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.as_str().serialize(serializer)
     }
 }
 
@@ -242,5 +263,24 @@ mod tests {
             crate::Empty,
             crate::Empty,
         )));
+    }
+
+    #[cfg(feature = "sval")]
+    #[test]
+    fn kind_stream() {
+        sval_test::assert_tokens(
+            &Kind::Span,
+            &[
+                sval_test::Token::TextBegin(Some(4)),
+                sval_test::Token::TextFragment("span"),
+                sval_test::Token::TextEnd,
+            ],
+        );
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn kind_serialize() {
+        serde_test::assert_ser_tokens(&Kind::Span, &[serde_test::Token::Str("span")]);
     }
 }

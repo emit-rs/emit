@@ -407,9 +407,17 @@ pub(crate) mod util {
         evt: emit::Event<impl emit::Props>,
         proto: impl FnOnce(PreEncodedCursor),
     ) {
+        encode_event_with(E::default(), evt, proto)
+    }
+
+    pub(crate) fn encode_event_with(
+        encoder: impl EventEncoder,
+        evt: emit::Event<impl emit::Props>,
+        proto: impl FnOnce(PreEncodedCursor),
+    ) {
         // Ensure the JSON representation is valid JSON
         let _: serde_json::Value = serde_json::from_reader(
-            E::default()
+            encoder
                 .encode_event::<Json>(&evt)
                 .unwrap()
                 .payload
@@ -419,7 +427,7 @@ pub(crate) mod util {
         .unwrap();
 
         proto(
-            E::default()
+            encoder
                 .encode_event::<Proto>(&evt)
                 .unwrap()
                 .payload

@@ -7,13 +7,7 @@ use crate::Error;
 
 pub use self::{export_metrics_service::*, metric::*};
 
-use emit::{
-    well_known::{
-        KEY_EVT_KIND, KEY_METRIC_AGG, KEY_METRIC_NAME, KEY_METRIC_UNIT, KEY_METRIC_VALUE,
-        KEY_SPAN_ID, KEY_SPAN_PARENT, KEY_TRACE_ID, METRIC_AGG_COUNT, METRIC_AGG_SUM,
-    },
-    Filter, Props,
-};
+use emit::{Filter as _, Props as _};
 
 use sval::Value;
 
@@ -37,7 +31,7 @@ impl Default for MetricsEventEncoder {
 
 fn default_name_formatter() -> Box<MessageFormatter> {
     Box::new(|evt, f| {
-        if let Some(name) = evt.props().get(KEY_METRIC_NAME) {
+        if let Some(name) = evt.props().get(emit::well_known::KEY_METRIC_NAME) {
             write!(f, "{}", name)
         } else {
             write!(f, "{}", evt.msg())
@@ -55,8 +49,8 @@ impl EventEncoder for MetricsEventEncoder {
         }
 
         if let (Some(metric_value), metric_agg) = (
-            evt.props().get(KEY_METRIC_VALUE),
-            evt.props().get(KEY_METRIC_AGG),
+            evt.props().get(emit::well_known::KEY_METRIC_VALUE),
+            evt.props().get(emit::well_known::KEY_METRIC_AGG),
         ) {
             let (start_time_unix_nano, time_unix_nano, aggregation_temporality) = evt
                 .extent()
@@ -88,13 +82,23 @@ impl EventEncoder for MetricsEventEncoder {
             let mut attributes = Vec::new();
 
             let _ = evt.props().for_each(|k, v| match k.get() {
-                KEY_METRIC_UNIT => {
+                // Well-known fields
+                emit::well_known::KEY_METRIC_UNIT => {
                     metric_unit = Some(v);
 
                     ControlFlow::Continue(())
                 }
-                KEY_METRIC_NAME | KEY_METRIC_VALUE | KEY_METRIC_AGG | KEY_SPAN_ID
-                | KEY_SPAN_PARENT | KEY_TRACE_ID | KEY_EVT_KIND => ControlFlow::Continue(()),
+                // Ignored
+                emit::well_known::KEY_METRIC_NAME
+                | emit::well_known::KEY_METRIC_VALUE
+                | emit::well_known::KEY_METRIC_AGG
+                | emit::well_known::KEY_SPAN_ID
+                | emit::well_known::KEY_SPAN_PARENT
+                | emit::well_known::KEY_TRACE_ID
+                | emit::well_known::KEY_EVT_KIND
+                | emit::well_known::KEY_SPAN_NAME
+                | emit::well_known::KEY_SPAN_KIND => ControlFlow::Continue(()),
+                // Regular attributes
                 _ => {
                     if let Ok(value) = sval_buffer::stream_to_value_owned(any_value::EmitValue(v)) {
                         attributes.push(KeyValue {
@@ -108,7 +112,7 @@ impl EventEncoder for MetricsEventEncoder {
             });
 
             let encoded = match metric_agg.and_then(|kind| kind.to_cow_str()).as_deref() {
-                Some(METRIC_AGG_SUM) => E::encode(Metric::<_, _, _> {
+                Some(emit::well_known::METRIC_AGG_SUM) => E::encode(Metric::<_, _, _> {
                     name: &sval::Display::new(metric_name),
                     unit: &metric_unit.map(sval::Display::new),
                     data: &MetricData::Sum::<_>(Sum::<_> {
@@ -121,7 +125,7 @@ impl EventEncoder for MetricsEventEncoder {
                         )?,
                     }),
                 }),
-                Some(METRIC_AGG_COUNT) => E::encode(Metric::<_, _, _> {
+                Some(emit::well_known::METRIC_AGG_COUNT) => E::encode(Metric::<_, _, _> {
                     name: &sval::Display::new(metric_name),
                     unit: &metric_unit.map(sval::Display::new),
                     data: &MetricData::Sum::<_>(Sum::<_> {

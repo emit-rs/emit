@@ -96,6 +96,7 @@ impl<
             &LOG_RECORD_ATTRIBUTES_INDEX,
             |stream| {
                 stream_attributes(stream, &self.0, |mut stream, k, v| match k.get() {
+                    // Well-known fields
                     emit::well_known::KEY_LVL => {
                         level = v.by_ref().cast::<emit::Level>().unwrap_or_default();
                         Ok(())
@@ -127,6 +128,9 @@ impl<
 
                         Ok(())
                     }
+                    // Ignored
+                    emit::well_known::KEY_SPAN_KIND | emit::well_known::KEY_SPAN_NAME => Ok(()),
+                    // Regular attributes
                     _ => stream.stream_attribute(k, v),
                 })
             },
