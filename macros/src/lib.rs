@@ -196,21 +196,9 @@ fn hooks() -> HashMap<&'static str, fn(TokenStream, TokenStream) -> syn::Result<
     map
 }
 
-/**
-Format a template.
-
-# Syntax
-
-See the [`macro@emit`] macro for syntax.
-
-# Control parameters
-
-This macro doesn't accept any control parameters.
-
-# Returns
-
-A `String`.
-*/
+#[doc = "Format a template."]
+#[doc = ""]
+#[doc = include_str!("./doc_fmt.md")]
 #[proc_macro]
 pub fn format(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     format::expand_tokens(format::ExpandTokens {
@@ -219,43 +207,9 @@ pub fn format(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     .unwrap_or_compile_error()
 }
 
-/**
-Construct an event.
-
-# Syntax
-
-```text
-(control_param),* tpl, (property),*
-```
-
-where
-
-- `control_param`: A Rust field-value with a pre-determined identifier (see below).
-- `tpl`: A template string literal.
-- `property`: A Rust field-value for a property to capture.
-
-# Control parameters
-
-This macro accepts the following optional control parameters:
-
-| name     | type                    | description                                                                      |
-| -------- | ----------------------- | -------------------------------------------------------------------------------- |
-| `mdl`    | `impl Into<emit::Path>` | The module the event belongs to. If unspecified the current module path is used. |
-| `props`  | `impl emit::Props`      | A base set of properties to add to the event.                                    |
-| `extent` | `impl emit::ToExtent`   | The extent to use on the event.                                                  |
-
-# Template
-
-The template for the event. See the [`macro@tpl`] macro for syntax.
-
-# Properties
-
-Properties that appear within the template or after it are added to the emitted event. The identifier of the property is its key. Property capturing can be adjusted through the `as_*` attribute macros.
-
-# Returns
-
-An `emit::Event`.
-*/
+#[doc = "Construct an event that can be emitted manually."]
+#[doc = ""]
+#[doc = include_str!("./doc_evt.md")]
 #[proc_macro]
 pub fn evt(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     build::expand_evt_tokens(build::ExpandEvtTokens {
@@ -265,17 +219,9 @@ pub fn evt(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     .unwrap_or_compile_error()
 }
 
-/**
-Construct a debug event.
-
-# Syntax
-
-See the [`macro@evt`] macro for syntax.
-
-# Returns
-
-An `emit::Event`.
-*/
+#[doc = "Construct an event at the debug level that can be emitted manually."]
+#[doc = ""]
+#[doc = include_str!("./doc_evt.md")]
 #[proc_macro]
 pub fn debug_evt(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     build::expand_evt_tokens(build::ExpandEvtTokens {
@@ -285,17 +231,9 @@ pub fn debug_evt(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     .unwrap_or_compile_error()
 }
 
-/**
-Construct an info event.
-
-# Syntax
-
-See the [`macro@evt`] macro for syntax.
-
-# Returns
-
-An `emit::Event`.
-*/
+#[doc = "Construct an event at the info level that can be emitted manually."]
+#[doc = ""]
+#[doc = include_str!("./doc_evt.md")]
 #[proc_macro]
 pub fn info_evt(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     build::expand_evt_tokens(build::ExpandEvtTokens {
@@ -305,17 +243,9 @@ pub fn info_evt(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     .unwrap_or_compile_error()
 }
 
-/**
-Construct a warn event.
-
-# Syntax
-
-See the [`macro@evt`] macro for syntax.
-
-# Returns
-
-An `emit::Event`.
-*/
+#[doc = "Construct an event at the warn level that can be emitted manually."]
+#[doc = ""]
+#[doc = include_str!("./doc_evt.md")]
 #[proc_macro]
 pub fn warn_evt(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     build::expand_evt_tokens(build::ExpandEvtTokens {
@@ -325,17 +255,9 @@ pub fn warn_evt(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     .unwrap_or_compile_error()
 }
 
-/**
-Construct an error event.
-
-# Syntax
-
-See the [`macro@evt`] macro for syntax.
-
-# Returns
-
-An `emit::Event`.
-*/
+#[doc = "Construct an event at the error level that can be emitted manually."]
+#[doc = ""]
+#[doc = include_str!("./doc_evt.md")]
 #[proc_macro]
 pub fn error_evt(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     build::expand_evt_tokens(build::ExpandEvtTokens {
@@ -345,45 +267,9 @@ pub fn error_evt(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     .unwrap_or_compile_error()
 }
 
-/**
-Wrap an operation in a span.
-
-# Syntax
-
-```text
-(control_param),* tpl, (property),*
-```
-
-where
-
-- `control_param`: A Rust field-value with a pre-determined identifier (see below).
-- `tpl`: A template string literal.
-- `property`: A Rust field-value for a property to capture.
-
-# Control parameters
-
-This macro accepts the following optional control parameters:
-
-| name        | type                          | description                                                                                                                                                    |
-| ----------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `rt`        | `impl emit::runtime::Runtime` | The runtime to emit the event through.                                                                                                                         |
-| `mdl`       | `impl Into<emit::Path>`       | The module the event belongs to. If unspecified the current module path is used.                                                                               |
-| `when`      | `impl emit::Filter`           | A filter to use instead of the one configured on the runtime.                                                                                                  |
-| `guard`     | -                             | An identifier to bind an `emit::SpanGuard` to in the body of the span for manual completion.                                                                        |
-| `ok_lvl`    | `str` or `emit::Level`        | Assume the instrumented block returns a `Result`. Assign the event the given level when the result is `Ok`.                                                    |
-| `err_lvl`   | `str` or `emit::Level`        | Assume the instrumented block returns a `Result`. Assign the event the given level when the result is `Err` and attach the error as the `err` property.        |
-| `panic_lvl` | `str` or `emit::Level`        | Detect whether the function panics and use the given level if it does.                                                                                         |
-| `err`       | `impl Fn(&E) -> T`            | Assume the instrumented block returns a `Result`. Map the `Err` variant into a new type `T` that is `str`, `&(dyn Error + 'static)`, or `impl Error + 'static` |
-| `setup`     | `impl Fn() -> T`              | Invoke the expression before creating the span, binding the result to a value that's dropped at the end of the annotated function.                             |
-
-# Template
-
-The template for the event. See the [`macro@tpl`] macro for syntax.
-
-# Properties
-
-Properties that appear within the template or after it are added to the emitted event. The identifier of the property is its key. Property capturing can be adjusted through the `as_*` attribute macros.
-*/
+#[doc = "Trace the execution of a function."]
+#[doc = ""]
+#[doc = include_str!("./doc_span.md")]
 #[proc_macro_attribute]
 pub fn span(
     args: proc_macro::TokenStream,
@@ -397,13 +283,9 @@ pub fn span(
     .unwrap_or_compile_error()
 }
 
-/**
-Wrap an operation in a debug span.
-
-# Syntax
-
-See the [`macro@span`] macro for syntax.
-*/
+#[doc = "Trace the execution of a function at the debug level."]
+#[doc = ""]
+#[doc = include_str!("./doc_span.md")]
 #[proc_macro_attribute]
 pub fn debug_span(
     args: proc_macro::TokenStream,
@@ -417,13 +299,9 @@ pub fn debug_span(
     .unwrap_or_compile_error()
 }
 
-/**
-Wrap an operation in an info span.
-
-# Syntax
-
-See the [`macro@span`] macro for syntax.
-*/
+#[doc = "Trace the execution of a function at the info level."]
+#[doc = ""]
+#[doc = include_str!("./doc_span.md")]
 #[proc_macro_attribute]
 pub fn info_span(
     args: proc_macro::TokenStream,
@@ -437,13 +315,9 @@ pub fn info_span(
     .unwrap_or_compile_error()
 }
 
-/**
-Wrap an operation in a warn span.
-
-# Syntax
-
-See the [`macro@span`] macro for syntax.
-*/
+#[doc = "Trace the execution of a function at the warn level."]
+#[doc = ""]
+#[doc = include_str!("./doc_span.md")]
 #[proc_macro_attribute]
 pub fn warn_span(
     args: proc_macro::TokenStream,
@@ -457,13 +331,9 @@ pub fn warn_span(
     .unwrap_or_compile_error()
 }
 
-/**
-Wrap an operation in an error span.
-
-# Syntax
-
-See the [`macro@span`] macro for syntax.
-*/
+#[doc = "Trace the execution of a function at the error level."]
+#[doc = ""]
+#[doc = include_str!("./doc_span.md")]
 #[proc_macro_attribute]
 pub fn error_span(
     args: proc_macro::TokenStream,
@@ -477,42 +347,9 @@ pub fn error_span(
     .unwrap_or_compile_error()
 }
 
-/**
-Start a span.
-
-See the [`SpanGuard::new`](https://docs.rs/emit/1.8.0/emit/span/struct.SpanGuard.html#method.new) for details on starting and completing the returned span.
-
-# Syntax
-
-```text
-(control_param),* tpl, (property),*
-```
-
-where
-
-- `control_param`: A Rust field-value with a pre-determined identifier (see below).
-- `tpl`: A template string literal.
-- `property`: A Rust field-value for a property to capture.
-
-# Control parameters
-
-This macro accepts the following optional control parameters:
-
-| name        | type                          | description                                                                                                                                                    |
-| ----------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `rt`        | `impl emit::runtime::Runtime` | The runtime to emit the event through.                                                                                                                         |
-| `mdl`       | `impl Into<emit::Path>`       | The module the event belongs to. If unspecified the current module path is used.                                                                               |
-| `when`      | `impl emit::Filter`           | A filter to use instead of the one configured on the runtime.                                                                                                  |
-| `panic_lvl` | `str` or `emit::Level`        | Detect whether the function panics and use the given level if it does.                                                                                         |
-
-# Template
-
-The template for the event. See the [`macro@tpl`] macro for syntax.
-
-# Properties
-
-Properties that appear within the template or after it are added to the emitted event. The identifier of the property is its key. Property capturing can be adjusted through the `as_*` attribute macros.
-*/
+#[doc = "Create a span that can be started and completed manually."]
+#[doc = ""]
+#[doc = include_str!("./doc_new_span.md")]
 #[proc_macro]
 pub fn new_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     span::expand_new_tokens(span::ExpandNewTokens {
@@ -522,13 +359,9 @@ pub fn new_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     .unwrap_or_compile_error()
 }
 
-/**
-Start a debug span.
-
-# Syntax
-
-See the [`macro@new_span`] macro for syntax.
-*/
+#[doc = "Create a span at the debug level that can be started and completed manually."]
+#[doc = ""]
+#[doc = include_str!("./doc_new_span.md")]
 #[proc_macro]
 pub fn new_debug_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     span::expand_new_tokens(span::ExpandNewTokens {
@@ -538,13 +371,9 @@ pub fn new_debug_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream 
     .unwrap_or_compile_error()
 }
 
-/**
-Start an info span.
-
-# Syntax
-
-See the [`macro@new_span`] macro for syntax.
-*/
+#[doc = "Create a span at the info level that can be started and completed manually."]
+#[doc = ""]
+#[doc = include_str!("./doc_new_span.md")]
 #[proc_macro]
 pub fn new_info_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     span::expand_new_tokens(span::ExpandNewTokens {
@@ -554,13 +383,9 @@ pub fn new_info_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     .unwrap_or_compile_error()
 }
 
-/**
-Start a warning span.
-
-# Syntax
-
-See the [`macro@new_span`] macro for syntax.
-*/
+#[doc = "Create a span at the warn level that can be started and completed manually."]
+#[doc = ""]
+#[doc = include_str!("./doc_new_span.md")]
 #[proc_macro]
 pub fn new_warn_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     span::expand_new_tokens(span::ExpandNewTokens {
@@ -570,13 +395,9 @@ pub fn new_warn_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     .unwrap_or_compile_error()
 }
 
-/**
-Start an error span.
-
-# Syntax
-
-See the [`macro@new_span`] macro for syntax.
-*/
+#[doc = "Create a span at the error level that can be started and completed manually."]
+#[doc = ""]
+#[doc = include_str!("./doc_new_span.md")]
 #[proc_macro]
 pub fn new_error_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     span::expand_new_tokens(span::ExpandNewTokens {
@@ -586,51 +407,9 @@ pub fn new_error_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream 
     .unwrap_or_compile_error()
 }
 
-/**
-Construct a template.
-
-Templates are text literals that include regular text with _holes_. A hole is a point in the template where a property should be interpolated in.
-
-# Syntax
-
-```text
-template_literal
-```
-
-where
-
-- `template_literal`: `"` `(text | hole)*` `"`
-- `text`: A fragment of plain text where `{` are escaped as `{{` and `}` are escaped as `}}`.
-- `hole`: `{` `property` `}`
-- `property`: A Rust field-value expression.
-
-The following are all examples of templates:
-
-```text
-"some text"
- ├───────┘
- text
-```
-
-```text
-"some text and {x}"
- ├────────────┘ │
- text           property
-```
-
-```text
-"some {{text}} and {x: 42} and {y}"
- ├────────────────┘ ├───┘ └───┤ │
- text               property  │ property
-                              text
-```
-
-See [the guide](https://emit-rs.io/reference/templates.html) for more details and examples of templates.
-
-# Returns
-
-An `emit::Template`.
-*/
+#[doc = "Construct a template."]
+#[doc = ""]
+#[doc = include_str!("./doc_tpl.md")]
 #[proc_macro]
 pub fn tpl(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     build::expand_tpl_tokens(build::ExpandTplTokens {
@@ -639,42 +418,9 @@ pub fn tpl(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     .unwrap_or_compile_error()
 }
 
-/**
-Emit an event.
-
-# Syntax
-
-```text
-(control_param),* tpl, (property),*
-```
-
-where
-
-- `control_param`: A Rust field-value with a pre-determined identifier (see below).
-- `tpl`: A template string literal.
-- `property`: A Rust field-value for a property to capture.
-
-# Control parameters
-
-This macro accepts the following optional control parameters:
-
-| name      | type                          | description                                                                                                                                                                                    |
-| --------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `rt`      | `impl emit::runtime::Runtime` | The runtime to emit the event through.                                                                                                                                                         |
-| `mdl`     | `impl Into<emit::Path>`       | The module the event belongs to. If unspecified the current module path is used.                                                                                                               |
-| `extent`  | `impl emit::ToExtent`         | The extent to use on the event. If it resolves to `None` then the clock on the runtime will be used to assign a point extent.                                                                  |
-| `props`   | `impl emit::Props`            | A base set of properties to add to the event.                                                                                                                                                  |
-| `evt`     | `impl emit::event::ToEvent`   | A base event to emit. Any properties captured by the macro will be appended to the base event. If this control parameter is specified then `mdl`, `props`, and `extent` cannot also be set. |
-| `when`    | `impl emit::Filter`           | A filter to use instead of the one configured on the runtime.                                                                                                                                  |
-
-# Template
-
-The template for the event. See the [`macro@tpl`] macro for syntax.
-
-# Properties
-
-Properties that appear within the template or after it are added to the emitted event. The identifier of the property is its key. Property capturing can be adjusted through the `as_*` attribute macros.
-*/
+#[doc = "Emit an event."]
+#[doc = ""]
+#[doc = include_str!("./doc_emit.md")]
 #[proc_macro]
 pub fn emit(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     emit::expand_tokens(emit::ExpandTokens {
@@ -684,13 +430,9 @@ pub fn emit(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     .unwrap_or_compile_error()
 }
 
-/**
-Emit a debug event.
-
-# Syntax
-
-See the [`macro@emit`] macro for syntax.
-*/
+#[doc = "Emit an event at the debug level."]
+#[doc = ""]
+#[doc = include_str!("./doc_emit.md")]
 #[proc_macro]
 pub fn debug(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     emit::expand_tokens(emit::ExpandTokens {
@@ -700,13 +442,9 @@ pub fn debug(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     .unwrap_or_compile_error()
 }
 
-/**
-Emit an info event.
-
-# Syntax
-
-See the [`macro@emit`] macro for syntax.
-*/
+#[doc = "Emit an event at the info level."]
+#[doc = ""]
+#[doc = include_str!("./doc_emit.md")]
 #[proc_macro]
 pub fn info(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     emit::expand_tokens(emit::ExpandTokens {
@@ -716,13 +454,9 @@ pub fn info(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     .unwrap_or_compile_error()
 }
 
-/**
-Emit a warn event.
-
-# Syntax
-
-See the [`macro@emit`] macro for syntax.
-*/
+#[doc = "Emit an event at the warn level."]
+#[doc = ""]
+#[doc = include_str!("./doc_emit.md")]
 #[proc_macro]
 pub fn warn(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     emit::expand_tokens(emit::ExpandTokens {
@@ -732,13 +466,9 @@ pub fn warn(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     .unwrap_or_compile_error()
 }
 
-/**
-Emit an error event.
-
-# Syntax
-
-See the [`macro@emit`] macro for syntax.
-*/
+#[doc = "Emit an event at the error level."]
+#[doc = ""]
+#[doc = include_str!("./doc_emit.md")]
 #[proc_macro]
 pub fn error(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     emit::expand_tokens(emit::ExpandTokens {
@@ -748,32 +478,9 @@ pub fn error(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     .unwrap_or_compile_error()
 }
 
-/**
-Emit a temporary debug event.
-
-# Syntax
-
-```text
-(property),*
-tpl, (property),*
-```
-
-where
-
-- `tpl`: A template string literal.
-- `property`: A Rust field-value for a property to capture.
-
-# Properties
-
-Properties that appear within the template or after it are added to the emitted event. The identifier of the property is its key. Property capturing can be adjusted through the `as_*` attribute macros.
-
-Unlike [`macro@debug`], this macro captures values using their [`Debug`](https://doc.rust-lang.org/std/fmt/trait.Debug.html) implementation by default.
-
-# When to use `dbg`
-
-This macro is a convenient way to pepper debug logs through code, but follows the same recommendations as the standard library's `dbg` macro.
-You shouldn't expect `dbg` statements to be long lived, and use the [`macro@debug`] macro instead with more deliberate data.
-*/
+#[doc = "Emit a temporary event as a quick-and-dirty debugging aid."]
+#[doc = ""]
+#[doc = include_str!("./doc_dbg.md")]
 #[proc_macro]
 pub fn dbg(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     dbg::expand_tokens(dbg::ExpandTokens {
