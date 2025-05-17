@@ -1,6 +1,6 @@
 # Design notes on `emit`'s macros
 
-_ May, 2025_
+_May, 2025_
 
 The human-readable message is a key part of a diagnostic event, and so is a cornerstone of a framework's API. Without it, you're just looking at a bag of data. A useful message includes enough detail from the ambient environment to help contextualize you when you see it. In Rust, you might construct such a message with the `format!()` macro from `std::fmt`:
 
