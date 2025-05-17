@@ -39,7 +39,7 @@ Relying on `std::fmt` makes sense; you get the exact same syntax Rust developers
 
 The output of `format!()` is a string, like `"user-123 added product-456 to their cart"`. When using `format!()` (or `format_args!()`, which can write to other destinations besides a string) you only see this final output. You don't get to see the template `"{user} added {product} to their cart"` or its arguments `user` or `product`. As a framework building on `std::fmt` you don't know that there's a variable called `user` or `product` that the user has plumbed in to their message.
 
-The message is a key part of a diagnostic event, but it's not enough on its own. If all you have is the string `"user-123 added product-456 to their cart"` you can't reliably work backwards to figure out who `user` or `product` were. You need properties like `user` and `product` as structured data to make your diagnostic events useful.
+The human-readable message is a key part of a diagnostic event, but it's not enough on its own. If all you have is the string `"user-123 added product-456 to their cart"` you can't reliably work backwards to figure out who `user` or `product` were. You need properties like `user` and `product` as structured data to make your diagnostic events useful.
 
 To get around the opaqueness of `std::fmt`, frameworks relying on it need you to duplicate any values you format into the message, so they can also capture them as structured data. In `log`, it looks like this:
 
@@ -59,17 +59,15 @@ let product = "product-456";
 tracing::event!(tracing::Level::INFO, user, product, "{user} added {product} to their cart");
 ```
 
-It's not unreasonable for `std::fmt` to be largely opaque. Its sole job is to build strings, and minimizing its public API gives it options to optimize the way it does this.
-
-This is a major papercut in existing APIs though. Ideally, we should be able to capture values we interpolate as structured data without having duplicating them elsewhere. This is the main idea behind [message templates](https://messagetemplates.org), which is widely used in the .NET ecosystem. This isn't possible with `std::fmt`, and I would say is pretty much out-of-scope for it to do, so we have to implement something new.
+It's not unreasonable for `std::fmt` to be largely opaque. Its sole job is to build strings, and minimizing its public API gives it options to optimize the way it does this. This is a major papercut in existing APIs though. Ideally, we should be able to capture values we interpolate as structured data without having to duplicate them elsewhere. The template itself without values interpolated also makes a nice "type" for diagnostic events, or names for spans. This is the main idea behind [message templates](https://messagetemplates.org), which is widely used in the .NET ecosystem. This isn't possible with `std::fmt` though, and I would say it is pretty much out-of-scope for it, so we have to implement something new if we want it.
 
 ## `std::fmt` syntax vs new syntax
 
-We need to build an alternative to `std::fmt` so we can see inside the template and capture values within it as structured data. We can either do this using the same end-user syntax as `std::fmt`, or we can invent something new. `emit` opted to invent something new. To understand why, let's first explore a few relevant features of `std::fmt`'s syntax in more detail.
+`emit` needed to build an alternative to `std::fmt` to see inside the template and capture values within it as structured data. A major decision point is whether to use the same end-user syntax as `std::fmt`, or to invent something new. `emit` largely opted to invent something new. To understand why, let's first explore a few relevant features of `std::fmt`'s syntax in more detail.
 
 ### `std::fmt`'s capturing syntax
 
-`std::fmt` interpolates _values_ into its _template literal_ by formatting them in _holes_ with an _identifer_ for the value to interpolate. These holes are denoted by `{}` within the template:
+`std::fmt` interpolates _values_ into its _template literal_ by formatting them in _holes_ with an _identifier_ for the value to interpolate. These holes are denoted by `{}` within the template:
 
 ```rust,ignore
 format!("hello, {x}");
@@ -235,9 +233,11 @@ match ({
 
 This is a surprisingly simple and powerful pattern for composing macros. Using standard Rust attributes means `emit`'s capturing is technically user-extensible. There's nothing that `#[emit::as_debug]` does that an end-user's own attribute macros couldn't.
 
+> **NOTE:** The idea that `emit::info!` doesn't know anything about `#[emit::as_debug]` is not _strictly_ true. Since attribute macros on expressions are [currently unstable](https://github.com/rust-lang/rust/issues/54727), to make these attributes work on stable compilers, they're expanded internally just before the tokens for `emit::info!` are emitted. They're still implemented as regular unprivileged attribute macros though and this hack can be removed at some point in the future. 
+
 ### Runtime Interpolation API
 
-`emit` uses lazy interpolation rather than eager. To render a template, you give it a set of `emit::Props` and an implementation of `emit::template::Write`, which is fed the text and property holes in sequence. This ends up working a lot like [JavaScript's tagged templates](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Template_literals#tagged_templates), and makes it possible to do things like `emit_term`'s type-based coloring:
+`emit` uses lazy interpolation, just like `format_args!()` does. To render a template, you give it a set of `emit::Props` and an implementation of `emit::template::Write`, which is fed the text and property holes in sequence. This ends up working a lot like [JavaScript's tagged templates](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Template_literals#tagged_templates), and makes it possible to do things like `emit_term`'s type-based coloring:
 
 ![`emit_term` colored output](../asset/emit_term.png)
 
