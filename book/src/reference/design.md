@@ -1,6 +1,6 @@
 # Design notes on `emit`'s macros
 
-_ May, 2025_
+_May, 2025_
 
 The human-readable message is a key part of a diagnostic event, and so is a cornerstone of a framework's API. Without it, you're just looking at a bag of data. A useful message includes enough detail from the ambient environment to help contextualize you when you see it. In Rust, you might construct such a message with the `format!()` macro from `std::fmt`:
 
@@ -10,8 +10,6 @@ let product = "product-456";
 
 let msg = format!("{user} added {product} to their cart");
 ```
-
-`emit`'s macros are a departure from how existing frameworks in this space work. `emit` invents its own syntax using procedural macros instead of deferring to `std::fmt`. This document outlines why `emit`'s macro syntax was chosen and how it works, so it might serve as a data point for others who want to explore this space more in their own projects.
 
 The original motivations for `std::fmt`'s current template syntax [are largely lost to time](https://github.com/rust-lang/rust/pull/8182), but the result is in the same ballpark as similar features in other languages, including [Python](https://peps.python.org/pep-3101/) and [C#](https://learn.microsoft.com/en-us/dotnet/csharp/tutorials/string-interpolation). The complete syntax is documented [here](https://doc.rust-lang.org/std/fmt/index.html#syntax), which we'll revisit a bit later.
 
@@ -24,7 +22,18 @@ let product = "product-456";
 log::info!("{user} added {product} to their cart");
 ```
 
+and in `tracing` it looks like this:
+
+```rust,ignore
+let user = "user-123";
+let product = "product-456";
+
+tracing::event!(tracing::Level::INFO, "{user} added {product} to their cart");
+```
+
 Relying on `std::fmt` makes sense; you get the exact same syntax Rust developers are already familiar with, along with all the work to integrate it into the compiler, optimizations, supporting IDE tooling, and you didn't have to do anything to get it.
+
+`emit`'s macros are a departure from how existing frameworks in this space work. `emit` invents its own syntax using procedural macros instead of deferring to `std::fmt`. This document outlines why `emit`'s macro syntax was chosen and how it works, so it might serve as a data point for others who want to explore this space more in their own projects.
 
 ## Why not build on `std::fmt`?
 
@@ -39,6 +48,15 @@ let user = "user-123";
 let product = "product-456";
 
 log::info!(user, product; "{user} added {product} to their cart");
+```
+
+and in `tracing` it looks like this:
+
+```rust,ignore
+let user = "user-123";
+let product = "product-456";
+
+tracing::event!(tracing::Level::INFO, user, product, "{user} added {product} to their cart");
 ```
 
 It's not unreasonable for `std::fmt` to be largely opaque. Its sole job is to build strings, and minimizing its public API gives it options to optimize the way it does this.
@@ -99,6 +117,24 @@ format!("hello, {x:?}");
 ```
 
 The `?` sigil uses `x`'s `std::fmt::Debug` implementation instead of its `std::fmt::Display`.
+
+In `log`, a similar syntax is used for its choice of capturing trait on values:
+
+```rust,ignore
+log::info!(x:?; "hello");
+```
+
+or:
+
+```rust,ignore
+log::info!(x:debug; "hello");
+```
+
+In `tracing`, it looks like this:
+
+```rust,ignore
+tracing::event!(tracing::Level::INFO, ?x, "hello");
+```
 
 ### `emit`'s capturing syntax
 
@@ -165,9 +201,9 @@ Rust attributes can accept arguments of their own. `emit` opts to re-use struct 
 emit::info!("{x}", #[emit::as_debug(inspect: true)] x);
 ```
 
-The drawback of attributes is that they're less compact than sigil-based flags.
+The drawback of attributes is that they're less compact than sigil-based flags. Unlike sigil-based flags though, attributes can naturally support more complex names and configuration, so are less of a syntactic dead-end.
 
-It's worth noting here that `#[emit::as_debug]` is not magically understood by `emit::info!`. It's just a regular procedural macro that operates on the output of `emit::info!`. `emit`'s attribute macros are based on _hooks_. These are named function calls emitted by previously evaluated macros that the attribute looks for and replaces. As an exmaple, `emit::info!` converts this:
+It's also worth noting that `#[emit::as_debug]` is not magically understood by `emit::info!`. It's just a regular procedural macro that operates on the output of `emit::info!`. `emit`'s attribute macros are based on _hooks_. These are named function calls emitted by previously evaluated macros that the attribute looks for and replaces. As an exmaple, `emit::info!` converts this:
 
 ```rust,ignore
 emit::info!("hello", x);
@@ -204,6 +240,10 @@ This is a surprisingly simple and powerful pattern for composing macros. Using s
 `emit` uses lazy interpolation rather than eager. To render a template, you give it a set of `emit::Props` and an implementation of `emit::template::Write`, which is fed the text and property holes in sequence. This ends up working a lot like [JavaScript's tagged templates](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Template_literals#tagged_templates), and makes it possible to do things like `emit_term`'s type-based coloring:
 
 ![`emit_term` colored output](../asset/emit_term.png)
+
+## Exploring the source
+
+`emit`'s macros are implemented in the [`emit_macros`](https://github.com/emit-rs/emit/tree/main/macros) crate. They generate code that calls functions defined in the [`macro_hooks`](https://github.com/emit-rs/emit/blob/main/src/macro_hooks.rs) module in `emit`.
 
 ## Possible future directions
 
