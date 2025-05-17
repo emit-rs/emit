@@ -300,6 +300,15 @@ impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt, TClock: Clock, TRng: Rng>
     pub fn emit<E: ToEvent>(&self, evt: E) {
         crate::emit(&self.emitter, &self.filter, &self.ctxt, &self.clock, evt)
     }
+
+    /**
+    Block for up to `timeout`, waiting for all diagnostic data emitted up to this point to be fully processed.
+
+    This method defers to the runtime's [`Emitter::blocking_flush`].
+    */
+    pub fn blocking_flush(&self, timeout: core::time::Duration) -> bool {
+        self.emitter.blocking_flush(timeout)
+    }
 }
 
 impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt, TClock: Clock, TRng: Rng> Emitter
