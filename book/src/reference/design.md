@@ -241,6 +241,10 @@ This is a surprisingly simple and powerful pattern for composing macros. Using s
 
 ![`emit_term` colored output](../asset/emit_term.png)
 
+## Exploring the source
+
+`emit`'s macros are implemented in the [`emit_macros`](https://github.com/emit-rs/emit/tree/main/macros) crate. They generate code that calls functions defined in the [`macro_hooks`](https://github.com/emit-rs/emit/blob/main/src/macro_hooks.rs) module in `emit`.
+
 ## Possible future directions
 
 We may want to introduce some kind of spread syntax for merging sets of properties:
