@@ -4,7 +4,7 @@ The [`ThreadLocalCtxt`] type.
 
 use std::{
     cell::RefCell,
-    collections::HashMap,
+    collections::{hash_map, HashMap},
     mem,
     ops::ControlFlow,
     sync::{Arc, Mutex},
@@ -58,38 +58,54 @@ A [`Ctxt::Frame`] on a [`ThreadLocalCtxt`].
 #[derive(Clone)]
 pub struct ThreadLocalCtxtFrame {
     props: Option<Arc<HashMap<Str<'static>, ThreadLocalValue>>>,
+    generation: usize,
 }
 
 #[derive(Clone)]
-enum ThreadLocalValue {
+struct ThreadLocalValue {
+    inner: ThreadLocalValueInner,
+    generation: usize,
+}
+
+#[derive(Clone)]
+enum ThreadLocalValueInner {
     TraceId(TraceId),
     SpanId(SpanId),
     Any(OwnedValue),
 }
 
 impl ThreadLocalValue {
-    fn from_value(value: Value) -> Self {
+    fn from_value(generation: usize, value: Value) -> Self {
         // Specialize a few common value types
 
         if let Some(trace_id) = value.downcast_ref() {
-            return ThreadLocalValue::TraceId(*trace_id);
+            return ThreadLocalValue {
+                inner: ThreadLocalValueInner::TraceId(*trace_id),
+                generation,
+            };
         }
 
         if let Some(span_id) = value.downcast_ref() {
-            return ThreadLocalValue::SpanId(*span_id);
+            return ThreadLocalValue {
+                inner: ThreadLocalValueInner::SpanId(*span_id),
+                generation,
+            };
         }
 
         // Fall back to buffering
-        ThreadLocalValue::Any(value.to_shared())
+        ThreadLocalValue {
+            inner: ThreadLocalValueInner::Any(value.to_shared()),
+            generation,
+        }
     }
 }
 
 impl ToValue for ThreadLocalValue {
     fn to_value(&self) -> Value {
-        match self {
-            ThreadLocalValue::TraceId(ref value) => value.to_value(),
-            ThreadLocalValue::SpanId(ref value) => value.to_value(),
-            ThreadLocalValue::Any(ref value) => value.to_value(),
+        match self.inner {
+            ThreadLocalValueInner::TraceId(ref value) => value.to_value(),
+            ThreadLocalValueInner::SpanId(ref value) => value.to_value(),
+            ThreadLocalValueInner::Any(ref value) => value.to_value(),
         }
     }
 }
@@ -128,15 +144,18 @@ impl Ctxt for ThreadLocalCtxt {
 
     fn open_root<P: Props>(&self, props: P) -> Self::Frame {
         let mut span = HashMap::new();
+        let generation = 0;
 
         let _ = props.for_each(|k, v| {
-            span.insert(k.to_shared(), ThreadLocalValue::from_value(v));
+            span.entry(k.to_shared())
+                .or_insert_with(|| ThreadLocalValue::from_value(generation, v));
 
             ControlFlow::Continue(())
         });
 
         ThreadLocalCtxtFrame {
             props: Some(Arc::new(span)),
+            generation,
         }
     }
 
@@ -147,10 +166,27 @@ impl Ctxt for ThreadLocalCtxt {
             span.props = Some(Arc::new(HashMap::new()));
         }
 
+        let generation = span.generation.wrapping_add(1);
+        span.generation = generation;
+
         let span_props = Arc::make_mut(span.props.as_mut().unwrap());
 
         let _ = props.for_each(|k, v| {
-            span_props.insert(k.to_shared(), ThreadLocalValue::from_value(v));
+            match span_props.entry(k.to_shared()) {
+                hash_map::Entry::Vacant(entry) => {
+                    // If the map doesn't already contain this property then insert it
+                    entry.insert(ThreadLocalValue::from_value(generation, v));
+                }
+                hash_map::Entry::Occupied(mut entry) => {
+                    let entry = entry.get_mut();
+
+                    if entry.generation != generation {
+                        // If the map does contain this property, and it's from a different generation
+                        // then overwrite it, otherwise keep the value that's already there
+                        *entry = ThreadLocalValue::from_value(generation, v);
+                    }
+                }
+            }
 
             ControlFlow::Continue(())
         });
@@ -191,7 +227,10 @@ fn current(id: usize) -> ThreadLocalCtxtFrame {
         active
             .borrow_mut()
             .entry(id)
-            .or_insert_with(|| ThreadLocalCtxtFrame { props: None })
+            .or_insert_with(|| ThreadLocalCtxtFrame {
+                props: None,
+                generation: 0,
+            })
             .clone()
     })
 }
@@ -200,9 +239,10 @@ fn swap(id: usize, incoming: &mut ThreadLocalCtxtFrame) {
     ACTIVE.with(|active| {
         let mut active = active.borrow_mut();
 
-        let current = active
-            .entry(id)
-            .or_insert_with(|| ThreadLocalCtxtFrame { props: None });
+        let current = active.entry(id).or_insert_with(|| ThreadLocalCtxtFrame {
+            props: None,
+            generation: 0,
+        });
 
         mem::swap(current, incoming);
     })
@@ -284,6 +324,33 @@ mod tests {
         ctxt.clone().with_current(|props| {
             assert_eq!(0, props.props().len());
         });
+    }
+
+    #[test]
+    fn dedup() {
+        let ctxt = ThreadLocalCtxt::new();
+
+        ctxt.clone().with_current(|props| {
+            assert_eq!(0, props.props().len());
+        });
+
+        let mut frame = ctxt.clone().open_push([("a", 1), ("a", 2)]);
+
+        assert_eq!(
+            "1",
+            frame.props.as_ref().unwrap()["a"].to_value().to_string()
+        );
+
+        ctxt.enter(&mut frame);
+
+        let inner = ctxt.clone().open_push([("a", 2), ("a", 3)]);
+
+        assert_eq!(
+            "2",
+            inner.props.as_ref().unwrap()["a"].to_value().to_string()
+        );
+
+        ctxt.exit(&mut frame);
     }
 
     #[test]
