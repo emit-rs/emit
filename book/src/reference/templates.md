@@ -30,7 +30,7 @@ Braces may be escaped by doubling them:
 emit::emit!("Hello, {{user}}");
 ```
 
-Properties use Rust's field value syntax, like you'd write when initializing struct fields. Usually they're a standalone identifer that will capture a property in scope with that name. Properties can also be given a value inline as an expression:
+Properties use Rust's field value syntax, like you'd write when initializing struct fields. Usually they're a standalone identifier that will capture a property in scope with that name. Properties can also be given a value inline as an expression:
 
 ```rust
 # extern crate emit;
