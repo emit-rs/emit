@@ -2,8 +2,6 @@
 An integration test between `emit_otlp` and the OpenTelemetry Collector.
 */
 
-use emit::Emitter;
-
 use std::{
     io::Read,
     path::Path,
