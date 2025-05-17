@@ -22,6 +22,15 @@ let product = "product-456";
 log::info!("{user} added {product} to their cart");
 ```
 
+and in `tracing` it looks like this:
+
+```rust,ignore
+let user = "user-123";
+let product = "product-456";
+
+tracing::event!(tracing::Level::INFO, "{user} added {product} to their cart");
+```
+
 Relying on `std::fmt` makes sense; you get the exact same syntax Rust developers are already familiar with, along with all the work to integrate it into the compiler, optimizations, supporting IDE tooling, and you didn't have to do anything to get it.
 
 `emit`'s macros are a departure from how existing frameworks in this space work. `emit` invents its own syntax using procedural macros instead of deferring to `std::fmt`. This document outlines why `emit`'s macro syntax was chosen and how it works, so it might serve as a data point for others who want to explore this space more in their own projects.
@@ -39,6 +48,15 @@ let user = "user-123";
 let product = "product-456";
 
 log::info!(user, product; "{user} added {product} to their cart");
+```
+
+and in `tracing` it looks like this:
+
+```rust,ignore
+let user = "user-123";
+let product = "product-456";
+
+tracing::event!(tracing::Level::INFO, user, product, "{user} added {product} to their cart");
 ```
 
 It's not unreasonable for `std::fmt` to be largely opaque. Its sole job is to build strings, and minimizing its public API gives it options to optimize the way it does this.
@@ -99,6 +117,24 @@ format!("hello, {x:?}");
 ```
 
 The `?` sigil uses `x`'s `std::fmt::Debug` implementation instead of its `std::fmt::Display`.
+
+In `log`, a similar syntax is used for its choice of capturing trait on values:
+
+```rust,ignore
+log::info!(x:?; "hello");
+```
+
+or:
+
+```rust,ignore
+log::info!(x:debug; "hello");
+```
+
+In `tracing`, it looks like this:
+
+```rust,ignore
+tracing::event!(tracing::Level::INFO, ?x, "hello");
+```
 
 ### `emit`'s capturing syntax
 
@@ -165,9 +201,9 @@ Rust attributes can accept arguments of their own. `emit` opts to re-use struct 
 emit::info!("{x}", #[emit::as_debug(inspect: true)] x);
 ```
 
-The drawback of attributes is that they're less compact than sigil-based flags.
+The drawback of attributes is that they're less compact than sigil-based flags. Unlike sigil-based flags though, attributes can naturally support more complex names and configuration, so are less of a syntactic dead-end.
 
-It's worth noting here that `#[emit::as_debug]` is not magically understood by `emit::info!`. It's just a regular procedural macro that operates on the output of `emit::info!`. `emit`'s attribute macros are based on _hooks_. These are named function calls emitted by previously evaluated macros that the attribute looks for and replaces. As an exmaple, `emit::info!` converts this:
+It's also worth noting that `#[emit::as_debug]` is not magically understood by `emit::info!`. It's just a regular procedural macro that operates on the output of `emit::info!`. `emit`'s attribute macros are based on _hooks_. These are named function calls emitted by previously evaluated macros that the attribute looks for and replaces. As an exmaple, `emit::info!` converts this:
 
 ```rust,ignore
 emit::info!("hello", x);
