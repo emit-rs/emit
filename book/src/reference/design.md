@@ -11,8 +11,6 @@ let product = "product-456";
 let msg = format!("{user} added {product} to their cart");
 ```
 
-`emit`'s macros are a departure from how existing frameworks in this space work. `emit` invents its own syntax using procedural macros instead of deferring to `std::fmt`. This document outlines why `emit`'s macro syntax was chosen and how it works, so it might serve as a data point for others who want to explore this space more in their own projects.
-
 The original motivations for `std::fmt`'s current template syntax [are largely lost to time](https://github.com/rust-lang/rust/pull/8182), but the result is in the same ballpark as similar features in other languages, including [Python](https://peps.python.org/pep-3101/) and [C#](https://learn.microsoft.com/en-us/dotnet/csharp/tutorials/string-interpolation). The complete syntax is documented [here](https://doc.rust-lang.org/std/fmt/index.html#syntax), which we'll revisit a bit later.
 
 Existing diagnostic frameworks use `std::fmt` for their human-readable messages, and so inherit its template syntax. In `log`, it looks like this:
@@ -25,6 +23,8 @@ log::info!("{user} added {product} to their cart");
 ```
 
 Relying on `std::fmt` makes sense; you get the exact same syntax Rust developers are already familiar with, along with all the work to integrate it into the compiler, optimizations, supporting IDE tooling, and you didn't have to do anything to get it.
+
+`emit`'s macros are a departure from how existing frameworks in this space work. `emit` invents its own syntax using procedural macros instead of deferring to `std::fmt`. This document outlines why `emit`'s macro syntax was chosen and how it works, so it might serve as a data point for others who want to explore this space more in their own projects.
 
 ## Why not build on `std::fmt`?
 
