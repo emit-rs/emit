@@ -203,7 +203,7 @@ emit::info!("{x}", #[emit::as_debug(inspect: true)] x);
 
 The drawback of attributes is that they're less compact than sigil-based flags. Unlike sigil-based flags though, attributes can naturally support more complex names and configuration, so are less of a syntactic dead-end.
 
-It's also worth noting that `#[emit::as_debug]` is not magically understood by `emit::info!`. It's just a regular procedural macro that operates on the output of `emit::info!`. `emit`'s attribute macros are based on _hooks_. These are named function calls emitted by previously evaluated macros that the attribute looks for and replaces. As an exmaple, `emit::info!` converts this:
+It's also worth noting that `#[emit::as_debug]` is not magically understood by `emit::info!`. It's just a regular procedural macro that operates on the output of `emit::info!`. `emit`'s attribute macros are based on _hooks_. These are named function calls emitted by previously evaluated macros that the attribute looks for and replaces. As an example, `emit::info!` converts this:
 
 ```rust,ignore
 emit::info!("hello", x);
