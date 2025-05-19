@@ -390,9 +390,6 @@ mod alloc_support {
 
     use alloc::collections::BTreeMap;
 
-    #[cfg(feature = "std")]
-    use std::collections::HashMap;
-
     /**
     The result of calling [`Props::dedup`].
 
@@ -517,9 +514,6 @@ mod alloc_support {
             }
 
             struct Spilled<'a> {
-                #[cfg(feature = "std")]
-                values: HashMap<Str<'a>, Value<'a>>,
-                #[cfg(not(feature = "std"))]
                 values: BTreeMap<Str<'a>, Value<'a>>,
             }
 
