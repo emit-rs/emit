@@ -83,15 +83,6 @@ pub trait Props {
     }
 
     /**
-    Whether the collection is known not to contain any duplicate keys.
-
-    If there's any possibility a key may be duplicated, this method should return `false`.
-    */
-    fn is_unique(&self) -> bool {
-        false
-    }
-
-    /**
     Concatenate `other` to the end of `self`.
     */
     fn and_props<U: Props>(self, other: U) -> And<Self, U>
@@ -123,6 +114,27 @@ pub trait Props {
     {
         Dedup::new(self)
     }
+
+    /**
+    Whether the collection is known not to contain any duplicate keys.
+
+    If there's any possibility a key may be duplicated, this method should return `false`.
+    */
+    fn is_unique(&self) -> bool {
+        false
+    }
+
+    /**
+    A hint on the number of properties in the collection.
+
+    The size is at least the number of times [`Props::for_each`] will call its given closure.
+    If the collection can't determine its size without needing to walk its values then this method will return `None`.
+
+    Implementors are encouraged to override this method with a more efficient implementation.
+    */
+    fn size(&self) -> Option<usize> {
+        None
+    }
 }
 
 impl<'a, P: Props + ?Sized> Props for &'a P {
@@ -144,6 +156,10 @@ impl<'a, P: Props + ?Sized> Props for &'a P {
     fn is_unique(&self) -> bool {
         (**self).is_unique()
     }
+
+    fn size(&self) -> Option<usize> {
+        (**self).size()
+    }
 }
 
 impl<P: Props> Props for Option<P> {
@@ -156,6 +172,34 @@ impl<P: Props> Props for Option<P> {
             None => ControlFlow::Continue(()),
         }
     }
+
+    fn get<'v, K: ToStr>(&'v self, key: K) -> Option<Value<'v>> {
+        match self {
+            Some(props) => props.get(key),
+            None => None,
+        }
+    }
+
+    fn pull<'kv, V: FromValue<'kv>, K: ToStr>(&'kv self, key: K) -> Option<V> {
+        match self {
+            Some(props) => props.pull(key),
+            None => None,
+        }
+    }
+
+    fn is_unique(&self) -> bool {
+        match self {
+            Some(props) => props.is_unique(),
+            None => true,
+        }
+    }
+
+    fn size(&self) -> Option<usize> {
+        match self {
+            Some(props) => props.size(),
+            None => Some(0),
+        }
+    }
 }
 
 #[cfg(feature = "alloc")]
@@ -166,6 +210,10 @@ impl<'a, P: Props + ?Sized + 'a> Props for alloc::boxed::Box<P> {
     ) -> ControlFlow<()> {
         (**self).for_each(for_each)
     }
+
+    fn size(&self) -> Option<usize> {
+        (**self).size()
+    }
 }
 
 #[cfg(feature = "alloc")]
@@ -175,6 +223,10 @@ impl<'a, P: Props + ?Sized + 'a> Props for alloc::sync::Arc<P> {
         for_each: F,
     ) -> ControlFlow<()> {
         (**self).for_each(for_each)
+    }
+
+    fn size(&self) -> Option<usize> {
+        (**self).size()
     }
 }
 
@@ -189,6 +241,10 @@ impl<K: ToStr, V: ToValue> Props for (K, V) {
     fn is_unique(&self) -> bool {
         true
     }
+
+    fn size(&self) -> Option<usize> {
+        Some(1)
+    }
 }
 
 impl<P: Props> Props for [P] {
@@ -202,6 +258,16 @@ impl<P: Props> Props for [P] {
 
         ControlFlow::Continue(())
     }
+
+    fn size(&self) -> Option<usize> {
+        let mut size = 0;
+
+        for p in self {
+            size += p.size()?;
+        }
+
+        Some(size)
+    }
 }
 
 impl<T, const N: usize> Props for [T; N]
@@ -212,7 +278,23 @@ where
         &'kv self,
         for_each: F,
     ) -> ControlFlow<()> {
-        (self as &[_]).for_each(for_each)
+        Props::for_each(self as &[_], for_each)
+    }
+
+    fn get<'v, K: ToStr>(&'v self, key: K) -> Option<Value<'v>> {
+        Props::get(self as &[_], key)
+    }
+
+    fn pull<'kv, V: FromValue<'kv>, K: ToStr>(&'kv self, key: K) -> Option<V> {
+        Props::pull(self as &[_], key)
+    }
+
+    fn is_unique(&self) -> bool {
+        Props::is_unique(self as &[_])
+    }
+
+    fn size(&self) -> Option<usize> {
+        Props::size(self as &[_])
     }
 }
 
@@ -231,6 +313,10 @@ impl Props for Empty {
     fn is_unique(&self) -> bool {
         true
     }
+
+    fn size(&self) -> Option<usize> {
+        Some(0)
+    }
 }
 
 impl<A: Props, B: Props> Props for And<A, B> {
@@ -247,18 +333,35 @@ impl<A: Props, B: Props> Props for And<A, B> {
 
         self.left().get(key).or_else(|| self.right().get(key))
     }
+
+    fn pull<'kv, V: FromValue<'kv>, K: ToStr>(&'kv self, key: K) -> Option<V> {
+        let key = key.borrow();
+
+        self.left().pull(key).or_else(|| self.right().pull(key))
+    }
+
+    fn size(&self) -> Option<usize> {
+        Some(self.left().size()? + self.right().size()?)
+    }
 }
 
 #[cfg(feature = "alloc")]
 mod alloc_support {
     use super::*;
 
+    use core::mem;
+
     use alloc::collections::BTreeMap;
+
+    #[cfg(feature = "std")]
+    use std::collections::HashMap;
 
     /**
     The result of calling [`Props::dedup`].
 
     Properties are de-duplicated by taking the first value for a given key.
+
+    Deduplication may allocate internally.
     */
     #[repr(transparent)]
     pub struct Dedup<P: ?Sized>(P);
@@ -275,21 +378,153 @@ mod alloc_support {
             &'kv self,
             mut for_each: F,
         ) -> ControlFlow<()> {
+            // A filter that checks for duplicate keys, avoiding allocating if possible.
+            //
+            // For small numbers of keys, it's more efficient to simply brute-force compare them
+            // than it is to hash or binary search. In these cases we also avoid allocating for
+            // the filter.
+            enum Filter<'a> {
+                Inline(Inline<'a, 16>),
+                Spilled(Spilled<'a>),
+            }
+
+            impl<'a> Filter<'a> {
+                fn new(size: Option<usize>) -> Self {
+                    match size {
+                        Some(size) if size <= 16 => Filter::Inline(Inline::new()),
+                        _ => Filter::Spilled(Spilled::new()),
+                    }
+                }
+
+                fn insert(&mut self, key: Str<'a>, value: Value<'a>) {
+                    match self {
+                        Filter::Inline(ref mut inline) => match inline.insert(key, value) {
+                            Ok(()) => (),
+                            Err((key, value)) => {
+                                let mut spilled = Spilled::spill(inline.take());
+                                spilled.insert(key, value);
+
+                                *self = Filter::Spilled(spilled);
+                            }
+                        },
+                        Filter::Spilled(ref mut spilled) => spilled.insert(key, value),
+                    }
+                }
+
+                fn take<'b>(&'b mut self) -> impl Iterator<Item = (Str<'a>, Value<'a>)> + 'b {
+                    enum Either<A, B> {
+                        A(A),
+                        B(B),
+                    }
+
+                    impl<T, A: Iterator<Item = T>, B: Iterator<Item = T>> Iterator for Either<A, B> {
+                        type Item = T;
+
+                        fn next(&mut self) -> Option<Self::Item> {
+                            match self {
+                                Either::A(a) => a.next(),
+                                Either::B(b) => b.next(),
+                            }
+                        }
+                    }
+
+                    match self {
+                        Filter::Inline(ref mut inline) => Either::A(inline.take()),
+                        Filter::Spilled(ref mut spilled) => Either::B(spilled.take()),
+                    }
+                }
+            }
+
+            struct Inline<'a, const N: usize> {
+                values: [(Str<'a>, Value<'a>); N],
+                len: usize,
+            }
+
+            impl<'a, const N: usize> Inline<'a, N> {
+                fn new() -> Self {
+                    Inline {
+                        values: [const { (Str::new(""), Value::null()) }; N],
+                        len: 0,
+                    }
+                }
+
+                fn insert(
+                    &mut self,
+                    key: Str<'a>,
+                    value: Value<'a>,
+                ) -> Result<(), (Str<'a>, Value<'a>)> {
+                    if self.len == N {
+                        return Err((key, value));
+                    }
+
+                    for (seen, _) in &self.values[..self.len] {
+                        if *seen == key {
+                            return Ok(());
+                        }
+                    }
+
+                    self.values[self.len] = (key, value);
+                    self.len += 1;
+
+                    Ok(())
+                }
+
+                fn take<'b>(&'b mut self) -> impl Iterator<Item = (Str<'a>, Value<'a>)> + 'b {
+                    let len = self.len;
+                    self.len = 0;
+
+                    (&mut self.values[..len])
+                        .into_iter()
+                        .map(|v| mem::replace(v, (Str::new(""), Value::null())))
+                }
+            }
+
+            struct Spilled<'a> {
+                #[cfg(feature = "std")]
+                values: HashMap<Str<'a>, Value<'a>>,
+                #[cfg(not(feature = "std"))]
+                values: BTreeMap<Str<'a>, Value<'a>>,
+            }
+
+            impl<'a> Spilled<'a> {
+                fn new() -> Self {
+                    Spilled {
+                        values: Default::default(),
+                    }
+                }
+
+                fn spill(seen: impl Iterator<Item = (Str<'a>, Value<'a>)>) -> Self {
+                    Spilled {
+                        values: seen.collect(),
+                    }
+                }
+
+                fn insert(&mut self, key: Str<'a>, value: Value<'a>) {
+                    self.values.entry(key).or_insert(value);
+                }
+
+                fn take<'b>(&'b mut self) -> impl Iterator<Item = (Str<'a>, Value<'a>)> + 'b {
+                    mem::take(&mut self.values).into_iter()
+                }
+            }
+
             // Optimization for props that are already unique
             if self.0.is_unique() {
                 return self.0.for_each(for_each);
             }
 
-            let mut seen = alloc::collections::BTreeMap::new();
+            let mut filter = Filter::new(self.0.size());
 
             // Ignore any break from this iteration
+            // We need to iterate twice here because we need to maintain a reference
+            // to keys to check them for duplicates before passing them by-value to the `for_each` fn
             let _ = self.0.for_each(|key, value| {
-                seen.entry(key).or_insert(value);
+                filter.insert(key, value);
 
                 ControlFlow::Continue(())
             });
 
-            for (key, value) in seen {
+            for (key, value) in filter.take() {
                 for_each(key, value)?;
             }
 
@@ -298,6 +533,10 @@ mod alloc_support {
 
         fn get<'v, K: ToStr>(&'v self, key: K) -> Option<Value<'v>> {
             self.0.get(key)
+        }
+
+        fn pull<'kv, V: FromValue<'kv>, K: ToStr>(&'kv self, key: K) -> Option<V> {
+            self.0.pull(key)
         }
 
         fn is_unique(&self) -> bool {
@@ -327,6 +566,10 @@ mod alloc_support {
 
         fn is_unique(&self) -> bool {
             true
+        }
+
+        fn size(&self) -> Option<usize> {
+            Some(self.len())
         }
     }
 
@@ -416,6 +659,10 @@ mod std_support {
         fn is_unique(&self) -> bool {
             true
         }
+
+        fn size(&self) -> Option<usize> {
+            Some(self.len())
+        }
     }
 
     #[cfg(test)]
@@ -472,6 +719,10 @@ impl<P: Props + ?Sized> Props for AsMap<P> {
 
     fn is_unique(&self) -> bool {
         self.0.is_unique()
+    }
+
+    fn size(&self) -> Option<usize> {
+        self.0.size()
     }
 }
 
@@ -563,6 +814,8 @@ mod internal {
         fn dispatch_get(&self, key: Str) -> Option<Value>;
 
         fn dispatch_is_unique(&self) -> bool;
+
+        fn dispatch_size(&self) -> Option<usize>;
     }
 
     pub trait SealedProps {
@@ -600,6 +853,10 @@ impl<P: Props> internal::DispatchProps for P {
     fn dispatch_is_unique(&self) -> bool {
         self.is_unique()
     }
+
+    fn dispatch_size(&self) -> Option<usize> {
+        self.size()
+    }
 }
 
 impl<'a> Props for dyn ErasedProps + 'a {
@@ -616,6 +873,10 @@ impl<'a> Props for dyn ErasedProps + 'a {
 
     fn is_unique(&self) -> bool {
         self.erase_props().0.dispatch_is_unique()
+    }
+
+    fn size(&self) -> Option<usize> {
+        self.erase_props().0.dispatch_size()
     }
 }
 
@@ -681,6 +942,11 @@ mod tests {
         let props = [("a", 1), ("a", 2)];
 
         assert_eq!(1, props.pull::<i32, _>("a").unwrap());
+    }
+
+    #[test]
+    fn size() {
+        todo!()
     }
 
     #[test]

@@ -1054,4 +1054,8 @@ impl<'a, const N: usize> Props for __PrivateMacroProps<'a, N> {
     fn is_unique(&self) -> bool {
         true
     }
+
+    fn size(&self) -> Option<usize> {
+        Some(self.0.len())
+    }
 }
