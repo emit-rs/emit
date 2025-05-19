@@ -648,7 +648,7 @@ mod alloc_support {
                         assert_eq!(1, v.cast::<i32>().unwrap());
                         bc += 1;
                     }
-                    _ => unreachable!(),
+                    _ => (),
                 }
 
                 ControlFlow::Continue(())
@@ -656,6 +656,144 @@ mod alloc_support {
 
             assert_eq!(1, ac);
             assert_eq!(1, bc);
+        }
+
+        #[test]
+        fn dedup_many() {
+            let props = [
+                ("aumcgyiuerskg", 1),
+                ("blvkmnfdigmgc", 2),
+                ("cvojdfmcisemc", 3),
+                ("dlkgjhmgkvnrd", 4),
+                ("eiugrlgmvmgvd", 5),
+                ("flfbjhmrimrtw", 6),
+                ("goihudvngusrg", 7),
+                ("hfjehrngviuwn", 8),
+                ("ivojitvnjysns", 9),
+                ("jciughnrhiens", 10),
+                ("kofhfuernytnd", 11),
+                ("lvgjrunfwwner", 12),
+                ("mfjerukfnjhns", 13),
+                ("nmorikjnnehsx", 14),
+                ("oiovjrmunsnex", 15),
+                ("pijdshfenrnfq", 16),
+                ("aumcgyiuerskg", 11),
+                ("blvkmnfdigmgc", 21),
+                ("cvojdfmcisemc", 31),
+                ("dlkgjhmgkvnrd", 41),
+                ("eiugrlgmvmgvd", 51),
+                ("flfbjhmrimrtw", 61),
+                ("goihudvngusrg", 71),
+                ("hfjehrngviuwn", 81),
+                ("ivojitvnjysns", 91),
+                ("jciughnrhiens", 101),
+                ("kofhfuernytnd", 111),
+                ("lvgjrunfwwner", 121),
+                ("mfjerukfnjhns", 131),
+                ("nmorikjnnehsx", 141),
+                ("oiovjrmunsnex", 151),
+                ("pijdshfenrnfq", 161),
+            ];
+
+            let deduped = props.dedup();
+
+            let mut ac = 0;
+            let mut bc = 0;
+
+            let _ = deduped.for_each(|k, v| {
+                match k.get() {
+                    "aumcgyiuerskg" => {
+                        assert_eq!(1, v.cast::<i32>().unwrap());
+                        ac += 1;
+                    }
+                    "blvkmnfdigmgc" => {
+                        assert_eq!(2, v.cast::<i32>().unwrap());
+                        bc += 1;
+                    }
+                    _ => (),
+                }
+
+                ControlFlow::Continue(())
+            });
+
+            assert_eq!(1, ac);
+            assert_eq!(1, bc);
+        }
+
+        struct WrongSize<P> {
+            props: P,
+            size: Option<usize>,
+        }
+
+        impl<P: Props> Props for WrongSize<P> {
+            fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
+                &'kv self,
+                for_each: F,
+            ) -> ControlFlow<()> {
+                self.props.for_each(for_each)
+            }
+
+            fn size(&self) -> Option<usize> {
+                self.size
+            }
+        }
+
+        #[test]
+        fn dedup_low_ball_size() {
+            let props = WrongSize {
+                props: [
+                    ("aumcgyiuerskg", 1),
+                    ("blvkmnfdigmgc", 2),
+                    ("cvojdfmcisemc", 3),
+                    ("dlkgjhmgkvnrd", 4),
+                    ("eiugrlgmvmgvd", 5),
+                    ("flfbjhmrimrtw", 6),
+                    ("goihudvngusrg", 7),
+                    ("hfjehrngviuwn", 8),
+                    ("ivojitvnjysns", 9),
+                    ("jciughnrhiens", 10),
+                    ("kofhfuernytnd", 11),
+                    ("lvgjrunfwwner", 12),
+                    ("mfjerukfnjhns", 13),
+                    ("nmorikjnnehsx", 14),
+                    ("oiovjrmunsnex", 15),
+                    ("pijdshfenrnfq", 16),
+                    ("rkjhfngjrfnhf", 17),
+                ],
+                size: Some(1),
+            };
+
+            let deduped = props.dedup();
+
+            let mut count = 0;
+
+            let _ = deduped.for_each(|_, _| {
+                count += 1;
+
+                ControlFlow::Continue(())
+            });
+
+            assert_eq!(17, count);
+        }
+
+        #[test]
+        fn dedup_high_ball_size() {
+            let props = WrongSize {
+                props: [("aumcgyiuerskg", 1)],
+                size: Some(usize::MAX),
+            };
+
+            let deduped = props.dedup();
+
+            let mut count = 0;
+
+            let _ = deduped.for_each(|_, _| {
+                count += 1;
+
+                ControlFlow::Continue(())
+            });
+
+            assert_eq!(1, count);
         }
     }
 }
