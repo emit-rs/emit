@@ -127,10 +127,9 @@ pub trait Props {
     /**
     A hint on the number of properties in the collection.
 
-    The size is at least the number of times [`Props::for_each`] will call its given closure.
-    If the collection can't determine its size without needing to walk its values then this method will return `None`.
+    The returned size isn't guaranteed to be exact, but should not be less than the number of times [`Props::for_each`] will call its given closure.
 
-    Implementors are encouraged to override this method with a more efficient implementation.
+    If the collection can't determine its size without needing to walk its values then this method will return `None`.
     */
     fn size(&self) -> Option<usize> {
         None
@@ -211,6 +210,18 @@ impl<'a, P: Props + ?Sized + 'a> Props for alloc::boxed::Box<P> {
         (**self).for_each(for_each)
     }
 
+    fn get<'v, K: ToStr>(&'v self, key: K) -> Option<Value<'v>> {
+        (**self).get(key)
+    }
+
+    fn pull<'kv, V: FromValue<'kv>, K: ToStr>(&'kv self, key: K) -> Option<V> {
+        (**self).pull(key)
+    }
+
+    fn is_unique(&self) -> bool {
+        (**self).is_unique()
+    }
+
     fn size(&self) -> Option<usize> {
         (**self).size()
     }
@@ -225,6 +236,18 @@ impl<'a, P: Props + ?Sized + 'a> Props for alloc::sync::Arc<P> {
         (**self).for_each(for_each)
     }
 
+    fn get<'v, K: ToStr>(&'v self, key: K) -> Option<Value<'v>> {
+        (**self).get(key)
+    }
+
+    fn pull<'kv, V: FromValue<'kv>, K: ToStr>(&'kv self, key: K) -> Option<V> {
+        (**self).pull(key)
+    }
+
+    fn is_unique(&self) -> bool {
+        (**self).is_unique()
+    }
+
     fn size(&self) -> Option<usize> {
         (**self).size()
     }
@@ -236,6 +259,14 @@ impl<K: ToStr, V: ToValue> Props for (K, V) {
         mut for_each: F,
     ) -> ControlFlow<()> {
         for_each(self.0.to_str(), self.1.to_value())
+    }
+
+    fn get<'v, G: ToStr>(&'v self, key: G) -> Option<Value<'v>> {
+        if key.to_str() == self.0.to_str() {
+            Some(self.1.to_value())
+        } else {
+            None
+        }
     }
 
     fn is_unique(&self) -> bool {
@@ -257,6 +288,18 @@ impl<P: Props> Props for [P] {
         }
 
         ControlFlow::Continue(())
+    }
+
+    fn get<'v, G: ToStr>(&'v self, key: G) -> Option<Value<'v>> {
+        let key = key.to_str();
+
+        for p in self {
+            if let Some(value) = p.get(key.by_ref()) {
+                return Some(value);
+            }
+        }
+
+        None
     }
 
     fn size(&self) -> Option<usize> {
@@ -332,12 +375,6 @@ impl<A: Props, B: Props> Props for And<A, B> {
         let key = key.borrow();
 
         self.left().get(key).or_else(|| self.right().get(key))
-    }
-
-    fn pull<'kv, V: FromValue<'kv>, K: ToStr>(&'kv self, key: K) -> Option<V> {
-        let key = key.borrow();
-
-        self.left().pull(key).or_else(|| self.right().pull(key))
     }
 
     fn size(&self) -> Option<usize> {
@@ -535,12 +572,14 @@ mod alloc_support {
             self.0.get(key)
         }
 
-        fn pull<'kv, V: FromValue<'kv>, K: ToStr>(&'kv self, key: K) -> Option<V> {
-            self.0.pull(key)
-        }
-
         fn is_unique(&self) -> bool {
             true
+        }
+
+        fn size(&self) -> Option<usize> {
+            // NOTE: The size here may be larger than the actual number of properties yielded
+            // after deduplication. `size` isn't required to be exact, just not too small.
+            self.0.size()
         }
     }
 
@@ -946,7 +985,9 @@ mod tests {
 
     #[test]
     fn size() {
-        todo!()
+        let props = [("a", 1), ("b", 2)].and_props([("c", 3)]);
+
+        assert_eq!(Some(3), props.size());
     }
 
     #[test]
