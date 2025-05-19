@@ -83,15 +83,6 @@ pub trait Props {
     }
 
     /**
-    Whether the collection is known not to contain any duplicate keys.
-
-    If there's any possibility a key may be duplicated, this method should return `false`.
-    */
-    fn is_unique(&self) -> bool {
-        false
-    }
-
-    /**
     Concatenate `other` to the end of `self`.
     */
     fn and_props<U: Props>(self, other: U) -> And<Self, U>
@@ -123,6 +114,26 @@ pub trait Props {
     {
         Dedup::new(self)
     }
+
+    /**
+    Whether the collection is known not to contain any duplicate keys.
+
+    If there's any possibility a key may be duplicated, this method should return `false`.
+    */
+    fn is_unique(&self) -> bool {
+        false
+    }
+
+    /**
+    A hint on the number of properties in the collection.
+
+    The returned size isn't guaranteed to be exact, but should not be less than the number of times [`Props::for_each`] will call its given closure.
+
+    If the collection can't determine its size without needing to walk its values then this method will return `None`.
+    */
+    fn size(&self) -> Option<usize> {
+        None
+    }
 }
 
 impl<'a, P: Props + ?Sized> Props for &'a P {
@@ -144,6 +155,10 @@ impl<'a, P: Props + ?Sized> Props for &'a P {
     fn is_unique(&self) -> bool {
         (**self).is_unique()
     }
+
+    fn size(&self) -> Option<usize> {
+        (**self).size()
+    }
 }
 
 impl<P: Props> Props for Option<P> {
@@ -156,6 +171,34 @@ impl<P: Props> Props for Option<P> {
             None => ControlFlow::Continue(()),
         }
     }
+
+    fn get<'v, K: ToStr>(&'v self, key: K) -> Option<Value<'v>> {
+        match self {
+            Some(props) => props.get(key),
+            None => None,
+        }
+    }
+
+    fn pull<'kv, V: FromValue<'kv>, K: ToStr>(&'kv self, key: K) -> Option<V> {
+        match self {
+            Some(props) => props.pull(key),
+            None => None,
+        }
+    }
+
+    fn is_unique(&self) -> bool {
+        match self {
+            Some(props) => props.is_unique(),
+            None => true,
+        }
+    }
+
+    fn size(&self) -> Option<usize> {
+        match self {
+            Some(props) => props.size(),
+            None => Some(0),
+        }
+    }
 }
 
 #[cfg(feature = "alloc")]
@@ -165,6 +208,22 @@ impl<'a, P: Props + ?Sized + 'a> Props for alloc::boxed::Box<P> {
         for_each: F,
     ) -> ControlFlow<()> {
         (**self).for_each(for_each)
+    }
+
+    fn get<'v, K: ToStr>(&'v self, key: K) -> Option<Value<'v>> {
+        (**self).get(key)
+    }
+
+    fn pull<'kv, V: FromValue<'kv>, K: ToStr>(&'kv self, key: K) -> Option<V> {
+        (**self).pull(key)
+    }
+
+    fn is_unique(&self) -> bool {
+        (**self).is_unique()
+    }
+
+    fn size(&self) -> Option<usize> {
+        (**self).size()
     }
 }
 
@@ -176,6 +235,22 @@ impl<'a, P: Props + ?Sized + 'a> Props for alloc::sync::Arc<P> {
     ) -> ControlFlow<()> {
         (**self).for_each(for_each)
     }
+
+    fn get<'v, K: ToStr>(&'v self, key: K) -> Option<Value<'v>> {
+        (**self).get(key)
+    }
+
+    fn pull<'kv, V: FromValue<'kv>, K: ToStr>(&'kv self, key: K) -> Option<V> {
+        (**self).pull(key)
+    }
+
+    fn is_unique(&self) -> bool {
+        (**self).is_unique()
+    }
+
+    fn size(&self) -> Option<usize> {
+        (**self).size()
+    }
 }
 
 impl<K: ToStr, V: ToValue> Props for (K, V) {
@@ -186,8 +261,20 @@ impl<K: ToStr, V: ToValue> Props for (K, V) {
         for_each(self.0.to_str(), self.1.to_value())
     }
 
+    fn get<'v, G: ToStr>(&'v self, key: G) -> Option<Value<'v>> {
+        if key.to_str() == self.0.to_str() {
+            Some(self.1.to_value())
+        } else {
+            None
+        }
+    }
+
     fn is_unique(&self) -> bool {
         true
+    }
+
+    fn size(&self) -> Option<usize> {
+        Some(1)
     }
 }
 
@@ -202,6 +289,28 @@ impl<P: Props> Props for [P] {
 
         ControlFlow::Continue(())
     }
+
+    fn get<'v, G: ToStr>(&'v self, key: G) -> Option<Value<'v>> {
+        let key = key.to_str();
+
+        for p in self {
+            if let Some(value) = p.get(key.by_ref()) {
+                return Some(value);
+            }
+        }
+
+        None
+    }
+
+    fn size(&self) -> Option<usize> {
+        let mut size = 0;
+
+        for p in self {
+            size += p.size()?;
+        }
+
+        Some(size)
+    }
 }
 
 impl<T, const N: usize> Props for [T; N]
@@ -212,7 +321,23 @@ where
         &'kv self,
         for_each: F,
     ) -> ControlFlow<()> {
-        (self as &[_]).for_each(for_each)
+        Props::for_each(self as &[_], for_each)
+    }
+
+    fn get<'v, K: ToStr>(&'v self, key: K) -> Option<Value<'v>> {
+        Props::get(self as &[_], key)
+    }
+
+    fn pull<'kv, V: FromValue<'kv>, K: ToStr>(&'kv self, key: K) -> Option<V> {
+        Props::pull(self as &[_], key)
+    }
+
+    fn is_unique(&self) -> bool {
+        Props::is_unique(self as &[_])
+    }
+
+    fn size(&self) -> Option<usize> {
+        Props::size(self as &[_])
     }
 }
 
@@ -231,6 +356,10 @@ impl Props for Empty {
     fn is_unique(&self) -> bool {
         true
     }
+
+    fn size(&self) -> Option<usize> {
+        Some(0)
+    }
 }
 
 impl<A: Props, B: Props> Props for And<A, B> {
@@ -247,11 +376,17 @@ impl<A: Props, B: Props> Props for And<A, B> {
 
         self.left().get(key).or_else(|| self.right().get(key))
     }
+
+    fn size(&self) -> Option<usize> {
+        Some(self.left().size()? + self.right().size()?)
+    }
 }
 
 #[cfg(feature = "alloc")]
 mod alloc_support {
     use super::*;
+
+    use core::mem;
 
     use alloc::collections::BTreeMap;
 
@@ -259,6 +394,8 @@ mod alloc_support {
     The result of calling [`Props::dedup`].
 
     Properties are de-duplicated by taking the first value for a given key.
+
+    Deduplication may allocate internally.
     */
     #[repr(transparent)]
     pub struct Dedup<P: ?Sized>(P);
@@ -275,21 +412,150 @@ mod alloc_support {
             &'kv self,
             mut for_each: F,
         ) -> ControlFlow<()> {
+            // A filter that checks for duplicate keys, avoiding allocating if possible.
+            //
+            // For small numbers of keys, it's more efficient to simply brute-force compare them
+            // than it is to hash or binary search. In these cases we also avoid allocating for
+            // the filter.
+            enum Filter<'a> {
+                Inline(Inline<'a, 16>),
+                Spilled(Spilled<'a>),
+            }
+
+            impl<'a> Filter<'a> {
+                fn new(size: Option<usize>) -> Self {
+                    match size {
+                        Some(size) if size <= 16 => Filter::Inline(Inline::new()),
+                        _ => Filter::Spilled(Spilled::new()),
+                    }
+                }
+
+                fn insert(&mut self, key: Str<'a>, value: Value<'a>) {
+                    match self {
+                        Filter::Inline(ref mut inline) => match inline.insert(key, value) {
+                            Ok(()) => (),
+                            Err((key, value)) => {
+                                let mut spilled = Spilled::spill(inline.take());
+                                spilled.insert(key, value);
+
+                                *self = Filter::Spilled(spilled);
+                            }
+                        },
+                        Filter::Spilled(ref mut spilled) => spilled.insert(key, value),
+                    }
+                }
+
+                fn take<'b>(&'b mut self) -> impl Iterator<Item = (Str<'a>, Value<'a>)> + 'b {
+                    enum Either<A, B> {
+                        A(A),
+                        B(B),
+                    }
+
+                    impl<T, A: Iterator<Item = T>, B: Iterator<Item = T>> Iterator for Either<A, B> {
+                        type Item = T;
+
+                        fn next(&mut self) -> Option<Self::Item> {
+                            match self {
+                                Either::A(a) => a.next(),
+                                Either::B(b) => b.next(),
+                            }
+                        }
+                    }
+
+                    match self {
+                        Filter::Inline(ref mut inline) => Either::A(inline.take()),
+                        Filter::Spilled(ref mut spilled) => Either::B(spilled.take()),
+                    }
+                }
+            }
+
+            struct Inline<'a, const N: usize> {
+                values: [(Str<'a>, Value<'a>); N],
+                len: usize,
+            }
+
+            impl<'a, const N: usize> Inline<'a, N> {
+                fn new() -> Self {
+                    Inline {
+                        values: [const { (Str::new(""), Value::null()) }; N],
+                        len: 0,
+                    }
+                }
+
+                fn insert(
+                    &mut self,
+                    key: Str<'a>,
+                    value: Value<'a>,
+                ) -> Result<(), (Str<'a>, Value<'a>)> {
+                    if self.len == N {
+                        return Err((key, value));
+                    }
+
+                    for (seen, _) in &self.values[..self.len] {
+                        if *seen == key {
+                            return Ok(());
+                        }
+                    }
+
+                    self.values[self.len] = (key, value);
+                    self.len += 1;
+
+                    Ok(())
+                }
+
+                fn take<'b>(&'b mut self) -> impl Iterator<Item = (Str<'a>, Value<'a>)> + 'b {
+                    let len = self.len;
+                    self.len = 0;
+
+                    (&mut self.values[..len])
+                        .into_iter()
+                        .map(|v| mem::replace(v, (Str::new(""), Value::null())))
+                }
+            }
+
+            struct Spilled<'a> {
+                values: BTreeMap<Str<'a>, Value<'a>>,
+            }
+
+            impl<'a> Spilled<'a> {
+                fn new() -> Self {
+                    Spilled {
+                        values: Default::default(),
+                    }
+                }
+
+                fn spill(seen: impl Iterator<Item = (Str<'a>, Value<'a>)>) -> Self {
+                    Spilled {
+                        values: seen.collect(),
+                    }
+                }
+
+                fn insert(&mut self, key: Str<'a>, value: Value<'a>) {
+                    self.values.entry(key).or_insert(value);
+                }
+
+                fn take<'b>(&'b mut self) -> impl Iterator<Item = (Str<'a>, Value<'a>)> + 'b {
+                    mem::take(&mut self.values).into_iter()
+                }
+            }
+
             // Optimization for props that are already unique
             if self.0.is_unique() {
                 return self.0.for_each(for_each);
             }
 
-            let mut seen = alloc::collections::BTreeMap::new();
+            let mut filter = Filter::new(self.0.size());
 
             // Ignore any break from this iteration
+            // We need to iterate twice here because we need to maintain a reference
+            // to keys to check them for duplicates before passing them by-value to the `for_each` fn
             let _ = self.0.for_each(|key, value| {
-                seen.entry(key).or_insert(value);
+                filter.insert(key, value);
 
                 ControlFlow::Continue(())
             });
 
-            for (key, value) in seen {
+            for (key, value) in filter.take() {
                 for_each(key, value)?;
             }
 
@@ -302,6 +568,12 @@ mod alloc_support {
 
         fn is_unique(&self) -> bool {
             true
+        }
+
+        fn size(&self) -> Option<usize> {
+            // NOTE: The size here may be larger than the actual number of properties yielded
+            // after deduplication. `size` isn't required to be exact, just not too small.
+            self.0.size()
         }
     }
 
@@ -327,6 +599,10 @@ mod alloc_support {
 
         fn is_unique(&self) -> bool {
             true
+        }
+
+        fn size(&self) -> Option<usize> {
+            Some(self.len())
         }
     }
 
@@ -372,7 +648,7 @@ mod alloc_support {
                         assert_eq!(1, v.cast::<i32>().unwrap());
                         bc += 1;
                     }
-                    _ => unreachable!(),
+                    _ => (),
                 }
 
                 ControlFlow::Continue(())
@@ -380,6 +656,144 @@ mod alloc_support {
 
             assert_eq!(1, ac);
             assert_eq!(1, bc);
+        }
+
+        #[test]
+        fn dedup_many() {
+            let props = [
+                ("aumcgyiuerskg", 1),
+                ("blvkmnfdigmgc", 2),
+                ("cvojdfmcisemc", 3),
+                ("dlkgjhmgkvnrd", 4),
+                ("eiugrlgmvmgvd", 5),
+                ("flfbjhmrimrtw", 6),
+                ("goihudvngusrg", 7),
+                ("hfjehrngviuwn", 8),
+                ("ivojitvnjysns", 9),
+                ("jciughnrhiens", 10),
+                ("kofhfuernytnd", 11),
+                ("lvgjrunfwwner", 12),
+                ("mfjerukfnjhns", 13),
+                ("nmorikjnnehsx", 14),
+                ("oiovjrmunsnex", 15),
+                ("pijdshfenrnfq", 16),
+                ("aumcgyiuerskg", 11),
+                ("blvkmnfdigmgc", 21),
+                ("cvojdfmcisemc", 31),
+                ("dlkgjhmgkvnrd", 41),
+                ("eiugrlgmvmgvd", 51),
+                ("flfbjhmrimrtw", 61),
+                ("goihudvngusrg", 71),
+                ("hfjehrngviuwn", 81),
+                ("ivojitvnjysns", 91),
+                ("jciughnrhiens", 101),
+                ("kofhfuernytnd", 111),
+                ("lvgjrunfwwner", 121),
+                ("mfjerukfnjhns", 131),
+                ("nmorikjnnehsx", 141),
+                ("oiovjrmunsnex", 151),
+                ("pijdshfenrnfq", 161),
+            ];
+
+            let deduped = props.dedup();
+
+            let mut ac = 0;
+            let mut bc = 0;
+
+            let _ = deduped.for_each(|k, v| {
+                match k.get() {
+                    "aumcgyiuerskg" => {
+                        assert_eq!(1, v.cast::<i32>().unwrap());
+                        ac += 1;
+                    }
+                    "blvkmnfdigmgc" => {
+                        assert_eq!(2, v.cast::<i32>().unwrap());
+                        bc += 1;
+                    }
+                    _ => (),
+                }
+
+                ControlFlow::Continue(())
+            });
+
+            assert_eq!(1, ac);
+            assert_eq!(1, bc);
+        }
+
+        struct WrongSize<P> {
+            props: P,
+            size: Option<usize>,
+        }
+
+        impl<P: Props> Props for WrongSize<P> {
+            fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
+                &'kv self,
+                for_each: F,
+            ) -> ControlFlow<()> {
+                self.props.for_each(for_each)
+            }
+
+            fn size(&self) -> Option<usize> {
+                self.size
+            }
+        }
+
+        #[test]
+        fn dedup_low_ball_size() {
+            let props = WrongSize {
+                props: [
+                    ("aumcgyiuerskg", 1),
+                    ("blvkmnfdigmgc", 2),
+                    ("cvojdfmcisemc", 3),
+                    ("dlkgjhmgkvnrd", 4),
+                    ("eiugrlgmvmgvd", 5),
+                    ("flfbjhmrimrtw", 6),
+                    ("goihudvngusrg", 7),
+                    ("hfjehrngviuwn", 8),
+                    ("ivojitvnjysns", 9),
+                    ("jciughnrhiens", 10),
+                    ("kofhfuernytnd", 11),
+                    ("lvgjrunfwwner", 12),
+                    ("mfjerukfnjhns", 13),
+                    ("nmorikjnnehsx", 14),
+                    ("oiovjrmunsnex", 15),
+                    ("pijdshfenrnfq", 16),
+                    ("rkjhfngjrfnhf", 17),
+                ],
+                size: Some(1),
+            };
+
+            let deduped = props.dedup();
+
+            let mut count = 0;
+
+            let _ = deduped.for_each(|_, _| {
+                count += 1;
+
+                ControlFlow::Continue(())
+            });
+
+            assert_eq!(17, count);
+        }
+
+        #[test]
+        fn dedup_high_ball_size() {
+            let props = WrongSize {
+                props: [("aumcgyiuerskg", 1)],
+                size: Some(usize::MAX),
+            };
+
+            let deduped = props.dedup();
+
+            let mut count = 0;
+
+            let _ = deduped.for_each(|_, _| {
+                count += 1;
+
+                ControlFlow::Continue(())
+            });
+
+            assert_eq!(1, count);
         }
     }
 }
@@ -415,6 +829,10 @@ mod std_support {
 
         fn is_unique(&self) -> bool {
             true
+        }
+
+        fn size(&self) -> Option<usize> {
+            Some(self.len())
         }
     }
 
@@ -472,6 +890,10 @@ impl<P: Props + ?Sized> Props for AsMap<P> {
 
     fn is_unique(&self) -> bool {
         self.0.is_unique()
+    }
+
+    fn size(&self) -> Option<usize> {
+        self.0.size()
     }
 }
 
@@ -563,6 +985,8 @@ mod internal {
         fn dispatch_get(&self, key: Str) -> Option<Value>;
 
         fn dispatch_is_unique(&self) -> bool;
+
+        fn dispatch_size(&self) -> Option<usize>;
     }
 
     pub trait SealedProps {
@@ -600,6 +1024,10 @@ impl<P: Props> internal::DispatchProps for P {
     fn dispatch_is_unique(&self) -> bool {
         self.is_unique()
     }
+
+    fn dispatch_size(&self) -> Option<usize> {
+        self.size()
+    }
 }
 
 impl<'a> Props for dyn ErasedProps + 'a {
@@ -616,6 +1044,10 @@ impl<'a> Props for dyn ErasedProps + 'a {
 
     fn is_unique(&self) -> bool {
         self.erase_props().0.dispatch_is_unique()
+    }
+
+    fn size(&self) -> Option<usize> {
+        self.erase_props().0.dispatch_size()
     }
 }
 
@@ -681,6 +1113,13 @@ mod tests {
         let props = [("a", 1), ("a", 2)];
 
         assert_eq!(1, props.pull::<i32, _>("a").unwrap());
+    }
+
+    #[test]
+    fn size() {
+        let props = [("a", 1), ("b", 2)].and_props([("c", 3)]);
+
+        assert_eq!(Some(3), props.size());
     }
 
     #[test]

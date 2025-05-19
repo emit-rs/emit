@@ -127,7 +127,7 @@ impl<'v> Value<'v> {
     The absence of any meaningful value.
     */
     #[track_caller]
-    pub fn null() -> Self {
+    pub const fn null() -> Self {
         Value(value_bag::ValueBag::empty())
     }
 
