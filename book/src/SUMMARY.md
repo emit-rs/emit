@@ -50,4 +50,5 @@
     - [Property capturing](./reference/property-capturing.md)
     - [Property attributes](./reference/property-attributes.md)
     - [Control parameters](./reference/control-parameters.md)
+    - [Acknowledgements](./reference/acknowledgements.md)
     - [Design notes](./reference/design.md)
