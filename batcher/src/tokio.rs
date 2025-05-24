@@ -44,6 +44,18 @@ where
 }
 
 /**
+Run [`Receiver::exec`] on the current `tokio` runtime.
+*/
+pub async fn exec<T: Channel, F: Future<Output = Result<(), BatchError<T>>>>(
+    receiver: Receiver<T>,
+    on_batch: impl FnMut(T) -> F,
+) {
+    receiver
+        .exec(|delay| tokio::time::sleep(delay), on_batch)
+        .await
+}
+
+/**
 Wait for a channel potentially running on a `tokio` thread to process all items active at the point this call was made.
 
 If the current thread is a `tokio` thread then this call will be executed using [`tokio::task::block_in_place`] to avoid starving other work.

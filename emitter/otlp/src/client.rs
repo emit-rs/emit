@@ -19,11 +19,10 @@ use std::{
     future::Future,
     pin::Pin,
     sync::Arc,
-    thread,
     time::{Duration, Instant},
 };
 
-use self::http::HttpConnection;
+use self::http::{HttpConnection, HttpVersion};
 
 mod http;
 mod logs;
@@ -34,6 +33,19 @@ pub use self::{logs::*, metrics::*, traces::*};
 
 const DEFAULT_MAX_REQUEST_SIZE_BYTES: usize = 1024 * 1024; // 1MiB
 const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
+#[cfg(not(all(
+    target_arch = "wasm32",
+    target_vendor = "unknown",
+    target_os = "unknown"
+)))]
+type Handle = std::thread::JoinHandle<()>;
+#[cfg(all(
+    target_arch = "wasm32",
+    target_vendor = "unknown",
+    target_os = "unknown"
+))]
+type Handle = ();
 
 /**
 An [`emit::Emitter`] that sends diagnostic events via the OpenTelemetry Protocol (OTLP).
@@ -61,7 +73,7 @@ struct OtlpInner {
         emit_batcher::Sender<Channel>,
     )>,
     metrics: Arc<InternalMetrics>,
-    _handle: thread::JoinHandle<()>,
+    _handle: Handle,
 }
 
 impl Otlp {
@@ -244,68 +256,86 @@ impl OtlpBuilder {
             None => (None, None),
         };
 
-        let receive = async move {
-            let processors =
-                FuturesUnordered::<Pin<Box<dyn Future<Output = ()> + Send + 'static>>>::new();
+        let handle = {
+            #[cfg(not(all(
+                target_arch = "wasm32",
+                target_vendor = "unknown",
+                target_os = "unknown"
+            )))]
+            {
+                let receive = async move {
+                    let processors = FuturesUnordered::<
+                        Pin<Box<dyn Future<Output = ()> + Send + 'static>>,
+                    >::new();
 
-            if let Some((transport, receiver)) = process_otlp_logs {
-                let transport = Arc::new(transport);
+                    if let Some((transport, receiver)) = process_otlp_logs {
+                        let transport = Arc::new(transport);
 
-                processors.push(Box::pin(receiver.exec(
-                    |wait| tokio::time::sleep(wait),
-                    move |batch| {
-                        let transport = transport.clone();
+                        processors.push(Box::pin(emit_batcher::tokio::exec(
+                            receiver,
+                            move |batch| {
+                                let transport = transport.clone();
 
-                        async move { transport.send(batch).await }
-                    },
-                )));
+                                async move { transport.send(batch).await }
+                            },
+                        )));
+                    }
+
+                    if let Some((transport, receiver)) = process_otlp_traces {
+                        let transport = Arc::new(transport);
+
+                        processors.push(Box::pin(emit_batcher::tokio::exec(
+                            receiver,
+                            move |batch| {
+                                let transport = transport.clone();
+
+                                async move { transport.send(batch).await }
+                            },
+                        )));
+                    }
+
+                    if let Some((transport, receiver)) = process_otlp_metrics {
+                        let transport = Arc::new(transport);
+
+                        processors.push(Box::pin(emit_batcher::tokio::exec(
+                            receiver,
+                            move |batch| {
+                                let transport = transport.clone();
+
+                                async move { transport.send(batch).await }
+                            },
+                        )));
+                    }
+
+                    // Process batches from each signal independently
+                    // This ensures one signal becoming unavailable doesn't
+                    // block the others
+                    let _ = processors.into_future().await;
+                };
+
+                // Spawn a background thread to process batches
+                // This is a safe way to ensure users of `Otlp` can never
+                // deadlock waiting on the processing of batches
+                std::thread::Builder::new()
+                    .name("emit_otlp_worker".into())
+                    .spawn(move || {
+                        tokio::runtime::Builder::new_current_thread()
+                            .enable_all()
+                            .build()
+                            .unwrap()
+                            .block_on(receive);
+                    })
+                    .map_err(|e| Error::new("failed to spawn background worker", e))?
             }
-
-            if let Some((transport, receiver)) = process_otlp_traces {
-                let transport = Arc::new(transport);
-
-                processors.push(Box::pin(receiver.exec(
-                    |wait| tokio::time::sleep(wait),
-                    move |batch| {
-                        let transport = transport.clone();
-
-                        async move { transport.send(batch).await }
-                    },
-                )));
+            #[cfg(all(
+                target_arch = "wasm32",
+                target_vendor = "unknown",
+                target_os = "unknown"
+            ))]
+            {
+                ()
             }
-
-            if let Some((transport, receiver)) = process_otlp_metrics {
-                let transport = Arc::new(transport);
-
-                processors.push(Box::pin(receiver.exec(
-                    |wait| tokio::time::sleep(wait),
-                    move |batch| {
-                        let transport = transport.clone();
-
-                        async move { transport.send(batch).await }
-                    },
-                )));
-            }
-
-            // Process batches from each signal independently
-            // This ensures one signal becoming unavailable doesn't
-            // block the others
-            let _ = processors.into_future().await;
         };
-
-        // Spawn a background thread to process batches
-        // This is a safe way to ensure users of `Otlp` can never
-        // deadlock waiting on the processing of batches
-        let handle = std::thread::Builder::new()
-            .name("emit_otlp_worker".into())
-            .spawn(move || {
-                tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .unwrap()
-                    .block_on(receive);
-            })
-            .map_err(|e| Error::new("failed to spawn background worker", e))?;
 
         Ok(OtlpInner {
             otlp_logs,
@@ -409,7 +439,8 @@ impl OtlpTransportBuilder {
         Ok(match self.protocol {
             // Configure the transport to use regular HTTP requests
             Protocol::Http => OtlpTransport::Http {
-                http: HttpConnection::http1(
+                http: HttpConnection::new(
+                    HttpVersion::Http1,
                     metrics.clone(),
                     url,
                     self.allow_compression,
@@ -444,7 +475,8 @@ impl OtlpTransportBuilder {
             // a simple message framing protocol and carry status codes in a trailer
             // instead of the response status
             Protocol::Grpc => OtlpTransport::Http {
-                http: HttpConnection::http2(
+                http: HttpConnection::new(
+                    HttpVersion::Http2,
                     metrics.clone(),
                     url,
                     self.allow_compression,
