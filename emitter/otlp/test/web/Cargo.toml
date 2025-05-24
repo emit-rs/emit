@@ -1,0 +1,25 @@
+[package]
+name = "emit_otlp_test_web"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies.emit]
+version = "1"
+default-features = false
+features = ["std", "implicit_rt"]
+
+[dependencies.emit_otlp]
+path = "../../"
+
+[dependencies.emit_web]
+version = "0.2"
+
+[dependencies.wasm-bindgen]
+version = "0.2"
+
+[dependencies.console_error_panic_hook]
+version = "0.1"

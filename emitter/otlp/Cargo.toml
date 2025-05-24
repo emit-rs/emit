@@ -22,10 +22,15 @@ path = "../../"
 features = ["std", "sval", "implicit_internal_rt"]
 default-features = false
 
-[dependencies.emit_batcher]
+[target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dependencies.emit_batcher]
 version = "1.9.0"
 path = "../../batcher"
 features = ["tokio"]
+
+[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.emit_batcher]
+version = "1.9.0"
+path = "../../batcher"
+features = ["web"]
 
 [dependencies.sval]
 version = "2.10"
@@ -53,38 +58,38 @@ features = ["std"]
 version = "2"
 features = ["std"]
 
-[dependencies.tokio]
+[target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dependencies.tokio]
 version = "1"
 default-features = false
 features = ["rt-multi-thread", "sync", "net"]
 
-[dependencies.hyper]
+[target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dependencies.hyper]
 version = "1"
 default-features = false
 features = ["client", "http1", "http2"]
 
-[dependencies.futures-util]
-version = "0.3"
-default-features = false
-features = ["std"]
-
-[dependencies.tokio-rustls]
+[target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dependencies.tokio-rustls]
 version = "0.26"
 optional = true
 default-features = false
 features = ["ring"]
 
-[dependencies.rustls-native-certs]
+[target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dependencies.rustls-native-certs]
 version = "0.8"
 optional = true
 
-[dependencies.tokio-native-tls]
+[target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dependencies.tokio-native-tls]
 version = "0.3"
 optional = true
 
 [dependencies.flate2]
 version = "1"
 optional = true
+
+[dependencies.futures-util]
+version = "0.3"
+default-features = false
+features = ["std"]
 
 [dependencies.bytes]
 version = "1"
