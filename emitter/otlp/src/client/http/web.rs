@@ -3,14 +3,26 @@ HTTP Transport based on `fetch`.
 
 This transport supports HTTP1.
 */
+#![allow(warnings)]
 
+use std::io::Read;
 use std::{fmt, future::Future, sync::Arc, time::Duration};
 
+use bytes::Buf;
+use js_sys::{Promise, Uint8Array};
+use wasm_bindgen::prelude::*;
+use wasm_bindgen_futures::JsFuture;
+
 use crate::{
-    client::http::HttpContent, data::EncodedPayload, internal_metrics::InternalMetrics, Error,
+    client::http::HttpContent,
+    data::{EncodedPayload, PreEncodedCursor},
+    internal_metrics::InternalMetrics,
+    Error,
 };
 
-pub(crate) struct HttpConnection {}
+pub(crate) struct HttpConnection {
+    uri: HttpUri,
+}
 
 impl HttpConnection {
     pub fn new<F: Future<Output = Result<Vec<u8>, Error>> + Send + 'static>(
@@ -26,10 +38,16 @@ impl HttpConnection {
     }
 
     pub fn uri(&self) -> &HttpUri {
-        todo!()
+        &self.uri
     }
 
     pub async fn send(&self, body: EncodedPayload, timeout: Duration) -> Result<Vec<u8>, Error> {
+        JsFuture::from(fetch(
+            self.uri.to_string(),
+            FetchInit::new(body.into_cursor())?,
+        ))
+        .await;
+
         todo!()
     }
 }
@@ -40,29 +58,31 @@ pub(crate) enum HttpVersion {
     Http2,
 }
 
-pub(crate) struct HttpUri {}
+pub(crate) struct HttpUri(http::Uri);
 
 impl fmt::Display for HttpUri {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        todo!()
+        fmt::Display::fmt(&self.0, f)
     }
 }
 
 impl HttpUri {
     pub fn is_https(&self) -> bool {
-        todo!()
+        self.0.scheme() == Some(&http::uri::Scheme::HTTPS)
     }
 
     pub fn host(&self) -> &str {
-        todo!()
+        self.0.host().expect("invalid URI")
     }
 
     pub fn authority(&self) -> &str {
-        todo!()
+        self.0.authority().expect("invalid URI").as_ref()
     }
 
     pub fn port(&self) -> u16 {
-        todo!()
+        self.0
+            .port_u16()
+            .unwrap_or_else(|| if self.is_https() { 443 } else { 80 })
     }
 }
 
@@ -80,4 +100,42 @@ impl HttpResponse {
     ) -> Result<(), Error> {
         todo!()
     }
+}
+
+#[wasm_bindgen]
+pub struct FetchInit {
+    body: Uint8Array,
+}
+
+impl FetchInit {
+    fn new(mut body: PreEncodedCursor) -> Result<Self, Error> {
+        // TODO: See if we can avoid the extra buffering here, possibly by writing into a Uint8Array to begin with
+        let length = body.remaining().try_into().map_err(|e| {
+            Error::new(
+                format!("Cannot send a request with more than {} bytes", u32::MAX),
+                e,
+            )
+        })?;
+
+        let mut buf = Uint8Array::new_with_length(length);
+
+        let mut offset = 0;
+        while body.remaining() > 0 {
+            let chunk = body.chunk();
+
+            // SAFETY: The view is valid for the duration of `set`, which copies elements
+            unsafe { buf.set(&Uint8Array::view(chunk), offset as u32) };
+
+            offset += chunk.len();
+            body.advance(chunk.len());
+        }
+
+        Ok(FetchInit { body: buf })
+    }
+}
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_name = "fetch")]
+    fn fetch(uri: String, init: FetchInit) -> Promise;
 }

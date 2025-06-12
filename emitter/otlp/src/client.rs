@@ -13,16 +13,42 @@ use crate::{
     Error, OtlpMetrics,
 };
 use emit_batcher::BatchError;
-use futures_util::{stream::FuturesUnordered, StreamExt};
 use std::{
     collections::HashMap,
-    future::Future,
-    pin::Pin,
     sync::Arc,
     time::{Duration, Instant},
 };
 
-use self::http::{HttpConnection, HttpVersion};
+use self::{
+    http::{HttpConnection, HttpVersion},
+    imp::Handle,
+};
+
+#[cfg(not(all(
+    target_arch = "wasm32",
+    target_vendor = "unknown",
+    target_os = "unknown"
+)))]
+#[path = "client/tokio.rs"]
+mod imp;
+
+#[cfg(all(
+    feature = "web",
+    target_arch = "wasm32",
+    target_vendor = "unknown",
+    target_os = "unknown"
+))]
+#[path = "client/web.rs"]
+mod imp;
+
+#[cfg(all(
+    not(feature = "web"),
+    target_arch = "wasm32",
+    target_vendor = "unknown",
+    target_os = "unknown"
+))]
+#[path = "client/stub.rs"]
+mod imp;
 
 mod http;
 mod logs;
@@ -33,19 +59,6 @@ pub use self::{logs::*, metrics::*, traces::*};
 
 const DEFAULT_MAX_REQUEST_SIZE_BYTES: usize = 1024 * 1024; // 1MiB
 const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
-
-#[cfg(not(all(
-    target_arch = "wasm32",
-    target_vendor = "unknown",
-    target_os = "unknown"
-)))]
-type Handle = std::thread::JoinHandle<()>;
-#[cfg(all(
-    target_arch = "wasm32",
-    target_vendor = "unknown",
-    target_os = "unknown"
-))]
-type Handle = ();
 
 /**
 An [`emit::Emitter`] that sends diagnostic events via the OpenTelemetry Protocol (OTLP).
@@ -202,7 +215,7 @@ impl OtlpBuilder {
     pub fn spawn(self) -> Otlp {
         let metrics = Arc::new(InternalMetrics::default());
 
-        let inner = match self.spawn_inner(metrics.clone()) {
+        let inner = match self.try_spawn_inner(metrics.clone()) {
             Ok(inner) => Some(inner),
             Err(err) => {
                 emit::error!(
@@ -219,7 +232,7 @@ impl OtlpBuilder {
         Otlp { metrics, inner }
     }
 
-    fn spawn_inner(self, metrics: Arc<InternalMetrics>) -> Result<OtlpInner, Error> {
+    fn try_spawn_inner(self, metrics: Arc<InternalMetrics>) -> Result<OtlpInner, Error> {
         let (otlp_logs, process_otlp_logs) = match self.otlp_logs {
             Some(builder) => {
                 let (encoder, transport) =
@@ -256,94 +269,15 @@ impl OtlpBuilder {
             None => (None, None),
         };
 
-        let handle = {
-            #[cfg(not(all(
-                target_arch = "wasm32",
-                target_vendor = "unknown",
-                target_os = "unknown"
-            )))]
-            {
-                let receive = async move {
-                    let processors = FuturesUnordered::<
-                        Pin<Box<dyn Future<Output = ()> + Send + 'static>>,
-                    >::new();
-
-                    if let Some((transport, receiver)) = process_otlp_logs {
-                        let transport = Arc::new(transport);
-
-                        processors.push(Box::pin(emit_batcher::tokio::exec(
-                            receiver,
-                            move |batch| {
-                                let transport = transport.clone();
-
-                                async move { transport.send(batch).await }
-                            },
-                        )));
-                    }
-
-                    if let Some((transport, receiver)) = process_otlp_traces {
-                        let transport = Arc::new(transport);
-
-                        processors.push(Box::pin(emit_batcher::tokio::exec(
-                            receiver,
-                            move |batch| {
-                                let transport = transport.clone();
-
-                                async move { transport.send(batch).await }
-                            },
-                        )));
-                    }
-
-                    if let Some((transport, receiver)) = process_otlp_metrics {
-                        let transport = Arc::new(transport);
-
-                        processors.push(Box::pin(emit_batcher::tokio::exec(
-                            receiver,
-                            move |batch| {
-                                let transport = transport.clone();
-
-                                async move { transport.send(batch).await }
-                            },
-                        )));
-                    }
-
-                    // Process batches from each signal independently
-                    // This ensures one signal becoming unavailable doesn't
-                    // block the others
-                    let _ = processors.into_future().await;
-                };
-
-                // Spawn a background thread to process batches
-                // This is a safe way to ensure users of `Otlp` can never
-                // deadlock waiting on the processing of batches
-                std::thread::Builder::new()
-                    .name("emit_otlp_worker".into())
-                    .spawn(move || {
-                        tokio::runtime::Builder::new_current_thread()
-                            .enable_all()
-                            .build()
-                            .unwrap()
-                            .block_on(receive);
-                    })
-                    .map_err(|e| Error::new("failed to spawn background worker", e))?
-            }
-            #[cfg(all(
-                target_arch = "wasm32",
-                target_vendor = "unknown",
-                target_os = "unknown"
-            ))]
-            {
-                ()
-            }
-        };
-
-        Ok(OtlpInner {
+        Self::try_spawn_inner_imp(
             otlp_logs,
+            process_otlp_logs,
             otlp_traces,
+            process_otlp_traces,
             otlp_metrics,
+            process_otlp_metrics,
             metrics,
-            _handle: handle,
-        })
+        )
     }
 }
 

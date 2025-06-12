@@ -7,11 +7,21 @@
 mod imp;
 
 #[cfg(all(
+    feature = "web",
     target_arch = "wasm32",
     target_vendor = "unknown",
     target_os = "unknown"
 ))]
 #[path = "http/web.rs"]
+mod imp;
+
+#[cfg(all(
+    not(feature = "web"),
+    target_arch = "wasm32",
+    target_vendor = "unknown",
+    target_os = "unknown"
+))]
+#[path = "http/stub.rs"]
 mod imp;
 
 pub(crate) use self::imp::*;
