@@ -3,13 +3,11 @@ HTTP Transport based on `fetch`.
 
 This transport supports HTTP1.
 */
-#![allow(warnings)]
 
-use std::io::Read;
-use std::{fmt, future::Future, sync::Arc, time::Duration};
+use std::{borrow::Cow, error, fmt, future::Future, io::Read, sync::Arc, time::Duration};
 
 use bytes::Buf;
-use js_sys::{Promise, Uint8Array};
+use js_sys::{Map, Object, Promise, Uint8Array};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 
@@ -23,6 +21,7 @@ use crate::{
 pub(crate) struct HttpConnection {
     uri: HttpUri,
     allow_compression: bool,
+    headers: Vec<(String, String)>,
     request: Box<dyn Fn(HttpContent) -> Result<HttpContent, Error> + Send + Sync>,
     metrics: Arc<InternalMetrics>,
 }
@@ -45,7 +44,9 @@ impl HttpConnection {
     }
 
     pub async fn send(&self, body: EncodedPayload, timeout: Duration) -> Result<Vec<u8>, Error> {
-        let body = HttpContent::new(
+        let resource = self.uri.to_string();
+
+        let content = HttpContent::new(
             self.allow_compression,
             &self.uri,
             &self.request,
@@ -53,7 +54,20 @@ impl HttpConnection {
             body,
         )?;
 
-        JsFuture::from(fetch(self.uri.to_string(), FetchInit::new(body)?)).await;
+        let init = FetchInit {
+            headers: http_headers(
+                content.iter_headers().chain(
+                    self.headers
+                        .iter()
+                        .map(|(k, v)| (&**k, Cow::Borrowed(&**v))),
+                ),
+            ),
+            body: http_body(content)?,
+        };
+
+        fetch(self.uri.to_string(), init)
+            .await
+            .map_err(|e| Error::new("failed to send fetch request", JsError::new(e)))?;
 
         todo!()
     }
@@ -109,41 +123,79 @@ impl HttpResponse {
     }
 }
 
-#[wasm_bindgen]
-pub struct FetchInit {
-    body: Uint8Array,
-    // TODO: Headers
+struct JsError(String);
+
+impl fmt::Debug for JsError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(&self.0, f)
+    }
 }
 
-impl FetchInit {
-    fn new(mut body: HttpContent) -> Result<Self, Error> {
-        // Buffer the body into a JavaScript array
-        let length = body
-            .content_len()
-            .try_into()
-            .map_err(|e| Error::new("the body content cannot be converted into a Uint8Array", e))?;
+impl fmt::Display for JsError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
 
-        let mut buf = Uint8Array::new_with_length(length);
+impl error::Error for JsError {}
 
-        let mut offset = 0;
-        while let Some(mut body) = body.next_content_cursor() {
-            while body.remaining() > 0 {
-                let chunk = body.chunk();
-
-                // SAFETY: The view is valid for the duration of `set`, which copies elements
-                unsafe { buf.set(&Uint8Array::view(chunk), offset as u32) };
-
-                offset += chunk.len();
-                body.advance(chunk.len());
-            }
+impl JsError {
+    fn new(err: JsValue) -> Self {
+        if let Some(err) = err.as_string() {
+            return JsError(err);
         }
 
-        Ok(FetchInit { body: buf })
+        let err = Object::from(err);
+
+        JsError(err.to_string().into())
     }
 }
 
 #[wasm_bindgen]
+pub struct FetchInit {
+    body: Uint8Array,
+    headers: Map,
+}
+
+fn http_body(mut body: HttpContent) -> Result<Uint8Array, Error> {
+    let length = body
+        .content_len()
+        .try_into()
+        .map_err(|e| Error::new("the body content cannot be converted into a Uint8Array", e))?;
+
+    let mut buf = Uint8Array::new_with_length(length);
+
+    let mut offset = 0;
+    while let Some(mut body) = body.next_content_cursor() {
+        while body.remaining() > 0 {
+            let chunk = body.chunk();
+
+            // SAFETY: The view is valid for the duration of `set`, which copies elements
+            unsafe { buf.set(&Uint8Array::view(chunk), offset as u32) };
+
+            offset += chunk.len();
+            body.advance(chunk.len());
+        }
+    }
+
+    Ok(buf)
+}
+
+fn http_headers(headers: impl Iterator<Item = (impl AsRef<str>, impl AsRef<str>)>) -> Map {
+    let mut buf = Map::new();
+
+    for (k, v) in headers {
+        let name = JsValue::from(k.as_ref());
+        let value = JsValue::from(v.as_ref());
+
+        buf.set(&name, &value);
+    }
+
+    buf
+}
+
+#[wasm_bindgen]
 extern "C" {
-    #[wasm_bindgen(js_name = "fetch")]
-    fn fetch(uri: String, init: FetchInit) -> Promise;
+    #[wasm_bindgen(js_name = "fetch", catch)]
+    async fn fetch(uri: String, init: FetchInit) -> Result<JsValue, JsValue>;
 }

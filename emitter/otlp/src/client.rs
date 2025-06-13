@@ -415,7 +415,7 @@ impl OtlpTransportBuilder {
                     url,
                     self.allow_compression,
                     self.headers,
-                    |mut req| {
+                    |req| {
                         let content_type_header = match req.content_type_header() {
                             "application/x-protobuf" => "application/grpc+proto",
                             content_type => {
@@ -432,8 +432,9 @@ impl OtlpTransportBuilder {
 
                         Ok(
                             // If the content is compressed then set the gRPC compression header byte for it
-                            if let Some(compression) = req.take_content_encoding_header() {
-                                req.with_content_type_header(content_type_header)
+                            if let Some(compression) = req.content_encoding_header() {
+                                req.with_content_encoding_header(None)
+                                    .with_content_type_header(content_type_header)
                                     .with_headers(match compression {
                                         "gzip" => &[("grpc-encoding", "gzip")],
                                         compression => {

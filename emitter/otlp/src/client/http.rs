@@ -26,7 +26,7 @@ mod imp;
 
 pub(crate) use self::imp::*;
 
-use std::io::Cursor;
+use std::{borrow::Cow, io::Cursor};
 
 use bytes::Buf;
 
@@ -144,13 +144,36 @@ impl HttpContent {
         self
     }
 
-    pub fn take_content_encoding_header(&mut self) -> Option<&'static str> {
-        self.content_encoding_header.take()
+    pub fn with_content_encoding_header(mut self, content_encoding: Option<&'static str>) -> Self {
+        self.content_encoding_header = content_encoding;
+        self
+    }
+
+    pub fn content_encoding_header(&self) -> Option<&'static str> {
+        self.content_encoding_header
     }
 
     pub fn with_headers(mut self, headers: &'static [(&'static str, &'static str)]) -> Self {
         self.custom_headers = headers;
         self
+    }
+
+    pub fn iter_headers(&self) -> impl Iterator<Item = (&str, Cow<str>)> {
+        Some(("content-type", Cow::Borrowed(self.content_type_header)))
+            .into_iter()
+            .chain(Some((
+                "content-length",
+                Cow::Owned(self.content_len().to_string()),
+            )))
+            .chain(
+                self.content_encoding_header
+                    .map(|v| ("content-encoding", Cow::Borrowed(v))),
+            )
+            .chain(
+                self.custom_headers
+                    .iter()
+                    .map(|(k, v)| (*k, Cow::Borrowed(*v))),
+            )
     }
 
     pub fn content_len(&self) -> usize {

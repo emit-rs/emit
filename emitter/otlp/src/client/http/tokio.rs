@@ -210,13 +210,10 @@ async fn send_request(
                 req = req.header(*k, *v);
             }
 
-            req = req
-                .header("host", uri.authority())
-                .header("content-length", content.content_len())
-                .header("content-type", content.content_type_header);
+            req = req.header("host", uri.authority());
 
-            if let Some(content_encoding) = content.content_encoding_header {
-                req = req.header("content-encoding", content_encoding);
+            for (name, value) in content.iter_headers() {
+                req = req.header(name, &*value);
             }
 
             for (k, v) in headers {
