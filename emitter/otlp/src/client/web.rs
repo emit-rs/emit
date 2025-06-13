@@ -41,6 +41,46 @@ impl OtlpBuilder {
         )>,
         metrics: Arc<InternalMetrics>,
     ) -> Result<OtlpInner, Error> {
-        todo!()
+        // Spawn the processors as fire-and-forget promises
+        if let Some((transport, receiver)) = process_otlp_logs {
+            let transport = Arc::new(transport);
+
+            emit_batcher::web::spawn(receiver, move |batch| {
+                let transport = transport.clone();
+
+                async move { transport.send(batch).await }
+            })
+            .map_err(|e| Error::new("failed to spawn logs transport", e))?;
+        }
+
+        if let Some((transport, receiver)) = process_otlp_traces {
+            let transport = Arc::new(transport);
+
+            emit_batcher::web::spawn(receiver, move |batch| {
+                let transport = transport.clone();
+
+                async move { transport.send(batch).await }
+            })
+            .map_err(|e| Error::new("failed to spawn traces transport", e))?;
+        }
+
+        if let Some((transport, receiver)) = process_otlp_metrics {
+            let transport = Arc::new(transport);
+
+            emit_batcher::web::spawn(receiver, move |batch| {
+                let transport = transport.clone();
+
+                async move { transport.send(batch).await }
+            })
+            .map_err(|e| Error::new("failed to spawn metrics transport", e))?;
+        }
+
+        Ok(OtlpInner {
+            otlp_logs,
+            otlp_traces,
+            otlp_metrics,
+            metrics,
+            _handle: (),
+        })
     }
 }

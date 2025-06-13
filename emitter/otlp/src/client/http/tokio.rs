@@ -313,31 +313,20 @@ impl HttpConnection {
                 None => connect(&self.metrics, self.version, &self.uri).await?,
             };
 
-            let body = {
-                #[cfg(feature = "gzip")]
-                {
-                    if self.allow_compression && !self.uri.is_https() {
-                        self.metrics.transport_request_compress_gzip.increment();
-
-                        HttpContent::gzip(body)?
-                    } else {
-                        HttpContent::raw(body)
-                    }
-                }
-                #[cfg(not(feature = "gzip"))]
-                {
-                    let _ = self.allow_compression;
-
-                    HttpContent::raw(body)
-                }
-            };
+            let body = HttpContent::new(
+                self.allow_compression,
+                &self.uri,
+                &self.request,
+                &self.metrics,
+                body,
+            )?;
 
             let res = send_request(
                 &self.metrics,
                 &mut sender,
                 &self.uri,
                 self.headers.iter().map(|(k, v)| (&**k, &**v)),
-                (self.request)(body)?,
+                body,
             )
             .await?;
 
@@ -424,22 +413,15 @@ impl Body for HttpContent {
     ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
         let unpinned = self.get_mut();
 
-        if let Some(header) = unpinned.content_frame.take() {
-            return Poll::Ready(Some(Ok(Frame::data(header.into_cursor()))));
-        }
-
-        let Some(payload) = unpinned.content_payload.take() else {
-            return Poll::Ready(None);
-        };
-
-        Poll::Ready(Some(Ok(Frame::data(payload.into_cursor()))))
+        Poll::Ready(
+            unpinned
+                .next_content_cursor()
+                .map(|cursor| Ok(Frame::data(cursor))),
+        )
     }
 
     fn is_end_stream(&self) -> bool {
-        match (&self.content_frame, &self.content_payload) {
-            (Some(_), _) | (_, Some(_)) => false,
-            _ => true,
-        }
+        !self.has_next_content_cursor()
     }
 
     fn size_hint(&self) -> SizeHint {

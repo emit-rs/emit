@@ -33,6 +33,7 @@ use bytes::Buf;
 use crate::{
     client::Encoding,
     data::{EncodedPayload, PreEncodedCursor},
+    internal_metrics::InternalMetrics,
     Error,
 };
 
@@ -53,6 +54,36 @@ fn content_type_of(payload: &EncodedPayload) -> &'static str {
 }
 
 impl HttpContent {
+    fn new(
+        allow_compression: bool,
+        uri: &HttpUri,
+        configure: impl Fn(HttpContent) -> Result<HttpContent, Error>,
+        metrics: &InternalMetrics,
+        payload: EncodedPayload,
+    ) -> Result<HttpContent, Error> {
+        let body = {
+            #[cfg(feature = "gzip")]
+            {
+                if allow_compression && !uri.is_https() {
+                    metrics.transport_request_compress_gzip.increment();
+
+                    HttpContent::gzip(payload)?
+                } else {
+                    HttpContent::raw(payload)
+                }
+            }
+            #[cfg(not(feature = "gzip"))]
+            {
+                let _ = allow_compression;
+                let _ = uri;
+
+                HttpContent::raw(payload)
+            }
+        };
+
+        configure(body)
+    }
+
     fn raw(payload: EncodedPayload) -> Self {
         HttpContent {
             content_frame: None,
@@ -138,6 +169,22 @@ impl HttpContent {
             .as_ref()
             .map(|payload| payload.len())
             .unwrap_or(0)
+    }
+
+    fn next_content_cursor(&mut self) -> Option<HttpContentCursor> {
+        if let Some(header) = self.content_frame.take() {
+            return Some(header.into_cursor());
+        }
+
+        if let Some(payload) = self.content_payload.take() {
+            return Some(payload.into_cursor());
+        };
+
+        None
+    }
+
+    fn has_next_content_cursor(&self) -> bool {
+        self.content_frame.is_some() || self.content_payload.is_some()
     }
 }
 

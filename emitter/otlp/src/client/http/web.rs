@@ -22,6 +22,9 @@ use crate::{
 
 pub(crate) struct HttpConnection {
     uri: HttpUri,
+    allow_compression: bool,
+    request: Box<dyn Fn(HttpContent) -> Result<HttpContent, Error> + Send + Sync>,
+    metrics: Arc<InternalMetrics>,
 }
 
 impl HttpConnection {
@@ -42,11 +45,15 @@ impl HttpConnection {
     }
 
     pub async fn send(&self, body: EncodedPayload, timeout: Duration) -> Result<Vec<u8>, Error> {
-        JsFuture::from(fetch(
-            self.uri.to_string(),
-            FetchInit::new(body.into_cursor())?,
-        ))
-        .await;
+        let body = HttpContent::new(
+            self.allow_compression,
+            &self.uri,
+            &self.request,
+            &self.metrics,
+            body,
+        )?;
+
+        JsFuture::from(fetch(self.uri.to_string(), FetchInit::new(body)?)).await;
 
         todo!()
     }
@@ -105,29 +112,30 @@ impl HttpResponse {
 #[wasm_bindgen]
 pub struct FetchInit {
     body: Uint8Array,
+    // TODO: Headers
 }
 
 impl FetchInit {
-    fn new(mut body: PreEncodedCursor) -> Result<Self, Error> {
-        // TODO: See if we can avoid the extra buffering here, possibly by writing into a Uint8Array to begin with
-        let length = body.remaining().try_into().map_err(|e| {
-            Error::new(
-                format!("Cannot send a request with more than {} bytes", u32::MAX),
-                e,
-            )
-        })?;
+    fn new(mut body: HttpContent) -> Result<Self, Error> {
+        // Buffer the body into a JavaScript array
+        let length = body
+            .content_len()
+            .try_into()
+            .map_err(|e| Error::new("the body content cannot be converted into a Uint8Array", e))?;
 
         let mut buf = Uint8Array::new_with_length(length);
 
         let mut offset = 0;
-        while body.remaining() > 0 {
-            let chunk = body.chunk();
+        while let Some(mut body) = body.next_content_cursor() {
+            while body.remaining() > 0 {
+                let chunk = body.chunk();
 
-            // SAFETY: The view is valid for the duration of `set`, which copies elements
-            unsafe { buf.set(&Uint8Array::view(chunk), offset as u32) };
+                // SAFETY: The view is valid for the duration of `set`, which copies elements
+                unsafe { buf.set(&Uint8Array::view(chunk), offset as u32) };
 
-            offset += chunk.len();
-            body.advance(chunk.len());
+                offset += chunk.len();
+                body.advance(chunk.len());
+            }
         }
 
         Ok(FetchInit { body: buf })
