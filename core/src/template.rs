@@ -168,7 +168,7 @@ impl<'a, 'b> Iterator for Parts<'a, 'b> {
 }
 
 impl<'a> ToValue for Template<'a> {
-    fn to_value(&self) -> Value {
+    fn to_value(&self) -> Value<'_> {
         if let Some(tpl) = self.as_literal() {
             Value::from_any(tpl)
         } else {
@@ -305,7 +305,7 @@ impl<'a, P: Props> Render<'a, P> {
 }
 
 impl<'a, P: Props> ToValue for Render<'a, P> {
-    fn to_value(&self) -> Value {
+    fn to_value(&self) -> Value<'_> {
         if let Some(tpl) = self.as_literal() {
             Value::from_any(tpl)
         } else {

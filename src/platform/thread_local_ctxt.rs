@@ -101,7 +101,7 @@ impl ThreadLocalValue {
 }
 
 impl ToValue for ThreadLocalValue {
-    fn to_value(&self) -> Value {
+    fn to_value(&self) -> Value<'_> {
         match self.inner {
             ThreadLocalValueInner::TraceId(ref value) => value.to_value(),
             ThreadLocalValueInner::SpanId(ref value) => value.to_value(),
