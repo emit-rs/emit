@@ -26,7 +26,7 @@ mod imp;
 
 pub(crate) use self::imp::*;
 
-use std::{borrow::Cow, io::Cursor};
+use std::{borrow::Cow, fmt, io::Cursor};
 
 use bytes::Buf;
 
@@ -36,6 +36,48 @@ use crate::{
     internal_metrics::InternalMetrics,
     Error,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum HttpVersion {
+    Http1,
+    Http2,
+}
+
+pub(crate) struct HttpUri(http::Uri);
+
+impl fmt::Display for HttpUri {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl HttpUri {
+    fn new(uri: impl AsRef<str>) -> Result<Self, Error> {
+        let uri = uri.as_ref();
+
+        Ok(HttpUri(uri.parse().map_err(|e| {
+            Error::new(format_args!("failed to parse {uri}"), e)
+        })?))
+    }
+
+    pub fn is_https(&self) -> bool {
+        self.0.scheme().unwrap() == &http::uri::Scheme::HTTPS
+    }
+
+    pub fn host(&self) -> &str {
+        self.0.host().unwrap()
+    }
+
+    pub fn authority(&self) -> &str {
+        self.0.authority().unwrap().as_str()
+    }
+
+    pub fn port(&self) -> u16 {
+        self.0
+            .port_u16()
+            .unwrap_or_else(|| if self.is_https() { 443 } else { 80 })
+    }
+}
 
 #[derive(Clone)]
 pub(crate) struct HttpContent {

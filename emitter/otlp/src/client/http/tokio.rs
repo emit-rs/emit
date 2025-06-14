@@ -5,7 +5,6 @@ This transport supports HTTP1 and gRPC via HTTP2.
 */
 
 use std::{
-    fmt,
     future::Future,
     pin::Pin,
     sync::{Arc, Mutex},
@@ -17,11 +16,11 @@ use emit::well_known::{KEY_SPAN_ID, KEY_TRACE_ID};
 use hyper::{
     body::{self, Body, Frame, SizeHint},
     client::conn::{http1, http2},
-    Method, Request, Uri,
+    Method, Request,
 };
 
 use crate::{
-    client::http::{HttpContent, HttpContentCursor},
+    client::http::{HttpContent, HttpContentCursor, HttpUri, HttpVersion},
     data::EncodedPayload,
     internal_metrics::InternalMetrics,
     Error,
@@ -253,7 +252,7 @@ pub(crate) struct HttpConnection {
     headers: Vec<(String, String)>,
     request: Box<dyn Fn(HttpContent) -> Result<HttpContent, Error> + Send + Sync>,
     response: Box<
-        dyn Fn(HttpResponse) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>> + Send>>
+        dyn Fn(HttpResponse) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send>>
             + Send
             + Sync,
     >,
@@ -265,7 +264,7 @@ pub(crate) struct HttpResponse {
 }
 
 impl HttpConnection {
-    pub fn new<F: Future<Output = Result<Vec<u8>, Error>> + Send + 'static>(
+    pub fn new<F: Future<Output = Result<(), Error>> + Send + 'static>(
         version: HttpVersion,
         metrics: Arc<InternalMetrics>,
         url: impl AsRef<str>,
@@ -277,10 +276,7 @@ impl HttpConnection {
         let url = url.as_ref();
 
         Ok(HttpConnection {
-            uri: HttpUri(
-                url.parse()
-                    .map_err(|e| Error::new(format_args!("failed to parse {url}"), e))?,
-            ),
+            uri: HttpUri::new(url)?,
             version,
             allow_compression,
             request: Box::new(request),
@@ -303,7 +299,7 @@ impl HttpConnection {
         &self.uri
     }
 
-    pub async fn send(&self, body: EncodedPayload, timeout: Duration) -> Result<Vec<u8>, Error> {
+    pub async fn send(&self, body: EncodedPayload, timeout: Duration) -> Result<(), Error> {
         let res = tokio::time::timeout(timeout, async {
             let mut sender = match self.poison() {
                 Some(sender) => sender,
@@ -338,12 +334,6 @@ impl HttpConnection {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum HttpVersion {
-    Http1,
-    Http2,
-}
-
 enum HttpSender {
     Http1(http1::SendRequest<HttpContent>),
     Http2(http2::SendRequest<HttpContent>),
@@ -368,34 +358,6 @@ impl HttpSender {
         metrics.transport_request_sent.increment();
 
         Ok(HttpResponse { res })
-    }
-}
-
-pub(crate) struct HttpUri(Uri);
-
-impl fmt::Display for HttpUri {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&self.0, f)
-    }
-}
-
-impl HttpUri {
-    pub fn is_https(&self) -> bool {
-        self.0.scheme().unwrap() == &hyper::http::uri::Scheme::HTTPS
-    }
-
-    pub fn host(&self) -> &str {
-        self.0.host().unwrap()
-    }
-
-    pub fn authority(&self) -> &str {
-        self.0.authority().unwrap().as_str()
-    }
-
-    pub fn port(&self) -> u16 {
-        self.0
-            .port_u16()
-            .unwrap_or_else(|| if self.is_https() { 443 } else { 80 })
     }
 }
 
@@ -431,26 +393,21 @@ impl HttpResponse {
         self.res.status().as_u16()
     }
 
-    pub async fn stream_payload(
+    pub async fn stream_trailers(
         mut self,
-        mut body: impl FnMut(&[u8]),
         mut trailer: impl FnMut(&str, &str),
     ) -> Result<(), Error> {
-        struct BufNext<'a, B, T>(&'a mut body::Incoming, &'a mut B, &'a mut T);
+        struct BufNext<'a, T>(&'a mut body::Incoming, &'a mut T);
 
-        impl<'a, B: FnMut(&[u8]), T: FnMut(&str, &str)> Future for BufNext<'a, B, T> {
+        impl<'a, T: FnMut(&str, &str)> Future for BufNext<'a, T> {
             type Output = Result<bool, Error>;
 
             fn poll(self: Pin<&mut Self>, ctx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
                 // SAFETY: `self` does not use interior pinning
-                let BufNext(incoming, body, trailer) = unsafe { Pin::get_unchecked_mut(self) };
+                let BufNext(incoming, trailer) = unsafe { Pin::get_unchecked_mut(self) };
 
                 match Pin::new(incoming).poll_frame(ctx) {
                     Poll::Ready(Some(Ok(frame))) => {
-                        if let Some(frame) = frame.data_ref() {
-                            (body)(frame);
-                        }
-
                         if let Some(trailers) = frame.trailers_ref() {
                             for (k, v) in trailers {
                                 let k = k.as_str();
@@ -474,7 +431,7 @@ impl HttpResponse {
 
         let frame = self.res.body_mut();
 
-        while BufNext(frame, &mut body, &mut trailer).await? {}
+        while BufNext(frame, &mut trailer).await? {}
 
         Ok(())
     }

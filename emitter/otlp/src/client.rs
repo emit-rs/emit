@@ -390,7 +390,7 @@ impl OtlpTransportBuilder {
                             if status >= 200 && status < 300 {
                                 metrics.http_batch_sent.increment();
 
-                                Ok(vec![])
+                                Ok(())
                             } else {
                                 metrics.http_batch_failed.increment();
 
@@ -459,25 +459,22 @@ impl OtlpTransportBuilder {
                             let mut status = 0;
                             let mut msg = String::new();
 
-                            res.stream_payload(
-                                |_| {},
-                                |k, v| match k {
-                                    "grpc-status" => {
-                                        status = v.parse().unwrap_or(0);
-                                    }
-                                    "grpc-message" => {
-                                        msg = v.into();
-                                    }
-                                    _ => {}
-                                },
-                            )
+                            res.stream_trailers(|k, v| match k {
+                                "grpc-status" => {
+                                    status = v.parse().unwrap_or(0);
+                                }
+                                "grpc-message" => {
+                                    msg = v.into();
+                                }
+                                _ => {}
+                            })
                             .await?;
 
                             // A request is considered successful if the grpc-status trailer is 0
                             if status == 0 {
                                 metrics.grpc_batch_sent.increment();
 
-                                Ok(vec![])
+                                Ok(())
                             }
                             // In any other case the request failed and may carry some diagnostic message
                             else {

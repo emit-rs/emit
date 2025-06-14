@@ -15,7 +15,7 @@ default = ["tls", "gzip"]
 gzip = ["dep:flate2"]
 tls = ["dep:tokio-rustls", "dep:rustls-native-certs"]
 tls-native = ["tls", "dep:tokio-native-tls"]
-web = ["emit_batcher/web", "wasm-bindgen", "wasm-bindgen-futures", "js-sys", "http"]
+web = ["emit_batcher/web", "wasm-bindgen", "wasm-bindgen-futures", "js-sys"]
 
 [dependencies.emit]
 version = "1.9.0"
@@ -44,9 +44,8 @@ optional = true
 version = "0.3"
 optional = true
 
-[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.http]
+[dependencies.http]
 version = "1"
-optional = true
 
 [dependencies.sval]
 version = "2.10"

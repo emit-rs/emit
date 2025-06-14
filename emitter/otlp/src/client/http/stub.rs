@@ -3,13 +3,16 @@ compile_error!("unsupported target");
 use std::{fmt, future::Future, sync::Arc, time::Duration};
 
 use crate::{
-    client::http::HttpContent, data::EncodedPayload, internal_metrics::InternalMetrics, Error,
+    client::http::{HttpContent, HttpVersion},
+    data::EncodedPayload,
+    internal_metrics::InternalMetrics,
+    Error,
 };
 
 pub(crate) struct HttpConnection {}
 
 impl HttpConnection {
-    pub fn new<F: Future<Output = Result<Vec<u8>, Error>> + Send + 'static>(
+    pub fn new<F: Future<Output = Result<(), Error>> + Send + 'static>(
         _version: HttpVersion,
         _metrics: Arc<InternalMetrics>,
         _url: impl AsRef<str>,
@@ -25,15 +28,9 @@ impl HttpConnection {
         unreachable!()
     }
 
-    pub async fn send(&self, _body: EncodedPayload, _timeout: Duration) -> Result<Vec<u8>, Error> {
+    pub async fn send(&self, _body: EncodedPayload, _timeout: Duration) -> Result<(), Error> {
         unreachable!()
     }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum HttpVersion {
-    Http1,
-    Http2,
 }
 
 pub(crate) struct HttpUri {}
@@ -69,9 +66,8 @@ impl HttpResponse {
         todo!()
     }
 
-    pub async fn stream_payload(
+    pub async fn stream_trailers(
         self,
-        mut _body: impl FnMut(&[u8]),
         mut _trailer: impl FnMut(&str, &str),
     ) -> Result<(), Error> {
         todo!()
