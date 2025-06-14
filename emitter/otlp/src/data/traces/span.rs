@@ -324,24 +324,3 @@ pub struct InlineEventAttributes<'a, A: ?Sized = [KeyValue<&'a str, &'a AnyValue
     #[sval(label = EVENT_ATTRIBUTES_LABEL, index = EVENT_ATTRIBUTES_INDEX)]
     pub attributes: &'a A,
 }
-
-pub struct PropsEventAttributes<P>(pub P);
-
-impl<P: emit::props::Props> sval::Value for PropsEventAttributes<P> {
-    fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(&'sval self, stream: &mut S) -> sval::Result {
-        stream.record_tuple_begin(None, None, None, None)?;
-
-        stream_field(
-            &mut *stream,
-            &EVENT_ATTRIBUTES_LABEL,
-            &EVENT_ATTRIBUTES_INDEX,
-            |stream| {
-                stream_attributes(stream, &self.0, |mut stream, k, v| {
-                    stream.stream_attribute(k, v)
-                })
-            },
-        )?;
-
-        stream.record_tuple_end(None, None, None)
-    }
-}

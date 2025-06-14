@@ -12,7 +12,6 @@ use std::{
     time::Duration,
 };
 
-use emit::well_known::{KEY_SPAN_ID, KEY_TRACE_ID};
 use hyper::{
     body::{self, Body, Frame, SizeHint},
     client::conn::{http1, http2},
@@ -20,7 +19,9 @@ use hyper::{
 };
 
 use crate::{
-    client::http::{HttpContent, HttpContentCursor, HttpUri, HttpVersion},
+    client::http::{
+        outgoing_traceparent_header, HttpContent, HttpContentCursor, HttpUri, HttpVersion,
+    },
     data::EncodedPayload,
     internal_metrics::InternalMetrics,
     Error,
@@ -197,12 +198,8 @@ async fn send_request(
     headers: impl Iterator<Item = (&str, &str)>,
     content: HttpContent,
 ) -> Result<HttpResponse, Error> {
-    let rt = emit::runtime::internal();
-
     let res = sender
         .send_request(metrics, {
-            use emit::{Ctxt as _, Props as _};
-
             let mut req = Request::builder().uri(&uri.0).method(Method::POST);
 
             for (k, v) in content.custom_headers {
@@ -220,15 +217,8 @@ async fn send_request(
             }
 
             // Propagate traceparent for the batch
-            let (trace_id, span_id) = rt.ctxt().with_current(|props| {
-                (
-                    props.pull::<emit::TraceId, _>(KEY_TRACE_ID),
-                    props.pull::<emit::SpanId, _>(KEY_SPAN_ID),
-                )
-            });
-
-            req = if let (Some(trace_id), Some(span_id)) = (trace_id, span_id) {
-                req.header("traceparent", format!("00-{trace_id}-{span_id}-00"))
+            req = if let Some((k, v)) = outgoing_traceparent_header() {
+                req.header(k, v)
             } else {
                 req
             };

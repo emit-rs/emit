@@ -17,7 +17,7 @@ key1=value1;property1;property2, key2 = value2, key3=value3; propertyKey=propert
 
 Values themselves are a collection of key and optional percent-encoded value pairs.
 */
-pub(crate) fn parse(input: &str) -> Result<Vec<(&str, Value)>, Error> {
+pub(crate) fn parse(input: &str) -> Result<Vec<(&str, Value<'_>)>, Error> {
     let mut results = Vec::new();
 
     let b = input.as_bytes();

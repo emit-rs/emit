@@ -29,6 +29,7 @@ pub(crate) use self::imp::*;
 use std::{borrow::Cow, fmt, io::Cursor};
 
 use bytes::Buf;
+use emit::{Ctxt as _, Props as _};
 
 use crate::{
     client::Encoding,
@@ -63,7 +64,14 @@ impl HttpUri {
     pub fn is_https(&self) -> bool {
         self.0.scheme().unwrap() == &http::uri::Scheme::HTTPS
     }
+}
 
+#[cfg(not(all(
+    target_arch = "wasm32",
+    target_vendor = "unknown",
+    target_os = "unknown"
+)))]
+impl HttpUri {
     pub fn host(&self) -> &str {
         self.0.host().unwrap()
     }
@@ -200,7 +208,7 @@ impl HttpContent {
         self
     }
 
-    pub fn iter_headers(&self) -> impl Iterator<Item = (&str, Cow<str>)> {
+    pub fn iter_headers(&self) -> impl Iterator<Item = (&str, Cow<'_, str>)> {
         Some(("content-type", Cow::Borrowed(self.content_type_header)))
             .into_iter()
             .chain(Some((
@@ -247,7 +255,14 @@ impl HttpContent {
 
         None
     }
+}
 
+#[cfg(not(all(
+    target_arch = "wasm32",
+    target_vendor = "unknown",
+    target_os = "unknown"
+)))]
+impl HttpContent {
     fn has_next_content_cursor(&self) -> bool {
         self.content_frame.is_some() || self.content_payload.is_some()
     }
@@ -329,5 +344,20 @@ impl Buf for HttpContentCursor {
             HttpContentCursor::Bytes(buf) => buf.advance(cnt),
             HttpContentCursor::SmallBytes(buf) => buf.advance(cnt),
         }
+    }
+}
+
+fn outgoing_traceparent_header() -> Option<(&'static str, String)> {
+    let (trace_id, span_id) = emit::runtime::internal().ctxt().with_current(|props| {
+        (
+            props.pull::<emit::TraceId, _>(emit::well_known::KEY_TRACE_ID),
+            props.pull::<emit::SpanId, _>(emit::well_known::KEY_SPAN_ID),
+        )
+    });
+
+    if let (Some(trace_id), Some(span_id)) = (trace_id, span_id) {
+        Some(("traceparent", format!("00-{trace_id}-{span_id}-00")))
+    } else {
+        None
     }
 }

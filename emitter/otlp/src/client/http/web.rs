@@ -4,16 +4,15 @@ HTTP Transport based on `fetch`.
 This transport supports HTTP1.
 */
 
-use std::{borrow::Cow, error, fmt, future::Future, io::Read, pin::Pin, sync::Arc, time::Duration};
+use std::{borrow::Cow, error, fmt, future::Future, pin::Pin, sync::Arc, time::Duration};
 
 use bytes::Buf;
-use js_sys::{Map, Object, Promise, Reflect, Uint8Array};
+use js_sys::{Map, Object, Reflect, Uint8Array};
 use wasm_bindgen::prelude::*;
-use wasm_bindgen_futures::JsFuture;
 
 use crate::{
-    client::http::{HttpContent, HttpUri, HttpVersion},
-    data::{EncodedPayload, PreEncodedCursor},
+    client::http::{outgoing_traceparent_header, HttpContent, HttpUri, HttpVersion},
+    data::EncodedPayload,
     internal_metrics::InternalMetrics,
     Error,
 };
@@ -70,19 +69,23 @@ impl HttpConnection {
             body,
         )?;
 
+        // NOTE: Headers added here may affect CORS
         let headers = js_headers(
-            content.iter_headers().chain(
-                self.headers
-                    .iter()
-                    .map(|(k, v)| (&**k, Cow::Borrowed(&**v))),
-            ),
+            content
+                .iter_headers()
+                .chain(
+                    self.headers
+                        .iter()
+                        .map(|(k, v)| (&**k, Cow::Borrowed(&**v))),
+                )
+                .chain(outgoing_traceparent_header().map(|(k, v)| (k, Cow::Owned(v)))),
         );
 
         let body = js_body(content)?;
 
         let res = fetch(
-            self.uri.to_string(),
-            &JsValue::from(fs_fetch_init("POST", headers, body)),
+            resource,
+            &JsValue::from(js_fetch_init("POST", headers, body)),
         )
         .await
         .map_err(|e| Error::new("failed to send fetch request", JsError::new(e)))?;
@@ -115,8 +118,8 @@ fn js_status(res: &JsValue) -> Result<u16, Error> {
         .ok_or_else(|| Error::msg("the fetch response status is not a number"))? as u16)
 }
 
-fn fs_fetch_init(method: &str, headers: Map, body: Uint8Array) -> Object {
-    let mut result = Object::new();
+fn js_fetch_init(method: &str, headers: Map, body: Uint8Array) -> Object {
+    let result = Object::new();
 
     Reflect::set(&result, &JsValue::from("method"), &JsValue::from(method))
         .expect("failed to set fetch init field");
@@ -129,7 +132,7 @@ fn fs_fetch_init(method: &str, headers: Map, body: Uint8Array) -> Object {
 }
 
 fn js_headers(headers: impl Iterator<Item = (impl AsRef<str>, impl AsRef<str>)>) -> Map {
-    let mut result = Map::new();
+    let result = Map::new();
 
     for (k, v) in headers {
         let name = JsValue::from(k.as_ref());
@@ -147,7 +150,7 @@ fn js_body(mut body: HttpContent) -> Result<Uint8Array, Error> {
         .try_into()
         .map_err(|e| Error::new("fetch request body is too large", e))?;
 
-    let mut result = Uint8Array::new_with_length(length);
+    let result = Uint8Array::new_with_length(length);
 
     let mut offset = 0;
     while let Some(mut body) = body.next_content_cursor() {
