@@ -47,6 +47,11 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab
 
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.x
+
       - name: Install Rust toolchain
         run: rustup default nightly
 
@@ -55,6 +60,9 @@ jobs:
 
       - name: Install certutil
         run: sudo apt-get update && sudo apt-get install -y libnss3-tools
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack
 
       - name: Get otelcol
         run: wget -O otelcol.deb https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.107.0/otelcol_0.107.0_linux_amd64.deb
@@ -77,3 +85,7 @@ jobs:
       - name: Throughput Test
         working-directory: ./emitter/otlp/test/throughput
         run: cargo run --release -- --spawn --flush
+
+      - name: Integration Test (Web)
+        working-directory: ./emitter/otlp/test/web
+        run: npm run exec

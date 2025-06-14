@@ -164,7 +164,7 @@ impl<'a, P: Props> Event<'a, P> {
     /**
     Get a lazily-evaluated formatting of the event's template.
     */
-    pub fn msg(&self) -> Render<&P> {
+    pub fn msg(&self) -> Render<'_, &P> {
         self.tpl.render(&self.props)
     }
 

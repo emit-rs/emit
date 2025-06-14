@@ -82,7 +82,7 @@ impl<C: Ctxt> Frame<C> {
     The properties in this frame will be visible until the returned [`EnterGuard`] is dropped.
     */
     #[track_caller]
-    pub fn enter(&mut self) -> EnterGuard<C> {
+    pub fn enter(&mut self) -> EnterGuard<'_, C> {
         self.ctxt.enter(&mut self.scope);
 
         EnterGuard {

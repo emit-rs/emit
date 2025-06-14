@@ -36,20 +36,20 @@ use crate::{
     message = "capturing requires `{Self}` implements `Display + Any` by default. If this value does implement `Display`, then dereference or annotate it with `#[emit::as_display]`. If it doesn't, then use one of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
 )]
 pub trait CaptureWithDefault {
-    fn capture(&self) -> Option<Value>;
+    fn capture(&self) -> Option<Value<'_>>;
 }
 
 impl<T> CaptureWithDefault for T
 where
     T: fmt::Display + Any,
 {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(Value::capture_display(self))
     }
 }
 
 impl CaptureWithDefault for str {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
@@ -58,26 +58,26 @@ impl CaptureWithDefault for str {
     message = "capturing with `#[emit::as_display(inspect: true)]` requires `{Self}` implements `Display + 'static`. If this value does implement `Display`, then dereference or remove the `inspect` argument. If it doesn't, then use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
 )]
 pub trait CaptureAsDisplay {
-    fn capture(&self) -> Option<Value>;
+    fn capture(&self) -> Option<Value<'_>>;
 }
 
 impl<T> CaptureAsDisplay for T
 where
     T: fmt::Display + Any,
 {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(Value::capture_display(self))
     }
 }
 
 impl CaptureAsDisplay for dyn fmt::Display {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
 
 impl CaptureAsDisplay for str {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
@@ -86,20 +86,20 @@ impl CaptureAsDisplay for str {
     message = "capturing with `#[emit::as_display]` requires `{Self}` implements `Display`. Use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
 )]
 pub trait CaptureAsAnonDisplay {
-    fn capture(&self) -> Option<Value>;
+    fn capture(&self) -> Option<Value<'_>>;
 }
 
 impl<T> CaptureAsAnonDisplay for T
 where
     T: fmt::Display,
 {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(Value::from_display(self))
     }
 }
 
 impl CaptureAsAnonDisplay for str {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
@@ -108,26 +108,26 @@ impl CaptureAsAnonDisplay for str {
     message = "capturing with `#[emit::as_debug(inspect: true)]` requires `{Self}` implements `Debug + 'static`. If this value does implement `Debug`, then dereference or remove the `inspect` argument. If it doesn't, then use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
 )]
 pub trait CaptureAsDebug {
-    fn capture(&self) -> Option<Value>;
+    fn capture(&self) -> Option<Value<'_>>;
 }
 
 impl<T> CaptureAsDebug for T
 where
     T: fmt::Debug + Any,
 {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(Value::capture_debug(self))
     }
 }
 
 impl CaptureAsDebug for dyn fmt::Debug {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
 
 impl CaptureAsDebug for str {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
@@ -136,20 +136,20 @@ impl CaptureAsDebug for str {
     message = "capturing with `#[emit::as_debug]` requires `{Self}` implements `Debug`. Use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
 )]
 pub trait CaptureAsAnonDebug {
-    fn capture(&self) -> Option<Value>;
+    fn capture(&self) -> Option<Value<'_>>;
 }
 
 impl<T> CaptureAsAnonDebug for T
 where
     T: fmt::Debug,
 {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(Value::from_debug(self))
     }
 }
 
 impl CaptureAsAnonDebug for str {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
@@ -158,20 +158,20 @@ impl CaptureAsAnonDebug for str {
     message = "capturing with `#[emit::as_value(inspect: true)]` requires `{Self}` implements `ToValue + 'static`. If this value does implement `ToValue`, then dereference or remove the `inspect` argument. If it doesn't, then use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
 )]
 pub trait CaptureAsValue {
-    fn capture(&self) -> Option<Value>;
+    fn capture(&self) -> Option<Value<'_>>;
 }
 
 impl<T> CaptureAsValue for T
 where
     T: ToValue + Any,
 {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
 
 impl CaptureAsValue for str {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
@@ -180,20 +180,20 @@ impl CaptureAsValue for str {
     message = "capturing with `#[emit::as_value]` requires `{Self}` implements `ToValue`. Use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
 )]
 pub trait CaptureAsAnonValue {
-    fn capture(&self) -> Option<Value>;
+    fn capture(&self) -> Option<Value<'_>>;
 }
 
 impl<T> CaptureAsAnonValue for T
 where
     T: ToValue,
 {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
 
 impl CaptureAsAnonValue for str {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
@@ -202,7 +202,7 @@ impl CaptureAsAnonValue for str {
     message = "capturing with `#[emit::as_sval(inspect: true)]` requires `{Self}` implements `Value + 'static`. If this value does implement `Value`, then dereference or remove the `inspect` argument. If it doesn't, then use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
 )]
 pub trait CaptureAsSval {
-    fn capture(&self) -> Option<Value>;
+    fn capture(&self) -> Option<Value<'_>>;
 }
 
 #[cfg(feature = "sval")]
@@ -210,13 +210,13 @@ impl<T> CaptureAsSval for T
 where
     T: sval::Value + Any,
 {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(Value::capture_sval(self))
     }
 }
 
 impl CaptureAsSval for str {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
@@ -225,7 +225,7 @@ impl CaptureAsSval for str {
     message = "capturing with `#[emit::as_sval]` requires `{Self}` implements `Value`. Use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
 )]
 pub trait CaptureAsAnonSval {
-    fn capture(&self) -> Option<Value>;
+    fn capture(&self) -> Option<Value<'_>>;
 }
 
 #[cfg(feature = "sval")]
@@ -233,13 +233,13 @@ impl<T> CaptureAsAnonSval for T
 where
     T: sval::Value,
 {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(Value::from_sval(self))
     }
 }
 
 impl CaptureAsAnonSval for str {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
@@ -248,7 +248,7 @@ impl CaptureAsAnonSval for str {
     message = "capturing with `#[emit::as_serde(inspect: true)]` requires `{Self}` implements `Serialize + 'static`. If this value does implement `Serialize`, then dereference or remove the `inspect` argument. If it doesn't, then use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
 )]
 pub trait CaptureAsSerde {
-    fn capture(&self) -> Option<Value>;
+    fn capture(&self) -> Option<Value<'_>>;
 }
 
 #[cfg(feature = "serde")]
@@ -256,13 +256,13 @@ impl<T> CaptureAsSerde for T
 where
     T: serde::Serialize + Any,
 {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(Value::capture_serde(self))
     }
 }
 
 impl CaptureAsSerde for str {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
@@ -271,7 +271,7 @@ impl CaptureAsSerde for str {
     message = "capturing with `#[emit::as_serde]` requires `{Self}` implements `Serialize`. Use another of the `#[emit::as_*]` attributes to capture this value using a trait it does implement."
 )]
 pub trait CaptureAsAnonSerde {
-    fn capture(&self) -> Option<Value>;
+    fn capture(&self) -> Option<Value<'_>>;
 }
 
 #[cfg(feature = "serde")]
@@ -279,13 +279,13 @@ impl<T> CaptureAsAnonSerde for T
 where
     T: serde::Serialize,
 {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(Value::from_serde(self))
     }
 }
 
 impl CaptureAsAnonSerde for str {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
@@ -294,7 +294,7 @@ impl CaptureAsAnonSerde for str {
     message = "capturing an error requires a `str` or that `{Self}` implements `Error + 'static`."
 )]
 pub trait CaptureAsError {
-    fn capture(&self) -> Option<Value>;
+    fn capture(&self) -> Option<Value<'_>>;
 }
 
 #[cfg(feature = "std")]
@@ -302,20 +302,20 @@ impl<T> CaptureAsError for T
 where
     T: Error + 'static,
 {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(Value::capture_error(self))
     }
 }
 
 #[cfg(feature = "std")]
 impl CaptureAsError for (dyn Error + 'static) {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
 
 impl CaptureAsError for str {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
@@ -324,35 +324,35 @@ impl CaptureAsError for str {
     message = "capturing a span id requires a `str`, `u64`, or `SpanId`."
 )]
 pub trait CaptureSpanId {
-    fn capture(&self) -> Option<Value>;
+    fn capture(&self) -> Option<Value<'_>>;
 }
 
 impl<'a, T: CaptureSpanId + ?Sized> CaptureSpanId for &'a T {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         (**self).capture()
     }
 }
 
 impl CaptureSpanId for SpanId {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
 
 impl CaptureSpanId for str {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
 
 impl CaptureSpanId for u64 {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
 
 impl<T: CaptureSpanId> CaptureSpanId for Option<T> {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         self.as_ref().and_then(|v| v.capture())
     }
 }
@@ -361,64 +361,64 @@ impl<T: CaptureSpanId> CaptureSpanId for Option<T> {
     message = "capturing a trace id requires a `str`, `u128`, or `TraceId`."
 )]
 pub trait CaptureTraceId {
-    fn capture(&self) -> Option<Value>;
+    fn capture(&self) -> Option<Value<'_>>;
 }
 
 impl<'a, T: CaptureTraceId + ?Sized> CaptureTraceId for &'a T {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         (**self).capture()
     }
 }
 
 impl CaptureTraceId for TraceId {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
 
 impl CaptureTraceId for str {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
 
 impl CaptureTraceId for u128 {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
 
 impl<T: CaptureTraceId> CaptureTraceId for Option<T> {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         self.as_ref().and_then(|v| v.capture())
     }
 }
 
 #[diagnostic::on_unimplemented(message = "capturing a level requires a `str` or `Level`.")]
 pub trait CaptureLevel {
-    fn capture(&self) -> Option<Value>;
+    fn capture(&self) -> Option<Value<'_>>;
 }
 
 impl<'a, T: CaptureLevel + ?Sized> CaptureLevel for &'a T {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         (**self).capture()
     }
 }
 
 impl CaptureLevel for Level {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
 
 impl CaptureLevel for str {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }
 }
 
 impl<T: CaptureLevel> CaptureLevel for Option<T> {
-    fn capture(&self) -> Option<Value> {
+    fn capture(&self) -> Option<Value<'_>> {
         self.as_ref().and_then(|v| v.capture())
     }
 }
@@ -542,105 +542,105 @@ so that when a bound isn't satisfied we get a more accurate type error.
 contexts. (We're expecting non-hygienic spans to support value interpolation).
 */
 pub trait __PrivateCaptureHook {
-    fn __private_capture_as_default(&self) -> Option<Value>
+    fn __private_capture_as_default(&self) -> Option<Value<'_>>
     where
         Self: CaptureWithDefault,
     {
         CaptureWithDefault::capture(self)
     }
 
-    fn __private_capture_as_display(&self) -> Option<Value>
+    fn __private_capture_as_display(&self) -> Option<Value<'_>>
     where
         Self: CaptureAsDisplay,
     {
         CaptureAsDisplay::capture(self)
     }
 
-    fn __private_capture_anon_as_display(&self) -> Option<Value>
+    fn __private_capture_anon_as_display(&self) -> Option<Value<'_>>
     where
         Self: CaptureAsAnonDisplay,
     {
         CaptureAsAnonDisplay::capture(self)
     }
 
-    fn __private_capture_as_debug(&self) -> Option<Value>
+    fn __private_capture_as_debug(&self) -> Option<Value<'_>>
     where
         Self: CaptureAsDebug,
     {
         CaptureAsDebug::capture(self)
     }
 
-    fn __private_capture_anon_as_debug(&self) -> Option<Value>
+    fn __private_capture_anon_as_debug(&self) -> Option<Value<'_>>
     where
         Self: CaptureAsAnonDebug,
     {
         CaptureAsAnonDebug::capture(self)
     }
 
-    fn __private_capture_as_value(&self) -> Option<Value>
+    fn __private_capture_as_value(&self) -> Option<Value<'_>>
     where
         Self: CaptureAsValue,
     {
         CaptureAsValue::capture(self)
     }
 
-    fn __private_capture_anon_as_value(&self) -> Option<Value>
+    fn __private_capture_anon_as_value(&self) -> Option<Value<'_>>
     where
         Self: CaptureAsAnonValue,
     {
         CaptureAsAnonValue::capture(self)
     }
 
-    fn __private_capture_as_sval(&self) -> Option<Value>
+    fn __private_capture_as_sval(&self) -> Option<Value<'_>>
     where
         Self: CaptureAsSval,
     {
         CaptureAsSval::capture(self)
     }
 
-    fn __private_capture_anon_as_sval(&self) -> Option<Value>
+    fn __private_capture_anon_as_sval(&self) -> Option<Value<'_>>
     where
         Self: CaptureAsAnonSval,
     {
         CaptureAsAnonSval::capture(self)
     }
 
-    fn __private_capture_as_serde(&self) -> Option<Value>
+    fn __private_capture_as_serde(&self) -> Option<Value<'_>>
     where
         Self: CaptureAsSerde,
     {
         CaptureAsSerde::capture(self)
     }
 
-    fn __private_capture_anon_as_serde(&self) -> Option<Value>
+    fn __private_capture_anon_as_serde(&self) -> Option<Value<'_>>
     where
         Self: CaptureAsAnonSerde,
     {
         CaptureAsAnonSerde::capture(self)
     }
 
-    fn __private_capture_as_error(&self) -> Option<Value>
+    fn __private_capture_as_error(&self) -> Option<Value<'_>>
     where
         Self: CaptureAsError,
     {
         CaptureAsError::capture(self)
     }
 
-    fn __private_capture_as_level(&self) -> Option<Value>
+    fn __private_capture_as_level(&self) -> Option<Value<'_>>
     where
         Self: CaptureLevel,
     {
         CaptureLevel::capture(self)
     }
 
-    fn __private_capture_as_span_id(&self) -> Option<Value>
+    fn __private_capture_as_span_id(&self) -> Option<Value<'_>>
     where
         Self: CaptureSpanId,
     {
         CaptureSpanId::capture(self)
     }
 
-    fn __private_capture_as_trace_id(&self) -> Option<Value>
+    fn __private_capture_as_trace_id(&self) -> Option<Value<'_>>
     where
         Self: CaptureTraceId,
     {
@@ -723,13 +723,13 @@ pub trait MdlControlParam {
 }
 
 impl<'a, T: MdlControlParam + ?Sized> MdlControlParam for &'a T {
-    fn mdl_control_param(&self) -> Path {
+    fn mdl_control_param(&self) -> Path<'_> {
         (**self).mdl_control_param()
     }
 }
 
 impl<'a> MdlControlParam for Path<'a> {
-    fn mdl_control_param(&self) -> Path {
+    fn mdl_control_param(&self) -> Path<'_> {
         self.by_ref()
     }
 }
@@ -739,13 +739,13 @@ pub trait TplControlParam {
 }
 
 impl<'a, T: TplControlParam + ?Sized> TplControlParam for &'a T {
-    fn tpl_control_param(&self) -> Template {
+    fn tpl_control_param(&self) -> Template<'_> {
         (**self).tpl_control_param()
     }
 }
 
 impl<'a> TplControlParam for Template<'a> {
-    fn tpl_control_param(&self) -> Template {
+    fn tpl_control_param(&self) -> Template<'_> {
         self.by_ref()
     }
 }

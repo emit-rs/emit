@@ -84,7 +84,7 @@ impl EncodedScopeItems {
         self.items.values().map(|v| v.len()).sum()
     }
 
-    pub fn items(&self) -> impl Iterator<Item = (emit::Path, &[EncodedPayload])> {
+    pub fn items(&self) -> impl Iterator<Item = (emit::Path<'_>, &[EncodedPayload])> {
         self.items.iter().map(|(k, v)| (k.by_ref(), &**v))
     }
 }

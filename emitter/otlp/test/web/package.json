@@ -1,0 +1,12 @@
+{
+  "name": "emit_otlp_test_web",
+  "version": "0.0.0",
+  "description": "",
+  "license": "MIT",
+  "author": "",
+  "main": "index.js",
+  "scripts": {
+    "preexec": "wasm-pack build native --target nodejs",
+    "exec": "node index.js"
+  }
+}

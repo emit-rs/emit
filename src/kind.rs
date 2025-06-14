@@ -101,7 +101,7 @@ impl serde::Serialize for Kind {
 }
 
 impl ToValue for Kind {
-    fn to_value(&self) -> Value {
+    fn to_value(&self) -> Value<'_> {
         Value::capture_display(self)
     }
 }

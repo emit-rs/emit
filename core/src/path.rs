@@ -35,7 +35,7 @@ impl<'a, 'b> From<&'a Path<'b>> for Path<'a> {
 }
 
 impl<'a> ToValue for Path<'a> {
-    fn to_value(&self) -> Value {
+    fn to_value(&self) -> Value<'_> {
         self.0.to_value()
     }
 }
@@ -123,7 +123,7 @@ impl<'a> Path<'a> {
 
     The behavior of this method on invalid paths is undefined.
     */
-    pub fn segments(&self) -> Segments {
+    pub fn segments(&self) -> Segments<'_> {
         Segments {
             inner: match self.0.get_static() {
                 Some(inner) => SegmentsInner::Static(inner.split("::")),

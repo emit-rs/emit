@@ -71,7 +71,7 @@ impl FromStr for TraceId {
 }
 
 impl ToValue for TraceId {
-    fn to_value(&self) -> Value {
+    fn to_value(&self) -> Value<'_> {
         Value::capture_display(self)
     }
 }
@@ -237,7 +237,7 @@ impl FromStr for SpanId {
 }
 
 impl ToValue for SpanId {
-    fn to_value(&self) -> Value {
+    fn to_value(&self) -> Value<'_> {
         Value::capture_display(self)
     }
 }
@@ -965,7 +965,7 @@ impl serde::Serialize for SpanKind {
 }
 
 impl ToValue for SpanKind {
-    fn to_value(&self) -> Value {
+    fn to_value(&self) -> Value<'_> {
         Value::capture_display(self)
     }
 }
@@ -1318,7 +1318,7 @@ pub mod completion {
             impl std::error::Error for PanicError {}
 
             impl ToValue for PanicError {
-                fn to_value(&self) -> Value {
+                fn to_value(&self) -> Value<'_> {
                     #[cfg(feature = "std")]
                     {
                         Value::capture_error(self)

@@ -217,7 +217,7 @@ impl fmt::Display for ParseLevelError {
 impl std::error::Error for ParseLevelError {}
 
 impl ToValue for Level {
-    fn to_value(&self) -> Value {
+    fn to_value(&self) -> Value<'_> {
         Value::capture_display(self)
     }
 }
