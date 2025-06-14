@@ -9,7 +9,7 @@ error[E0277]: capturing requires `NotDisplay` implements `Display + Any` by defa
 note: required by a bound in `__private_capture_as_default`
  --> $WORKSPACE/src/macro_hooks.rs
   |
-  |     fn __private_capture_as_default(&self) -> Option<Value>
+  |     fn __private_capture_as_default(&self) -> Option<Value<'_>>
   |        ---------------------------- required by a bound in this associated function
   |     where
   |         Self: CaptureWithDefault,

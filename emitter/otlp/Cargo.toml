@@ -23,27 +23,6 @@ path = "../../"
 features = ["std", "sval", "implicit_internal_rt"]
 default-features = false
 
-[target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dependencies.emit_batcher]
-version = "1.9.0"
-path = "../../batcher"
-features = ["tokio"]
-
-[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.emit_batcher]
-version = "1.9.0"
-path = "../../batcher"
-
-[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.wasm-bindgen]
-version = "0.2"
-optional = true
-
-[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.wasm-bindgen-futures]
-version = "0.4"
-optional = true
-
-[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.js-sys]
-version = "0.3"
-optional = true
-
 [dependencies.http]
 version = "1"
 
@@ -94,6 +73,27 @@ version = "0.8"
 optional = true
 
 [target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dependencies.tokio-native-tls]
+version = "0.3"
+optional = true
+
+[target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dependencies.emit_batcher]
+version = "1.9.0"
+path = "../../batcher"
+features = ["tokio"]
+
+[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.emit_batcher]
+version = "1.9.0"
+path = "../../batcher"
+
+[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.wasm-bindgen]
+version = "0.2"
+optional = true
+
+[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.wasm-bindgen-futures]
+version = "0.4"
+optional = true
+
+[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.js-sys]
 version = "0.3"
 optional = true
 
