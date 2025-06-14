@@ -70,21 +70,22 @@ impl HttpConnection {
             body,
         )?;
 
-        let init = JsRequest {
-            method: "POST",
-            headers: js_headers(
-                content.iter_headers().chain(
-                    self.headers
-                        .iter()
-                        .map(|(k, v)| (&**k, Cow::Borrowed(&**v))),
-                ),
+        let headers = js_headers(
+            content.iter_headers().chain(
+                self.headers
+                    .iter()
+                    .map(|(k, v)| (&**k, Cow::Borrowed(&**v))),
             ),
-            body: js_body(content)?,
-        };
+        );
 
-        let res = fetch(self.uri.to_string(), init)
-            .await
-            .map_err(|e| Error::new("failed to send fetch request", JsError::new(e)))?;
+        let body = js_body(content)?;
+
+        let res = fetch(
+            self.uri.to_string(),
+            &JsValue::from(fs_fetch_init("POST", headers, body)),
+        )
+        .await
+        .map_err(|e| Error::new("failed to send fetch request", JsError::new(e)))?;
 
         (self.response)(HttpResponse {
             status: js_status(&res)?,
@@ -114,33 +115,39 @@ fn js_status(res: &JsValue) -> Result<u16, Error> {
         .ok_or_else(|| Error::msg("the fetch response status is not a number"))? as u16)
 }
 
-#[wasm_bindgen]
-pub struct JsRequest {
-    method: &'static str,
-    headers: Map,
-    body: Uint8Array,
+fn fs_fetch_init(method: &str, headers: Map, body: Uint8Array) -> Object {
+    let mut result = Object::new();
+
+    Reflect::set(&result, &JsValue::from("method"), &JsValue::from(method))
+        .expect("failed to set fetch init field");
+    Reflect::set(&result, &JsValue::from("headers"), &JsValue::from(headers))
+        .expect("failed to set fetch init field");
+    Reflect::set(&result, &JsValue::from("body"), &JsValue::from(body))
+        .expect("failed to set fetch init field");
+
+    result
 }
 
 fn js_headers(headers: impl Iterator<Item = (impl AsRef<str>, impl AsRef<str>)>) -> Map {
-    let mut buf = Map::new();
+    let mut result = Map::new();
 
     for (k, v) in headers {
         let name = JsValue::from(k.as_ref());
         let value = JsValue::from(v.as_ref());
 
-        buf.set(&name, &value);
+        result.set(&name, &value);
     }
 
-    buf
+    result
 }
 
 fn js_body(mut body: HttpContent) -> Result<Uint8Array, Error> {
     let length = body
         .content_len()
         .try_into()
-        .map_err(|e| Error::new("failed to buffer fetch request body", e))?;
+        .map_err(|e| Error::new("fetch request body is too large", e))?;
 
-    let mut buf = Uint8Array::new_with_length(length);
+    let mut result = Uint8Array::new_with_length(length);
 
     let mut offset = 0;
     while let Some(mut body) = body.next_content_cursor() {
@@ -148,14 +155,14 @@ fn js_body(mut body: HttpContent) -> Result<Uint8Array, Error> {
             let chunk = body.chunk();
 
             // SAFETY: The view is valid for the duration of `set`, which copies elements
-            unsafe { buf.set(&Uint8Array::view(chunk), offset as u32) };
+            unsafe { result.set(&Uint8Array::view(chunk), offset as u32) };
 
             offset += chunk.len();
             body.advance(chunk.len());
         }
     }
 
-    Ok(buf)
+    Ok(result)
 }
 
 struct JsError(String);
@@ -189,5 +196,5 @@ impl JsError {
 #[wasm_bindgen]
 extern "C" {
     #[wasm_bindgen(js_name = "fetch", catch)]
-    async fn fetch(uri: String, init: JsRequest) -> Result<JsValue, JsValue>;
+    async fn fetch(uri: String, init: &JsValue) -> Result<JsValue, JsValue>;
 }

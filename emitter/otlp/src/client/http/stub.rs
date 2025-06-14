@@ -66,10 +66,7 @@ impl HttpResponse {
         todo!()
     }
 
-    pub async fn stream_trailers(
-        self,
-        mut _trailer: impl FnMut(&str, &str),
-    ) -> Result<(), Error> {
+    pub async fn stream_trailers(self, mut _trailer: impl FnMut(&str, &str)) -> Result<(), Error> {
         todo!()
     }
 }
