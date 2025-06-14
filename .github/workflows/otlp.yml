@@ -47,6 +47,11 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab
 
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.x
+
       - name: Install Rust toolchain
         run: rustup default nightly
 
@@ -82,8 +87,5 @@ jobs:
         run: cargo run --release -- --spawn --flush
 
       - name: Integration Test (Web)
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 24.x
         working-directory: ./emitter/otlp/test/web
         run: npm run exec
