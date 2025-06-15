@@ -1,6 +1,6 @@
 compile_error!("unsupported target");
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use crate::{
     client::{Channel, ClientEventEncoder, OtlpBuilder, OtlpInner, OtlpTransport},
@@ -43,6 +43,18 @@ impl OtlpBuilder {
         )>,
         _metrics: Arc<InternalMetrics>,
     ) -> Result<OtlpInner, Error> {
+        unreachable!()
+    }
+}
+
+pub(crate) struct Instant;
+
+impl Instant {
+    pub fn now() -> Self {
+        unreachable!()
+    }
+
+    pub fn elapsed(&self) -> Duration {
         unreachable!()
     }
 }

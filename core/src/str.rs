@@ -269,7 +269,7 @@ pub trait ToStr {
     /**
     Perform the conversion.
     */
-    fn to_str(&self) -> Str;
+    fn to_str(&self) -> Str<'_>;
 }
 
 impl<'a, T: ToStr + ?Sized> ToStr for &'a T {

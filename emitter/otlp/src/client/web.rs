@@ -1,4 +1,6 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
+
+use wasm_bindgen::prelude::*;
 
 use crate::{
     client::{Channel, ClientEventEncoder, OtlpBuilder, OtlpInner, OtlpTransport},
@@ -82,5 +84,45 @@ impl OtlpBuilder {
             metrics,
             _handle: (),
         })
+    }
+}
+
+pub(crate) struct Instant(f64);
+
+impl Instant {
+    pub fn now() -> Self {
+        Instant(performance_now())
+    }
+
+    pub fn elapsed(&self) -> Duration {
+        let now = performance_now();
+
+        let elapsed_secs = (self.0 - now) * 1000.0;
+
+        if elapsed_secs.is_finite() && !elapsed_secs.is_negative() {
+            Duration::from_secs_f64(elapsed_secs)
+        } else {
+            Duration::MAX
+        }
+    }
+}
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = performance, js_name = "now")]
+    pub fn performance_now() -> f64;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wasm_bindgen_test::*;
+
+    #[wasm_bindgen_test]
+    fn instant_is_defined() {
+        let now = Instant::now();
+
+        assert_ne!(Duration::MIN, now.elapsed());
+        assert_ne!(Duration::MAX, now.elapsed());
     }
 }

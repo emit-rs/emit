@@ -15,3 +15,10 @@ path = "../../../../../"
 
 [dependencies.emit_otlp]
 path = "../../../"
+
+[dependencies.uuid]
+version = "1"
+features = ["js", "v4"]
+
+[dependencies.console_error_panic_hook]
+version = "0.1"

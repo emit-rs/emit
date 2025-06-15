@@ -14,6 +14,7 @@ members = [
     "macros",
     "examples/common_patterns",
     "examples/opentelemetry/direct_otlp",
+    "examples/opentelemetry/web",
     "examples/trace_zipkin",
     "examples/metric_prometheus",
     "test/ui",

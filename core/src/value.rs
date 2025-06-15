@@ -297,7 +297,7 @@ pub trait ToValue {
     /**
     Perform the conversion.
     */
-    fn to_value(&self) -> Value;
+    fn to_value(&self) -> Value<'_>;
 }
 
 /**

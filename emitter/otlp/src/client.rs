@@ -13,15 +13,11 @@ use crate::{
     Error, OtlpMetrics,
 };
 use emit_batcher::BatchError;
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use self::{
     http::{HttpConnection, HttpVersion},
-    imp::Handle,
+    imp::{Handle, Instant},
 };
 
 #[cfg(not(all(

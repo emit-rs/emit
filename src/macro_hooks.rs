@@ -719,7 +719,7 @@ impl<A: Filter, B: Filter> Filter for FirstDefined<A, B> {
 }
 
 pub trait MdlControlParam {
-    fn mdl_control_param(&self) -> Path;
+    fn mdl_control_param(&self) -> Path<'_>;
 }
 
 impl<'a, T: MdlControlParam + ?Sized> MdlControlParam for &'a T {
@@ -735,7 +735,7 @@ impl<'a> MdlControlParam for Path<'a> {
 }
 
 pub trait TplControlParam {
-    fn tpl_control_param(&self) -> Template;
+    fn tpl_control_param(&self) -> Template<'_>;
 }
 
 impl<'a, T: TplControlParam + ?Sized> TplControlParam for &'a T {
