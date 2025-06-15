@@ -805,6 +805,11 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(not(all(
+        target_arch = "wasm32",
+        target_vendor = "unknown",
+        target_os = "unknown"
+    )))]
     fn otlp_empty_closes_bg_thread_on_drop() {
         let mut otlp = Otlp::builder().spawn();
 
@@ -821,6 +826,11 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(all(
+        target_arch = "wasm32",
+        target_vendor = "unknown",
+        target_os = "unknown"
+    )))]
     fn otlp_non_empty_closes_bg_thread_on_drop() {
         let mut otlp = Otlp::builder()
             .logs(OtlpLogsBuilder::proto(OtlpTransportBuilder::http(
@@ -841,6 +851,11 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(all(
+        target_arch = "wasm32",
+        target_vendor = "unknown",
+        target_os = "unknown"
+    )))]
     fn otlp_channel_splits_requests_by_size() {
         use emit_batcher::Channel as _;
 
