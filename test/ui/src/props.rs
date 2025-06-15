@@ -380,7 +380,7 @@ fn props_as_value() {
     struct Data;
 
     impl emit::value::ToValue for Data {
-        fn to_value(&self) -> emit::Value {
+        fn to_value(&self) -> emit::Value<'_> {
             "Data".to_value()
         }
     }

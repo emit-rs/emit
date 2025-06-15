@@ -11,10 +11,11 @@ categories = ["development-tools::debugging"]
 edition = "2021"
 
 [features]
-default = ["tls", "gzip"]
+default = ["tls", "gzip", "web"]
 gzip = ["dep:flate2"]
 tls = ["dep:tokio-rustls", "dep:rustls-native-certs"]
 tls-native = ["tls", "dep:tokio-native-tls"]
+web = ["emit/web", "emit_batcher/web", "wasm-bindgen", "wasm-bindgen-futures", "js-sys"]
 
 [dependencies.emit]
 version = "1.9.0"
@@ -22,10 +23,8 @@ path = "../../"
 features = ["std", "sval", "implicit_internal_rt"]
 default-features = false
 
-[dependencies.emit_batcher]
-version = "1.9.0"
-path = "../../batcher"
-features = ["tokio"]
+[dependencies.http]
+version = "1"
 
 [dependencies.sval]
 version = "2.10"
@@ -53,38 +52,59 @@ features = ["std"]
 version = "2"
 features = ["std"]
 
-[dependencies.tokio]
+[target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dependencies.tokio]
 version = "1"
 default-features = false
-features = ["rt-multi-thread", "sync", "net"]
+features = ["rt", "sync", "net"]
 
-[dependencies.hyper]
+[target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dependencies.hyper]
 version = "1"
 default-features = false
 features = ["client", "http1", "http2"]
 
-[dependencies.futures-util]
-version = "0.3"
-default-features = false
-features = ["std"]
-
-[dependencies.tokio-rustls]
+[target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dependencies.tokio-rustls]
 version = "0.26"
 optional = true
 default-features = false
 features = ["ring"]
 
-[dependencies.rustls-native-certs]
+[target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dependencies.rustls-native-certs]
 version = "0.8"
 optional = true
 
-[dependencies.tokio-native-tls]
+[target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dependencies.tokio-native-tls]
+version = "0.3"
+optional = true
+
+[target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dependencies.emit_batcher]
+version = "1.9.0"
+path = "../../batcher"
+features = ["tokio"]
+
+[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.emit_batcher]
+version = "1.9.0"
+path = "../../batcher"
+
+[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.wasm-bindgen]
+version = "0.2"
+optional = true
+
+[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.wasm-bindgen-futures]
+version = "0.4"
+optional = true
+
+[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.js-sys]
 version = "0.3"
 optional = true
 
 [dependencies.flate2]
 version = "1"
 optional = true
+
+[dependencies.futures-util]
+version = "0.3"
+default-features = false
+features = ["std"]
 
 [dependencies.bytes]
 version = "1"
@@ -100,9 +120,12 @@ version = "1"
 
 [dev-dependencies.tokio]
 version = "1"
-features = ["full"]
+features = ["sync", "macros", "io-util", "rt", "time"]
 
 [dev-dependencies.emit]
 version = "1.9.0"
 path = "../../"
 features = ["implicit_rt"]
+
+[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dev-dependencies.wasm-bindgen-test]
+version = "0.3"

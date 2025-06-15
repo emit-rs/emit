@@ -982,7 +982,7 @@ mod internal {
             for_each: &'f mut dyn FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>,
         ) -> ControlFlow<()>;
 
-        fn dispatch_get(&self, key: Str) -> Option<Value>;
+        fn dispatch_get(&self, key: Str) -> Option<Value<'_>>;
 
         fn dispatch_is_unique(&self) -> bool;
 

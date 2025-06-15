@@ -57,6 +57,36 @@ jobs:
         working-directory: ./core
         run: cargo hack check --each-feature --exclude-features std,alloc,implicit_rt,implicit_internal_rt -Z avoid-dev-deps --target thumbv6m-none-eabi
 
+  wasip1:
+    name: Test (Wasip1)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab
+
+      - name: Install Wasmtime
+        run: curl https://wasmtime.dev/install.sh -sSf | bash
+
+      - name: Add Wasmtime to path
+        run: echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
+
+      - name: Install Rust toolchain
+        run: rustup default nightly
+
+      - name: Install wasm32-wasip1 target
+        run: rustup target add wasm32-wasip1
+
+      - name: Install cargo-hack
+        run: cargo install cargo-hack
+
+      - name: All
+        working-directory: ./core
+        run: cargo test --target wasm32-wasip1 --all-features
+
+      - name: Build powerset
+        working-directory: ./core
+        run: cargo hack build --target wasm32-wasip1 --feature-powerset --lib
+
   miri:
     name: Test (Miri)
     runs-on: ubuntu-latest

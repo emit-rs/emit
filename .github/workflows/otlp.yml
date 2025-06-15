@@ -41,11 +41,44 @@ jobs:
         working-directory: ./emitter/otlp
         run: cargo hack test --feature-powerset --lib -Z minimal-versions
 
-  integration:
+  wasm:
+    name: Test (Node)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
         uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.x
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack
+
+      - name: Default
+        working-directory: ./emitter/otlp
+        run: wasm-pack test --node
+
+      - name: All
+        working-directory: ./emitter/otlp
+        run: wasm-pack test --node --all-features
+
+      - name: Web
+        working-directory: ./emitter/otlp
+        run: wasm-pack test --node --no-default-features --features web
+
+  integration:
+    name: Test (Integration)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.x
 
       - name: Install Rust toolchain
         run: rustup default nightly
@@ -77,3 +110,31 @@ jobs:
       - name: Throughput Test
         working-directory: ./emitter/otlp/test/throughput
         run: cargo run --release -- --spawn --flush
+
+  integration-web:
+    name: Test (Integration Node)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.x
+
+      - name: Install Rust toolchain
+        run: rustup default nightly
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack
+
+      - name: Get otelcol
+        run: wget -O otelcol.deb https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.107.0/otelcol_0.107.0_linux_amd64.deb
+
+      - name: Install otelcol
+        run: sudo dpkg -i ./otelcol.deb
+
+      - name: Integration Test
+        working-directory: ./emitter/otlp/test/web
+        run: npm run exec

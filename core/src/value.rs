@@ -297,7 +297,7 @@ pub trait ToValue {
     /**
     Perform the conversion.
     */
-    fn to_value(&self) -> Value;
+    fn to_value(&self) -> Value<'_>;
 }
 
 /**
@@ -315,13 +315,13 @@ pub trait FromValue<'v> {
 }
 
 impl<'a, T: ToValue + ?Sized> ToValue for &'a T {
-    fn to_value(&self) -> Value {
+    fn to_value(&self) -> Value<'_> {
         (**self).to_value()
     }
 }
 
 impl<T: ToValue> ToValue for Option<T> {
-    fn to_value(&self) -> Value {
+    fn to_value(&self) -> Value<'_> {
         match self {
             Some(v) => v.to_value(),
             None => Value::null(),
@@ -330,7 +330,7 @@ impl<T: ToValue> ToValue for Option<T> {
 }
 
 impl<'v> ToValue for Value<'v> {
-    fn to_value(&self) -> Value {
+    fn to_value(&self) -> Value<'_> {
         self.by_ref()
     }
 }
@@ -345,13 +345,13 @@ macro_rules! impl_primitive {
     ($($t:ty,)*) => {
         $(
             impl ToValue for $t {
-                fn to_value(&self) -> Value {
+                fn to_value(&self) -> Value<'_> {
                     Value(self.into())
                 }
             }
 
             impl<const N: usize> ToValue for [$t; N] {
-                fn to_value(&self) -> Value {
+                fn to_value(&self) -> Value<'_> {
                     Value(self.into())
                 }
             }
@@ -387,13 +387,13 @@ macro_rules! impl_ref {
     ($(& $l:lifetime $t:ty,)*) => {
         $(
             impl ToValue for $t {
-                fn to_value(&self) -> Value {
+                fn to_value(&self) -> Value<'_> {
                     Value(self.into())
                 }
             }
 
             impl<$l, const N: usize> ToValue for [&$l $t; N] {
-                fn to_value(&self) -> Value {
+                fn to_value(&self) -> Value<'_> {
                     Value(self.into())
                 }
             }
@@ -430,20 +430,20 @@ impl_primitive!(u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize, 
 impl_ref!(&'v str,);
 
 impl ToValue for dyn fmt::Debug {
-    fn to_value(&self) -> Value {
+    fn to_value(&self) -> Value<'_> {
         Value(value_bag::ValueBag::from_dyn_debug(self))
     }
 }
 
 impl ToValue for dyn fmt::Display {
-    fn to_value(&self) -> Value {
+    fn to_value(&self) -> Value<'_> {
         Value(value_bag::ValueBag::from_dyn_display(self))
     }
 }
 
 #[cfg(feature = "std")]
 impl ToValue for dyn std::error::Error + 'static {
-    fn to_value(&self) -> Value {
+    fn to_value(&self) -> Value<'_> {
         Value(value_bag::ValueBag::from_dyn_error(self))
     }
 }
@@ -546,7 +546,7 @@ mod alloc_support {
     }
 
     impl ToValue for OwnedValue {
-        fn to_value(&self) -> Value {
+        fn to_value(&self) -> Value<'_> {
             self.by_ref()
         }
     }
@@ -569,7 +569,7 @@ mod alloc_support {
     }
 
     impl ToValue for String {
-        fn to_value(&self) -> Value {
+        fn to_value(&self) -> Value<'_> {
             Value(self.into())
         }
     }
@@ -593,7 +593,7 @@ mod alloc_support {
     }
 
     impl<'v> ToValue for Cow<'v, str> {
-        fn to_value(&self) -> Value {
+        fn to_value(&self) -> Value<'_> {
             Value(self.into())
         }
     }

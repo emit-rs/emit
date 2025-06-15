@@ -427,7 +427,7 @@ impl FromStr for Timestamp {
 }
 
 impl ToValue for Timestamp {
-    fn to_value(&self) -> Value {
+    fn to_value(&self) -> Value<'_> {
         Value::capture_display(self)
     }
 }

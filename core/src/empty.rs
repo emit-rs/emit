@@ -9,3 +9,12 @@ A type that behaves like a default, empty, null value.
 */
 #[derive(Default, Debug, Clone, Copy)]
 pub struct Empty;
+
+impl Empty {
+    /**
+    Create an empty value.
+    */
+    pub const fn new() -> Self {
+        Empty
+    }
+}

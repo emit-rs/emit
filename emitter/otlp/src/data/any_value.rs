@@ -35,25 +35,11 @@ pub enum AnyValue<'a, SV: ?Sized = str> {
 
 const ARRAY_VALUES_LABEL: sval::Label =
     sval::Label::new("values").with_tag(&sval::tags::VALUE_IDENT);
-
 const ARRAY_VALUES_INDEX: sval::Index = sval::Index::new(1);
-
-#[derive(Value)]
-pub struct ArrayValue<'a> {
-    #[sval(label = ARRAY_VALUES_LABEL, index = ARRAY_VALUES_INDEX)]
-    pub values: &'a [AnyValue<'a>],
-}
 
 const KVLIST_VALUES_LABEL: sval::Label =
     sval::Label::new("values").with_tag(&sval::tags::VALUE_IDENT);
-
 const KVLIST_VALUES_INDEX: sval::Index = sval::Index::new(1);
-
-#[derive(Value)]
-pub struct KvList<'a> {
-    #[sval(label = KVLIST_VALUES_LABEL, index = KVLIST_VALUES_INDEX)]
-    pub values: &'a [KeyValue<&'a str, &'a AnyValue<'a>>],
-}
 
 const KEY_VALUE_KEY_LABEL: sval::Label = sval::Label::new("key").with_tag(&sval::tags::VALUE_IDENT);
 const KEY_VALUE_VALUE_LABEL: sval::Label =

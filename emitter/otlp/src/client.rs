@@ -13,17 +13,38 @@ use crate::{
     Error, OtlpMetrics,
 };
 use emit_batcher::BatchError;
-use futures_util::{stream::FuturesUnordered, StreamExt};
-use std::{
-    collections::HashMap,
-    future::Future,
-    pin::Pin,
-    sync::Arc,
-    thread,
-    time::{Duration, Instant},
+use std::{collections::HashMap, sync::Arc, time::Duration};
+
+use self::{
+    http::{HttpConnection, HttpVersion},
+    imp::{Handle, Instant},
 };
 
-use self::http::HttpConnection;
+#[cfg(not(all(
+    target_arch = "wasm32",
+    target_vendor = "unknown",
+    target_os = "unknown"
+)))]
+#[path = "client/tokio.rs"]
+mod imp;
+
+#[cfg(all(
+    feature = "web",
+    target_arch = "wasm32",
+    target_vendor = "unknown",
+    target_os = "unknown"
+))]
+#[path = "client/web.rs"]
+mod imp;
+
+#[cfg(all(
+    not(feature = "web"),
+    target_arch = "wasm32",
+    target_vendor = "unknown",
+    target_os = "unknown"
+))]
+#[path = "client/stub.rs"]
+mod imp;
 
 mod http;
 mod logs;
@@ -61,7 +82,7 @@ struct OtlpInner {
         emit_batcher::Sender<Channel>,
     )>,
     metrics: Arc<InternalMetrics>,
-    _handle: thread::JoinHandle<()>,
+    _handle: Handle,
 }
 
 impl Otlp {
@@ -190,7 +211,7 @@ impl OtlpBuilder {
     pub fn spawn(self) -> Otlp {
         let metrics = Arc::new(InternalMetrics::default());
 
-        let inner = match self.spawn_inner(metrics.clone()) {
+        let inner = match self.try_spawn_inner(metrics.clone()) {
             Ok(inner) => Some(inner),
             Err(err) => {
                 emit::error!(
@@ -207,7 +228,7 @@ impl OtlpBuilder {
         Otlp { metrics, inner }
     }
 
-    fn spawn_inner(self, metrics: Arc<InternalMetrics>) -> Result<OtlpInner, Error> {
+    fn try_spawn_inner(self, metrics: Arc<InternalMetrics>) -> Result<OtlpInner, Error> {
         let (otlp_logs, process_otlp_logs) = match self.otlp_logs {
             Some(builder) => {
                 let (encoder, transport) =
@@ -244,76 +265,15 @@ impl OtlpBuilder {
             None => (None, None),
         };
 
-        let receive = async move {
-            let processors =
-                FuturesUnordered::<Pin<Box<dyn Future<Output = ()> + Send + 'static>>>::new();
-
-            if let Some((transport, receiver)) = process_otlp_logs {
-                let transport = Arc::new(transport);
-
-                processors.push(Box::pin(receiver.exec(
-                    |wait| tokio::time::sleep(wait),
-                    move |batch| {
-                        let transport = transport.clone();
-
-                        async move { transport.send(batch).await }
-                    },
-                )));
-            }
-
-            if let Some((transport, receiver)) = process_otlp_traces {
-                let transport = Arc::new(transport);
-
-                processors.push(Box::pin(receiver.exec(
-                    |wait| tokio::time::sleep(wait),
-                    move |batch| {
-                        let transport = transport.clone();
-
-                        async move { transport.send(batch).await }
-                    },
-                )));
-            }
-
-            if let Some((transport, receiver)) = process_otlp_metrics {
-                let transport = Arc::new(transport);
-
-                processors.push(Box::pin(receiver.exec(
-                    |wait| tokio::time::sleep(wait),
-                    move |batch| {
-                        let transport = transport.clone();
-
-                        async move { transport.send(batch).await }
-                    },
-                )));
-            }
-
-            // Process batches from each signal independently
-            // This ensures one signal becoming unavailable doesn't
-            // block the others
-            let _ = processors.into_future().await;
-        };
-
-        // Spawn a background thread to process batches
-        // This is a safe way to ensure users of `Otlp` can never
-        // deadlock waiting on the processing of batches
-        let handle = std::thread::Builder::new()
-            .name("emit_otlp_worker".into())
-            .spawn(move || {
-                tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .unwrap()
-                    .block_on(receive);
-            })
-            .map_err(|e| Error::new("failed to spawn background worker", e))?;
-
-        Ok(OtlpInner {
+        Self::try_spawn_inner_imp(
             otlp_logs,
+            process_otlp_logs,
             otlp_traces,
+            process_otlp_traces,
             otlp_metrics,
+            process_otlp_metrics,
             metrics,
-            _handle: handle,
-        })
+        )
     }
 }
 
@@ -409,7 +369,8 @@ impl OtlpTransportBuilder {
         Ok(match self.protocol {
             // Configure the transport to use regular HTTP requests
             Protocol::Http => OtlpTransport::Http {
-                http: HttpConnection::http1(
+                http: HttpConnection::new(
+                    HttpVersion::Http1,
                     metrics.clone(),
                     url,
                     self.allow_compression,
@@ -425,7 +386,7 @@ impl OtlpTransportBuilder {
                             if status >= 200 && status < 300 {
                                 metrics.http_batch_sent.increment();
 
-                                Ok(vec![])
+                                Ok(())
                             } else {
                                 metrics.http_batch_failed.increment();
 
@@ -444,12 +405,13 @@ impl OtlpTransportBuilder {
             // a simple message framing protocol and carry status codes in a trailer
             // instead of the response status
             Protocol::Grpc => OtlpTransport::Http {
-                http: HttpConnection::http2(
+                http: HttpConnection::new(
+                    HttpVersion::Http2,
                     metrics.clone(),
                     url,
                     self.allow_compression,
                     self.headers,
-                    |mut req| {
+                    |req| {
                         let content_type_header = match req.content_type_header() {
                             "application/x-protobuf" => "application/grpc+proto",
                             content_type => {
@@ -466,8 +428,9 @@ impl OtlpTransportBuilder {
 
                         Ok(
                             // If the content is compressed then set the gRPC compression header byte for it
-                            if let Some(compression) = req.take_content_encoding_header() {
-                                req.with_content_type_header(content_type_header)
+                            if let Some(compression) = req.content_encoding_header() {
+                                req.with_content_encoding_header(None)
+                                    .with_content_type_header(content_type_header)
                                     .with_headers(match compression {
                                         "gzip" => &[("grpc-encoding", "gzip")],
                                         compression => {
@@ -492,25 +455,22 @@ impl OtlpTransportBuilder {
                             let mut status = 0;
                             let mut msg = String::new();
 
-                            res.stream_payload(
-                                |_| {},
-                                |k, v| match k {
-                                    "grpc-status" => {
-                                        status = v.parse().unwrap_or(0);
-                                    }
-                                    "grpc-message" => {
-                                        msg = v.into();
-                                    }
-                                    _ => {}
-                                },
-                            )
+                            res.stream_trailers(|k, v| match k {
+                                "grpc-status" => {
+                                    status = v.parse().unwrap_or(0);
+                                }
+                                "grpc-message" => {
+                                    msg = v.into();
+                                }
+                                _ => {}
+                            })
                             .await?;
 
                             // A request is considered successful if the grpc-status trailer is 0
                             if status == 0 {
                                 metrics.grpc_batch_sent.increment();
 
-                                Ok(vec![])
+                                Ok(())
                             }
                             // In any other case the request failed and may carry some diagnostic message
                             else {
@@ -841,6 +801,11 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(not(all(
+        target_arch = "wasm32",
+        target_vendor = "unknown",
+        target_os = "unknown"
+    )))]
     fn otlp_empty_closes_bg_thread_on_drop() {
         let mut otlp = Otlp::builder().spawn();
 
@@ -857,6 +822,11 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(all(
+        target_arch = "wasm32",
+        target_vendor = "unknown",
+        target_os = "unknown"
+    )))]
     fn otlp_non_empty_closes_bg_thread_on_drop() {
         let mut otlp = Otlp::builder()
             .logs(OtlpLogsBuilder::proto(OtlpTransportBuilder::http(

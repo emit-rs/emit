@@ -704,7 +704,7 @@ mod std_support {
         /**
         Get the underlying [`Runtime`], or a [`Runtime::default`] if it hasn't been initialized yet.
         */
-        pub fn get(&self) -> &AmbientRuntime {
+        pub fn get(&self) -> &AmbientRuntime<'_> {
             const EMPTY_AMBIENT_RUNTIME: AmbientRuntime = Runtime::build(
                 &Empty as &(dyn ErasedEmitter + Send + Sync + 'static),
                 &Empty as &(dyn ErasedFilter + Send + Sync + 'static),
@@ -764,7 +764,7 @@ mod std_support {
         /**
         Get the underlying [`Runtime`], or a [`Runtime::default`] if it hasn't been initialized yet.
         */
-        pub fn get(&self) -> &AmbientRuntime {
+        pub fn get(&self) -> &AmbientRuntime<'_> {
             self.0.get()
         }
     }
@@ -827,7 +827,7 @@ mod no_std_support {
         /**
         When the `std` feature is not enabled this method always returns an empty runtime.
         */
-        pub fn get(&self) -> &AmbientRuntime {
+        pub fn get(&self) -> &AmbientRuntime<'_> {
             const EMPTY_AMBIENT_RUNTIME: AmbientRuntime =
                 Runtime::build(&Empty, &Empty, &Empty, &Empty, &Empty);
 
@@ -851,7 +851,7 @@ mod no_std_support {
         /**
         When the `std` feature is not enabled this method always returns an empty runtime.
         */
-        pub fn get(&self) -> &AmbientRuntime {
+        pub fn get(&self) -> &AmbientRuntime<'_> {
             self.0.get()
         }
     }

@@ -1,0 +1,33 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: "localhost:4418"
+        cors:
+          allowed_origins:
+            - "http://localhost:8080"
+          allowed_headers:
+            - content-type
+            - content-encoding
+            - traceparent
+            - tracestate
+
+exporters:
+  debug:
+    verbosity: detailed
+    sampling_initial: 1
+
+service:
+  telemetry:
+    metrics:
+      level: none
+  pipelines:
+    logs:
+      receivers: [otlp]
+      exporters: [debug]
+    traces:
+      receivers: [otlp]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      exporters: [debug]

@@ -101,7 +101,7 @@ impl ThreadLocalValue {
 }
 
 impl ToValue for ThreadLocalValue {
-    fn to_value(&self) -> Value {
+    fn to_value(&self) -> Value<'_> {
         match self.inner {
             ThreadLocalValueInner::TraceId(ref value) => value.to_value(),
             ThreadLocalValueInner::SpanId(ref value) => value.to_value(),
@@ -251,7 +251,13 @@ fn swap(id: usize, incoming: &mut ThreadLocalCtxtFrame) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::thread;
+
+    #[cfg(all(
+        target_arch = "wasm32",
+        target_vendor = "unknown",
+        target_os = "unknown"
+    ))]
+    use wasm_bindgen_test::*;
 
     impl ThreadLocalCtxtFrame {
         fn props(&self) -> HashMap<Str<'static>, ThreadLocalValue> {
@@ -279,6 +285,14 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(
+            target_arch = "wasm32",
+            target_vendor = "unknown",
+            target_os = "unknown"
+        ),
+        wasm_bindgen_test
+    )]
     fn push_props() {
         let ctxt = ThreadLocalCtxt::new();
 
@@ -393,7 +407,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_arch = "wasm32"))]
     fn frame_thread_propagation() {
+        use std::thread;
+
         let ctxt = ThreadLocalCtxt::new();
 
         let mut frame = ctxt.open_push(("a", 1));

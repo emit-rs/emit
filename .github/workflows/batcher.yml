@@ -39,18 +39,24 @@ jobs:
         run: cargo hack test --feature-powerset --lib -Z minimal-versions
 
   web:
+    name: Test (Node)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
         uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab
 
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.x
+
       - name: Install Rust toolchain
         run: rustup default nightly
 
-      - name: Install
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      - name: Install wasm-pack
+        run: cargo install wasm-pack
 
-      - name: Default features
+      - name: Default
         working-directory: ./batcher
         run: wasm-pack test --node
 

@@ -1,0 +1,24 @@
+[package]
+name = "emit_otlp_test_web_native"
+version = "0.0.0"
+edition = "2024"
+
+[lib]
+path = "lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies.wasm-bindgen]
+version = "0.2"
+
+[dependencies.emit]
+path = "../../../../../"
+
+[dependencies.emit_otlp]
+path = "../../../"
+
+[dependencies.uuid]
+version = "1"
+features = ["js", "v4"]
+
+[dependencies.console_error_panic_hook]
+version = "0.1"

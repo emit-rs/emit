@@ -244,7 +244,7 @@ impl<'a, 'b> From<&'a Str<'b>> for Str<'a> {
 }
 
 impl<'k> ToValue for Str<'k> {
-    fn to_value(&self) -> Value {
+    fn to_value(&self) -> Value<'_> {
         self.get().to_value()
     }
 }
@@ -269,23 +269,23 @@ pub trait ToStr {
     /**
     Perform the conversion.
     */
-    fn to_str(&self) -> Str;
+    fn to_str(&self) -> Str<'_>;
 }
 
 impl<'a, T: ToStr + ?Sized> ToStr for &'a T {
-    fn to_str(&self) -> Str {
+    fn to_str(&self) -> Str<'_> {
         (**self).to_str()
     }
 }
 
 impl<'k> ToStr for Str<'k> {
-    fn to_str(&self) -> Str {
+    fn to_str(&self) -> Str<'_> {
         self.by_ref()
     }
 }
 
 impl ToStr for str {
-    fn to_str(&self) -> Str {
+    fn to_str(&self) -> Str<'_> {
         Str::new_ref(self)
     }
 }
@@ -431,19 +431,19 @@ mod alloc_support {
     }
 
     impl ToStr for String {
-        fn to_str(&self) -> Str {
+        fn to_str(&self) -> Str<'_> {
             Str::new_ref(self)
         }
     }
 
     impl ToStr for Box<str> {
-        fn to_str(&self) -> Str {
+        fn to_str(&self) -> Str<'_> {
             Str::new_ref(self)
         }
     }
 
     impl ToStr for Arc<str> {
-        fn to_str(&self) -> Str {
+        fn to_str(&self) -> Str<'_> {
             Str::new_shared(self.clone())
         }
     }
@@ -481,11 +481,6 @@ mod alloc_support {
     #[cfg(test)]
     mod tests {
         use super::*;
-
-        #[test]
-        fn str_size() {
-            assert_eq!(40, mem::size_of::<Str>());
-        }
 
         #[test]
         fn to_owned() {
