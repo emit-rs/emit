@@ -759,6 +759,11 @@ pub mod sync;
 pub mod tokio;
 
 #[cfg(feature = "web")]
+#[cfg(all(
+    target_arch = "wasm32",
+    target_vendor = "unknown",
+    target_os = "unknown"
+))]
 pub mod web;
 
 // Re-export an appropriate implementation of blocking functions based on crate features

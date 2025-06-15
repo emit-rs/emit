@@ -64,10 +64,6 @@ jobs:
         working-directory: ./emitter/otlp
         run: wasm-pack test --node --all-features
 
-      - name: None
-        working-directory: ./emitter/otlp
-        run: wasm-pack test --node --no-default-features
-
       - name: Web
         working-directory: ./emitter/otlp
         run: wasm-pack test --node --no-default-features --features web

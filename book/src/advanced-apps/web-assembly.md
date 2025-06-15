@@ -2,6 +2,15 @@
 
 You can use `emit` in WebAssembly applications.
 
-If you're targeting WASI via the `wasm32-wasi` target, you shouldn't need to do anything special to make `emit` work.
+When WebAssembly support requires bindings to JavaScript APIs, crates will use a `web` Cargo feature that enables them.
 
-If you're targeting NodeJS or the web via the `wasm32-unknown` target, you can use [`emit_web`](https://docs.rs/emit_web) to provide a clock and source of randomness. See [the crate docs](https://docs.rs/emit_web) for more details. You can also treat `wasm32-unknown` like any other embedded target. See [Instrumenting embedded applications](./embedded.md) for more details.
+If you're targeting WASI via the `wasm32-wasi` target, you shouldn't need to do anything special to make `emit` work, but not all emitters support WASI yet. The following emitters are compatible with WASI:
+
+- [`emit_term`](../emitting-events/console.md) to emit events to stdout.
+
+If you're targeting NodeJS or the web via the `wasm32-unknown` target, you can use emitters that support a `web` Cargo feature. That includes:
+
+- [`emit_otlp`](../emitting-events/otlp.md) to emit events to an OpenTelemetry-compatible service. Note that in the browser you may need to configure CORS. See [the docs](https://docs.rs/emit_otlp/#webassembly) for more details.
+- [`emit_web`](https://docs.rs/emit_web) to emit events via the [`console`](https://developer.mozilla.org/en-US/docs/Web/API/console) API.
+
+You can also treat `wasm32-unknown` like any other embedded target. See [Instrumenting embedded applications](./embedded.md) for more details.

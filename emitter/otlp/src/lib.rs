@@ -249,9 +249,36 @@ The following table lists currently supported environment variables:
 
 New environment variables that affect configuration may be added in the future.
 
+# WebAssembly
+
+`emit_otlp` can be used in Node and browser applications by compiling to WebAssembly using the `wasm32-unknown-unknown` target.
+
+When running in WebAssembly, requests are made using the [`fetch`](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API) API. This supports the following transports:
+
+- HTTP+protobuf
+- HTTP+JSON
+
+Compression via gzip is supported in WebAssembly.
+
+## CORS
+
+If you're running in a browser, you'll likely need to configure [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS) on your upstream OpenTelemetry-compatible service, otherwise attempts to export telemetry will fail. CORS configuration requires allow-listing a set of origins, and request headers.
+
+`emit_otlp` issues requests using the following HTTP methods:
+
+- POST
+
+`emit_otlp` may add the following request headers:
+
+- `content-type`
+- `content-encoding`
+- `traceparent`
+- `tracestate`
+- Any custom headers you've configured
+
 # Logs
 
-All [`emit::Event`]s can be represented as OTLP log records. You should at least configure the logs signal to make sure all diagnostics are captured in some way. A minimal logging configuration for gRPC+Protobuf is:
+All [`emit::Event`]s can be represented as OTLP log records. You should at least configure the logs signal to make sure all diagnostics are captured in some way. A minimal logging configuration for gRPC+protobuf is:
 
 ```
 # fn build() -> emit_otlp::Otlp {
@@ -543,12 +570,12 @@ http://localhost:4318/v1/logs
 When the traces signal is configured, [`emit::Event`]s can be represented as OTLP spans so long as they satisfy the following conditions:
 
 - They have a valid [`emit::TraceId`] in the [`emit::well_known::KEY_TRACE_ID`] property and [`emit::SpanId`] in the [`emit::well_known::KEY_SPAN_ID`] property.
-- Their [`emit::Event::extent`] is a span. That is, [`emit::Extent::is_span`] is `true`.
+- Their [`emit::Event::extent`] is a span. That is, [`emit::Extent::is_range`] is `true`.
 - They have an [`emit::Kind::Span`] in the [`emit::well_known::KEY_EVT_KIND`] property.
 
 If any condition is not met, the event will be represented as an OTLP log record. If the logs signal is not configured then it will be discarded.
 
-A minimal logging configuration for gRPC+Protobuf is:
+A minimal logging configuration for gRPC+protobuf is:
 
 ```
 # fn build() -> emit_otlp::Otlp {
@@ -851,7 +878,7 @@ When the metrics signal is configured, [`emit::Event`]s can be represented as OT
 
 If any condition is not met, the event will be represented as an OTLP log record. If the logs signal is not configured then it will be discarded.
 
-A minimal logging configuration for gRPC+Protobuf is:
+A minimal logging configuration for gRPC+protobuf is:
 
 ```
 # fn build() -> emit_otlp::Otlp {
