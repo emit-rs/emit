@@ -851,11 +851,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(all(
-        target_arch = "wasm32",
-        target_vendor = "unknown",
-        target_os = "unknown"
-    )))]
     fn otlp_channel_splits_requests_by_size() {
         use emit_batcher::Channel as _;
 
