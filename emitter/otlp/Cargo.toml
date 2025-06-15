@@ -126,3 +126,6 @@ features = ["sync", "macros", "io-util", "rt", "time"]
 version = "1.9.0"
 path = "../../"
 features = ["implicit_rt"]
+
+[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dev-dependencies.wasm-bindgen-test]
+version = "0.3"

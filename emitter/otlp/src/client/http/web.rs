@@ -41,7 +41,9 @@ impl HttpConnection {
         response: impl Fn(HttpResponse) -> F + Send + Sync + 'static,
     ) -> Result<Self, Error> {
         if version != HttpVersion::Http1 {
-            unimplemented!()
+            return Err(Error::msg(
+                "only HTTP1-based transports are supported by fetch",
+            ));
         }
 
         Ok(HttpConnection {
@@ -83,11 +85,11 @@ impl HttpConnection {
 
         let body = js_body(content)?;
 
-        let signal = AbortSignal::timeout_millis(timeout.as_millis() as u32);
+        let signal = js_signal(timeout);
 
         let res = fetch(
             resource,
-            &JsValue::from(js_fetch_init("POST", headers, body, signal)),
+            &JsValue::from(js_fetch_init("POST", &headers, &body, signal.as_ref())),
         )
         .await
         .map_err(|e| Error::new("failed to send fetch request", JsError::new(e)))?;
@@ -109,7 +111,7 @@ impl HttpResponse {
     }
 
     pub async fn stream_trailers(self, _trailer: impl FnMut(&str, &str)) -> Result<(), Error> {
-        unimplemented!()
+        Err(Error::msg("streaming trailers is not supported by fetch"))
     }
 }
 
@@ -120,7 +122,12 @@ fn js_status(res: &JsValue) -> Result<u16, Error> {
         .ok_or_else(|| Error::msg("the fetch response status is not a number"))? as u16)
 }
 
-fn js_fetch_init(method: &str, headers: Map, body: Uint8Array, signal: AbortSignal) -> Object {
+fn js_fetch_init(
+    method: &str,
+    headers: &Map,
+    body: &Uint8Array,
+    signal: Option<&AbortSignal>,
+) -> Object {
     let result = Object::new();
 
     Reflect::set(&result, &JsValue::from("method"), &JsValue::from(method))
@@ -129,8 +136,11 @@ fn js_fetch_init(method: &str, headers: Map, body: Uint8Array, signal: AbortSign
         .expect("failed to set fetch init field");
     Reflect::set(&result, &JsValue::from("body"), &JsValue::from(body))
         .expect("failed to set fetch init field");
-    Reflect::set(&result, &JsValue::from("signal"), &JsValue::from(signal))
-        .expect("failed to set fetch init field");
+
+    if let Some(signal) = signal {
+        Reflect::set(&result, &JsValue::from("signal"), &JsValue::from(signal))
+            .expect("failed to set fetch init field");
+    }
 
     result
 }
@@ -172,6 +182,21 @@ fn js_body(mut body: HttpContent) -> Result<Uint8Array, Error> {
     Ok(result)
 }
 
+fn js_signal(timeout: Duration) -> Option<AbortSignal> {
+    // `AbortSignal.timeout` is fairly new (mid 2024), so only call it if it's defined
+    ABORT_SIGNAL.with(|signal| {
+        if Reflect::get(signal, &JsValue::from("timeout"))
+            .ok()
+            .unwrap_or(JsValue::UNDEFINED)
+            .is_undefined()
+        {
+            return None;
+        }
+
+        Some(AbortSignal::timeout_millis(timeout.as_millis() as u32))
+    })
+}
+
 struct JsError(String);
 
 impl fmt::Debug for JsError {
@@ -205,9 +230,23 @@ extern "C" {
     #[wasm_bindgen(js_name = "fetch", catch)]
     async fn fetch(uri: String, init: &JsValue) -> Result<JsValue, JsValue>;
 
+    #[wasm_bindgen(thread_local_v2, js_name = "AbortSignal")]
+    static ABORT_SIGNAL: JsValue;
+
     #[wasm_bindgen]
     type AbortSignal;
 
     #[wasm_bindgen(static_method_of = AbortSignal, js_name = "timeout")]
     fn timeout_millis(ms: u32) -> AbortSignal;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wasm_bindgen_test::*;
+
+    #[wasm_bindgen_test]
+    fn abort_signal_is_defined() {
+        assert!(js_signal(Duration::from_millis(1)).is_some());
+    }
 }

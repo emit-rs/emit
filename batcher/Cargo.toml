@@ -24,23 +24,23 @@ version = "1"
 features = ["rt", "sync", "time"]
 optional = true
 
-[dependencies.wasm-bindgen]
-version = "0.2"
-optional = true
-
-[dependencies.wasm-bindgen-futures]
-version = "0.4"
-optional = true
-
-[dependencies.js-sys]
-version = "0.3"
-optional = true
-
 [dependencies.futures]
 version = "0.3"
 optional = true
 
-[dev-dependencies.wasm-bindgen-test]
+[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.wasm-bindgen]
+version = "0.2"
+optional = true
+
+[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.wasm-bindgen-futures]
+version = "0.4"
+optional = true
+
+[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.js-sys]
+version = "0.3"
+optional = true
+
+[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dev-dependencies.wasm-bindgen-test]
 version = "0.3"
 
 [target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dev-dependencies.tokio]
