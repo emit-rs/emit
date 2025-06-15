@@ -35,11 +35,12 @@ edition = "2021"
 features = ["std", "rand", "sval", "serde", "implicit_rt", "implicit_internal_rt"]
 
 [features]
-default = ["std", "rand", "implicit_rt", "implicit_internal_rt"]
+default = ["std", "rand", "web", "implicit_rt", "implicit_internal_rt"]
 std = ["alloc", "emit_macros/std", "emit_core/std"]
 alloc = ["emit_core/alloc"]
 sval = ["emit_macros/sval", "emit_core/sval", "dep:sval"]
 serde = ["emit_macros/serde", "emit_core/serde", "dep:serde"]
+web = ["wasm-bindgen", "js-sys"]
 implicit_rt = ["emit_core/implicit_rt", "emit_macros/implicit_rt"]
 implicit_internal_rt = ["emit_core/implicit_internal_rt"]
 
@@ -62,23 +63,37 @@ version = "1"
 optional = true
 default-features = false
 
-[dependencies.rand]
+# rand is only pulled in as a dependency on select platforms that
+# don't require `getrandom` build-time configuration
+
+[target.'cfg(any(target_os = "linux", target_os = "windows", target_os = "macos", target_os = "ios", target_os = "android"))'.dependencies.rand]
 version = "0.9"
+optional = true
+
+[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.wasm-bindgen]
+version = "0.2"
+optional = true
+
+[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.js-sys]
+version = "0.3"
 optional = true
 
 [dev-dependencies.serde]
 version = "1"
 features = ["derive"]
 
-[dev-dependencies.tokio]
-version = "1"
-features = ["full"]
-
 [dev-dependencies.sval_test]
 version = "2"
 
 [dev-dependencies.serde_test]
 version = "1"
+
+[target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dev-dependencies.tokio]
+version = "1"
+features = ["full"]
+
+[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dev-dependencies.wasm-bindgen-test]
+version = "0.3"
 
 [profile.release]
 debug = true

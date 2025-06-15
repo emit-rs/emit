@@ -11,11 +11,11 @@ categories = ["development-tools::debugging"]
 edition = "2021"
 
 [features]
-default = ["tls", "gzip"]
+default = ["tls", "gzip", "web"]
 gzip = ["dep:flate2"]
 tls = ["dep:tokio-rustls", "dep:rustls-native-certs"]
 tls-native = ["tls", "dep:tokio-native-tls"]
-web = ["emit_batcher/web", "wasm-bindgen", "wasm-bindgen-futures", "js-sys"]
+web = ["emit/web", "emit_batcher/web", "wasm-bindgen", "wasm-bindgen-futures", "js-sys"]
 
 [dependencies.emit]
 version = "1.9.0"

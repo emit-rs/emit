@@ -12,8 +12,6 @@ version = "0.2"
 
 [dependencies.emit]
 path = "../../../../../"
-default-features = false
 
 [dependencies.emit_otlp]
 path = "../../../"
-features = ["web"]

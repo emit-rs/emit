@@ -45,15 +45,15 @@ The [`crate::runtime::AmbientSlot`] is type-erased, but you can also define your
 static RUNTIME: emit::runtime::Runtime<
     MyEmitter,
     emit::Empty,
-    emit::platform::thread_local_ctxt::ThreadLocalCtxt,
-    emit::platform::system_clock::SystemClock,
-    emit::platform::rand_rng::RandRng,
+    emit::platform::DefaultCtxt,
+    emit::platform::DefaultClock,
+    emit::platform::DefaultRng,
 > = emit::runtime::Runtime::build(
     MyEmitter,
     emit::Empty,
-    emit::platform::thread_local_ctxt::ThreadLocalCtxt::shared(),
-    emit::platform::system_clock::SystemClock::new(),
-    emit::platform::rand_rng::RandRng::new(),
+    emit::platform::DefaultCtxt::shared(),
+    emit::platform::DefaultClock::new(),
+    emit::platform::DefaultRng::new(),
 );
 
 struct MyEmitter;

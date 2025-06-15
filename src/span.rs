@@ -1831,7 +1831,7 @@ mod tests {
     #[test]
     #[cfg(feature = "rand")]
     fn span_id_random_rand() {
-        assert!(SpanId::random(crate::platform::rand_rng::RandRng::new()).is_some());
+        assert!(SpanId::random(crate::platform::DefaultRng::new()).is_some());
     }
 
     #[test]
@@ -1842,7 +1842,7 @@ mod tests {
     #[test]
     #[cfg(feature = "rand")]
     fn trace_id_random_rand() {
-        assert!(TraceId::random(crate::platform::rand_rng::RandRng::new()).is_some());
+        assert!(TraceId::random(crate::platform::DefaultRng::new()).is_some());
     }
 
     #[test]
@@ -1993,8 +1993,8 @@ mod tests {
     #[test]
     #[cfg(all(feature = "std", feature = "rand", not(miri)))]
     fn span_ctxt_new() {
-        let rng = crate::platform::rand_rng::RandRng::new();
-        let ctxt = crate::platform::thread_local_ctxt::ThreadLocalCtxt::new();
+        let rng = crate::platform::DefaultRng::new();
+        let ctxt = crate::platform::DefaultCtxt::new();
 
         // Span context from an empty source is empty
         let root = SpanCtxt::current(&ctxt);
@@ -2131,8 +2131,8 @@ mod tests {
     #[cfg(all(feature = "std", feature = "rand", not(miri)))]
     fn active_span_new() {
         let clock = MyClock(Cell::new(0));
-        let rng = crate::platform::rand_rng::RandRng::new();
-        let ctxt = crate::platform::thread_local_ctxt::ThreadLocalCtxt::new();
+        let rng = crate::platform::DefaultRng::new();
+        let ctxt = crate::platform::DefaultCtxt::new();
 
         let complete_called = Cell::new(false);
 
@@ -2194,8 +2194,8 @@ mod tests {
     #[cfg(all(feature = "std", feature = "rand", not(miri)))]
     fn active_span_unstarted_complete() {
         let clock = MyClock(Cell::new(0));
-        let rng = crate::platform::rand_rng::RandRng::new();
-        let ctxt = crate::platform::thread_local_ctxt::ThreadLocalCtxt::new();
+        let rng = crate::platform::DefaultRng::new();
+        let ctxt = crate::platform::DefaultCtxt::new();
 
         let complete_called = Cell::new(false);
 
@@ -2223,9 +2223,9 @@ mod tests {
     #[test]
     #[cfg(all(feature = "std", feature = "rand", not(miri)))]
     fn active_span_new_disabled() {
-        let rng = crate::platform::rand_rng::RandRng::new();
+        let rng = crate::platform::DefaultRng::new();
         let clock = crate::platform::system_clock::SystemClock::new();
-        let ctxt = crate::platform::thread_local_ctxt::ThreadLocalCtxt::new();
+        let ctxt = crate::platform::DefaultCtxt::new();
 
         let complete_called = Cell::new(false);
 
@@ -2257,9 +2257,9 @@ mod tests {
     #[test]
     #[cfg(all(feature = "std", feature = "rand", not(miri)))]
     fn active_span_custom_complete() {
-        let ctxt = crate::platform::thread_local_ctxt::ThreadLocalCtxt::new();
+        let ctxt = crate::platform::DefaultCtxt::new();
         let clock = crate::platform::system_clock::SystemClock::new();
-        let rng = crate::platform::rand_rng::RandRng::new();
+        let rng = crate::platform::DefaultRng::new();
 
         let custom_complete_called = Cell::new(false);
         let default_complete_called = Cell::new(false);
@@ -2294,8 +2294,8 @@ mod tests {
     #[cfg(all(feature = "std", feature = "rand", not(miri)))]
     fn active_span_with_props() {
         let clock = MyClock(Cell::new(0));
-        let rng = crate::platform::rand_rng::RandRng::new();
-        let ctxt = crate::platform::thread_local_ctxt::ThreadLocalCtxt::new();
+        let rng = crate::platform::DefaultRng::new();
+        let ctxt = crate::platform::DefaultCtxt::new();
 
         let complete_called = Cell::new(false);
 

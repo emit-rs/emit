@@ -241,7 +241,7 @@ mod tests {
     #[cfg(feature = "std")]
     #[test]
     fn frame_manual() {
-        let ctxt = crate::platform::thread_local_ctxt::ThreadLocalCtxt::new();
+        let ctxt = crate::platform::DefaultCtxt::new();
 
         let frame = Frame::push(&ctxt, ("a", 1));
 
@@ -262,7 +262,7 @@ mod tests {
     #[cfg(feature = "std")]
     #[test]
     fn frame_exec() {
-        let ctxt = crate::platform::thread_local_ctxt::ThreadLocalCtxt::new();
+        let ctxt = crate::platform::DefaultCtxt::new();
 
         let mut frame = Frame::push(&ctxt, ("a", 1));
 
@@ -276,7 +276,7 @@ mod tests {
     #[cfg(feature = "std")]
     #[test]
     fn frame_in_fn() {
-        let ctxt = crate::platform::thread_local_ctxt::ThreadLocalCtxt::new();
+        let ctxt = crate::platform::DefaultCtxt::new();
 
         let frame = Frame::push(&ctxt, ("a", 1));
 
@@ -289,10 +289,18 @@ mod tests {
         f();
     }
 
-    #[cfg(all(feature = "std", not(miri)))]
+    #[cfg(all(
+        feature = "std",
+        not(all(
+            target_arch = "wasm32",
+            target_vendor = "unknown",
+            target_os = "unknown"
+        )),
+        not(miri)
+    ))]
     #[tokio::test]
     async fn frame_in_future() {
-        let ctxt = crate::platform::thread_local_ctxt::ThreadLocalCtxt::new();
+        let ctxt = crate::platform::DefaultCtxt::new();
 
         let frame = Frame::push(&ctxt, ("a", 1));
 
