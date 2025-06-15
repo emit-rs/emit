@@ -97,9 +97,9 @@ impl Instant {
     pub fn elapsed(&self) -> Duration {
         let now = performance_now();
 
-        let elapsed_secs = (self.0 - now) * 1000.0;
+        let elapsed_secs = (now - self.0) * 1000.0;
 
-        if elapsed_secs.is_finite() && !elapsed_secs.is_negative() {
+        if elapsed_secs.is_finite() && !elapsed_secs.is_sign_negative() {
             Duration::from_secs_f64(elapsed_secs)
         } else {
             Duration::MAX
@@ -122,7 +122,7 @@ mod tests {
     fn instant_is_defined() {
         let now = Instant::now();
 
-        assert_ne!(Duration::MIN, now.elapsed());
+        assert_ne!(Duration::ZERO, now.elapsed());
         assert_ne!(Duration::MAX, now.elapsed());
     }
 }
