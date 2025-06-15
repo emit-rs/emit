@@ -21,7 +21,7 @@ default-features = false
 
 [dependencies.tokio]
 version = "1"
-features = ["rt-multi-thread", "sync", "time"]
+features = ["rt", "sync", "time"]
 optional = true
 
 [dependencies.wasm-bindgen]
@@ -45,4 +45,4 @@ version = "0.3"
 
 [target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dev-dependencies.tokio]
 version = "1"
-features = ["full"]
+features = ["sync", "macros", "io-util", "rt", "time"]

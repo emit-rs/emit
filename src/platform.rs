@@ -7,6 +7,11 @@ Note that types exported here aren't guartanteed to be available on all platform
 */
 
 #[cfg(feature = "std")]
+#[cfg(not(all(
+    target_arch = "wasm32",
+    target_vendor = "unknown",
+    target_os = "unknown"
+)))]
 pub mod system_clock;
 
 #[cfg(feature = "std")]
@@ -18,7 +23,8 @@ pub mod thread_local_ctxt;
     target_os = "windows",
     target_os = "macos",
     target_os = "ios",
-    target_os = "android"
+    target_os = "android",
+    target_os = "wasi"
 ))]
 pub mod rand_rng;
 
@@ -102,7 +108,8 @@ The default [`crate::Rng`].
     target_os = "windows",
     target_os = "macos",
     target_os = "ios",
-    target_os = "android"
+    target_os = "android",
+    target_os = "wasi"
 ))]
 pub type DefaultRng = crate::Empty;
 /**
@@ -114,7 +121,8 @@ The default [`crate::Rng`].
     target_os = "windows",
     target_os = "macos",
     target_os = "ios",
-    target_os = "android"
+    target_os = "android",
+    target_os = "wasi"
 ))]
 pub type DefaultRng = rand_rng::RandRng;
 

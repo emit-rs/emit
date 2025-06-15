@@ -57,6 +57,7 @@ The [`setup()`] function configures `emit` with an [`Emitter`] to write [`Event`
     - `macos`
     - `ios`
     - `android`
+    - `wasi`
 
 ## Troubleshooting
 

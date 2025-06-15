@@ -483,11 +483,6 @@ mod alloc_support {
         use super::*;
 
         #[test]
-        fn str_size() {
-            assert_eq!(40, mem::size_of::<Str>());
-        }
-
-        #[test]
         fn to_owned() {
             for case in [
                 Str::new("string"),

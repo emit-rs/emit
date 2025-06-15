@@ -68,3 +68,58 @@ jobs:
 
       - name: No features
         run: cargo +nightly miri test --lib --no-default-features
+
+  wasip1:
+    name: Test (Wasip1)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab
+
+      - name: Install Wasmtime
+        run: curl https://wasmtime.dev/install.sh -sSf | bash
+
+      - name: Add Wasmtime to path
+        run: echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
+
+      - name: Install Rust toolchain
+        run: rustup default nightly
+
+      - name: Install wasm32-wasip1 target
+        run: rustup target add wasm32-wasip1
+
+      - name: Install cargo-hack
+        run: cargo install cargo-hack
+
+      - name: All
+        run: cargo test --target wasm32-wasip1 --all-features
+
+      - name: Build powerset
+        run: cargo hack build --target wasm32-wasip1 --feature-powerset --lib
+
+  wasm:
+    name: Test (Node)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.x
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack
+
+      - name: Default
+        run: wasm-pack test --node
+
+      - name: All
+        run: wasm-pack test --node --all-features
+
+      - name: None
+        run: wasm-pack test --node --no-default-features
+
+      - name: Web
+        run: wasm-pack test --node --no-default-features --features web

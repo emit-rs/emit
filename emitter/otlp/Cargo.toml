@@ -55,7 +55,7 @@ features = ["std"]
 [target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dependencies.tokio]
 version = "1"
 default-features = false
-features = ["rt-multi-thread", "sync", "net"]
+features = ["rt", "sync", "net"]
 
 [target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dependencies.hyper]
 version = "1"
@@ -120,7 +120,7 @@ version = "1"
 
 [dev-dependencies.tokio]
 version = "1"
-features = ["full"]
+features = ["sync", "macros", "io-util", "rt", "time"]
 
 [dev-dependencies.emit]
 version = "1.9.0"

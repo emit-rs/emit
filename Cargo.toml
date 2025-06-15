@@ -66,7 +66,7 @@ default-features = false
 # rand is only pulled in as a dependency on select platforms that
 # don't require `getrandom` build-time configuration
 
-[target.'cfg(any(target_os = "linux", target_os = "windows", target_os = "macos", target_os = "ios", target_os = "android"))'.dependencies.rand]
+[target.'cfg(any(target_os = "linux", target_os = "windows", target_os = "macos", target_os = "ios", target_os = "android", target_os = "wasi"))'.dependencies.rand]
 version = "0.9"
 optional = true
 
@@ -90,7 +90,7 @@ version = "1"
 
 [target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dev-dependencies.tokio]
 version = "1"
-features = ["full"]
+features = ["sync", "macros", "io-util", "rt", "time"]
 
 [target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dev-dependencies.wasm-bindgen-test]
 version = "0.3"

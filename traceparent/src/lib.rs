@@ -1094,10 +1094,7 @@ mod tests {
         Empty, Rng,
     };
 
-    use std::{
-        sync::atomic::{AtomicUsize, Ordering},
-        thread,
-    };
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
     fn traceparent_roundtrip() {
@@ -1305,6 +1302,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "wasi"))]
     fn traceparent_across_threads() {
         let rng = RandRng::new();
 
@@ -1316,7 +1314,7 @@ mod tests {
 
         let frame = traceparent.push();
 
-        thread::spawn(move || {
+        std::thread::spawn(move || {
             frame.call(|| {
                 let current = Traceparent::current();
 
@@ -1328,13 +1326,14 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "wasi"))]
     fn traceparent_ctxt_across_threads() {
         let rng = RandRng::new();
         let ctxt = TraceparentCtxt::new(ThreadLocalCtxt::new());
 
         let span_ctxt = SpanCtxt::current(&ctxt).new_child(&rng).push(ctxt.clone());
 
-        thread::spawn(move || {
+        std::thread::spawn(move || {
             span_ctxt.call(|| {
                 let traceparent = Traceparent::current();
                 let span_ctxt = SpanCtxt::current(&ctxt);

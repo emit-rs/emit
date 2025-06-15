@@ -1640,9 +1640,11 @@ pub mod completion {
         }
 
         #[cfg(feature = "std")]
+        #[cfg(not(target_arch = "wasm32"))]
         struct Guard<T: Completion>(T);
 
         #[cfg(feature = "std")]
+        #[cfg(not(target_arch = "wasm32"))]
         impl<T: Completion> Drop for Guard<T> {
             fn drop(&mut self) {
                 self.0
@@ -1652,6 +1654,7 @@ pub mod completion {
 
         #[test]
         #[cfg(feature = "std")]
+        #[cfg(not(target_arch = "wasm32"))]
         fn default_completion_detects_panics() {
             let called = Cell::new(false);
 
@@ -1676,6 +1679,7 @@ pub mod completion {
 
         #[test]
         #[cfg(feature = "std")]
+        #[cfg(not(target_arch = "wasm32"))]
         fn default_completion_uses_panic_lvl() {
             let called = Cell::new(false);
 
@@ -1704,6 +1708,7 @@ pub mod completion {
 mod tests {
     use super::*;
 
+    #[cfg(all(feature = "std", feature = "rand", not(miri)))]
     use emit_core::filter;
 
     use std::time::Duration;
@@ -2224,7 +2229,7 @@ mod tests {
     #[cfg(all(feature = "std", feature = "rand", not(miri)))]
     fn active_span_new_disabled() {
         let rng = crate::platform::DefaultRng::new();
-        let clock = crate::platform::system_clock::SystemClock::new();
+        let clock = crate::platform::DefaultClock::new();
         let ctxt = crate::platform::DefaultCtxt::new();
 
         let complete_called = Cell::new(false);
@@ -2258,7 +2263,7 @@ mod tests {
     #[cfg(all(feature = "std", feature = "rand", not(miri)))]
     fn active_span_custom_complete() {
         let ctxt = crate::platform::DefaultCtxt::new();
-        let clock = crate::platform::system_clock::SystemClock::new();
+        let clock = crate::platform::DefaultClock::new();
         let rng = crate::platform::DefaultRng::new();
 
         let custom_complete_called = Cell::new(false);

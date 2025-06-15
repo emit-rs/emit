@@ -631,16 +631,7 @@ mod alloc_support {
         pub const fn new() -> Self {
             Reporter {
                 sources: Vec::new(),
-                clock: {
-                    #[cfg(feature = "std")]
-                    {
-                        ReporterClock::System
-                    }
-                    #[cfg(not(feature = "std"))]
-                    {
-                        ReporterClock::Other(None)
-                    }
-                },
+                clock: ReporterClock::Default,
             }
         }
 
@@ -746,16 +737,14 @@ mod alloc_support {
     }
 
     enum ReporterClock {
-        #[cfg(feature = "std")]
-        System,
+        Default,
         Other(Option<Box<dyn ErasedClock + Send + Sync>>),
     }
 
     impl Clock for ReporterClock {
         fn now(&self) -> Option<Timestamp> {
             match self {
-                #[cfg(feature = "std")]
-                ReporterClock::System => crate::platform::system_clock::SystemClock::new().now(),
+                ReporterClock::Default => crate::platform::DefaultClock::new().now(),
                 ReporterClock::Other(clock) => clock.now(),
             }
         }
@@ -766,6 +755,13 @@ mod alloc_support {
         use super::*;
         use std::time::Duration;
 
+        #[cfg(all(
+            target_arch = "wasm32",
+            target_vendor = "unknown",
+            target_os = "unknown"
+        ))]
+        use wasm_bindgen_test::*;
+
         #[test]
         fn reporter_is_send_sync() {
             fn check<T: Send + Sync>() {}
@@ -775,6 +771,14 @@ mod alloc_support {
 
         #[test]
         #[cfg(not(miri))]
+        #[cfg_attr(
+            all(
+                target_arch = "wasm32",
+                target_vendor = "unknown",
+                target_os = "unknown"
+            ),
+            wasm_bindgen_test
+        )]
         fn reporter_sample() {
             use std::cell::Cell;
 
@@ -821,6 +825,14 @@ mod alloc_support {
 
         #[test]
         #[cfg(all(feature = "std", not(miri)))]
+        #[cfg_attr(
+            all(
+                target_arch = "wasm32",
+                target_vendor = "unknown",
+                target_os = "unknown"
+            ),
+            wasm_bindgen_test
+        )]
         fn reporter_normalize_std() {
             let mut reporter = Reporter::new();
 
@@ -840,7 +852,41 @@ mod alloc_support {
             }));
         }
 
+        #[wasm_bindgen_test]
+        #[cfg(all(feature = "web", not(miri)))]
+        #[cfg(all(
+            target_arch = "wasm32",
+            target_vendor = "unknown",
+            target_os = "unknown"
+        ))]
+        fn reporter_normalize_web() {
+            let mut reporter = Reporter::new();
+
+            reporter.add_source(source::from_fn(|sampler| {
+                sampler.metric(Metric::new(
+                    Path::new_raw("test"),
+                    "metric 1",
+                    "count",
+                    crate::Empty,
+                    42,
+                    crate::Empty,
+                ));
+            }));
+
+            reporter.sample_metrics(sampler::from_fn(|metric| {
+                assert!(metric.extent().is_some());
+            }));
+        }
+
         #[test]
+        #[cfg_attr(
+            all(
+                target_arch = "wasm32",
+                target_vendor = "unknown",
+                target_os = "unknown"
+            ),
+            wasm_bindgen_test
+        )]
         fn reporter_normalize_empty_extent() {
             let mut reporter = Reporter::new();
 
@@ -863,6 +909,14 @@ mod alloc_support {
         }
 
         #[test]
+        #[cfg_attr(
+            all(
+                target_arch = "wasm32",
+                target_vendor = "unknown",
+                target_os = "unknown"
+            ),
+            wasm_bindgen_test
+        )]
         fn reporter_normalize_point_extent() {
             let mut reporter = Reporter::new();
 
@@ -890,6 +944,14 @@ mod alloc_support {
         }
 
         #[test]
+        #[cfg_attr(
+            all(
+                target_arch = "wasm32",
+                target_vendor = "unknown",
+                target_os = "unknown"
+            ),
+            wasm_bindgen_test
+        )]
         fn reporter_normalize_range_extent() {
             let mut reporter = Reporter::new();
 
