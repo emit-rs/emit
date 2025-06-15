@@ -83,9 +83,11 @@ impl HttpConnection {
 
         let body = js_body(content)?;
 
+        let signal = AbortSignal::timeout_millis(timeout.as_millis() as u32);
+
         let res = fetch(
             resource,
-            &JsValue::from(js_fetch_init("POST", headers, body)),
+            &JsValue::from(js_fetch_init("POST", headers, body, signal)),
         )
         .await
         .map_err(|e| Error::new("failed to send fetch request", JsError::new(e)))?;
@@ -118,7 +120,7 @@ fn js_status(res: &JsValue) -> Result<u16, Error> {
         .ok_or_else(|| Error::msg("the fetch response status is not a number"))? as u16)
 }
 
-fn js_fetch_init(method: &str, headers: Map, body: Uint8Array) -> Object {
+fn js_fetch_init(method: &str, headers: Map, body: Uint8Array, signal: AbortSignal) -> Object {
     let result = Object::new();
 
     Reflect::set(&result, &JsValue::from("method"), &JsValue::from(method))
@@ -126,6 +128,8 @@ fn js_fetch_init(method: &str, headers: Map, body: Uint8Array) -> Object {
     Reflect::set(&result, &JsValue::from("headers"), &JsValue::from(headers))
         .expect("failed to set fetch init field");
     Reflect::set(&result, &JsValue::from("body"), &JsValue::from(body))
+        .expect("failed to set fetch init field");
+    Reflect::set(&result, &JsValue::from("signal"), &JsValue::from(signal))
         .expect("failed to set fetch init field");
 
     result
@@ -200,4 +204,10 @@ impl JsError {
 extern "C" {
     #[wasm_bindgen(js_name = "fetch", catch)]
     async fn fetch(uri: String, init: &JsValue) -> Result<JsValue, JsValue>;
+
+    #[wasm_bindgen]
+    type AbortSignal;
+
+    #[wasm_bindgen(static_method_of = AbortSignal, js_name = "timeout")]
+    fn timeout_millis(ms: u32) -> AbortSignal;
 }

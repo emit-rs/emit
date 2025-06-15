@@ -135,7 +135,7 @@ Wait for approximately `delay`.
 This is semantically more like `park_timeout` than `sleep` because the treatment of the delay itself is quite lax.
 
 This function may wait for longer than `delay` if `delay` is a fractional number of milliseconds.
-This function may wait for less than `delay` if `window.setTimeout` cannot be called, or the future is dropped before the delay triggers.
+This function may wait for less than `delay` if `setTimeout` cannot be called, or the future is dropped before the delay triggers.
 */
 struct Park {
     // `Some` if the timeout hasn't been scheduled yet
@@ -220,7 +220,7 @@ impl Future for Park {
         drop(state);
 
         // Schedule the timeout if we haven't already
-        // The timeout is done using `window.setTimeout`
+        // The timeout is done using `setTimeout`
         if let Some(delay) = unpinned.delay.take() {
             let state = unpinned.state.clone();
 
