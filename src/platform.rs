@@ -2,6 +2,8 @@
 Components provided by the underlying platform.
 
 This module defines implementations of [`crate::runtime::Runtime`] components that use capabilities of the host platform.
+
+Note that types exported here aren't guartanteed to be available on all platforms. For portability, you should avoid relying on them.
 */
 
 #[cfg(feature = "std")]
@@ -89,7 +91,7 @@ The default [`crate::Clock`].
     target_vendor = "unknown",
     target_os = "unknown"
 ))]
-pub type DefaultClock = web::DateClock;
+pub type DefaultClock = web::date_clock::DateClock;
 
 /**
 The default [`crate::Rng`].
@@ -135,4 +137,4 @@ The default [`crate::Rng`].
     target_vendor = "unknown",
     target_os = "unknown"
 ))]
-pub type DefaultRng = web::CryptoRng;
+pub type DefaultRng = web::crypto_rng::CryptoRng;

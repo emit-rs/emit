@@ -50,6 +50,13 @@ The [`setup()`] function configures `emit` with an [`Emitter`] to write [`Event`
 - `implicit_internal_rt` (default): Enable configuring the internal runtime for `emit`'s own diagnostics.
 - `sval`: Enable capturing complex properties using `sval`.
 - `serde`: Enable capturing complex properties using `serde`.
+- `web` (default): Use JavaScript built-in APIs on WebAssembly targets for platform support. This feature is a no-op outside of `wasm32-unknown-unknown`.
+- `rand` (default): Use `rand` as the default source of randomness on targets with a default provider. The specific version of `rand` is not guaranteed to remain the same. This feature is a no-op outside of the following targets:
+    - `linux`
+    - `windows`
+    - `macos`
+    - `ios`
+    - `android`
 
 ## Troubleshooting
 
