@@ -4,7 +4,7 @@
 
 ## Using the `#[span]` macro
 
-The most straightforward way to add ambient context is using the [`#[span]`](https://docs.rs/emit/1.9.0/emit/attr.span.html) macro. Any properties captured by the span will also be added to events emitted during its execution:
+The most straightforward way to add ambient context is using the [`#[span]`](https://docs.rs/emit/1.10.0/emit/attr.span.html) macro. Any properties captured by the span will also be added to events emitted during its execution:
 
 ```rust
 # extern crate emit;
@@ -46,7 +46,7 @@ See [Tracing](../tracing.md) for more details.
 
 ## Manually
 
-Ambient context can be worked with directly. `emit` stores its ambient context in an implementation of the [`Ctxt`](https://docs.rs/emit/1.9.0/emit/trait.Ctxt.html) trait. Properties in the ambient context can be added or removed using [`Frame`s](https://docs.rs/emit/1.9.0/emit/frame/struct.Frame.html). You may want to work with context directly when you're not trying to produce spans in a distributed trace, or when your application doesn't have a single point where attributes could be applied to manipulate ambient context.
+Ambient context can be worked with directly. `emit` stores its ambient context in an implementation of the [`Ctxt`](https://docs.rs/emit/1.10.0/emit/trait.Ctxt.html) trait. Properties in the ambient context can be added or removed using [`Frame`s](https://docs.rs/emit/1.10.0/emit/frame/struct.Frame.html). You may want to work with context directly when you're not trying to produce spans in a distributed trace, or when your application doesn't have a single point where attributes could be applied to manipulate ambient context.
 
 When converted to use ambient context manually, the previous example looks like this:
 
