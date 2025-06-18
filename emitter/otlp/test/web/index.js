@@ -18,18 +18,21 @@ otelcol.stderr.on('data', (data) => {
 wasm.setup();
 
 // Run the integration test
-let jsonFragment = wasm.http_json();
-let protoFragment = wasm.http_proto();
+(async () => {
+    try {
+        let jsonFragment = await wasm.http_json();
+        let protoFragment = await wasm.http_proto();
 
-// Wait a bit then shut down
-setTimeout(() => {
-    if (!output.match(jsonFragment)) {
-        throw new Error(`otelcol output did not contain the expected fragment '${jsonFragment}' from HTTP+JSON`);
+        if (!output.match(jsonFragment)) {
+            throw new Error(`otelcol output did not contain the expected fragment '${jsonFragment}' from HTTP+JSON`);
+        }
+
+        if (!output.match(protoFragment)) {
+            throw new Error(`otelcol output did not contain the expected fragment '${protoFragment}' from HTTP+protobuf`);
+        }
     }
-
-    if (!output.match(protoFragment)) {
-        throw new Error(`otelcol output did not contain the expected fragment '${protoFragment}' from HTTP+protobuf`);
+    finally {
+        otelcol.kill();
     }
+})();
 
-    otelcol.kill();
-}, 1000);

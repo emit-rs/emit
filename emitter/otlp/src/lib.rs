@@ -276,6 +276,33 @@ If you're running in a browser, you'll likely need to configure [CORS](https://d
 - `tracestate`
 - Any custom headers you've configured
 
+## Flushing
+
+Calling `blocking_flush` in WebAssembly will immediately return `false` without flushing. To flush `emit_otlp` in WebAssembly, you can call [`Otlp::flush`] on your spawned emitter directly.
+`emit` makes this available to you in the return value of [`emit::setup`]:
+
+```
+# async fn build() {
+let rt = emit::setup()
+    .emit_to(emit_otlp::new()
+        .resource(emit::props! {
+            #[emit::key("service.name")]
+            service_name: emit::pkg!(),
+        })
+        .logs(emit_otlp::logs_grpc_proto("http://localhost:4318"))
+        .spawn())
+    .init();
+
+// This will not flush in WebAssembly
+let flushed = rt.blocking_flush(std::time::Duration::from_secs(30));
+assert!(!flushed);
+
+// This will flush in WebAssembly
+let flushed = rt.emitter().flush(std::time::Duration::from_secs(30)).await;
+assert!(flushed);
+# }
+```
+
 # Logs
 
 All [`emit::Event`]s can be represented as OTLP log records. You should at least configure the logs signal to make sure all diagnostics are captured in some way. A minimal logging configuration for gRPC+protobuf is:

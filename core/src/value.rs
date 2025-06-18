@@ -234,6 +234,27 @@ impl<'v> Value<'v> {
 
 impl<'v> fmt::Debug for Value<'v> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        #[cfg(feature = "std")]
+        {
+            /*
+            If the value is an error then display it along with its root cause.
+
+            In Debug formats, we write the error and its root cause as a tuple
+            */
+
+            use std::iter;
+
+            if let Some(err) = self.to_borrowed_error() {
+                return if let Some(root) =
+                    iter::successors(err.source(), |ref err| err.source()).last()
+                {
+                    fmt::Debug::fmt(&(err, root), f)
+                } else {
+                    fmt::Debug::fmt(err, f)
+                };
+            }
+        }
+
         fmt::Debug::fmt(&self.0, f)
     }
 }
@@ -245,9 +266,7 @@ impl<'v> fmt::Display for Value<'v> {
             /*
             If the value is an error then display it along with its root cause.
 
-            Rust errors are typically a chain of fragments, becoming more specific as they get closer
-            to the original failure. We display both the top and the bottom of the chain here so
-            the result is more likely to be useful.
+            In Display formats, we write the error and its root cause as a string
             */
 
             use std::iter;
@@ -716,11 +735,36 @@ mod tests {
 
         assert_eq!(
             "outer",
+            format!(
+                "{:?}",
+                Value::capture_error(&Error {
+                    msg: "outer".into(),
+                    source: None,
+                })
+            ),
+        );
+
+        assert_eq!(
+            "outer",
             Value::capture_error(&Error {
                 msg: "outer".into(),
                 source: None,
             })
             .to_string(),
+        );
+
+        assert_eq!(
+            "outer (inner)",
+            format!(
+                "{:?}",
+                Value::capture_error(&Error {
+                    msg: "outer".into(),
+                    source: Some(Box::new(Error {
+                        msg: "inner".into(),
+                        source: None,
+                    })),
+                })
+            ),
         );
 
         assert_eq!(
@@ -733,6 +777,23 @@ mod tests {
                 })),
             })
             .to_string(),
+        );
+
+        assert_eq!(
+            "outer (root)",
+            format!(
+                "{:?}",
+                Value::capture_error(&Error {
+                    msg: "outer".into(),
+                    source: Some(Box::new(Error {
+                        msg: "inner".into(),
+                        source: Some(Box::new(Error {
+                            msg: "root".into(),
+                            source: None,
+                        })),
+                    })),
+                })
+            ),
         );
 
         assert_eq!(

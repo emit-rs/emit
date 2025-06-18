@@ -7,7 +7,7 @@ This transport supports HTTP1.
 use std::{borrow::Cow, error, fmt, future::Future, pin::Pin, sync::Arc, time::Duration};
 
 use bytes::Buf;
-use js_sys::{Map, Object, Reflect, Uint8Array};
+use js_sys::{Map, Object, Reflect, Uint8Array, JSON};
 use wasm_bindgen::prelude::*;
 
 use crate::{
@@ -197,17 +197,34 @@ fn js_signal(timeout: Duration) -> Option<AbortSignal> {
     })
 }
 
-struct JsError(String);
-
-impl fmt::Debug for JsError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(&self.0, f)
-    }
+#[derive(Debug)]
+struct JsError {
+    msg: String,
+    payload: Vec<(String, String)>,
 }
 
 impl fmt::Display for JsError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(&self.0, f)
+        write!(f, "{}", self.msg)?;
+
+        if self.payload.len() > 0 {
+            f.write_str(" (")?;
+
+            let mut first = true;
+            for (k, v) in &self.payload {
+                if !first {
+                    write!(f, ", {k}: {v}")?;
+                } else {
+                    write!(f, "{k}: {v}")?;
+                }
+
+                first = false;
+            }
+
+            f.write_str(")")?;
+        }
+
+        Ok(())
     }
 }
 
@@ -215,13 +232,56 @@ impl error::Error for JsError {}
 
 impl JsError {
     fn new(err: JsValue) -> Self {
-        if let Some(err) = err.as_string() {
-            return JsError(err);
+        if let Some(msg) = err.as_string() {
+            return JsError {
+                msg,
+                payload: Vec::new(),
+            };
         }
 
         let err = Object::from(err);
 
-        JsError(err.to_string().into())
+        let msg = err.to_string().into();
+
+        let mut payload = Vec::new();
+        extract_err(&err, &mut 0, &mut String::from("err"), &mut payload);
+
+        JsError { msg, payload }
+    }
+}
+
+fn extract_err(
+    obj: &Object,
+    depth: &mut usize,
+    path: &mut String,
+    payload: &mut Vec<(String, String)>,
+) {
+    for key in Object::keys(obj) {
+        if let Ok(value) = Reflect::get(obj, &key) {
+            let original_len = path.len();
+            path.push('.');
+            path.push_str(&js_stringify(&key));
+            *depth += 1;
+
+            if value.is_object() && *depth < 6 {
+                extract_err(&Object::from(value), depth, path, payload);
+            } else {
+                payload.push((path.clone(), js_stringify(&value)));
+            }
+
+            *depth -= 1;
+            path.truncate(original_len);
+        }
+    }
+}
+
+fn js_stringify(value: &JsValue) -> String {
+    if let Some(value) = value.as_string() {
+        value
+    } else if let Ok(value) = JSON::stringify(&value) {
+        value.into()
+    } else {
+        String::from("<unknown>")
     }
 }
 

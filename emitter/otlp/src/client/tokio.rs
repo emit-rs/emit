@@ -132,3 +132,7 @@ impl Instant {
         self.0.elapsed()
     }
 }
+
+pub(crate) async fn flush(sender: &emit_batcher::Sender<Channel>, timeout: Duration) -> bool {
+    emit_batcher::tokio::flush(sender, timeout).await
+}
