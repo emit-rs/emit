@@ -4,9 +4,8 @@
   "description": "",
   "license": "MIT",
   "author": "",
-  "main": "index.js",
   "scripts": {
     "preexec": "wasm-pack build native --target nodejs",
-    "exec": "node index.js"
+    "exec": "node index.mjs"
   }
 }

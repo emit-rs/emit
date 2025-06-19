@@ -15,12 +15,12 @@ pub fn setup() {
 
 #[wasm_bindgen]
 pub async fn http_proto() -> String {
-    run_test(emit_otlp::logs_http_proto("http://localhost:34318/v1/logs")).await
+    run_test(emit_otlp::logs_http_proto("http://localhost:4418/v1/logs")).await
 }
 
 #[wasm_bindgen]
 pub async fn http_json() -> String {
-    run_test(emit_otlp::logs_http_json("http://localhost:34318/v1/logs")).await
+    run_test(emit_otlp::logs_http_json("http://localhost:4418/v1/logs")).await
 }
 
 async fn run_test(builder: emit_otlp::OtlpLogsBuilder) -> String {

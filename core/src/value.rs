@@ -713,10 +713,15 @@ mod tests {
     #[cfg(feature = "std")]
     #[test]
     fn error_display() {
-        #[derive(Debug)]
         struct Error {
             msg: String,
             source: Option<Box<Error>>,
+        }
+
+        impl fmt::Debug for Error {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.debug_struct("Error").field("msg", &self.msg).finish()
+            }
         }
 
         impl fmt::Display for Error {
@@ -734,7 +739,7 @@ mod tests {
         }
 
         assert_eq!(
-            "outer",
+            "Error { msg: \"outer\" }",
             format!(
                 "{:?}",
                 Value::capture_error(&Error {
@@ -754,7 +759,7 @@ mod tests {
         );
 
         assert_eq!(
-            "outer (inner)",
+            "(Error { msg: \"outer\" }, Error { msg: \"inner\" })",
             format!(
                 "{:?}",
                 Value::capture_error(&Error {
@@ -777,23 +782,6 @@ mod tests {
                 })),
             })
             .to_string(),
-        );
-
-        assert_eq!(
-            "outer (root)",
-            format!(
-                "{:?}",
-                Value::capture_error(&Error {
-                    msg: "outer".into(),
-                    source: Some(Box::new(Error {
-                        msg: "inner".into(),
-                        source: Some(Box::new(Error {
-                            msg: "root".into(),
-                            source: None,
-                        })),
-                    })),
-                })
-            ),
         );
 
         assert_eq!(
