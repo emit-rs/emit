@@ -234,27 +234,6 @@ impl<'v> Value<'v> {
 
 impl<'v> fmt::Debug for Value<'v> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        #[cfg(feature = "std")]
-        {
-            /*
-            If the value is an error then display it along with its root cause.
-
-            In Debug formats, we write the error and its root cause as a tuple
-            */
-
-            use std::iter;
-
-            if let Some(err) = self.to_borrowed_error() {
-                return if let Some(root) =
-                    iter::successors(err.source(), |ref err| err.source()).last()
-                {
-                    fmt::Debug::fmt(&(err, root), f)
-                } else {
-                    fmt::Debug::fmt(err, f)
-                };
-            }
-        }
-
         fmt::Debug::fmt(&self.0, f)
     }
 }
@@ -266,7 +245,9 @@ impl<'v> fmt::Display for Value<'v> {
             /*
             If the value is an error then display it along with its root cause.
 
-            In Display formats, we write the error and its root cause as a string
+            Rust errors are typically a chain of fragments, becoming more specific as they get closer
+            to the original failure. We display both the top and the bottom of the chain here so
+            the result is more likely to be useful.
             */
 
             use std::iter;
@@ -713,15 +694,10 @@ mod tests {
     #[cfg(feature = "std")]
     #[test]
     fn error_display() {
+        #[derive(Debug)]
         struct Error {
             msg: String,
             source: Option<Box<Error>>,
-        }
-
-        impl fmt::Debug for Error {
-            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                f.debug_struct("Error").field("msg", &self.msg).finish()
-            }
         }
 
         impl fmt::Display for Error {
@@ -739,37 +715,12 @@ mod tests {
         }
 
         assert_eq!(
-            "Error { msg: \"outer\" }",
-            format!(
-                "{:?}",
-                Value::capture_error(&Error {
-                    msg: "outer".into(),
-                    source: None,
-                })
-            ),
-        );
-
-        assert_eq!(
             "outer",
             Value::capture_error(&Error {
                 msg: "outer".into(),
                 source: None,
             })
             .to_string(),
-        );
-
-        assert_eq!(
-            "(Error { msg: \"outer\" }, Error { msg: \"inner\" })",
-            format!(
-                "{:?}",
-                Value::capture_error(&Error {
-                    msg: "outer".into(),
-                    source: Some(Box::new(Error {
-                        msg: "inner".into(),
-                        source: None,
-                    })),
-                })
-            ),
         );
 
         assert_eq!(
