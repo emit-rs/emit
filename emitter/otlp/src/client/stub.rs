@@ -58,3 +58,7 @@ impl Instant {
         unreachable!()
     }
 }
+
+pub(crate) async fn flush(_sender: &emit_batcher::Sender<Channel>, timeout: Duration) -> bool {
+    false
+}

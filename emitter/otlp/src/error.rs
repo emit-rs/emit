@@ -3,6 +3,7 @@ use std::{error, fmt};
 /**
 An error attempting to configure a [`crate::Otlp`] instance.
 */
+#[derive(Debug)]
 pub struct Error {
     msg: String,
     cause: Option<Box<dyn error::Error + Send + Sync>>,
@@ -32,12 +33,6 @@ impl error::Error for Error {
         self.cause
             .as_ref()
             .map(|source| &**source as &(dyn error::Error + 'static))
-    }
-}
-
-impl fmt::Debug for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(&self.msg, f)
     }
 }
 

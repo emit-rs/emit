@@ -107,6 +107,10 @@ impl Instant {
     }
 }
 
+pub(crate) async fn flush(sender: &emit_batcher::Sender<Channel>, timeout: Duration) -> bool {
+    emit_batcher::web::flush(sender, timeout).await
+}
+
 #[wasm_bindgen]
 extern "C" {
     #[wasm_bindgen(js_namespace = performance, js_name = "now")]

@@ -10,8 +10,13 @@ crate-type = ["cdylib"]
 [dependencies.wasm-bindgen]
 version = "0.2"
 
+[dependencies.wasm-bindgen-futures]
+version = "0.4"
+
 [dependencies.emit]
 path = "../../../../../"
+default-features = false
+features = ["implicit_internal_rt"]
 
 [dependencies.emit_otlp]
 path = "../../../"

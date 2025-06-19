@@ -579,6 +579,21 @@ impl<R: data::RequestEncoder> OtlpTransport<R> {
     }
 }
 
+impl Otlp {
+    /**
+    Wait for up to `timeout` for any pending events to be sent to the backend OTLP service.
+
+    This method is an alternative to [`emit::Emitter::blocking_flush`].
+    */
+    pub async fn flush(&self, timeout: Duration) -> bool {
+        if let Some(ref inner) = self.inner {
+            inner.flush(timeout).await
+        } else {
+            true
+        }
+    }
+}
+
 impl emit::Emitter for Otlp {
     fn emit<E: emit::event::ToEvent>(&self, evt: E) {
         self.inner.emit(evt)
@@ -586,6 +601,34 @@ impl emit::Emitter for Otlp {
 
     fn blocking_flush(&self, timeout: Duration) -> bool {
         self.inner.blocking_flush(timeout)
+    }
+}
+
+impl OtlpInner {
+    async fn flush(&self, timeout: Duration) -> bool {
+        // Same impl as `blocking_flush` below
+        let start = Instant::now();
+        let mut fully_flushed = true;
+
+        if let Some((_, ref sender)) = self.otlp_logs {
+            if !imp::flush(sender, timeout.saturating_sub(start.elapsed())).await {
+                fully_flushed = false;
+            }
+        }
+
+        if let Some((_, ref sender)) = self.otlp_traces {
+            if !imp::flush(sender, timeout.saturating_sub(start.elapsed())).await {
+                fully_flushed = false;
+            }
+        }
+
+        if let Some((_, ref sender)) = self.otlp_metrics {
+            if !imp::flush(sender, timeout.saturating_sub(start.elapsed())).await {
+                fully_flushed = false;
+            }
+        }
+
+        fully_flushed
     }
 }
 
@@ -625,26 +668,27 @@ impl emit::Emitter for OtlpInner {
 
     fn blocking_flush(&self, timeout: Duration) -> bool {
         let start = Instant::now();
+        let mut fully_flushed = true;
 
         if let Some((_, ref sender)) = self.otlp_logs {
             if !emit_batcher::blocking_flush(sender, timeout.saturating_sub(start.elapsed())) {
-                return false;
+                fully_flushed = false;
             }
         }
 
         if let Some((_, ref sender)) = self.otlp_traces {
             if !emit_batcher::blocking_flush(sender, timeout.saturating_sub(start.elapsed())) {
-                return false;
+                fully_flushed = false;
             }
         }
 
         if let Some((_, ref sender)) = self.otlp_metrics {
             if !emit_batcher::blocking_flush(sender, timeout.saturating_sub(start.elapsed())) {
-                return false;
+                fully_flushed = false;
             }
         }
 
-        true
+        fully_flushed
     }
 }
 
