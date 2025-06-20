@@ -16,5 +16,11 @@ path = "../../../emitter/otlp"
 [dependencies.wasm-bindgen]
 version = "0.2"
 
+[dependencies.wasm-bindgen-futures]
+version = "0.4"
+
+[dependencies.js-sys]
+version = "0.3"
+
 [dependencies.console_error_panic_hook]
 version = "0.1"
