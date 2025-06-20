@@ -49,7 +49,7 @@ jobs:
         run: cargo install cargo-hack
 
       - name: Powerset
-        run: cargo hack check --each-feature --exclude-features default,rand,std,alloc,implicit_rt,implicit_internal_rt -Z avoid-dev-deps --target thumbv6m-none-eabi
+        run: cargo hack check --each-feature --exclude-features default,std,alloc,implicit_rt,implicit_internal_rt -Z avoid-dev-deps --target thumbv6m-none-eabi
 
   miri:
     name: Test (Miri)

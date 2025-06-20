@@ -103,19 +103,39 @@ pub type DefaultClock = web::date_clock::DateClock;
 The default [`crate::Rng`].
 */
 #[cfg(not(feature = "rand"))]
-#[cfg(any(
+#[cfg(not(all(
+    target_arch = "wasm32",
+    target_vendor = "unknown",
+    target_os = "unknown"
+)))]
+pub type DefaultRng = crate::Empty;
+/**
+The default [`crate::Rng`].
+*/
+#[cfg(feature = "rand")]
+#[cfg(not(all(
+    target_arch = "wasm32",
+    target_vendor = "unknown",
+    target_os = "unknown"
+)))]
+#[cfg(not(any(
     target_os = "linux",
     target_os = "windows",
     target_os = "macos",
     target_os = "ios",
     target_os = "android",
     target_os = "wasi"
-))]
+)))]
 pub type DefaultRng = crate::Empty;
 /**
 The default [`crate::Rng`].
 */
 #[cfg(feature = "rand")]
+#[cfg(not(all(
+    target_arch = "wasm32",
+    target_vendor = "unknown",
+    target_os = "unknown"
+)))]
 #[cfg(any(
     target_os = "linux",
     target_os = "windows",

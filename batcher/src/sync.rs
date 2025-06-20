@@ -73,6 +73,8 @@ pub fn blocking_flush<T: Channel>(sender: &Sender<T>, timeout: Duration) -> bool
     {
         let _ = (sender, timeout);
 
+        emit::warn!(rt: emit::runtime::internal(), "blocking flush is not supported on this platform");
+
         return false;
     }
 
