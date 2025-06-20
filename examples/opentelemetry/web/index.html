@@ -9,8 +9,11 @@
     async function initRun() {
       await init();
 
-      setup();
+      const otlp = setup();
+      
       run();
+
+      await otlp.flush();
     }
 
     initRun();
