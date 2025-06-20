@@ -349,6 +349,15 @@ where
                 template::Template,
             };
 
+            if !self.emitter.set {
+                internal_slot().get().emit(Event::new(
+                    mdl!(),
+                    Template::literal("an `Emitter` hasn't been configured; this means any emitted events will be discarded"),
+                    Empty,
+                    Empty,
+                ));
+            }
+
             if !self.ctxt.set {
                 // Check whether the default context is able to track properties
                 let tracks_props =
