@@ -115,11 +115,38 @@ pub struct Setup<
     TClock = DefaultClock,
     TRng = DefaultRng,
 > {
-    emitter: TEmitter,
-    filter: TFilter,
-    ctxt: TCtxt,
-    clock: TClock,
-    rng: TRng,
+    emitter: SetupCell<TEmitter>,
+    filter: SetupCell<TFilter>,
+    ctxt: SetupCell<TCtxt>,
+    clock: SetupCell<TClock>,
+    rng: SetupCell<TRng>,
+}
+
+struct SetupCell<T> {
+    value: T,
+    set: bool,
+}
+
+impl<T: Default> SetupCell<T> {
+    fn initial() -> Self {
+        SetupCell {
+            value: Default::default(),
+            set: false,
+        }
+    }
+}
+
+impl<T> SetupCell<T> {
+    fn new(value: T) -> Self {
+        SetupCell { value, set: true }
+    }
+
+    fn set<U>(self, set: impl FnOnce(T) -> U) -> SetupCell<U> {
+        SetupCell {
+            value: set(self.value),
+            set: true,
+        }
+    }
 }
 
 impl Default for Setup {
@@ -134,11 +161,11 @@ impl Setup {
     */
     pub fn new() -> Self {
         Setup {
-            emitter: Default::default(),
-            filter: Default::default(),
-            ctxt: Default::default(),
-            clock: Default::default(),
-            rng: Default::default(),
+            emitter: SetupCell::initial(),
+            filter: SetupCell::initial(),
+            ctxt: SetupCell::initial(),
+            clock: SetupCell::initial(),
+            rng: SetupCell::initial(),
         }
     }
 }
@@ -154,7 +181,7 @@ impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt, TClock: Clock, TRng: Rng>
         emitter: UEmitter,
     ) -> Setup<UEmitter, TFilter, TCtxt, TClock, TRng> {
         Setup {
-            emitter,
+            emitter: SetupCell::new(emitter),
             filter: self.filter,
             ctxt: self.ctxt,
             clock: self.clock,
@@ -170,7 +197,7 @@ impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt, TClock: Clock, TRng: Rng>
         emitter: UEmitter,
     ) -> Setup<And<TEmitter, UEmitter>, TFilter, TCtxt, TClock, TRng> {
         Setup {
-            emitter: self.emitter.and_to(emitter),
+            emitter: self.emitter.set(|first| first.and_to(emitter)),
             filter: self.filter,
             ctxt: self.ctxt,
             clock: self.clock,
@@ -186,7 +213,7 @@ impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt, TClock: Clock, TRng: Rng>
         map: impl FnOnce(TEmitter) -> UEmitter,
     ) -> Setup<UEmitter, TFilter, TCtxt, TClock, TRng> {
         Setup {
-            emitter: map(self.emitter),
+            emitter: self.emitter.set(map),
             filter: self.filter,
             ctxt: self.ctxt,
             clock: self.clock,
@@ -203,7 +230,7 @@ impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt, TClock: Clock, TRng: Rng>
     ) -> Setup<TEmitter, UFilter, TCtxt, TClock, TRng> {
         Setup {
             emitter: self.emitter,
-            filter,
+            filter: SetupCell::new(filter),
             ctxt: self.ctxt,
             clock: self.clock,
             rng: self.rng,
@@ -219,7 +246,7 @@ impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt, TClock: Clock, TRng: Rng>
     ) -> Setup<TEmitter, And<TFilter, UFilter>, TCtxt, TClock, TRng> {
         Setup {
             emitter: self.emitter,
-            filter: self.filter.and_when(filter),
+            filter: self.filter.set(|first| first.and_when(filter)),
             ctxt: self.ctxt,
             clock: self.clock,
             rng: self.rng,
@@ -236,7 +263,7 @@ impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt, TClock: Clock, TRng: Rng>
         Setup {
             emitter: self.emitter,
             filter: self.filter,
-            ctxt,
+            ctxt: SetupCell::new(ctxt),
             clock: self.clock,
             rng: self.rng,
         }
@@ -252,7 +279,7 @@ impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt, TClock: Clock, TRng: Rng>
         Setup {
             emitter: self.emitter,
             filter: self.filter,
-            ctxt: map(self.ctxt),
+            ctxt: self.ctxt.set(map),
             clock: self.clock,
             rng: self.rng,
         }
@@ -269,7 +296,7 @@ impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt, TClock: Clock, TRng: Rng>
             emitter: self.emitter,
             filter: self.filter,
             ctxt: self.ctxt,
-            clock,
+            clock: SetupCell::new(clock),
             rng: self.rng,
         }
     }
@@ -283,7 +310,7 @@ impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt, TClock: Clock, TRng: Rng>
             filter: self.filter,
             ctxt: self.ctxt,
             clock: self.clock,
-            rng,
+            rng: SetupCell::new(rng),
         }
     }
 
@@ -291,7 +318,13 @@ impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt, TClock: Clock, TRng: Rng>
     Initialize a standalone runtime.
     */
     pub fn init_runtime(self) -> Runtime<TEmitter, TFilter, TCtxt, TClock, TRng> {
-        Runtime::build(self.emitter, self.filter, self.ctxt, self.clock, self.rng)
+        Runtime::build(
+            self.emitter.value,
+            self.filter.value,
+            self.ctxt.value,
+            self.clock.value,
+            self.rng.value,
+        )
     }
 }
 
@@ -305,6 +338,68 @@ impl<
 where
     TCtxt::Frame: Send + 'static,
 {
+    fn check_platform_is_initialized(&self) {
+        let _ = (self.ctxt.set, self.clock.set, self.rng.set);
+
+        #[cfg(feature = "implicit_internal_rt")]
+        {
+            use crate::{mdl, Frame};
+            use emit_core::{
+                empty::Empty, event::Event, props::Props as _, runtime::internal_slot,
+                template::Template,
+            };
+
+            if !self.emitter.set {
+                internal_slot().get().emit(Event::new(
+                    mdl!(),
+                    Template::literal("an `Emitter` hasn't been configured; this means any emitted events will be discarded"),
+                    Empty,
+                    Empty,
+                ));
+            }
+
+            if !self.ctxt.set {
+                // Check whether the default context is able to track properties
+                let tracks_props =
+                    Frame::root(&self.ctxt.value, ("check_platform_is_initialized", true))
+                        .with(|props| props.pull("check_platform_is_initialized").unwrap_or(false));
+
+                if !tracks_props {
+                    internal_slot().get().emit(Event::new(
+                        mdl!(),
+                        Template::literal("a `Ctxt` hasn't been configured and the default does not track properties; this means contextual logging will be unavailable"),
+                        Empty,
+                        Empty,
+                    ));
+                }
+            }
+
+            if !self.clock.set {
+                // Check whether the default clock is able to tell time
+                if self.clock.value.now().is_none() {
+                    internal_slot().get().emit(Event::new(
+                        mdl!(),
+                        Template::literal("a `Clock` hasn't been configured and the default does not tell time; this means events will not include timestamps"),
+                        Empty,
+                        Empty,
+                    ));
+                }
+            }
+
+            if !self.rng.set {
+                // Check whether the default rng is able to generate data
+                if self.rng.value.fill([0; 1]).is_none() {
+                    internal_slot().get().emit(Event::new(
+                        mdl!(),
+                        Template::literal("a `Rng` hasn't been configured and the default does not generate values; this means trace and span ids will not be generated"),
+                        Empty,
+                        Empty,
+                    ));
+                }
+            }
+        }
+    }
+
     /**
     Initialize the default runtime used by `emit` macros.
 
@@ -317,6 +412,8 @@ where
     #[must_use = "call `flush_on_drop` or call `blocking_flush` at the end of `main` to ensure events are flushed."]
     #[cfg(feature = "implicit_rt")]
     pub fn init(self) -> Init<'static, TEmitter, TCtxt> {
+        self.check_platform_is_initialized();
+
         self.init_slot(emit_core::runtime::shared_slot())
     }
 
@@ -330,6 +427,8 @@ where
     #[must_use = "call `flush_on_drop` or call `blocking_flush` at the end of `main` to ensure events are flushed."]
     #[cfg(feature = "implicit_rt")]
     pub fn try_init(self) -> Option<Init<'static, TEmitter, TCtxt>> {
+        self.check_platform_is_initialized();
+
         self.try_init_slot(emit_core::runtime::shared_slot())
     }
 
@@ -354,11 +453,11 @@ where
     pub fn try_init_slot<'a>(self, slot: &'a AmbientSlot) -> Option<Init<'a, TEmitter, TCtxt>> {
         let ambient = slot.init(
             Runtime::new()
-                .with_emitter(self.emitter)
-                .with_filter(self.filter)
-                .with_ctxt(self.ctxt)
-                .with_clock(self.clock)
-                .with_rng(self.rng),
+                .with_emitter(self.emitter.value)
+                .with_filter(self.filter.value)
+                .with_ctxt(self.ctxt.value)
+                .with_clock(self.clock.value)
+                .with_rng(self.rng.value),
         )?;
 
         Some(Init {
@@ -408,11 +507,11 @@ where
 
         let ambient = slot.init(
             Runtime::new()
-                .with_emitter(self.emitter)
-                .with_filter(self.filter)
-                .with_ctxt(self.ctxt)
-                .with_clock(self.clock)
-                .with_rng(self.rng),
+                .with_emitter(self.emitter.value)
+                .with_filter(self.filter.value)
+                .with_ctxt(self.ctxt.value)
+                .with_clock(self.clock.value)
+                .with_rng(self.rng.value),
         )?;
 
         Some(Init {

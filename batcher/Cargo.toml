@@ -18,6 +18,7 @@ web = ["dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:js-sys", "dep:future
 version = "1.10.0"
 path = "../"
 default-features = false
+features = ["implicit_internal_rt"]
 
 [dependencies.tokio]
 version = "1"
