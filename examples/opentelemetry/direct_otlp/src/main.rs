@@ -12,7 +12,7 @@ Try setting:
 - `OTEL_SERVICE_NAME` to specify the name of the service.
 - `OTEL_RESOURCE_ATTRIBUTES` to add ambient properties.
 
-See [the docs](https://docs.rs/emit_otlp/1.10.0/emit_otlp/index.html#configuring-from-environment-variables) for more details on supported environment variables.
+See [the docs](https://docs.rs/emit_otlp/1.11.0/emit_otlp/index.html#configuring-from-environment-variables) for more details on supported environment variables.
 */
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

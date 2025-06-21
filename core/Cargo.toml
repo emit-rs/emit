@@ -1,6 +1,6 @@
 [package]
 name = "emit_core"
-version = "1.10.0"
+version = "1.11.0"
 authors = ["emit contributors"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
