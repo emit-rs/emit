@@ -7,7 +7,7 @@ This transport supports HTTP1 and gRPC via HTTP2.
 use std::{
     future::Future,
     pin::Pin,
-    sync::{Arc, Mutex},
+    sync::{Arc, LazyLock, Mutex},
     task::{self, Context, Poll},
     time::Duration,
 };
@@ -24,8 +24,11 @@ use crate::{
     },
     data::EncodedPayload,
     internal_metrics::InternalMetrics,
-    Error,
+    telemetry_sdk_name, telemetry_sdk_version, Error,
 };
+
+static USER_AGENT: LazyLock<String> =
+    LazyLock::new(|| format!("{}/{}", telemetry_sdk_name(), telemetry_sdk_version()));
 
 async fn connect(
     metrics: &InternalMetrics,
@@ -191,47 +194,55 @@ async fn http2_handshake(
     Ok(HttpSender::Http2(sender))
 }
 
-async fn send_request(
-    metrics: &InternalMetrics,
+async fn send_request<'a>(
+    metrics: &'a InternalMetrics,
     sender: &mut HttpSender,
-    uri: &HttpUri,
-    headers: impl Iterator<Item = (&str, &str)>,
+    uri: &'a HttpUri,
+    headers: impl Iterator<Item = (&'a str, &'a str)>,
     content: HttpContent,
 ) -> Result<HttpResponse, Error> {
     let res = sender
-        .send_request(metrics, {
-            let mut req = Request::builder().uri(&uri.0).method(Method::POST);
-
-            for (k, v) in content.custom_headers {
-                req = req.header(*k, *v);
-            }
-
-            req = req.header("host", uri.authority());
-
-            for (name, value) in content.iter_headers() {
-                req = req.header(name, &*value);
-            }
-
-            for (k, v) in headers {
-                req = req.header(k, v);
-            }
-
-            // Propagate traceparent for the batch
-            req = if let Some((k, v)) = outgoing_traceparent_header() {
-                req.header(k, v)
-            } else {
-                req
-            };
-
-            req.body(content).map_err(|e| {
-                metrics.transport_request_failed.increment();
-
-                Error::new("failed to stream HTTP body", e)
-            })?
-        })
+        .send_request(metrics, http_request(metrics, uri, headers, content)?)
         .await?;
 
     Ok(res)
+}
+
+fn http_request<'a>(
+    metrics: &'a InternalMetrics,
+    uri: &'a HttpUri,
+    headers: impl Iterator<Item = (&'a str, &'a str)>,
+    content: HttpContent,
+) -> Result<Request<HttpContent>, Error> {
+    let mut req = Request::builder().uri(&uri.0).method(Method::POST);
+
+    for (k, v) in content.custom_headers {
+        req = req.header(*k, *v);
+    }
+
+    req = req.header("host", uri.authority());
+    req = req.header("user-agent", &*USER_AGENT);
+
+    for (name, value) in content.iter_headers() {
+        req = req.header(name, &*value);
+    }
+
+    for (k, v) in headers {
+        req = req.header(k, v);
+    }
+
+    // Propagate traceparent for the batch
+    req = if let Some((k, v)) = outgoing_traceparent_header() {
+        req.header(k, v)
+    } else {
+        req
+    };
+
+    Ok(req.body(content).map_err(|e| {
+        metrics.transport_request_failed.increment();
+
+        Error::new("failed to stream HTTP body", e)
+    })?)
 }
 
 pub(crate) struct HttpConnection {

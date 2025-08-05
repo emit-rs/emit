@@ -39,19 +39,6 @@ impl Parse for TplArgs {
     }
 }
 
-pub struct TplPartsArgs {}
-
-impl Parse for TplPartsArgs {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        args::set_from_field_values(
-            input.parse_terminated(FieldValue::parse, Token![,])?.iter(),
-            [],
-        )?;
-
-        Ok(TplPartsArgs {})
-    }
-}
-
 /**
 The `tpl!` macro.
 */
