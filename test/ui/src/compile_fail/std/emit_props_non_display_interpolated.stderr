@@ -1,16 +1,16 @@
 error[E0277]: capturing requires `NotDisplay` implements `Display + Any` by default. If this value does implement `Display`, then dereference or annotate it with `#[emit::as_display]`. If it doesn't, then use one of the `#[emit::as_*]` attributes to capture this value using a trait it does implement.
  --> src/compile_fail/std/emit_props_non_display_interpolated.rs:4:28
   |
-4 |     emit::emit!("template {x}");
-  |                            ^ the trait `std::fmt::Display` is not implemented for `NotDisplay`
-  |
-  = help: the trait `CaptureWithDefault` is implemented for `str`
-  = note: required for `NotDisplay` to implement `CaptureWithDefault`
+  4 |     emit::emit!("template {x}");
+    |                            ^ the trait `std::fmt::Display` is not implemented for `NotDisplay`
+    |
+    = help: the trait `CaptureWithDefault` is implemented for `str`
+    = note: required for `NotDisplay` to implement `CaptureWithDefault`
 note: required by a bound in `__private_capture_as_default`
- --> $WORKSPACE/src/macro_hooks.rs
-  |
-  |     fn __private_capture_as_default(&self) -> Option<Value<'_>>
-  |        ---------------------------- required by a bound in this associated function
-  |     where
-  |         Self: CaptureWithDefault,
-  |               ^^^^^^^^^^^^^^^^^^ required by this bound in `__PrivateCaptureHook::__private_capture_as_default`
+   --> $WORKSPACE/src/macro_hooks.rs
+    |
+    |     fn __private_capture_as_default(&self) -> Option<Value<'_>>
+    |        ---------------------------- required by a bound in this associated function
+    |     where
+    |         Self: CaptureWithDefault,
+    |               ^^^^^^^^^^^^^^^^^^ required by this bound in `__PrivateCaptureHook::__private_capture_as_default`
