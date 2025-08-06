@@ -221,7 +221,6 @@ fn http_request<'a>(
     }
 
     req = req.header("host", uri.authority());
-    req = req.header("user-agent", &*USER_AGENT);
 
     for (name, value) in content.iter_headers() {
         req = req.header(name, &*value);
@@ -230,6 +229,9 @@ fn http_request<'a>(
     for (k, v) in headers {
         req = req.header(k, v);
     }
+
+    // These values don't override custom headers
+    req = req.header("user-agent", &*USER_AGENT);
 
     // Propagate traceparent for the batch
     req = if let Some((k, v)) = outgoing_traceparent_header() {
@@ -513,6 +515,8 @@ where
 mod tests {
     use super::*;
 
+    use crate::data::{Json, RawEncoder};
+
     #[test]
     fn default_http_port_is_80() {
         let uri = HttpUri("http://example.com".parse().unwrap());
@@ -523,5 +527,47 @@ mod tests {
     fn default_https_port_is_443() {
         let uri = HttpUri("https://example.com".parse().unwrap());
         assert_eq!(443, uri.port());
+    }
+
+    #[test]
+    fn default_user_agent() {
+        let metrics = InternalMetrics::default();
+        let uri = HttpUri::new("http://localhost:4718").unwrap();
+        let headers = [] as [(&str, &str); 0];
+        let content = HttpContent::new(
+            false,
+            &uri,
+            |content| Ok(content),
+            &metrics,
+            Json::encode(42),
+        )
+        .unwrap();
+
+        let req = http_request(&metrics, &uri, headers.into_iter(), content).unwrap();
+
+        let agent = req.headers().get("user-agent").unwrap().to_str().unwrap();
+
+        assert_eq!(&*USER_AGENT, agent);
+    }
+
+    #[test]
+    fn custom_user_agent() {
+        let metrics = InternalMetrics::default();
+        let uri = HttpUri::new("http://localhost:4718").unwrap();
+        let headers = [("user-agent", "custom-agent")];
+        let content = HttpContent::new(
+            false,
+            &uri,
+            |content| Ok(content),
+            &metrics,
+            Json::encode(42),
+        )
+        .unwrap();
+
+        let req = http_request(&metrics, &uri, headers.into_iter(), content).unwrap();
+
+        let agent = req.headers().get("user-agent").unwrap().to_str().unwrap();
+
+        assert_eq!("custom-agent", agent);
     }
 }
