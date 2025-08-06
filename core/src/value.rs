@@ -545,6 +545,12 @@ mod alloc_support {
         }
     }
 
+    impl<'a> From<Value<'a>> for OwnedValue {
+        fn from(value: Value<'a>) -> Self {
+            value.to_owned()
+        }
+    }
+
     impl ToValue for OwnedValue {
         fn to_value(&self) -> Value<'_> {
             self.by_ref()
