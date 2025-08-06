@@ -422,9 +422,110 @@ impl<'kv, 'a, C: FromProps<'kv> + 'a> FromProps<'kv> for alloc::sync::Arc<C> {
 mod alloc_support {
     use super::*;
 
-    use core::mem;
+    use crate::value::OwnedValue;
 
-    use alloc::{collections::BTreeMap, vec::Vec};
+    use core::{cmp, mem, ptr::addr_of_mut};
+
+    use alloc::{boxed::Box, collections::BTreeMap, vec::Vec};
+
+    /**
+    A set of owned [`Props`].
+    */
+    pub struct OwnedProps {
+        data: Vec<Box<OwnedProp>>,
+        head_ptr: Option<*mut OwnedProp>,
+    }
+
+    struct OwnedProp {
+        key: Str<'static>,
+        value: OwnedValue,
+        next_ptr: Option<*mut OwnedProp>,
+    }
+
+    impl OwnedProps {
+        fn collect<P: Props + ?Sized>(
+            props: &P,
+            mut mkkey: impl FnMut(Str) -> Str<'static>,
+            mut mkvalue: impl FnMut(Value) -> OwnedValue,
+        ) -> Self {
+            let capacity = cmp::min(128, props.size().unwrap_or(0));
+
+            let mut data = Vec::<Box<OwnedProp>>::with_capacity(capacity);
+            let mut head_ptr = None::<*mut OwnedProp>;
+            let mut tail_ptr = None::<*mut OwnedProp>;
+
+            let _ = props.for_each(|k, v| {
+                match data.binary_search_by_key(&k.get(), |prop| &prop.key.get()) {
+                    // A value is already associated with this key
+                    Ok(_) => ControlFlow::Continue(()),
+                    // A value isn't yet associated with this key
+                    // We'll insert it now, updating the traversal linked list
+                    // to maintain ordering
+                    Err(idx) => {
+                        let mut prop = Box::new(OwnedProp {
+                            key: mkkey(k),
+                            value: mkvalue(v),
+                            next_ptr: None,
+                        });
+
+                        let prop_ptr = addr_of_mut!(*prop);
+
+                        head_ptr = head_ptr.or_else(|| Some(prop_ptr));
+
+                        if let Some(tail_ptr) = tail_ptr {
+                            debug_assert!(head_ptr.is_some());
+
+                            // SAFETY: The data in `tail_ptr` is owned by `data`,
+                            // which outlives this dereference
+                            let tail = unsafe { &mut *tail_ptr };
+
+                            debug_assert!(tail.next_ptr.is_none());
+
+                            tail.next_ptr = Some(prop_ptr);
+                        }
+                        tail_ptr = Some(prop_ptr);
+
+                        data.insert(idx, prop);
+
+                        ControlFlow::Continue(())
+                    }
+                }
+            });
+
+            OwnedProps { data, head_ptr }
+        }
+
+        fn for_each<'kv, F: FnMut(&'kv Str<'static>, &'kv OwnedValue) -> ControlFlow<()>>(
+            &'kv self,
+            mut for_each: F,
+        ) -> ControlFlow<()> {
+            let mut next_ptr = self.head_ptr;
+
+            while let Some(current_ptr) = next_ptr.take() {
+                // SAFETY: The data in `current_ptr` is owned by `self`,
+                // which outlives this dereference
+                let current = unsafe { &*current_ptr };
+
+                for_each(&current.key, &current.value)?;
+
+                next_ptr = current.next_ptr;
+            }
+
+            ControlFlow::Continue(())
+        }
+
+        fn get<'v, K: ToStr>(&'v self, key: K) -> Option<&'v OwnedValue> {
+            let key = key.to_str();
+
+            match self
+                .data
+                .binary_search_by_key(&key.get(), |prop| &prop.key.get())
+            {
+                Ok(idx) => Some(&self.data[idx].value),
+                Err(_) => None,
+            }
+        }
+    }
 
     /**
     The result of calling [`Props::dedup`].
@@ -638,6 +739,24 @@ mod alloc_support {
         }
     }
 
+    impl<'kv, K, V> FromProps<'kv> for Vec<(K, V)>
+    where
+        K: From<Str<'kv>>,
+        V: From<Value<'kv>>,
+    {
+        fn from_props<P: Props + ?Sized>(props: &'kv P) -> Self {
+            let mut result = Vec::new();
+
+            let _ = props.for_each(|k, v| {
+                result.push((k.into(), v.into()));
+
+                ControlFlow::Continue(())
+            });
+
+            result
+        }
+    }
+
     impl<K, V> Props for BTreeMap<K, V>
     where
         K: Ord + ToStr + Borrow<str>,
@@ -677,24 +796,6 @@ mod alloc_support {
 
             let _ = props.for_each(|k, v| {
                 result.entry(k.into()).or_insert_with(|| v.into());
-
-                ControlFlow::Continue(())
-            });
-
-            result
-        }
-    }
-
-    impl<'kv, K, V> FromProps<'kv> for Vec<(K, V)>
-    where
-        K: From<Str<'kv>>,
-        V: From<Value<'kv>>,
-    {
-        fn from_props<P: Props + ?Sized>(props: &'kv P) -> Self {
-            let mut result = Vec::new();
-
-            let _ = props.for_each(|k, v| {
-                result.push((k.into(), v.into()));
 
                 ControlFlow::Continue(())
             });
