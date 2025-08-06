@@ -274,6 +274,7 @@ If you're running in a browser, you'll likely need to configure [CORS](https://d
 - `content-encoding`
 - `traceparent`
 - `tracestate`
+- `user-agent`
 - Any custom headers you've configured
 
 ## Flushing

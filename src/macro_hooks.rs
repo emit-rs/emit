@@ -308,7 +308,7 @@ where
 }
 
 #[cfg(feature = "std")]
-impl CaptureAsError for (dyn Error + 'static) {
+impl CaptureAsError for dyn Error + 'static {
     fn capture(&self) -> Option<Value<'_>> {
         Some(self.to_value())
     }

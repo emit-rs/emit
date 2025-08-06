@@ -16,6 +16,6 @@ note: required by a bound in `__private_capture_anon_as_debug`
   |               ^^^^^^^^^^^^^^^^^^ required by this bound in `__PrivateCaptureHook::__private_capture_anon_as_debug`
 help: consider annotating `Data` with `#[derive(Debug)]`
   |
-1   + #[derive(Debug)]
-2   | struct Data {
+  1 + #[derive(Debug)]
+  2 | struct Data {
     |

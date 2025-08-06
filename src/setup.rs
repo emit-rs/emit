@@ -318,6 +318,14 @@ impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt, TClock: Clock, TRng: Rng>
     Initialize a standalone runtime.
     */
     pub fn init_runtime(self) -> Runtime<TEmitter, TFilter, TCtxt, TClock, TRng> {
+        let _ = (
+            self.emitter.set,
+            self.filter.set,
+            self.ctxt.set,
+            self.clock.set,
+            self.rng.set,
+        );
+
         Runtime::build(
             self.emitter.value,
             self.filter.value,
@@ -338,6 +346,7 @@ impl<
 where
     TCtxt::Frame: Send + 'static,
 {
+    #[cfg(feature = "implicit_rt")]
     fn check_platform_is_initialized(&self) {
         let _ = (self.ctxt.set, self.clock.set, self.rng.set);
 
