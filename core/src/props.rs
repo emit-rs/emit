@@ -426,89 +426,188 @@ mod alloc_support {
 
     use core::{cmp, mem, ptr::addr_of_mut};
 
-    use alloc::{boxed::Box, collections::BTreeMap, vec::Vec};
+    use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec::Vec};
 
     /**
     A set of owned [`Props`].
+
+    Properties are deduplicated, but the original iteration order is retained. If the collection is created from [`OwnedProps::collect_shared`] then cloning is also cheap.
     */
     pub struct OwnedProps {
-        data: Vec<Box<OwnedProp>>,
-        head_ptr: Option<*mut OwnedProp>,
+        props: *const [Box<OwnedProp>],
+        owner: OwnedPropsOwner,
+        head: Option<*const OwnedProp>,
     }
 
     struct OwnedProp {
         key: Str<'static>,
         value: OwnedValue,
-        next_ptr: Option<*mut OwnedProp>,
+        next: Option<*const OwnedProp>,
+    }
+
+    enum OwnedPropsOwner {
+        Box(*mut [Box<OwnedProp>]),
+        Shared(Arc<[Box<OwnedProp>]>),
+    }
+
+    unsafe impl Send for OwnedProps {}
+    unsafe impl Sync for OwnedProps {}
+
+    impl Clone for OwnedProps {
+        fn clone(&self) -> Self {
+            match self.owner {
+                OwnedPropsOwner::Box(_) => {
+                    let (props, head) = OwnedProps::cloned(self);
+
+                    OwnedProps::new_owned(props, head)
+                }
+                OwnedPropsOwner::Shared(ref props) => {
+                    OwnedProps::new_shared(props.clone(), self.head)
+                }
+            }
+        }
+    }
+
+    impl Drop for OwnedProps {
+        fn drop(&mut self) {
+            match self.owner {
+                OwnedPropsOwner::Box(boxed) => {
+                    drop(unsafe { Box::from_raw(boxed) });
+                }
+                // Other cases handled normally
+                _ => (),
+            }
+        }
     }
 
     impl OwnedProps {
-        fn collect<P: Props + ?Sized>(
-            props: &P,
-            mut mkkey: impl FnMut(Str) -> Str<'static>,
-            mut mkvalue: impl FnMut(Value) -> OwnedValue,
-        ) -> Self {
+        fn cloned(src: &Self) -> (Box<[Box<OwnedProp>]>, Option<*const OwnedProp>) {
+            let mut collected = Vec::<Box<OwnedProp>>::with_capacity(src.props.len());
+            let mut head = None::<*const OwnedProp>;
+            let mut tail = None::<*mut OwnedProp>;
+
+            let _ = src.for_each(|k, v| {
+                // SAFETY: `head` and `tail` point to values in `collected`, which outlives this function call
+                let prop = unsafe { OwnedProp::new(&mut head, &mut tail, k.clone(), v.clone()) };
+
+                collected.push(prop);
+
+                ControlFlow::Continue(())
+            });
+
+            // Sort the collection at the end
+            collected.sort_by(|a, b| a.key.cmp(&b.key));
+
+            (collected.into_boxed_slice(), head)
+        }
+
+        fn new_owned(props: Box<[Box<OwnedProp>]>, head: Option<*const OwnedProp>) -> Self {
+            let props = Box::into_raw(props);
+            let owner = OwnedPropsOwner::Box(props);
+
+            OwnedProps { props, owner, head }
+        }
+
+        fn new_shared(props: Arc<[Box<OwnedProp>]>, head: Option<*const OwnedProp>) -> Self {
+            let ptr = Arc::as_ptr(&props);
+            let owner = OwnedPropsOwner::Shared(props);
+            let props = ptr;
+
+            OwnedProps { props, owner, head }
+        }
+
+        fn collect(
+            props: impl Props,
+            mut key: impl FnMut(Str) -> Str<'static>,
+            mut value: impl FnMut(Value) -> OwnedValue,
+        ) -> (Box<[Box<OwnedProp>]>, Option<*const OwnedProp>) {
             let capacity = cmp::min(128, props.size().unwrap_or(0));
 
-            let mut data = Vec::<Box<OwnedProp>>::with_capacity(capacity);
-            let mut head_ptr = None::<*mut OwnedProp>;
-            let mut tail_ptr = None::<*mut OwnedProp>;
+            let mut collected = Vec::<Box<OwnedProp>>::with_capacity(capacity);
+            let mut head = None::<*const OwnedProp>;
+            let mut tail = None::<*mut OwnedProp>;
 
             let _ = props.for_each(|k, v| {
-                match data.binary_search_by_key(&k.get(), |prop| &prop.key.get()) {
+                match collected.binary_search_by_key(&k.get(), |prop| &prop.key.get()) {
                     // A value is already associated with this key
                     Ok(_) => ControlFlow::Continue(()),
                     // A value isn't yet associated with this key
                     // We'll insert it now, updating the traversal linked list
                     // to maintain ordering
                     Err(idx) => {
-                        let mut prop = Box::new(OwnedProp {
-                            key: mkkey(k),
-                            value: mkvalue(v),
-                            next_ptr: None,
-                        });
+                        // SAFETY: `head` and `tail` point to values in `collected`, which outlives this function call
+                        let prop =
+                            unsafe { OwnedProp::new(&mut head, &mut tail, key(k), value(v)) };
 
-                        let prop_ptr = addr_of_mut!(*prop);
-
-                        head_ptr = head_ptr.or_else(|| Some(prop_ptr));
-
-                        if let Some(tail_ptr) = tail_ptr {
-                            debug_assert!(head_ptr.is_some());
-
-                            // SAFETY: The data in `tail_ptr` is owned by `data`,
-                            // which outlives this dereference
-                            let tail = unsafe { &mut *tail_ptr };
-
-                            debug_assert!(tail.next_ptr.is_none());
-
-                            tail.next_ptr = Some(prop_ptr);
-                        }
-                        tail_ptr = Some(prop_ptr);
-
-                        data.insert(idx, prop);
+                        collected.insert(idx, prop);
 
                         ControlFlow::Continue(())
                     }
                 }
             });
 
-            OwnedProps { data, head_ptr }
+            (collected.into_boxed_slice(), head)
+        }
+
+        /**
+        Collect a set of [`Props`] into an owned collection.
+
+        Cloning will involve cloning the collection.
+        */
+        pub fn collect_owned(props: impl Props) -> Self {
+            let (props, head) = Self::collect(props, |k| k.to_owned(), |v| v.to_owned());
+
+            let props = Box::into_raw(props);
+            let owner = OwnedPropsOwner::Box(props);
+
+            OwnedProps { props, owner, head }
+        }
+
+        /**
+        Collect a set of [`Props`] into an owned collection.
+
+        Cloning will involve cloning the `Arc`, which may be cheaper than cloning the collection itself.
+        */
+        pub fn collect_shared(props: impl Props) -> Self {
+            let (props, head) = Self::collect(props, |k| k.to_shared(), |v| v.to_shared());
+
+            Self::new_shared(props.into(), head)
+        }
+
+        /**
+        Get a new collection, taking an owned copy of the data in this one.
+
+        If the collection already contains an `Arc` value then this method is a cheap referenced counted clone.
+        */
+        pub fn to_shared(&self) -> Self {
+            match self.owner {
+                OwnedPropsOwner::Box(_) => {
+                    // We need to clone the data into new allocations, since we don't own them
+                    let (props, head) = OwnedProps::cloned(self);
+
+                    Self::new_shared(Arc::from(props), head)
+                }
+                OwnedPropsOwner::Shared(ref owner) => {
+                    OwnedProps::new_shared(owner.clone(), self.head)
+                }
+            }
         }
 
         fn for_each<'kv, F: FnMut(&'kv Str<'static>, &'kv OwnedValue) -> ControlFlow<()>>(
             &'kv self,
             mut for_each: F,
         ) -> ControlFlow<()> {
-            let mut next_ptr = self.head_ptr;
+            // Properties are iterated in insertion order
+            let mut next = self.head;
 
-            while let Some(current_ptr) = next_ptr.take() {
-                // SAFETY: The data in `current_ptr` is owned by `self`,
+            while let Some(current) = next.take() {
+                // SAFETY: The data in `current` is owned by `self`,
                 // which outlives this dereference
-                let current = unsafe { &*current_ptr };
+                let current = unsafe { &*current };
 
                 for_each(&current.key, &current.value)?;
 
-                next_ptr = current.next_ptr;
+                next = current.next;
             }
 
             ControlFlow::Continue(())
@@ -517,13 +616,73 @@ mod alloc_support {
         fn get<'v, K: ToStr>(&'v self, key: K) -> Option<&'v OwnedValue> {
             let key = key.to_str();
 
-            match self
-                .data
-                .binary_search_by_key(&key.get(), |prop| &prop.key.get())
-            {
-                Ok(idx) => Some(&self.data[idx].value),
+            // SAFETY: `props` is owned by `Self`, which outlives this function call
+            let props = unsafe { &*self.props };
+
+            match props.binary_search_by_key(&key.get(), |prop| &prop.key.get()) {
+                Ok(idx) => Some(&props[idx].value),
                 Err(_) => None,
             }
+        }
+    }
+
+    impl OwnedProp {
+        // SAFETY: `head` and `tail` must be valid to dereference within this function call
+        unsafe fn new(
+            head: &mut Option<*const OwnedProp>,
+            tail: &mut Option<*mut OwnedProp>,
+            key: Str<'static>,
+            value: OwnedValue,
+        ) -> Box<Self> {
+            let mut prop = Box::new(OwnedProp {
+                key,
+                value,
+                next: None,
+            });
+
+            let prop_ptr = addr_of_mut!(*prop);
+
+            *head = head.or_else(|| Some(prop_ptr));
+
+            if let Some(tail) = tail {
+                debug_assert!(head.is_some());
+
+                // SAFETY: The contract of `new` requires `tail` be valid to dereference
+                let tail = unsafe { &mut **tail };
+
+                debug_assert!(tail.next.is_none());
+                tail.next = Some(prop_ptr);
+            }
+            *tail = Some(prop_ptr);
+
+            prop
+        }
+    }
+
+    impl Props for OwnedProps {
+        fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
+            &'kv self,
+            mut for_each: F,
+        ) -> ControlFlow<()> {
+            self.for_each(|k, v| for_each(k.by_ref(), v.by_ref()))
+        }
+
+        fn get<'v, K: ToStr>(&'v self, key: K) -> Option<Value<'v>> {
+            self.get(key).map(|v| v.by_ref())
+        }
+
+        fn is_unique(&self) -> bool {
+            true
+        }
+
+        fn size(&self) -> Option<usize> {
+            Some(self.props.len())
+        }
+    }
+
+    impl<'kv> FromProps<'kv> for OwnedProps {
+        fn from_props<P: Props + ?Sized>(props: &'kv P) -> Self {
+            Self::collect_owned(props)
         }
     }
 
@@ -1012,6 +1171,99 @@ mod alloc_support {
             });
 
             assert_eq!(1, count);
+        }
+
+        #[test]
+        fn owned_props_collect() {
+            for (description, case) in [
+                (
+                    "owned",
+                    OwnedProps::collect_owned([
+                        ("b", 2),
+                        ("a", 1),
+                        ("c", 3),
+                        ("b", 12),
+                        ("a", 11),
+                        ("c", 13),
+                    ]),
+                ),
+                (
+                    "shared",
+                    OwnedProps::collect_shared([
+                        ("b", 2),
+                        ("a", 1),
+                        ("c", 3),
+                        ("b", 12),
+                        ("a", 11),
+                        ("c", 13),
+                    ]),
+                ),
+                (
+                    "owned -> shared",
+                    OwnedProps::collect_owned([
+                        ("b", 2),
+                        ("a", 1),
+                        ("c", 3),
+                        ("b", 12),
+                        ("a", 11),
+                        ("c", 13),
+                    ])
+                    .to_shared(),
+                ),
+                (
+                    "shared -> shared",
+                    OwnedProps::collect_shared([
+                        ("b", 2),
+                        ("a", 1),
+                        ("c", 3),
+                        ("b", 12),
+                        ("a", 11),
+                        ("c", 13),
+                    ])
+                    .to_shared(),
+                ),
+                (
+                    "owned -> clone",
+                    OwnedProps::collect_owned([
+                        ("b", 2),
+                        ("a", 1),
+                        ("c", 3),
+                        ("b", 12),
+                        ("a", 11),
+                        ("c", 13),
+                    ])
+                    .clone(),
+                ),
+                (
+                    "shared -> clone",
+                    OwnedProps::collect_shared([
+                        ("b", 2),
+                        ("a", 1),
+                        ("c", 3),
+                        ("b", 12),
+                        ("a", 11),
+                        ("c", 13),
+                    ])
+                    .clone(),
+                ),
+            ] {
+                assert_eq!(Some(1), case.pull::<usize, _>("a"), "{description}");
+                assert_eq!(Some(2), case.pull::<usize, _>("b"), "{description}");
+                assert_eq!(Some(3), case.pull::<usize, _>("c"), "{description}");
+
+                let mut values = Vec::new();
+
+                let _ = case.for_each(|k, v| {
+                    values.push((k.get(), v.by_ref().cast::<usize>()));
+                    ControlFlow::Continue(())
+                });
+
+                assert_eq!(
+                    vec![("b", Some(2)), ("a", Some(1)), ("c", Some(3))],
+                    values,
+                    "{description}"
+                );
+            }
         }
     }
 }

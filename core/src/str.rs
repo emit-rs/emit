@@ -419,7 +419,7 @@ mod alloc_support {
         /**
         Get a new string, taking an owned copy of the data in this one.
 
-        If the string contains a `'static` or `Arc` value then this method is cheap and doesn't involve cloning. In other cases the underlying value will be passed through [`Str::new_shared`].
+        If the string contains a `'static` or `Arc` value then this method is cheap. In other cases the underlying value will be passed through [`Str::new_shared`].
         */
         pub fn to_shared(&self) -> Str<'static> {
             match self.owner {
