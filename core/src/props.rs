@@ -424,7 +424,7 @@ mod alloc_support {
 
     use crate::value::OwnedValue;
 
-    use core::{cmp, mem, ptr::addr_of_mut};
+    use core::{cmp, mem};
 
     use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec::Vec};
 
@@ -434,7 +434,7 @@ mod alloc_support {
     Properties are deduplicated, but the original iteration order is retained. If the collection is created from [`OwnedProps::collect_shared`] then cloning is also cheap.
     */
     pub struct OwnedProps {
-        props: *const [Box<OwnedProp>],
+        props: *const [*mut OwnedProp],
         owner: OwnedPropsOwner,
         head: Option<*const OwnedProp>,
     }
@@ -446,8 +446,8 @@ mod alloc_support {
     }
 
     enum OwnedPropsOwner {
-        Box(*mut [Box<OwnedProp>]),
-        Shared(Arc<[Box<OwnedProp>]>),
+        Box(*mut [*mut OwnedProp]),
+        Shared(Arc<[*mut OwnedProp]>),
     }
 
     unsafe impl Send for OwnedProps {}
@@ -472,17 +472,33 @@ mod alloc_support {
         fn drop(&mut self) {
             match self.owner {
                 OwnedPropsOwner::Box(boxed) => {
-                    drop(unsafe { Box::from_raw(boxed) });
+                    let b = unsafe { Box::from_raw(boxed) };
+
+                    for prop in b {
+                        drop(unsafe { Box::from_raw(prop) });
+                    }
                 }
-                // Other cases handled normally
-                _ => (),
+                OwnedPropsOwner::Shared(ref mut shared) => {
+                    // We don't use weak pointers here, but if we did it would be possible
+                    // to observe a user-after-free by dropping the contents of this final
+                    // strong reference, and then upgrading a weak reference before the Arc
+                    // itself is dropped. We can't use `Arc::try_unwrap` here because the allocation
+                    // it holds is unsized
+                    debug_assert_eq!(0, Arc::weak_count(shared));
+
+                    if let Some(b) = Arc::get_mut(shared) {
+                        for prop in b {
+                            drop(unsafe { Box::from_raw(*prop) });
+                        }
+                    }
+                }
             }
         }
     }
 
     impl OwnedProps {
-        fn cloned(src: &Self) -> (Box<[Box<OwnedProp>]>, Option<*const OwnedProp>) {
-            let mut collected = Vec::<Box<OwnedProp>>::with_capacity(src.props.len());
+        fn cloned(src: &Self) -> (Box<[*mut OwnedProp]>, Option<*const OwnedProp>) {
+            let mut collected = Vec::<*mut OwnedProp>::with_capacity(src.props.len());
             let mut head = None::<*const OwnedProp>;
             let mut tail = None::<*mut OwnedProp>;
 
@@ -496,19 +512,23 @@ mod alloc_support {
             });
 
             // Sort the collection at the end
-            collected.sort_by(|a, b| a.key.cmp(&b.key));
+            collected.sort_by(|a, b| {
+                let (a, b) = unsafe { (&**a, &**b) };
+
+                a.key.cmp(&b.key)
+            });
 
             (collected.into_boxed_slice(), head)
         }
 
-        fn new_owned(props: Box<[Box<OwnedProp>]>, head: Option<*const OwnedProp>) -> Self {
+        fn new_owned(props: Box<[*mut OwnedProp]>, head: Option<*const OwnedProp>) -> Self {
             let props = Box::into_raw(props);
             let owner = OwnedPropsOwner::Box(props);
 
             OwnedProps { props, owner, head }
         }
 
-        fn new_shared(props: Arc<[Box<OwnedProp>]>, head: Option<*const OwnedProp>) -> Self {
+        fn new_shared(props: Arc<[*mut OwnedProp]>, head: Option<*const OwnedProp>) -> Self {
             let ptr = Arc::as_ptr(&props);
             let owner = OwnedPropsOwner::Shared(props);
             let props = ptr;
@@ -520,15 +540,19 @@ mod alloc_support {
             props: impl Props,
             mut key: impl FnMut(Str) -> Str<'static>,
             mut value: impl FnMut(Value) -> OwnedValue,
-        ) -> (Box<[Box<OwnedProp>]>, Option<*const OwnedProp>) {
+        ) -> (Box<[*mut OwnedProp]>, Option<*const OwnedProp>) {
             let capacity = cmp::min(128, props.size().unwrap_or(0));
 
-            let mut collected = Vec::<Box<OwnedProp>>::with_capacity(capacity);
+            let mut collected = Vec::<*mut OwnedProp>::with_capacity(capacity);
             let mut head = None::<*const OwnedProp>;
             let mut tail = None::<*mut OwnedProp>;
 
             let _ = props.for_each(|k, v| {
-                match collected.binary_search_by_key(&k.get(), |prop| &prop.key.get()) {
+                match collected.binary_search_by_key(&k.get(), |prop| {
+                    let prop = unsafe { &**prop };
+
+                    prop.key.get()
+                }) {
                     // A value is already associated with this key
                     Ok(_) => ControlFlow::Continue(()),
                     // A value isn't yet associated with this key
@@ -619,8 +643,17 @@ mod alloc_support {
             // SAFETY: `props` is owned by `Self`, which outlives this function call
             let props = unsafe { &*self.props };
 
-            match props.binary_search_by_key(&key.get(), |prop| &prop.key.get()) {
-                Ok(idx) => Some(&props[idx].value),
+            match props.binary_search_by_key(&key.get(), |prop| {
+                // SAFETY: `prop` is owned by `Self` and follows normal borrowing rules
+                let prop = unsafe { &**prop };
+
+                prop.key.get()
+            }) {
+                Ok(idx) => {
+                    // SAFETY: `prop` is owned by `Self` and follows normal borrowing rules
+                    let prop = unsafe { &*props[idx] };
+                    Some(&prop.value)
+                }
                 Err(_) => None,
             }
         }
@@ -633,14 +666,12 @@ mod alloc_support {
             tail: &mut Option<*mut OwnedProp>,
             key: Str<'static>,
             value: OwnedValue,
-        ) -> Box<Self> {
-            let mut prop = Box::new(OwnedProp {
+        ) -> *mut Self {
+            let prop_ptr = Box::into_raw(Box::new(OwnedProp {
                 key,
                 value,
                 next: None,
-            });
-
-            let prop_ptr = addr_of_mut!(*prop);
+            }));
 
             *head = head.or_else(|| Some(prop_ptr));
 
@@ -655,7 +686,7 @@ mod alloc_support {
             }
             *tail = Some(prop_ptr);
 
-            prop
+            prop_ptr
         }
     }
 
