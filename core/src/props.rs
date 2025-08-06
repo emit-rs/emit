@@ -93,6 +93,15 @@ pub trait Props {
     }
 
     /**
+    Collect these properties into another collection type.
+
+    This method defers to the [`FromProps`] implementation on `C`.
+    */
+    fn collect<'kv, C: FromProps<'kv>>(&'kv self) -> C {
+        C::from_props(self)
+    }
+
+    /**
     Get an adapter that will serialize properties as a map.
     */
     fn as_map(&self) -> &AsMap<Self>
@@ -382,13 +391,40 @@ impl<A: Props, B: Props> Props for And<A, B> {
     }
 }
 
+/**
+A type that can be constructed from [`Props`].
+*/
+pub trait FromProps<'kv> {
+    /**
+    Convert from `P`.
+
+    Implementors of this method may re-order or deduplicate key-values in `P`.
+    If any deduplication occurs, it must take _the first_ value seen for a given key.
+    */
+    fn from_props<P: Props + ?Sized>(props: &'kv P) -> Self;
+}
+
+#[cfg(feature = "alloc")]
+impl<'kv, 'a, C: FromProps<'kv> + 'a> FromProps<'kv> for alloc::boxed::Box<C> {
+    fn from_props<P: Props + ?Sized>(props: &'kv P) -> Self {
+        alloc::boxed::Box::new(C::from_props(props))
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<'kv, 'a, C: FromProps<'kv> + 'a> FromProps<'kv> for alloc::sync::Arc<C> {
+    fn from_props<P: Props + ?Sized>(props: &'kv P) -> Self {
+        alloc::sync::Arc::new(C::from_props(props))
+    }
+}
+
 #[cfg(feature = "alloc")]
 mod alloc_support {
     use super::*;
 
     use core::mem;
 
-    use alloc::collections::BTreeMap;
+    use alloc::{collections::BTreeMap, vec::Vec};
 
     /**
     The result of calling [`Props::dedup`].
@@ -577,6 +613,31 @@ mod alloc_support {
         }
     }
 
+    impl<T: Props> Props for Vec<T> {
+        fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
+            &'kv self,
+            for_each: F,
+        ) -> ControlFlow<()> {
+            Props::for_each(self as &[_], for_each)
+        }
+
+        fn get<'v, K: ToStr>(&'v self, key: K) -> Option<Value<'v>> {
+            Props::get(self as &[_], key)
+        }
+
+        fn pull<'kv, V: FromValue<'kv>, K: ToStr>(&'kv self, key: K) -> Option<V> {
+            Props::pull(self as &[_], key)
+        }
+
+        fn is_unique(&self) -> bool {
+            Props::is_unique(self as &[_])
+        }
+
+        fn size(&self) -> Option<usize> {
+            Props::size(self as &[_])
+        }
+    }
+
     impl<K, V> Props for BTreeMap<K, V>
     where
         K: Ord + ToStr + Borrow<str>,
@@ -606,9 +667,47 @@ mod alloc_support {
         }
     }
 
+    impl<'kv, K, V> FromProps<'kv> for BTreeMap<K, V>
+    where
+        K: Ord + From<Str<'kv>>,
+        V: From<Value<'kv>>,
+    {
+        fn from_props<P: Props + ?Sized>(props: &'kv P) -> Self {
+            let mut result = BTreeMap::new();
+
+            let _ = props.for_each(|k, v| {
+                result.entry(k.into()).or_insert_with(|| v.into());
+
+                ControlFlow::Continue(())
+            });
+
+            result
+        }
+    }
+
+    impl<'kv, K, V> FromProps<'kv> for Vec<(K, V)>
+    where
+        K: From<Str<'kv>>,
+        V: From<Value<'kv>>,
+    {
+        fn from_props<P: Props + ?Sized>(props: &'kv P) -> Self {
+            let mut result = Vec::new();
+
+            let _ = props.for_each(|k, v| {
+                result.push((k.into(), v.into()));
+
+                ControlFlow::Continue(())
+            });
+
+            result
+        }
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        use crate::value::OwnedValue;
 
         #[test]
         fn btreemap_props() {
@@ -623,6 +722,24 @@ mod alloc_support {
             assert_eq!(3, Props::pull::<i32, _>(&props, "c").unwrap());
 
             assert!(props.is_unique());
+        }
+
+        #[test]
+        fn btreemap_from_props() {
+            let props = BTreeMap::<String, OwnedValue>::from_props(&[("a", 1), ("a", 2), ("c", 3)]);
+
+            assert_eq!(1, Props::pull::<i32, _>(&props, "a").unwrap());
+            assert_eq!(3, Props::pull::<i32, _>(&props, "c").unwrap());
+        }
+
+        #[test]
+        fn vec_from_props() {
+            let props = Vec::<(String, OwnedValue)>::from_props(&[("a", 1), ("a", 2), ("c", 3)]);
+
+            assert_eq!(3, props.len());
+
+            assert_eq!(1, Props::pull::<i32, _>(&props, "a").unwrap());
+            assert_eq!(3, Props::pull::<i32, _>(&props, "c").unwrap());
         }
 
         #[test]
@@ -836,9 +953,29 @@ mod std_support {
         }
     }
 
+    impl<'kv, K, V> FromProps<'kv> for HashMap<K, V>
+    where
+        K: Eq + Hash + From<Str<'kv>>,
+        V: From<Value<'kv>>,
+    {
+        fn from_props<P: Props + ?Sized>(props: &'kv P) -> Self {
+            let mut result = HashMap::new();
+
+            let _ = props.for_each(|k, v| {
+                result.entry(k.into()).or_insert_with(|| v.into());
+
+                ControlFlow::Continue(())
+            });
+
+            result
+        }
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        use crate::value::OwnedValue;
 
         #[test]
         fn hashmap_props() {
@@ -853,6 +990,14 @@ mod std_support {
             assert_eq!(3, Props::pull::<i32, _>(&props, "c").unwrap());
 
             assert!(props.is_unique());
+        }
+
+        #[test]
+        fn hashmap_from_props() {
+            let props = HashMap::<String, OwnedValue>::from_props(&[("a", 1), ("a", 2), ("c", 3)]);
+
+            assert_eq!(1, Props::pull::<i32, _>(&props, "a").unwrap());
+            assert_eq!(3, Props::pull::<i32, _>(&props, "c").unwrap());
         }
     }
 }
