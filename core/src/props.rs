@@ -424,7 +424,7 @@ mod alloc_support {
 
     use crate::value::OwnedValue;
 
-    use core::{cmp, mem};
+    use core::{cmp, mem, ptr};
 
     use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec::Vec};
 
@@ -472,10 +472,12 @@ mod alloc_support {
         fn drop(&mut self) {
             match self.owner {
                 OwnedPropsOwner::Box(boxed) => {
-                    let b = unsafe { Box::from_raw(boxed) };
+                    // SAFETY: We're dropping the box through our exclusive reference
+                    let mut b = unsafe { Box::from_raw(boxed) };
 
-                    for prop in b {
-                        drop(unsafe { Box::from_raw(prop) });
+                    // SAFETY: We're dropping the value through our exclusive reference
+                    unsafe {
+                        SliceDropGuard::new(&mut b).drop();
                     }
                 }
                 OwnedPropsOwner::Shared(ref mut shared) => {
@@ -487,8 +489,9 @@ mod alloc_support {
                     debug_assert_eq!(0, Arc::weak_count(shared));
 
                     if let Some(b) = Arc::get_mut(shared) {
-                        for prop in b {
-                            drop(unsafe { Box::from_raw(*prop) });
+                        // SAFETY: We're dropping the value through our exclusive reference
+                        unsafe {
+                            SliceDropGuard::new(b).drop();
                         }
                     }
                 }
@@ -498,27 +501,32 @@ mod alloc_support {
 
     impl OwnedProps {
         fn cloned(src: &Self) -> (Box<[*mut OwnedProp]>, Option<*const OwnedProp>) {
-            let mut collected = Vec::<*mut OwnedProp>::with_capacity(src.props.len());
+            let mut guard = VecDropGuard::with_capacity(src.props.len());
             let mut head = None::<*const OwnedProp>;
             let mut tail = None::<*mut OwnedProp>;
 
+            // This method creates an independent copy of a set of owned props
+            // We can't simply clone the underlying collections, because they hold
+            // internal pointers that would be invalidated
             let _ = src.for_each(|k, v| {
                 // SAFETY: `head` and `tail` point to values in `collected`, which outlives this function call
-                let prop = unsafe { OwnedProp::new(&mut head, &mut tail, k.clone(), v.clone()) };
+                let mut prop =
+                    unsafe { OwnedProp::new(&mut head, &mut tail, k.clone(), v.clone()) };
 
-                collected.push(prop);
+                guard.collected.reserve(1);
+                guard.collected.push(prop.take());
 
                 ControlFlow::Continue(())
             });
 
             // Sort the collection at the end
-            collected.sort_by(|a, b| {
+            guard.collected.sort_by(|a, b| {
                 let (a, b) = unsafe { (&**a, &**b) };
 
                 a.key.cmp(&b.key)
             });
 
-            (collected.into_boxed_slice(), head)
+            (guard.take().into_boxed_slice(), head)
         }
 
         fn new_owned(props: Box<[*mut OwnedProp]>, head: Option<*const OwnedProp>) -> Self {
@@ -541,14 +549,16 @@ mod alloc_support {
             mut key: impl FnMut(Str) -> Str<'static>,
             mut value: impl FnMut(Value) -> OwnedValue,
         ) -> (Box<[*mut OwnedProp]>, Option<*const OwnedProp>) {
+            // We don't want to overallocate if `props.size()` returns a nonsense value
             let capacity = cmp::min(128, props.size().unwrap_or(0));
 
-            let mut collected = Vec::<*mut OwnedProp>::with_capacity(capacity);
+            let mut guard = VecDropGuard::with_capacity(capacity);
             let mut head = None::<*const OwnedProp>;
             let mut tail = None::<*mut OwnedProp>;
 
             let _ = props.for_each(|k, v| {
-                match collected.binary_search_by_key(&k.get(), |prop| {
+                match guard.collected.binary_search_by_key(&k.get(), |prop| {
+                    // SAFETY: `prop` is owned by `collected`, which outlives this function call
                     let prop = unsafe { &**prop };
 
                     prop.key.get()
@@ -559,18 +569,22 @@ mod alloc_support {
                     // We'll insert it now, updating the traversal linked list
                     // to maintain ordering
                     Err(idx) => {
+                        // Reserve space before attempting to construct a prop, so we don't leak it
+                        // if `insert` fails
+
                         // SAFETY: `head` and `tail` point to values in `collected`, which outlives this function call
-                        let prop =
+                        let mut prop =
                             unsafe { OwnedProp::new(&mut head, &mut tail, key(k), value(v)) };
 
-                        collected.insert(idx, prop);
+                        guard.collected.reserve(1);
+                        guard.collected.insert(idx, prop.take());
 
                         ControlFlow::Continue(())
                     }
                 }
             });
 
-            (collected.into_boxed_slice(), head)
+            (guard.take().into_boxed_slice(), head)
         }
 
         /**
@@ -659,37 +673,6 @@ mod alloc_support {
         }
     }
 
-    impl OwnedProp {
-        // SAFETY: `head` and `tail` must be valid to dereference within this function call
-        unsafe fn new(
-            head: &mut Option<*const OwnedProp>,
-            tail: &mut Option<*mut OwnedProp>,
-            key: Str<'static>,
-            value: OwnedValue,
-        ) -> *mut Self {
-            let prop_ptr = Box::into_raw(Box::new(OwnedProp {
-                key,
-                value,
-                next: None,
-            }));
-
-            *head = head.or_else(|| Some(prop_ptr));
-
-            if let Some(tail) = tail {
-                debug_assert!(head.is_some());
-
-                // SAFETY: The contract of `new` requires `tail` be valid to dereference
-                let tail = unsafe { &mut **tail };
-
-                debug_assert!(tail.next.is_none());
-                tail.next = Some(prop_ptr);
-            }
-            *tail = Some(prop_ptr);
-
-            prop_ptr
-        }
-    }
-
     impl Props for OwnedProps {
         fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
             &'kv self,
@@ -714,6 +697,119 @@ mod alloc_support {
     impl<'kv> FromProps<'kv> for OwnedProps {
         fn from_props<P: Props + ?Sized>(props: &'kv P) -> Self {
             Self::collect_owned(props)
+        }
+    }
+
+    impl OwnedProp {
+        // SAFETY: `head` and `tail` must be valid to dereference within this function call
+        unsafe fn new(
+            head: &mut Option<*const OwnedProp>,
+            tail: &mut Option<*mut OwnedProp>,
+            key: Str<'static>,
+            value: OwnedValue,
+        ) -> PropDropGuard {
+            let guard = PropDropGuard::new(Box::new(OwnedProp {
+                key,
+                value,
+                next: None,
+            }));
+
+            let prop_ptr = guard.0;
+
+            *head = head.or_else(|| Some(prop_ptr));
+
+            if let Some(tail) = tail {
+                debug_assert!(head.is_some());
+
+                // SAFETY: The contract of `new` requires `tail` be valid to dereference
+                let tail = unsafe { &mut **tail };
+
+                debug_assert!(tail.next.is_none());
+                tail.next = Some(prop_ptr);
+            }
+            *tail = Some(prop_ptr);
+
+            guard
+        }
+    }
+
+    struct SliceDropGuard<'a> {
+        idx: usize,
+        value: &'a mut [*mut OwnedProp],
+    }
+
+    impl<'a> Drop for SliceDropGuard<'a> {
+        fn drop(&mut self) {
+            // Attempt to resume dropping if a destructor panics
+            // SAFETY: We're dropping the value through our exclusive reference
+            unsafe {
+                self.drop();
+            }
+        }
+    }
+
+    impl<'a> SliceDropGuard<'a> {
+        fn new(value: &'a mut [*mut OwnedProp]) -> Self {
+            SliceDropGuard { value, idx: 0 }
+        }
+
+        // SAFETY: The value referenced by this guard must be getting dropped
+        unsafe fn drop(&mut self) {
+            while self.idx < self.value.len() {
+                let prop = self.value[self.idx];
+                self.idx += 1;
+
+                // SAFETY: We're dropping the value through our exclusive reference
+                drop(unsafe { Box::from_raw(prop) });
+            }
+        }
+    }
+
+    struct VecDropGuard {
+        collected: Vec<*mut OwnedProp>,
+    }
+
+    impl VecDropGuard {
+        fn with_capacity(cap: usize) -> Self {
+            VecDropGuard {
+                collected: Vec::with_capacity(cap),
+            }
+        }
+
+        fn take(&mut self) -> Vec<*mut OwnedProp> {
+            mem::take(&mut self.collected)
+        }
+    }
+
+    impl Drop for VecDropGuard {
+        fn drop(&mut self) {
+            // SAFETY: We're dropping the value through our exclusive reference
+            unsafe {
+                SliceDropGuard::new(&mut self.collected).drop();
+            }
+        }
+    }
+
+    struct PropDropGuard(*mut OwnedProp);
+
+    impl PropDropGuard {
+        fn new(prop: Box<OwnedProp>) -> Self {
+            PropDropGuard(Box::into_raw(prop))
+        }
+
+        fn take(&mut self) -> *mut OwnedProp {
+            mem::replace(&mut self.0, ptr::null_mut())
+        }
+    }
+
+    impl Drop for PropDropGuard {
+        fn drop(&mut self) {
+            if self.0.is_null() {
+                return;
+            }
+
+            // SAFETY: We're dropping the value through our exclusive reference
+            drop(unsafe { Box::from_raw(self.0) });
         }
     }
 
