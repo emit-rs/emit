@@ -281,6 +281,18 @@ mod alloc_support {
             }
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn owned_event_is_send_sync() {
+            fn check<T: Send + Sync>() {}
+
+            check::<Event<'static, OwnedProps>>();
+        }
+    }
 }
 
 #[cfg(test)]
