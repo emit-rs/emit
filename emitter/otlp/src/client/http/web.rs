@@ -63,13 +63,7 @@ impl HttpConnection {
     pub async fn send(&self, body: EncodedPayload, timeout: Duration) -> Result<(), Error> {
         let resource = self.uri.to_string();
 
-        let content = HttpContent::new(
-            self.allow_compression,
-            &self.uri,
-            &self.request,
-            &self.metrics,
-            body,
-        )?;
+        let content = HttpContent::new(self.allow_compression, &self.request, &self.metrics, body)?;
 
         // NOTE: Headers added here may affect CORS
         let headers = js_headers(

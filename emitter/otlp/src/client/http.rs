@@ -111,7 +111,6 @@ fn content_type_of(payload: &EncodedPayload) -> &'static str {
 impl HttpContent {
     fn new(
         allow_compression: bool,
-        uri: &HttpUri,
         configure: impl Fn(HttpContent) -> Result<HttpContent, Error>,
         metrics: &InternalMetrics,
         payload: EncodedPayload,
@@ -119,7 +118,7 @@ impl HttpContent {
         let body = {
             #[cfg(feature = "gzip")]
             {
-                if allow_compression && !uri.is_https() {
+                if allow_compression {
                     metrics.transport_request_compress_gzip.increment();
 
                     HttpContent::gzip(payload)?
@@ -130,7 +129,6 @@ impl HttpContent {
             #[cfg(not(feature = "gzip"))]
             {
                 let _ = allow_compression;
-                let _ = uri;
                 let _ = metrics;
 
                 HttpContent::raw(payload)
