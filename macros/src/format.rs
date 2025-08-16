@@ -1,23 +1,8 @@
 use proc_macro2::TokenStream;
-use syn::{parse::Parse, spanned::Spanned, FieldValue};
-
-use crate::args;
+use syn::spanned::Spanned;
 
 pub struct ExpandTokens {
     pub input: TokenStream,
-}
-
-struct Args {}
-
-impl Parse for Args {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        args::set_from_field_values(
-            input.parse_terminated(FieldValue::parse, Token![,])?.iter(),
-            [],
-        )?;
-
-        Ok(Args {})
-    }
 }
 
 pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
@@ -30,7 +15,22 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     }
     #[cfg(feature = "std")]
     {
-        use crate::{template, util::ToRefTokens};
+        use syn::{parse::Parse, FieldValue};
+
+        use crate::{args, template, util::ToRefTokens};
+
+        struct Args {}
+
+        impl Parse for Args {
+            fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+                args::set_from_field_values(
+                    input.parse_terminated(FieldValue::parse, Token![,])?.iter(),
+                    [],
+                )?;
+
+                Ok(Args {})
+            }
+        }
 
         let span = opts.input.span();
 

@@ -17,22 +17,22 @@ version = "1.11.1"
 
 ```rust
 # mod emit_term { pub fn stdout() -> impl emit::Emitter { emit::emitter::from_fn(|_| {}) } }
-# #[cfg(not(feature = "std"))] fn main() {}
-# #[cfg(feature = "std")]
+# #[cfg(not(all(feature = "implicit_rt", feature = "std")))] fn main() {}
+# #[cfg(all(feature = "implicit_rt", feature = "std"))]
 fn main() {
     let rt = emit::setup()
         .emit_to(emit_term::stdout())
         .init();
 
+    #[emit::span("Greet {user}")]
+    fn greet(user: &str) {
+        emit::info!("Hello, {user}!");
+    }
+
     // Your app code goes here
     greet("Rust");
 
     rt.blocking_flush(std::time::Duration::from_secs(5));
-}
-
-#[emit::span("Greet {user}")]
-fn greet(user: &str) {
-    emit::info!("Hello, {user}!");
 }
 ```
 

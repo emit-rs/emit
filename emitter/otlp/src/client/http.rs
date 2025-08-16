@@ -61,6 +61,11 @@ impl HttpUri {
         })?))
     }
 
+    #[cfg(not(all(
+        target_arch = "wasm32",
+        target_vendor = "unknown",
+        target_os = "unknown"
+    )))]
     pub fn is_https(&self) -> bool {
         self.0.scheme().unwrap() == &http::uri::Scheme::HTTPS
     }
@@ -126,6 +131,7 @@ impl HttpContent {
             {
                 let _ = allow_compression;
                 let _ = uri;
+                let _ = metrics;
 
                 HttpContent::raw(payload)
             }
