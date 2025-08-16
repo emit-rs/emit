@@ -55,7 +55,9 @@ impl<'k> fmt::Display for Str<'k> {
     }
 }
 
+// SAFETY: `Str` synchronizes through `Arc` when ownership is shared
 unsafe impl<'k> Send for Str<'k> {}
+// SAFETY: `Str` does not use interior mutability
 unsafe impl<'k> Sync for Str<'k> {}
 
 impl<'k> Clone for Str<'k> {

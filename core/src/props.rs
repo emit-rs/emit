@@ -432,6 +432,11 @@ mod alloc_support {
     A set of owned [`Props`].
 
     Properties are deduplicated, but the original iteration order is retained. If the collection is created from [`OwnedProps::collect_shared`] then cloning is also cheap.
+
+    ## Implementation details
+
+    Internally, `OwnedProps` is backed by a hashtable to make key lookup efficient. Each entry in the table also forms a linked list in iteration order.
+    The hash algorithm used is FNV-1a.
     */
     pub struct OwnedProps {
         buckets: *const [OwnedPropsBucket],
@@ -440,7 +445,9 @@ mod alloc_support {
         head: Option<*const OwnedProp>,
     }
 
+    // SAFETY: `OwnedProps` synchronizes through `Arc` when ownership is shared
     unsafe impl Send for OwnedProps {}
+    // SAFETY: `OwnedProps` does not use interior mutability
     unsafe impl Sync for OwnedProps {}
 
     impl Clone for OwnedProps {
@@ -507,6 +514,8 @@ mod alloc_support {
     impl OwnedProps {
         fn cloned(src: &Self) -> (usize, Box<[OwnedPropsBucket]>, Option<*const OwnedProp>) {
             // NOTE: This could be better optimized
+            // We already know what size each bucket should be, we could store
+            // the index of the bucket on each entry to re-assemble them
 
             let nbuckets = src.buckets.len();
             let mut nprops = 0;
@@ -520,11 +529,13 @@ mod alloc_support {
             // This method creates an independent copy of a set of owned props
             // We can't simply clone the underlying collections, because they hold
             // internal pointers that would be invalidated
-            let _ = src.for_each(|k, v| {
-                // SAFETY: `head` and `tail` point to values in `collected`, which outlives this function call
-                let prop = unsafe { OwnedProp::new(&mut head, &mut tail, k.clone(), v.clone()) };
+            let _ = src.for_each(|prop| {
+                let bucket = &mut buckets[idx(nbuckets, &prop.key)];
 
-                let bucket = &mut buckets[idx(nbuckets, &k)];
+                // SAFETY: `head` and `tail` point to values in `collected`, which outlives this function call
+                let prop = unsafe {
+                    OwnedProp::new(&mut head, &mut tail, prop.key.clone(), prop.value.clone())
+                };
 
                 bucket.push(prop);
                 nprops += 1;
@@ -573,7 +584,8 @@ mod alloc_support {
             mut key: impl FnMut(Str) -> Str<'static>,
             mut value: impl FnMut(Value) -> OwnedValue,
         ) -> (usize, Box<[OwnedPropsBucket]>, Option<*const OwnedProp>) {
-            // We don't want to overallocate if `props.size()` returns a nonsense value
+            // We want a reasonable number of buckets to reduce the number of keys to scan
+            // We don't want to overallocate if `props.size()` returns a nonsense value though
             let nbuckets = cmp::min(128, props.size().unwrap_or(32));
             let mut nprops = 0;
             let mut buckets = iter::from_fn(|| Some(OwnedPropsBucket::new()))
@@ -589,9 +601,6 @@ mod alloc_support {
                 if bucket.get(&k).is_some() {
                     ControlFlow::Continue(())
                 } else {
-                    // Reserve space before attempting to construct a prop, so we don't leak it
-                    // if `insert` fails
-
                     // SAFETY: `head` and `tail` point to values in `collected`, which outlives this function call
                     let prop = unsafe { OwnedProp::new(&mut head, &mut tail, key(k), value(v)) };
 
@@ -655,7 +664,7 @@ mod alloc_support {
             }
         }
 
-        fn for_each<'kv, F: FnMut(&'kv Str<'static>, &'kv OwnedValue) -> ControlFlow<()>>(
+        fn for_each<'kv, F: FnMut(&'kv OwnedProp) -> ControlFlow<()>>(
             &'kv self,
             mut for_each: F,
         ) -> ControlFlow<()> {
@@ -667,7 +676,7 @@ mod alloc_support {
                 // which outlives this dereference
                 let current = unsafe { &*current };
 
-                for_each(&current.key, &current.value)?;
+                for_each(&current)?;
 
                 next = current.next;
             }
@@ -675,7 +684,7 @@ mod alloc_support {
             ControlFlow::Continue(())
         }
 
-        fn get<'v, K: ToStr>(&'v self, key: K) -> Option<&'v OwnedValue> {
+        fn get<'v, K: ToStr>(&'v self, key: K) -> Option<&'v OwnedProp> {
             let key = key.to_str();
 
             // SAFETY: `buckets` is owned by `Self`, which outlives this function call
@@ -690,11 +699,11 @@ mod alloc_support {
             &'kv self,
             mut for_each: F,
         ) -> ControlFlow<()> {
-            self.for_each(|k, v| for_each(k.by_ref(), v.by_ref()))
+            self.for_each(|prop| for_each(prop.key.by_ref(), prop.value.by_ref()))
         }
 
         fn get<'v, K: ToStr>(&'v self, key: K) -> Option<Value<'v>> {
-            self.get(key).map(|v| v.by_ref())
+            self.get(key).map(|prop| prop.value.by_ref())
         }
 
         fn is_unique(&self) -> bool {
@@ -729,13 +738,13 @@ mod alloc_support {
             }
         }
 
-        fn get(&self, k: &Str) -> Option<&OwnedValue> {
+        fn get(&self, k: &Str) -> Option<&OwnedProp> {
             if !self.head.is_null() {
                 // SAFETY: `prop` is owned by `Self` and follows normal borrowing rules
                 let prop = unsafe { &*self.head };
 
                 if prop.key == *k {
-                    return Some(&prop.value);
+                    return Some(&prop);
                 }
             }
 
@@ -744,7 +753,7 @@ mod alloc_support {
                 let prop = unsafe { &**prop };
 
                 if prop.key == *k {
-                    return Some(&prop.value);
+                    return Some(&prop);
                 }
             }
 
@@ -1418,8 +1427,8 @@ mod alloc_support {
 
                 let mut values = Vec::new();
 
-                let _ = case.for_each(|k, v| {
-                    values.push((k.get(), v.by_ref().cast::<usize>()));
+                let _ = case.for_each(|prop| {
+                    values.push((prop.key.get(), prop.value.by_ref().cast::<usize>()));
                     ControlFlow::Continue(())
                 });
 
