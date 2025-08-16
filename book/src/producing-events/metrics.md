@@ -1,6 +1,21 @@
 # Metrics
 
-Metrics are an effective approach to monitoring applications at scale. They can be cheap to collect, making them suitable for performance sensitive operations. They can also be compact to report, making them suitable for high-volume scenarios. `emit` doesn't provide much infrastructure for collecting or sampling metrics. What it does provide is a standard way to report metric samples as events.
+Metrics are an effective approach to monitoring applications at scale. They can be cheap to collect, making them suitable for performance sensitive operations. They can also be compact to report, making them suitable for high-volume scenarios.
+
+`emit` doesn't provide its own definitions of _meters_ or _instruments_, types like gauges and counters that you can set or increment. The way you track metrics in your application will depend on what kind of application it is, so it's up to you to decide how you want to do this.
+
+What `emit` does provide is a standard way to report metric samples you collect as events through its runtime:
+
+```mermaid
+flowchart
+    meter["`**meter/instrument**
+    _Gauges, counters, etc defined by your application_`"] -- sample --> emit
+    emit["`**emit event**
+    _Regular emit events using well-known properties to signal them as metric samples_
+    `"]
+```
+
+Emitters that are metric-aware, like [`emit_otlp`](../emitting-events/otlp.md), can then handle those samples differently from regular events.
 
 A standard kind of metric is a monotonic counter, which can be represented as an atomic integer. In this example, our counter is for the number of bytes written to a file, which we'll call `bytes_written`. We can report a sample of this counter as an event using some [well-known properties](./metrics/data-model.md):
 

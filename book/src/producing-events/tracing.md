@@ -33,7 +33,7 @@ Event {
 }
 ```
 
-When the annotated function returns, a span event for its execution is emitted. The extent of a span event is a range, where the start is the time the function began executing, and the end is the time the function returned.
+When the annotated function returns, a span event for its execution is emitted. The extent of a span event is a range, where the start is the time the function began executing, and the end is the time the function returned. Emitters that are trace-aware, like [`emit_otlp`](../emitting-events/otlp.md), can then handle those spans differently from regular events.
 
 Asynchronous functions are also supported:
 
