@@ -59,6 +59,6 @@ impl Instant {
     }
 }
 
-pub(crate) async fn flush(_sender: &emit_batcher::Sender<Channel>, timeout: Duration) -> bool {
+pub(crate) async fn flush(_sender: &emit_batcher::Sender<Channel>, _timeout: Duration) -> bool {
     false
 }

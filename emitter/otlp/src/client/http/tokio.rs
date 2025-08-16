@@ -309,13 +309,8 @@ impl HttpConnection {
                 None => connect(&self.metrics, self.version, &self.uri).await?,
             };
 
-            let body = HttpContent::new(
-                self.allow_compression,
-                &self.uri,
-                &self.request,
-                &self.metrics,
-                body,
-            )?;
+            let body =
+                HttpContent::new(self.allow_compression, &self.request, &self.metrics, body)?;
 
             let res = send_request(
                 &self.metrics,
@@ -534,14 +529,8 @@ mod tests {
         let metrics = InternalMetrics::default();
         let uri = HttpUri::new("http://localhost:4718").unwrap();
         let headers = [] as [(&str, &str); 0];
-        let content = HttpContent::new(
-            false,
-            &uri,
-            |content| Ok(content),
-            &metrics,
-            Json::encode(42),
-        )
-        .unwrap();
+        let content =
+            HttpContent::new(false, |content| Ok(content), &metrics, Json::encode(42)).unwrap();
 
         let req = http_request(&metrics, &uri, headers.into_iter(), content).unwrap();
 
@@ -555,14 +544,8 @@ mod tests {
         let metrics = InternalMetrics::default();
         let uri = HttpUri::new("http://localhost:4718").unwrap();
         let headers = [("user-agent", "custom-agent")];
-        let content = HttpContent::new(
-            false,
-            &uri,
-            |content| Ok(content),
-            &metrics,
-            Json::encode(42),
-        )
-        .unwrap();
+        let content =
+            HttpContent::new(false, |content| Ok(content), &metrics, Json::encode(42)).unwrap();
 
         let req = http_request(&metrics, &uri, headers.into_iter(), content).unwrap();
 

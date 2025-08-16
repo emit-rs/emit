@@ -147,6 +147,7 @@ If the `gzip` Cargo feature is enabled then gzip compression will be applied aut
 You can disable any compression through an [`OtlpTransportBuilder`]:
 
 ```
+# #[cfg(feature = "gzip")]
 # fn build() -> emit_otlp::OtlpBuilder {
 emit_otlp::new()
    .logs(emit_otlp::logs_proto(emit_otlp::http("http://localhost:4318/v1/logs")

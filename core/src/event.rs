@@ -262,6 +262,39 @@ impl<'a, P: Props> ToEvent for Event<'a, P> {
     }
 }
 
+#[cfg(feature = "alloc")]
+mod alloc_support {
+    use super::*;
+
+    use crate::props::OwnedProps;
+
+    impl<'a, P: Props> Event<'a, P> {
+        /**
+        Get a new event, taking an owned copy of its data.
+        */
+        pub fn to_owned(&self) -> Event<'static, OwnedProps> {
+            Event {
+                mdl: self.mdl.to_owned(),
+                extent: self.extent.clone(),
+                tpl: self.tpl.to_owned(),
+                props: OwnedProps::collect_owned(&self.props),
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn owned_event_is_send_sync() {
+            fn check<T: Send + Sync>() {}
+
+            check::<Event<'static, OwnedProps>>();
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{str::Str, value::Value};
@@ -297,5 +330,10 @@ mod tests {
         assert(&evt);
         assert(&evt.by_ref());
         assert(&evt.erase());
+
+        #[cfg(feature = "alloc")]
+        {
+            assert(&evt.to_owned());
+        }
     }
 }

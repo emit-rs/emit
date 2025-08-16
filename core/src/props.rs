@@ -93,6 +93,15 @@ pub trait Props {
     }
 
     /**
+    Collect these properties into another collection type.
+
+    This method defers to the [`FromProps`] implementation on `C`.
+    */
+    fn collect<'kv, C: FromProps<'kv>>(&'kv self) -> C {
+        C::from_props(self)
+    }
+
+    /**
     Get an adapter that will serialize properties as a map.
     */
     fn as_map(&self) -> &AsMap<Self>
@@ -382,13 +391,474 @@ impl<A: Props, B: Props> Props for And<A, B> {
     }
 }
 
+/**
+A type that can be constructed from [`Props`].
+*/
+pub trait FromProps<'kv> {
+    /**
+    Convert from `P`.
+
+    Implementors of this method may re-order or deduplicate key-values in `P`.
+    If any deduplication occurs, it must take _the first_ value seen for a given key.
+    */
+    fn from_props<P: Props + ?Sized>(props: &'kv P) -> Self;
+}
+
+#[cfg(feature = "alloc")]
+impl<'kv, 'a, C: FromProps<'kv> + 'a> FromProps<'kv> for alloc::boxed::Box<C> {
+    fn from_props<P: Props + ?Sized>(props: &'kv P) -> Self {
+        alloc::boxed::Box::new(C::from_props(props))
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<'kv, 'a, C: FromProps<'kv> + 'a> FromProps<'kv> for alloc::sync::Arc<C> {
+    fn from_props<P: Props + ?Sized>(props: &'kv P) -> Self {
+        alloc::sync::Arc::new(C::from_props(props))
+    }
+}
+
 #[cfg(feature = "alloc")]
 mod alloc_support {
     use super::*;
 
-    use core::mem;
+    use crate::value::OwnedValue;
 
-    use alloc::collections::BTreeMap;
+    use core::{cmp, iter, mem, ptr};
+
+    use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec::Vec};
+
+    /**
+    A set of owned [`Props`].
+
+    Properties are deduplicated, but the original iteration order is retained. If the collection is created from [`OwnedProps::collect_shared`] then cloning is also cheap.
+
+    ## Implementation details
+
+    Internally, `OwnedProps` is backed by a hashtable to make key lookup efficient. Each entry in the table also forms a linked list in iteration order.
+    The hash algorithm used is FNV-1a.
+    */
+    pub struct OwnedProps {
+        buckets: *const [OwnedPropsBucket],
+        nprops: usize,
+        owner: OwnedPropsOwner,
+        head: Option<*const OwnedProp>,
+    }
+
+    // SAFETY: `OwnedProps` synchronizes through `Arc` when ownership is shared
+    unsafe impl Send for OwnedProps {}
+    // SAFETY: `OwnedProps` does not use interior mutability
+    unsafe impl Sync for OwnedProps {}
+
+    impl Clone for OwnedProps {
+        fn clone(&self) -> Self {
+            match self.owner {
+                OwnedPropsOwner::Box(_) => {
+                    let (nprops, props, head) = OwnedProps::cloned(self);
+
+                    OwnedProps::new_owned(nprops, props, head)
+                }
+                OwnedPropsOwner::Shared(ref props) => {
+                    OwnedProps::new_shared(self.nprops, props.clone(), self.head)
+                }
+            }
+        }
+    }
+
+    impl Drop for OwnedProps {
+        fn drop(&mut self) {
+            match self.owner {
+                OwnedPropsOwner::Box(boxed) => {
+                    // SAFETY: We're dropping the box through our exclusive reference
+                    drop(unsafe { Box::from_raw(boxed) });
+                }
+                OwnedPropsOwner::Shared(_) => {
+                    // No special drop handling is needed for `Arc`
+                }
+            }
+        }
+    }
+
+    struct OwnedPropsBucket {
+        head: *mut OwnedProp,
+        tail: Vec<*mut OwnedProp>,
+    }
+
+    impl Drop for OwnedPropsBucket {
+        fn drop(&mut self) {
+            let mut guard = SliceDropGuard::new(&mut self.tail);
+
+            if !self.head.is_null() {
+                // SAFETY: We're dropping the box through our exclusive reference
+                drop(unsafe { Box::from_raw(self.head) })
+            }
+
+            // SAFETY: We're dropping the value through our exclusive reference
+            unsafe {
+                guard.drop();
+            }
+        }
+    }
+
+    struct OwnedProp {
+        key: Str<'static>,
+        value: OwnedValue,
+        next: Option<*const OwnedProp>,
+    }
+
+    enum OwnedPropsOwner {
+        Box(*mut [OwnedPropsBucket]),
+        Shared(Arc<[OwnedPropsBucket]>),
+    }
+
+    impl OwnedProps {
+        fn cloned(src: &Self) -> (usize, Box<[OwnedPropsBucket]>, Option<*const OwnedProp>) {
+            // NOTE: This could be better optimized
+            // We already know what size each bucket should be, we could store
+            // the index of the bucket on each entry to re-assemble them
+
+            let nbuckets = src.buckets.len();
+            let mut nprops = 0;
+            let mut buckets = iter::from_fn(|| Some(OwnedPropsBucket::new()))
+                .take(nbuckets)
+                .collect::<Vec<_>>()
+                .into_boxed_slice();
+            let mut head = None::<*const OwnedProp>;
+            let mut tail = None::<*mut OwnedProp>;
+
+            // This method creates an independent copy of a set of owned props
+            // We can't simply clone the underlying collections, because they hold
+            // internal pointers that would be invalidated
+            let _ = src.for_each(|prop| {
+                let bucket = &mut buckets[idx(nbuckets, &prop.key)];
+
+                // SAFETY: `head` and `tail` point to values in `collected`, which outlives this function call
+                let prop = unsafe {
+                    OwnedProp::new(&mut head, &mut tail, prop.key.clone(), prop.value.clone())
+                };
+
+                bucket.push(prop);
+                nprops += 1;
+
+                ControlFlow::Continue(())
+            });
+
+            (nprops, buckets, head)
+        }
+
+        fn new_owned(
+            nprops: usize,
+            buckets: Box<[OwnedPropsBucket]>,
+            head: Option<*const OwnedProp>,
+        ) -> Self {
+            let buckets = Box::into_raw(buckets);
+            let owner = OwnedPropsOwner::Box(buckets);
+
+            OwnedProps {
+                nprops,
+                buckets,
+                owner,
+                head,
+            }
+        }
+
+        fn new_shared(
+            nprops: usize,
+            buckets: Arc<[OwnedPropsBucket]>,
+            head: Option<*const OwnedProp>,
+        ) -> Self {
+            let ptr = Arc::as_ptr(&buckets);
+            let owner = OwnedPropsOwner::Shared(buckets);
+            let buckets = ptr;
+
+            OwnedProps {
+                nprops,
+                buckets,
+                owner,
+                head,
+            }
+        }
+
+        fn collect(
+            props: impl Props,
+            mut key: impl FnMut(Str) -> Str<'static>,
+            mut value: impl FnMut(Value) -> OwnedValue,
+        ) -> (usize, Box<[OwnedPropsBucket]>, Option<*const OwnedProp>) {
+            // We want a reasonable number of buckets to reduce the number of keys to scan
+            // We don't want to overallocate if `props.size()` returns a nonsense value though
+            let nbuckets = cmp::min(128, props.size().unwrap_or(32));
+            let mut nprops = 0;
+            let mut buckets = iter::from_fn(|| Some(OwnedPropsBucket::new()))
+                .take(nbuckets)
+                .collect::<Vec<_>>()
+                .into_boxed_slice();
+            let mut head = None::<*const OwnedProp>;
+            let mut tail = None::<*mut OwnedProp>;
+
+            let _ = props.for_each(|k, v| {
+                let bucket = &mut buckets[idx(nbuckets, &k)];
+
+                if bucket.get(&k).is_some() {
+                    ControlFlow::Continue(())
+                } else {
+                    // SAFETY: `head` and `tail` point to values in `collected`, which outlives this function call
+                    let prop = unsafe { OwnedProp::new(&mut head, &mut tail, key(k), value(v)) };
+
+                    bucket.push(prop);
+                    nprops += 1;
+
+                    ControlFlow::Continue(())
+                }
+            });
+
+            (nprops, buckets, head)
+        }
+
+        /**
+        Collect a set of [`Props`] into an owned collection.
+
+        Cloning will involve cloning the collection.
+        */
+        pub fn collect_owned(props: impl Props) -> Self {
+            let (nprops, buckets, head) = Self::collect(props, |k| k.to_owned(), |v| v.to_owned());
+
+            let buckets = Box::into_raw(buckets);
+            let owner = OwnedPropsOwner::Box(buckets);
+
+            OwnedProps {
+                nprops,
+                buckets,
+                owner,
+                head,
+            }
+        }
+
+        /**
+        Collect a set of [`Props`] into an owned collection.
+
+        Cloning will involve cloning the `Arc`, which may be cheaper than cloning the collection itself.
+        */
+        pub fn collect_shared(props: impl Props) -> Self {
+            let (nprops, buckets, head) =
+                Self::collect(props, |k| k.to_shared(), |v| v.to_shared());
+
+            Self::new_shared(nprops, buckets.into(), head)
+        }
+
+        /**
+        Get a new collection, taking an owned copy of the data in this one.
+
+        If the collection already contains an `Arc` value then this method is a cheap referenced counted clone.
+        */
+        pub fn to_shared(&self) -> Self {
+            match self.owner {
+                OwnedPropsOwner::Box(_) => {
+                    // We need to clone the data into new allocations, since we don't own them
+                    let (nprops, buckets, head) = OwnedProps::cloned(self);
+
+                    Self::new_shared(nprops, Arc::from(buckets), head)
+                }
+                OwnedPropsOwner::Shared(ref owner) => {
+                    OwnedProps::new_shared(self.nprops, owner.clone(), self.head)
+                }
+            }
+        }
+
+        fn for_each<'kv, F: FnMut(&'kv OwnedProp) -> ControlFlow<()>>(
+            &'kv self,
+            mut for_each: F,
+        ) -> ControlFlow<()> {
+            // Properties are iterated in insertion order
+            let mut next = self.head;
+
+            while let Some(current) = next.take() {
+                // SAFETY: The data in `current` is owned by `self`,
+                // which outlives this dereference
+                let current = unsafe { &*current };
+
+                for_each(&current)?;
+
+                next = current.next;
+            }
+
+            ControlFlow::Continue(())
+        }
+
+        fn get<'v, K: ToStr>(&'v self, key: K) -> Option<&'v OwnedProp> {
+            let key = key.to_str();
+
+            // SAFETY: `buckets` is owned by `Self`, which outlives this function call
+            let buckets = unsafe { &*self.buckets };
+
+            buckets[idx(buckets.len(), &key)].get(&key)
+        }
+    }
+
+    impl Props for OwnedProps {
+        fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
+            &'kv self,
+            mut for_each: F,
+        ) -> ControlFlow<()> {
+            self.for_each(|prop| for_each(prop.key.by_ref(), prop.value.by_ref()))
+        }
+
+        fn get<'v, K: ToStr>(&'v self, key: K) -> Option<Value<'v>> {
+            self.get(key).map(|prop| prop.value.by_ref())
+        }
+
+        fn is_unique(&self) -> bool {
+            true
+        }
+
+        fn size(&self) -> Option<usize> {
+            Some(self.nprops)
+        }
+    }
+
+    impl<'kv> FromProps<'kv> for OwnedProps {
+        fn from_props<P: Props + ?Sized>(props: &'kv P) -> Self {
+            Self::collect_owned(props)
+        }
+    }
+
+    impl OwnedPropsBucket {
+        fn new() -> OwnedPropsBucket {
+            OwnedPropsBucket {
+                head: ptr::null_mut(),
+                tail: Vec::new(),
+            }
+        }
+
+        fn push(&mut self, mut prop: PropDropGuard) {
+            if self.head.is_null() {
+                self.head = prop.take();
+            } else {
+                self.tail.reserve(1);
+                self.tail.push(prop.take());
+            }
+        }
+
+        fn get(&self, k: &Str) -> Option<&OwnedProp> {
+            if !self.head.is_null() {
+                // SAFETY: `prop` is owned by `Self` and follows normal borrowing rules
+                let prop = unsafe { &*self.head };
+
+                if prop.key == *k {
+                    return Some(&prop);
+                }
+            }
+
+            for prop in &self.tail {
+                // SAFETY: `prop` is owned by `Self` and follows normal borrowing rules
+                let prop = unsafe { &**prop };
+
+                if prop.key == *k {
+                    return Some(&prop);
+                }
+            }
+
+            None
+        }
+    }
+
+    impl OwnedProp {
+        // SAFETY: `head` and `tail` must be valid to dereference within this function call
+        unsafe fn new(
+            head: &mut Option<*const OwnedProp>,
+            tail: &mut Option<*mut OwnedProp>,
+            key: Str<'static>,
+            value: OwnedValue,
+        ) -> PropDropGuard {
+            let guard = PropDropGuard::new(Box::new(OwnedProp {
+                key,
+                value,
+                next: None,
+            }));
+
+            let prop_ptr = guard.0;
+
+            *head = head.or_else(|| Some(prop_ptr));
+
+            if let Some(tail) = tail {
+                debug_assert!(head.is_some());
+
+                // SAFETY: The contract of `new` requires `tail` be valid to dereference
+                let tail = unsafe { &mut **tail };
+
+                debug_assert!(tail.next.is_none());
+                tail.next = Some(prop_ptr);
+            }
+            *tail = Some(prop_ptr);
+
+            guard
+        }
+    }
+
+    struct SliceDropGuard<'a> {
+        idx: usize,
+        value: &'a mut [*mut OwnedProp],
+    }
+
+    impl<'a> Drop for SliceDropGuard<'a> {
+        fn drop(&mut self) {
+            // Attempt to resume dropping if a destructor panics
+            // SAFETY: We're dropping the value through our exclusive reference
+            unsafe {
+                self.drop();
+            }
+        }
+    }
+
+    impl<'a> SliceDropGuard<'a> {
+        fn new(value: &'a mut [*mut OwnedProp]) -> Self {
+            SliceDropGuard { value, idx: 0 }
+        }
+
+        // SAFETY: The value referenced by this guard must be getting dropped
+        unsafe fn drop(&mut self) {
+            while self.idx < self.value.len() {
+                let prop = self.value[self.idx];
+                self.idx += 1;
+
+                // SAFETY: We're dropping the value through our exclusive reference
+                drop(unsafe { Box::from_raw(prop) });
+            }
+        }
+    }
+
+    struct PropDropGuard(*mut OwnedProp);
+
+    impl PropDropGuard {
+        fn new(prop: Box<OwnedProp>) -> Self {
+            PropDropGuard(Box::into_raw(prop))
+        }
+
+        fn take(&mut self) -> *mut OwnedProp {
+            mem::replace(&mut self.0, ptr::null_mut())
+        }
+    }
+
+    impl Drop for PropDropGuard {
+        fn drop(&mut self) {
+            if self.0.is_null() {
+                return;
+            }
+
+            // SAFETY: We're dropping the value through our exclusive reference
+            drop(unsafe { Box::from_raw(self.0) });
+        }
+    }
+
+    fn idx(buckets: usize, k: &Str) -> usize {
+        let mut hash = 0xcbf29ce484222325;
+
+        for b in k.get().as_bytes() {
+            hash = hash ^ (*b as u64);
+            hash = hash.wrapping_mul(0x00000100000001b3);
+        }
+
+        (hash as usize) % buckets
+    }
 
     /**
     The result of calling [`Props::dedup`].
@@ -577,6 +1047,49 @@ mod alloc_support {
         }
     }
 
+    impl<T: Props> Props for Vec<T> {
+        fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
+            &'kv self,
+            for_each: F,
+        ) -> ControlFlow<()> {
+            Props::for_each(self as &[_], for_each)
+        }
+
+        fn get<'v, K: ToStr>(&'v self, key: K) -> Option<Value<'v>> {
+            Props::get(self as &[_], key)
+        }
+
+        fn pull<'kv, V: FromValue<'kv>, K: ToStr>(&'kv self, key: K) -> Option<V> {
+            Props::pull(self as &[_], key)
+        }
+
+        fn is_unique(&self) -> bool {
+            Props::is_unique(self as &[_])
+        }
+
+        fn size(&self) -> Option<usize> {
+            Props::size(self as &[_])
+        }
+    }
+
+    impl<'kv, K, V> FromProps<'kv> for Vec<(K, V)>
+    where
+        K: From<Str<'kv>>,
+        V: From<Value<'kv>>,
+    {
+        fn from_props<P: Props + ?Sized>(props: &'kv P) -> Self {
+            let mut result = Vec::new();
+
+            let _ = props.for_each(|k, v| {
+                result.push((k.into(), v.into()));
+
+                ControlFlow::Continue(())
+            });
+
+            result
+        }
+    }
+
     impl<K, V> Props for BTreeMap<K, V>
     where
         K: Ord + ToStr + Borrow<str>,
@@ -606,9 +1119,29 @@ mod alloc_support {
         }
     }
 
+    impl<'kv, K, V> FromProps<'kv> for BTreeMap<K, V>
+    where
+        K: Ord + From<Str<'kv>>,
+        V: From<Value<'kv>>,
+    {
+        fn from_props<P: Props + ?Sized>(props: &'kv P) -> Self {
+            let mut result = BTreeMap::new();
+
+            let _ = props.for_each(|k, v| {
+                result.entry(k.into()).or_insert_with(|| v.into());
+
+                ControlFlow::Continue(())
+            });
+
+            result
+        }
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        use crate::value::OwnedValue;
 
         #[test]
         fn btreemap_props() {
@@ -623,6 +1156,24 @@ mod alloc_support {
             assert_eq!(3, Props::pull::<i32, _>(&props, "c").unwrap());
 
             assert!(props.is_unique());
+        }
+
+        #[test]
+        fn btreemap_from_props() {
+            let props = BTreeMap::<String, OwnedValue>::from_props(&[("a", 1), ("a", 2), ("c", 3)]);
+
+            assert_eq!(1, Props::pull::<i32, _>(&props, "a").unwrap());
+            assert_eq!(3, Props::pull::<i32, _>(&props, "c").unwrap());
+        }
+
+        #[test]
+        fn vec_from_props() {
+            let props = Vec::<(String, OwnedValue)>::from_props(&[("a", 1), ("a", 2), ("c", 3)]);
+
+            assert_eq!(3, props.len());
+
+            assert_eq!(1, Props::pull::<i32, _>(&props, "a").unwrap());
+            assert_eq!(3, Props::pull::<i32, _>(&props, "c").unwrap());
         }
 
         #[test]
@@ -795,6 +1346,119 @@ mod alloc_support {
 
             assert_eq!(1, count);
         }
+
+        #[test]
+        fn owned_props_empty() {
+            let props = OwnedProps::collect_owned([] as [(Str, Value); 0]);
+
+            assert_eq!(Some(0), props.size());
+            assert!(props.is_unique());
+
+            let mut count = 0;
+
+            let _ = props.for_each(|_| {
+                count += 1;
+                ControlFlow::Continue(())
+            });
+
+            assert_eq!(0, count);
+        }
+
+        #[test]
+        fn owned_props_collect() {
+            for (description, case) in [
+                (
+                    "owned",
+                    OwnedProps::collect_owned([
+                        ("b", 2),
+                        ("a", 1),
+                        ("c", 3),
+                        ("b", 12),
+                        ("a", 11),
+                        ("c", 13),
+                    ]),
+                ),
+                (
+                    "shared",
+                    OwnedProps::collect_shared([
+                        ("b", 2),
+                        ("a", 1),
+                        ("c", 3),
+                        ("b", 12),
+                        ("a", 11),
+                        ("c", 13),
+                    ]),
+                ),
+                (
+                    "owned -> shared",
+                    OwnedProps::collect_owned([
+                        ("b", 2),
+                        ("a", 1),
+                        ("c", 3),
+                        ("b", 12),
+                        ("a", 11),
+                        ("c", 13),
+                    ])
+                    .to_shared(),
+                ),
+                (
+                    "shared -> shared",
+                    OwnedProps::collect_shared([
+                        ("b", 2),
+                        ("a", 1),
+                        ("c", 3),
+                        ("b", 12),
+                        ("a", 11),
+                        ("c", 13),
+                    ])
+                    .to_shared(),
+                ),
+                (
+                    "owned -> clone",
+                    OwnedProps::collect_owned([
+                        ("b", 2),
+                        ("a", 1),
+                        ("c", 3),
+                        ("b", 12),
+                        ("a", 11),
+                        ("c", 13),
+                    ])
+                    .clone(),
+                ),
+                (
+                    "shared -> clone",
+                    OwnedProps::collect_shared([
+                        ("b", 2),
+                        ("a", 1),
+                        ("c", 3),
+                        ("b", 12),
+                        ("a", 11),
+                        ("c", 13),
+                    ])
+                    .clone(),
+                ),
+            ] {
+                assert_eq!(Some(3), case.size());
+                assert!(case.is_unique());
+
+                assert_eq!(Some(1), case.pull::<usize, _>("a"), "{description}");
+                assert_eq!(Some(2), case.pull::<usize, _>("b"), "{description}");
+                assert_eq!(Some(3), case.pull::<usize, _>("c"), "{description}");
+
+                let mut values = Vec::new();
+
+                let _ = case.for_each(|prop| {
+                    values.push((prop.key.get(), prop.value.by_ref().cast::<usize>()));
+                    ControlFlow::Continue(())
+                });
+
+                assert_eq!(
+                    vec![("b", Some(2)), ("a", Some(1)), ("c", Some(3))],
+                    values,
+                    "{description}"
+                );
+            }
+        }
     }
 }
 
@@ -836,9 +1500,29 @@ mod std_support {
         }
     }
 
+    impl<'kv, K, V> FromProps<'kv> for HashMap<K, V>
+    where
+        K: Eq + Hash + From<Str<'kv>>,
+        V: From<Value<'kv>>,
+    {
+        fn from_props<P: Props + ?Sized>(props: &'kv P) -> Self {
+            let mut result = HashMap::new();
+
+            let _ = props.for_each(|k, v| {
+                result.entry(k.into()).or_insert_with(|| v.into());
+
+                ControlFlow::Continue(())
+            });
+
+            result
+        }
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        use crate::value::OwnedValue;
 
         #[test]
         fn hashmap_props() {
@@ -853,6 +1537,14 @@ mod std_support {
             assert_eq!(3, Props::pull::<i32, _>(&props, "c").unwrap());
 
             assert!(props.is_unique());
+        }
+
+        #[test]
+        fn hashmap_from_props() {
+            let props = HashMap::<String, OwnedValue>::from_props(&[("a", 1), ("a", 2), ("c", 3)]);
+
+            assert_eq!(1, Props::pull::<i32, _>(&props, "a").unwrap());
+            assert_eq!(3, Props::pull::<i32, _>(&props, "c").unwrap());
         }
     }
 }
