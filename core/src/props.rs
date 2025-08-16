@@ -424,7 +424,7 @@ mod alloc_support {
 
     use crate::value::OwnedValue;
 
-    use core::{cmp, mem, ptr};
+    use core::{cmp, iter, mem, ptr};
 
     use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec::Vec};
 
@@ -434,20 +434,10 @@ mod alloc_support {
     Properties are deduplicated, but the original iteration order is retained. If the collection is created from [`OwnedProps::collect_shared`] then cloning is also cheap.
     */
     pub struct OwnedProps {
-        props: *const [*mut OwnedProp],
+        buckets: *const [OwnedPropsBucket],
+        nprops: usize,
         owner: OwnedPropsOwner,
         head: Option<*const OwnedProp>,
-    }
-
-    struct OwnedProp {
-        key: Str<'static>,
-        value: OwnedValue,
-        next: Option<*const OwnedProp>,
-    }
-
-    enum OwnedPropsOwner {
-        Box(*mut [*mut OwnedProp]),
-        Shared(Arc<[*mut OwnedProp]>),
     }
 
     unsafe impl Send for OwnedProps {}
@@ -457,12 +447,12 @@ mod alloc_support {
         fn clone(&self) -> Self {
             match self.owner {
                 OwnedPropsOwner::Box(_) => {
-                    let (props, head) = OwnedProps::cloned(self);
+                    let (nprops, props, head) = OwnedProps::cloned(self);
 
-                    OwnedProps::new_owned(props, head)
+                    OwnedProps::new_owned(nprops, props, head)
                 }
                 OwnedPropsOwner::Shared(ref props) => {
-                    OwnedProps::new_shared(props.clone(), self.head)
+                    OwnedProps::new_shared(self.nprops, props.clone(), self.head)
                 }
             }
         }
@@ -473,35 +463,57 @@ mod alloc_support {
             match self.owner {
                 OwnedPropsOwner::Box(boxed) => {
                     // SAFETY: We're dropping the box through our exclusive reference
-                    let mut b = unsafe { Box::from_raw(boxed) };
-
-                    // SAFETY: We're dropping the value through our exclusive reference
-                    unsafe {
-                        SliceDropGuard::new(&mut b).drop();
-                    }
+                    drop(unsafe { Box::from_raw(boxed) });
                 }
-                OwnedPropsOwner::Shared(ref mut shared) => {
-                    // We don't use weak pointers here, but if we did it would be possible
-                    // to observe a user-after-free by dropping the contents of this final
-                    // strong reference, and then upgrading a weak reference before the Arc
-                    // itself is dropped. We can't use `Arc::try_unwrap` here because the allocation
-                    // it holds is unsized
-                    debug_assert_eq!(0, Arc::weak_count(shared));
-
-                    if let Some(b) = Arc::get_mut(shared) {
-                        // SAFETY: We're dropping the value through our exclusive reference
-                        unsafe {
-                            SliceDropGuard::new(b).drop();
-                        }
-                    }
+                OwnedPropsOwner::Shared(_) => {
+                    // No special drop handling is needed for `Arc`
                 }
             }
         }
     }
 
+    struct OwnedPropsBucket {
+        head: *mut OwnedProp,
+        tail: Vec<*mut OwnedProp>,
+    }
+
+    impl Drop for OwnedPropsBucket {
+        fn drop(&mut self) {
+            let mut guard = SliceDropGuard::new(&mut self.tail);
+
+            if !self.head.is_null() {
+                // SAFETY: We're dropping the box through our exclusive reference
+                drop(unsafe { Box::from_raw(self.head) })
+            }
+
+            // SAFETY: We're dropping the value through our exclusive reference
+            unsafe {
+                guard.drop();
+            }
+        }
+    }
+
+    struct OwnedProp {
+        key: Str<'static>,
+        value: OwnedValue,
+        next: Option<*const OwnedProp>,
+    }
+
+    enum OwnedPropsOwner {
+        Box(*mut [OwnedPropsBucket]),
+        Shared(Arc<[OwnedPropsBucket]>),
+    }
+
     impl OwnedProps {
-        fn cloned(src: &Self) -> (Box<[*mut OwnedProp]>, Option<*const OwnedProp>) {
-            let mut guard = VecDropGuard::with_capacity(src.props.len());
+        fn cloned(src: &Self) -> (usize, Box<[OwnedPropsBucket]>, Option<*const OwnedProp>) {
+            // NOTE: This could be better optimized
+
+            let nbuckets = src.buckets.len();
+            let mut nprops = 0;
+            let mut buckets = iter::from_fn(|| Some(OwnedPropsBucket::new()))
+                .take(nbuckets)
+                .collect::<Vec<_>>()
+                .into_boxed_slice();
             let mut head = None::<*const OwnedProp>;
             let mut tail = None::<*mut OwnedProp>;
 
@@ -510,81 +522,87 @@ mod alloc_support {
             // internal pointers that would be invalidated
             let _ = src.for_each(|k, v| {
                 // SAFETY: `head` and `tail` point to values in `collected`, which outlives this function call
-                let mut prop =
-                    unsafe { OwnedProp::new(&mut head, &mut tail, k.clone(), v.clone()) };
+                let prop = unsafe { OwnedProp::new(&mut head, &mut tail, k.clone(), v.clone()) };
 
-                guard.collected.reserve(1);
-                guard.collected.push(prop.take());
+                let bucket = &mut buckets[idx(nbuckets, &k)];
+
+                bucket.push(prop);
+                nprops += 1;
 
                 ControlFlow::Continue(())
             });
 
-            // Sort the collection at the end
-            guard.collected.sort_by(|a, b| {
-                let (a, b) = unsafe { (&**a, &**b) };
-
-                a.key.cmp(&b.key)
-            });
-
-            (guard.take().into_boxed_slice(), head)
+            (nprops, buckets, head)
         }
 
-        fn new_owned(props: Box<[*mut OwnedProp]>, head: Option<*const OwnedProp>) -> Self {
-            let props = Box::into_raw(props);
-            let owner = OwnedPropsOwner::Box(props);
+        fn new_owned(
+            nprops: usize,
+            buckets: Box<[OwnedPropsBucket]>,
+            head: Option<*const OwnedProp>,
+        ) -> Self {
+            let buckets = Box::into_raw(buckets);
+            let owner = OwnedPropsOwner::Box(buckets);
 
-            OwnedProps { props, owner, head }
+            OwnedProps {
+                nprops,
+                buckets,
+                owner,
+                head,
+            }
         }
 
-        fn new_shared(props: Arc<[*mut OwnedProp]>, head: Option<*const OwnedProp>) -> Self {
-            let ptr = Arc::as_ptr(&props);
-            let owner = OwnedPropsOwner::Shared(props);
-            let props = ptr;
+        fn new_shared(
+            nprops: usize,
+            buckets: Arc<[OwnedPropsBucket]>,
+            head: Option<*const OwnedProp>,
+        ) -> Self {
+            let ptr = Arc::as_ptr(&buckets);
+            let owner = OwnedPropsOwner::Shared(buckets);
+            let buckets = ptr;
 
-            OwnedProps { props, owner, head }
+            OwnedProps {
+                nprops,
+                buckets,
+                owner,
+                head,
+            }
         }
 
         fn collect(
             props: impl Props,
             mut key: impl FnMut(Str) -> Str<'static>,
             mut value: impl FnMut(Value) -> OwnedValue,
-        ) -> (Box<[*mut OwnedProp]>, Option<*const OwnedProp>) {
+        ) -> (usize, Box<[OwnedPropsBucket]>, Option<*const OwnedProp>) {
             // We don't want to overallocate if `props.size()` returns a nonsense value
-            let capacity = cmp::min(128, props.size().unwrap_or(0));
-
-            let mut guard = VecDropGuard::with_capacity(capacity);
+            let nbuckets = cmp::min(128, props.size().unwrap_or(32));
+            let mut nprops = 0;
+            let mut buckets = iter::from_fn(|| Some(OwnedPropsBucket::new()))
+                .take(nbuckets)
+                .collect::<Vec<_>>()
+                .into_boxed_slice();
             let mut head = None::<*const OwnedProp>;
             let mut tail = None::<*mut OwnedProp>;
 
             let _ = props.for_each(|k, v| {
-                match guard.collected.binary_search_by_key(&k.get(), |prop| {
-                    // SAFETY: `prop` is owned by `collected`, which outlives this function call
-                    let prop = unsafe { &**prop };
+                let bucket = &mut buckets[idx(nbuckets, &k)];
 
-                    prop.key.get()
-                }) {
-                    // A value is already associated with this key
-                    Ok(_) => ControlFlow::Continue(()),
-                    // A value isn't yet associated with this key
-                    // We'll insert it now, updating the traversal linked list
-                    // to maintain ordering
-                    Err(idx) => {
-                        // Reserve space before attempting to construct a prop, so we don't leak it
-                        // if `insert` fails
+                if bucket.get(&k).is_some() {
+                    ControlFlow::Continue(())
+                } else {
+                    // Reserve space before attempting to construct a prop, so we don't leak it
+                    // if `insert` fails
 
-                        // SAFETY: `head` and `tail` point to values in `collected`, which outlives this function call
-                        let mut prop =
-                            unsafe { OwnedProp::new(&mut head, &mut tail, key(k), value(v)) };
+                    // SAFETY: `head` and `tail` point to values in `collected`, which outlives this function call
+                    let prop = unsafe { OwnedProp::new(&mut head, &mut tail, key(k), value(v)) };
 
-                        guard.collected.reserve(1);
-                        guard.collected.insert(idx, prop.take());
+                    bucket.push(prop);
+                    nprops += 1;
 
-                        ControlFlow::Continue(())
-                    }
+                    ControlFlow::Continue(())
                 }
             });
 
-            (guard.take().into_boxed_slice(), head)
+            (nprops, buckets, head)
         }
 
         /**
@@ -593,12 +611,17 @@ mod alloc_support {
         Cloning will involve cloning the collection.
         */
         pub fn collect_owned(props: impl Props) -> Self {
-            let (props, head) = Self::collect(props, |k| k.to_owned(), |v| v.to_owned());
+            let (nprops, buckets, head) = Self::collect(props, |k| k.to_owned(), |v| v.to_owned());
 
-            let props = Box::into_raw(props);
-            let owner = OwnedPropsOwner::Box(props);
+            let buckets = Box::into_raw(buckets);
+            let owner = OwnedPropsOwner::Box(buckets);
 
-            OwnedProps { props, owner, head }
+            OwnedProps {
+                nprops,
+                buckets,
+                owner,
+                head,
+            }
         }
 
         /**
@@ -607,9 +630,10 @@ mod alloc_support {
         Cloning will involve cloning the `Arc`, which may be cheaper than cloning the collection itself.
         */
         pub fn collect_shared(props: impl Props) -> Self {
-            let (props, head) = Self::collect(props, |k| k.to_shared(), |v| v.to_shared());
+            let (nprops, buckets, head) =
+                Self::collect(props, |k| k.to_shared(), |v| v.to_shared());
 
-            Self::new_shared(props.into(), head)
+            Self::new_shared(nprops, buckets.into(), head)
         }
 
         /**
@@ -621,12 +645,12 @@ mod alloc_support {
             match self.owner {
                 OwnedPropsOwner::Box(_) => {
                     // We need to clone the data into new allocations, since we don't own them
-                    let (props, head) = OwnedProps::cloned(self);
+                    let (nprops, buckets, head) = OwnedProps::cloned(self);
 
-                    Self::new_shared(Arc::from(props), head)
+                    Self::new_shared(nprops, Arc::from(buckets), head)
                 }
                 OwnedPropsOwner::Shared(ref owner) => {
-                    OwnedProps::new_shared(owner.clone(), self.head)
+                    OwnedProps::new_shared(self.nprops, owner.clone(), self.head)
                 }
             }
         }
@@ -654,22 +678,10 @@ mod alloc_support {
         fn get<'v, K: ToStr>(&'v self, key: K) -> Option<&'v OwnedValue> {
             let key = key.to_str();
 
-            // SAFETY: `props` is owned by `Self`, which outlives this function call
-            let props = unsafe { &*self.props };
+            // SAFETY: `buckets` is owned by `Self`, which outlives this function call
+            let buckets = unsafe { &*self.buckets };
 
-            match props.binary_search_by_key(&key.get(), |prop| {
-                // SAFETY: `prop` is owned by `Self` and follows normal borrowing rules
-                let prop = unsafe { &**prop };
-
-                prop.key.get()
-            }) {
-                Ok(idx) => {
-                    // SAFETY: `prop` is owned by `Self` and follows normal borrowing rules
-                    let prop = unsafe { &*props[idx] };
-                    Some(&prop.value)
-                }
-                Err(_) => None,
-            }
+            buckets[idx(buckets.len(), &key)].get(&key)
         }
     }
 
@@ -690,13 +702,53 @@ mod alloc_support {
         }
 
         fn size(&self) -> Option<usize> {
-            Some(self.props.len())
+            Some(self.nprops)
         }
     }
 
     impl<'kv> FromProps<'kv> for OwnedProps {
         fn from_props<P: Props + ?Sized>(props: &'kv P) -> Self {
             Self::collect_owned(props)
+        }
+    }
+
+    impl OwnedPropsBucket {
+        fn new() -> OwnedPropsBucket {
+            OwnedPropsBucket {
+                head: ptr::null_mut(),
+                tail: Vec::new(),
+            }
+        }
+
+        fn push(&mut self, mut prop: PropDropGuard) {
+            if self.head.is_null() {
+                self.head = prop.take();
+            } else {
+                self.tail.reserve(1);
+                self.tail.push(prop.take());
+            }
+        }
+
+        fn get(&self, k: &Str) -> Option<&OwnedValue> {
+            if !self.head.is_null() {
+                // SAFETY: `prop` is owned by `Self` and follows normal borrowing rules
+                let prop = unsafe { &*self.head };
+
+                if prop.key == *k {
+                    return Some(&prop.value);
+                }
+            }
+
+            for prop in &self.tail {
+                // SAFETY: `prop` is owned by `Self` and follows normal borrowing rules
+                let prop = unsafe { &**prop };
+
+                if prop.key == *k {
+                    return Some(&prop.value);
+                }
+            }
+
+            None
         }
     }
 
@@ -765,31 +817,6 @@ mod alloc_support {
         }
     }
 
-    struct VecDropGuard {
-        collected: Vec<*mut OwnedProp>,
-    }
-
-    impl VecDropGuard {
-        fn with_capacity(cap: usize) -> Self {
-            VecDropGuard {
-                collected: Vec::with_capacity(cap),
-            }
-        }
-
-        fn take(&mut self) -> Vec<*mut OwnedProp> {
-            mem::take(&mut self.collected)
-        }
-    }
-
-    impl Drop for VecDropGuard {
-        fn drop(&mut self) {
-            // SAFETY: We're dropping the value through our exclusive reference
-            unsafe {
-                SliceDropGuard::new(&mut self.collected).drop();
-            }
-        }
-    }
-
     struct PropDropGuard(*mut OwnedProp);
 
     impl PropDropGuard {
@@ -811,6 +838,17 @@ mod alloc_support {
             // SAFETY: We're dropping the value through our exclusive reference
             drop(unsafe { Box::from_raw(self.0) });
         }
+    }
+
+    fn idx(buckets: usize, k: &Str) -> usize {
+        let mut hash = 0xcbf29ce484222325;
+
+        for b in k.get().as_bytes() {
+            hash = hash ^ (*b as u64);
+            hash = hash.wrapping_mul(0x00000100000001b3);
+        }
+
+        (hash as usize) % buckets
     }
 
     /**
