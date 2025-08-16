@@ -1348,6 +1348,23 @@ mod alloc_support {
         }
 
         #[test]
+        fn owned_props_empty() {
+            let props = OwnedProps::collect_owned([] as [(Str, Value); 0]);
+
+            assert_eq!(Some(0), props.size());
+            assert!(props.is_unique());
+
+            let mut count = 0;
+
+            let _ = props.for_each(|_| {
+                count += 1;
+                ControlFlow::Continue(())
+            });
+
+            assert_eq!(0, count);
+        }
+
+        #[test]
         fn owned_props_collect() {
             for (description, case) in [
                 (
@@ -1421,6 +1438,9 @@ mod alloc_support {
                     .clone(),
                 ),
             ] {
+                assert_eq!(Some(3), case.size());
+                assert!(case.is_unique());
+
                 assert_eq!(Some(1), case.pull::<usize, _>("a"), "{description}");
                 assert_eq!(Some(2), case.pull::<usize, _>("b"), "{description}");
                 assert_eq!(Some(3), case.pull::<usize, _>("c"), "{description}");
