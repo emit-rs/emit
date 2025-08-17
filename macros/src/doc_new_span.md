@@ -4,6 +4,8 @@ Also see [the guide](https://emit-rs.io/producing-events/tracing/manual-span-cre
 
 # Examples
 
+## Creating spans
+
 Note that [`macro@new_debug_span`], [`macro@new_info_span`], [`macro@new_warn_span`], and [`macro@new_error_span`] use the same syntax.
 
 Creating a span with captured properties in the template:
@@ -29,6 +31,22 @@ Specifying control parameters before the template (in this example, `mdl`):
 ```ignore
 let (span, guard) = emit::new_span!(mdl: emit::path!("a::b"), "something of note");
 ```
+
+## Entering the created span
+
+Once a span is created, a block of code can be executed within it:
+
+```ignore
+let (mut span, guard) = emit::new_span!("manual span");
+
+guard.call(move || {
+    span.start();
+
+    // Your code goes here
+})
+```
+
+The call to `span.start()` **must** be within the call to `guard.call` (or the future passed to `guard.in_future`) otherwise the span will complete early, without its ambient context.
 
 # Syntax
 
