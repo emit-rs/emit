@@ -236,6 +236,16 @@ pub fn blocking_flush(timeout: core::time::Duration) -> bool {
     runtime::shared().blocking_flush(timeout)
 }
 
+/**
+Sample a metric source.
+
+This method will use [`runtime::shared()`] as the source, emitting samples as events directly through the runtime.
+*/
+#[cfg(feature = "implicit_rt")]
+pub fn sample_metrics(source: impl metric::Source) {
+    source.sample_metrics(metric::sampler::from_emitter(runtime::shared()))
+}
+
 #[doc(hidden)]
 pub mod __private {
     pub extern crate core;
