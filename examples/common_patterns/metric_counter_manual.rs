@@ -17,9 +17,9 @@ fn main() {
     // Emit a metric sample with the current value of `metric_a`
     emit::sample(emit::Metric::new(
         emit::mdl!(),
-        emit::Empty,
         "metric_a",
         "count",
+        emit::Empty,
         metric_a.load(Ordering::Relaxed),
         emit::Empty,
     ));
@@ -32,9 +32,9 @@ fn main() {
     // Emit another sample for `metric_a`
     emit::sample(emit::Metric::new(
         emit::mdl!(),
-        emit::Empty,
         "metric_a",
         "count",
+        emit::Empty,
         metric_a.load(Ordering::Relaxed),
         emit::Empty,
     ));
