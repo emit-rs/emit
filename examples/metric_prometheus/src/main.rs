@@ -25,7 +25,7 @@ fn main() {
     for _ in 0..60 {
         bytes_written += rand::rng().random_range(0..750);
 
-        emit::emit!(evt: emit::Metric::new(emit::pkg!(), "bytes_written", "count", emit::clock().now(), bytes_written, emit::Empty));
+        emit::count_sample!(mdl: emit::pkg!(), value: bytes_written);
 
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
