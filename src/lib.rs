@@ -38,6 +38,47 @@ fn main() {
 
 The [`setup()`] function configures `emit` with an [`Emitter`] to write [`Event`]s to. The [`macro@emit`] macro emits an event, capturing any ambient state referred to in its template. The [`macro@span`] macro instruments a function, timing its execution and correlating any other events emitted within it together.
 
+## Macros
+
+`emit` makes extensive use of procedural macros for reducing boilerplate when producing and emitting diagnostics.
+Its macros can be grouped based on the kind of diagnostic signal they relate to.
+
+### Logging macros
+
+- [`macro@emit`]: Emit an event.
+- [`macro@debug`]: Emit an event at the debug level.
+- [`macro@info`]: Emit an event at the info level.
+- [`macro@warn`]: Emit an event at the warning level.
+- [`macro@error`]: Emit an event at the error level.
+
+### Tracing macros
+
+- [`macro@span`]: Trace the execution of a function.
+- [`macro@debug_span`]: Trace the execution of a function at the debug level.
+- [`macro@info_span`]: Trace the execution of a function at the info level.
+- [`macro@warn_span`]: Trace the execution of a function at the warning level.
+- [`macro@error_span`]: Trace the execution of a function at the error level.
+- [`macro@new_span`]: Create a span that can be started and completed manually.
+- [`macro@new_debug_span`]: Create a span at the debug level that can be started and completed manually.
+- [`macro@new_info_span`]: Create a span at the info level that can be started and completed manually.
+- [`macro@new_warn_span`]: Create a span at the warning level that can be started and completed manually.
+- [`macro@new_error_span`]: Create a span at the error level that can be started and completed manually.
+
+### Metrics macros
+
+- [`macro@sample`]: Emit a metric sample.
+- [`macro@count_sample`]: Emit a metric sample with a monotonic count.
+- [`macro@sum_sample`]: Emit a metric sample with a non-monotonic sum.
+- [`macro@min_sample`]: Emit a metric sample with the minimum value.
+- [`macro@max_sample`]: Emit a metric sample with the maximum value.
+- [`macro@last_sample`]: Emit a metric sample with the latest value.
+- [`macro@metric`]: Construct a metric sample.
+- [`macro@count_metric`]: Construct a metric sample with a monotonic count.
+- [`macro@sum_metric`]: Construct a metric sample with a non-monotonic sum.
+- [`macro@min_metric`]: Construct a metric sample with the minimum value.
+- [`macro@max_metric`]: Construct a metric sample with the maximum value.
+- [`macro@last_metric`]: Construct a metric sample with the latest value.
+
 ## Stable vs nightly toolchains
 
 `emit` works on stable versions of Rust, but can provide more accurate compiler messages on nightly toolchains.

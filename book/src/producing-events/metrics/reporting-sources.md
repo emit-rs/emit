@@ -8,24 +8,18 @@ use emit::metric::{Source as _, Sampler as _};
 
 // Create some metric sources
 let source_1 = emit::metric::source::from_fn(|sampler| {
-    sampler.metric(emit::Metric::new(
-        emit::path!("source_1"),
-        "bytes_written",
-        emit::well_known::METRIC_AGG_COUNT,
-        emit::Empty,
-        1,
-        emit::Empty,
+    sampler.metric(emit::count_metric!(
+        mdl: emit::path!("source_1"),
+        name: "bytes_written",
+        value: 1,
     ));
 });
 
 let source_2 = emit::metric::source::from_fn(|sampler| {
-    sampler.metric(emit::Metric::new(
-        emit::path!("source_2"),
-        "bytes_written",
-        emit::well_known::METRIC_AGG_COUNT,
-        emit::Empty,
-        2,
-        emit::Empty,
+    sampler.metric(emit::count_metric!(
+        mdl: emit::path!("source_2"),
+        name: "bytes_written",
+        value: 2,
     ));
 });
 

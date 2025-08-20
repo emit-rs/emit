@@ -128,8 +128,16 @@ name = "metric_counter"
 path = "metric_counter.rs"
 
 [[example]]
+name = "metric_counter_manual"
+path = "metric_counter_manual.rs"
+
+[[example]]
 name = "metric_source"
 path = "metric_source.rs"
+
+[[example]]
+name = "metric_props"
+path = "metric_props.rs"
 
 [[example]]
 name = "testing"

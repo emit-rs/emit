@@ -9,14 +9,7 @@ The following metric reports that the number of bytes written changed by 17 over
 let now = emit::clock().now();
 let last_sample = now.map(|now| now - std::time::Duration::from_secs(30));
 
-emit::emit!(
-    extent: last_sample..now,
-    "{metric_agg} of {metric_name} is {metric_value}",
-    evt_kind: "metric",
-    metric_agg: "count",
-    metric_name: "bytes_written",
-    metric_value: 17,
-);
+emit::count_sample!(extent: last_sample..now, name: "bytes_written", value: 17);
 ```
 
 ```text
