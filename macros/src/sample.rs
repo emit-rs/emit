@@ -8,6 +8,7 @@ use crate::{
 };
 
 pub struct ExpandTokens {
+    pub agg: Option<TokenStream>,
     pub input: TokenStream,
 }
 
@@ -17,7 +18,7 @@ pub struct SampleArgs {
     extent: args::ExtentArg,
     metric_value: MetricValueArg,
     metric_name: TokenStream,
-    metric_agg: TokenStream,
+    metric_agg: Option<TokenStream>,
 }
 
 struct MetricValueArg(Expr);
@@ -95,11 +96,7 @@ impl Parse for SampleArgs {
         let props = props.take_or_default();
         let extent = extent.take_or_default();
 
-        let metric_agg = metric_agg.take().unwrap_or_else(|| {
-            let agg = emit_core::well_known::METRIC_AGG_LAST;
-
-            quote!(#agg)
-        });
+        let metric_agg = metric_agg.take();
 
         let metric_value = metric_value
             .take()
@@ -140,7 +137,12 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     let mdl_tokens = args.mdl.to_tokens();
     let metric_name = args.metric_name;
     let metric_value = args.metric_value.to_tokens().to_ref_tokens();
-    let metric_agg = args.metric_agg;
+
+    let metric_agg = args.metric_agg.or(opts.agg).unwrap_or_else(|| {
+        let agg = emit_core::well_known::METRIC_AGG_LAST;
+
+        quote!(#agg)
+    });
 
     Ok(
         quote!(emit::__private::__private_new_sample(#mdl_tokens, #extent_tokens, #props_tokens, #metric_name, #metric_agg, #metric_value)),

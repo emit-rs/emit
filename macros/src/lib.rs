@@ -492,10 +492,64 @@ pub fn dbg(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
 /**
 Construct a metric sample.
+
+# Examples
+
+Construct a metric sample from a value:
+
+```ignore
+let my_metric = 42;
+
+let metric = emit::new_sample!(metric_value: my_metric);
+```
+
+In the above example, the `metric_name` is inferred to be `"my_metric"` using the name of the identifier in the `metric_value` control parameter.
+
+The `metric_name` can also be specified manually, and is required if `metric_value` is not an identifier:
+
+```ignore
+let metric = emit::new_sample!(metric_name: "my_metric", metric_value: 42);
+```
+
+Properties can be attached to metric samples:
+
+```ignore
+let my_metric = 42;
+
+let metric = emit::new_sample!(metric_value: my_metric, props: emit::props! { my_property: "some value" });
+```
+
+# Syntax
+
+```text
+(control_param),*
+```
+
+where
+
+- `control_param`: A Rust field-value with a pre-determined identifier (see below).
+
+# Control parameters
+
+This macro accepts the following optional control parameters:
+
+| name                                                                | type                          | description                                                                                                                                     |
+| ------------------------------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mdl`                                                               | `impl Into<emit::Path>`       | The module the metric sample belongs to. If unspecified the current module path is used.                                                        |
+| `extent`                                                            | `impl emit::ToExtent`         | The extent to use on the metric sample. If unspecified the extent is left empty.                                                                |
+| `props`                                                             | `impl emit::Props`            | A set of properties to add to the metric sample.                                                                                                |
+| `metric_value` (**required**)                                       | `impl emit::ToValue`          | The value of the metric sample. If the value is an identifier then `metric_name` will be inferred to be that identifier.                        |
+| `metric_name` (**required** if `metric_value` is not an identifier) | `impl emit::ToStr`            | The name of the metric being sampled. If unspecified, and `metric_value` is an identifier, then the stringified identifier is used as the name. |
+| `metric_agg`                                                        | `impl emit::ToStr`            | The aggregation of the metric sample. If unspecified `"last"` is used.                                                                          |
+
+# Returns
+
+An `emit::Metric`.
 */
 #[proc_macro]
 pub fn new_sample(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     sample::expand_tokens(sample::ExpandTokens {
+        agg: None,
         input: TokenStream::from(item),
     })
     .unwrap_or_compile_error()
@@ -513,6 +567,10 @@ path
 where
 
 - `path`: A string literal containing a valid `emit` path.
+
+# Returns
+
+An `emit::Path`.
 */
 #[proc_macro]
 pub fn path(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -534,6 +592,10 @@ Construct a set of properties.
 where
 
 - `property`: A Rust field-value for a property. The identifier of the field-value is the key of the property.
+
+# Returns
+
+An `impl emit::Props`.
 */
 #[proc_macro]
 pub fn props(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
