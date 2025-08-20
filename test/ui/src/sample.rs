@@ -30,6 +30,31 @@ fn sample_basic() {
 }
 
 #[test]
+fn sample_value_capture() {
+    let called = Called::new();
+
+    let rt = simple_runtime(
+        |evt| {
+            assert_eq!(
+                "MyValue",
+                evt.props().get("metric_value").unwrap().to_string()
+            );
+
+            called.record();
+        },
+        |_| true,
+    );
+
+    #[derive(Debug)]
+    struct MyValue;
+
+    let my_metric = MyValue;
+    emit::sample!(rt, #[emit::as_debug] value: my_metric);
+
+    assert!(called.was_called());
+}
+
+#[test]
 fn sample_agg() {
     let called = Called::new();
 

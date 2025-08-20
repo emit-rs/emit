@@ -9,14 +9,11 @@ The following metric is for a time-series with 15 buckets, where each bucket cov
 let now = emit::clock().now();
 let last_sample = now.map(|now| now - std::time::Duration::from_secs(15));
 
-emit::emit!(
+emit::count_sample!(
     extent: last_sample..now,
-    "{metric_agg} of {metric_name} is {metric_value}",
-    evt_kind: "metric",
-    metric_agg: "count",
-    metric_name: "bytes_written",
+    name: "bytes_written",
     #[emit::as_value]
-    metric_value: [
+    value: [
         0,
         5,
         56,

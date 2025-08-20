@@ -131,7 +131,7 @@ impl Props {
 
         let key_value_tokens = {
             let key_value_tokens =
-                capture::key_value_with_hook(&attrs, &fv, fn_name, interpolated, captured)?;
+                capture::eval_key_value_with_hook(&attrs, &fv, fn_name, interpolated, captured)?;
 
             match cfg_attr {
                 Some(ref cfg_attr) => quote_spanned!(fv.span()=>

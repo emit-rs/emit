@@ -4,6 +4,7 @@ use syn::{parse::Parse, spanned::Spanned, Expr, FieldValue};
 
 use crate::{
     args::{self, Arg},
+    capture,
     util::ToRefTokens,
 };
 
@@ -26,15 +27,15 @@ pub struct Args {
     agg: Option<TokenStream>,
 }
 
-struct MetricValueArg(Expr);
+struct MetricValueArg(FieldValue);
 
 impl MetricValueArg {
-    pub fn new(value: Expr) -> Self {
+    pub fn new(value: FieldValue) -> Self {
         MetricValueArg(value)
     }
 
     pub fn ident(&self) -> Option<&Ident> {
-        let Expr::Path(ref path) = self.0 else {
+        let Expr::Path(ref path) = self.0.expr else {
             return None;
         };
 
@@ -45,7 +46,8 @@ impl MetricValueArg {
         let inferred = self
             .ident()
             .ok_or_else(|| {
-                let msg = format!("either `name` needs to be specified, or `value` must be an identifier to infer `name` from, like: `let my_metric = {}; emit::sample!(value: my_metric);`", self.to_tokens());
+                let expr = &self.0.expr;
+                let msg = format!("either `name` needs to be specified, or `value` must be an identifier to infer `name` from, like: `let my_metric = {}; emit::sample!(value: my_metric);`", quote!(#expr));
 
                 syn::Error::new(self.span(), msg)
             })?
@@ -55,13 +57,17 @@ impl MetricValueArg {
     }
 
     fn span(&self) -> Span {
-        self.0.span()
+        self.0.expr.span()
     }
 
-    pub fn to_tokens(&self) -> TokenStream {
-        let expr = &self.0;
-
-        quote_spanned!(expr.span()=> #expr)
+    pub fn to_tokens(&self) -> syn::Result<TokenStream> {
+        capture::eval_value_with_hook(
+            &self.0.attrs,
+            &self.0,
+            capture::default_fn_name(&self.0),
+            false,
+            true,
+        )
     }
 }
 
@@ -92,7 +98,7 @@ impl Parse for Args {
 
             Ok(args::PropsArg::new(quote_spanned!(expr.span()=> #expr)))
         });
-        let mut value = Arg::new("value", |fv| Ok(MetricValueArg::new(fv.expr.clone())));
+        let mut value = Arg::new("value", |fv| Ok(MetricValueArg::new(fv.clone())));
         let mut name = Arg::token_stream("name", |fv| {
             let expr = &fv.expr;
 
@@ -165,7 +171,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     } else {
         args.value.infer_name()?
     };
-    let value = args.value.to_tokens().to_ref_tokens();
+    let value = args.value.to_tokens()?;
 
     let agg = args.agg.or(opts.agg).unwrap_or_else(|| {
         let agg = emit_core::well_known::METRIC_AGG_LAST;
@@ -192,7 +198,7 @@ pub fn expand_metric_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Erro
     } else {
         args.value.infer_name()?
     };
-    let value = args.value.to_tokens().to_ref_tokens();
+    let value = args.value.to_tokens()?;
 
     let agg = args.agg.or(opts.agg).unwrap_or_else(|| {
         let agg = emit_core::well_known::METRIC_AGG_LAST;

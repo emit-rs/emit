@@ -30,7 +30,7 @@ impl Parse for Args {
     }
 }
 
-pub fn key_value_with_hook(
+pub fn eval_key_value_with_hook(
     attrs: &[Attribute],
     fv: &FieldValue,
     fn_name: TokenStream,
@@ -38,8 +38,39 @@ pub fn key_value_with_hook(
     captured: bool,
 ) -> syn::Result<TokenStream> {
     let key_expr = fv.key_expr()?;
-    let expr = &fv.expr;
+    let value_expr = &fv.expr;
 
+    let key_tokens = key::key_with_hook(&[], &key_expr);
+    let value_tokens = value_with_hook(&value_expr, fn_name, interpolated, captured);
+
+    hook::eval_hooks(
+        &attrs,
+        syn::parse_quote_spanned!(fv.span()=>
+        {
+            (#key_tokens, #value_tokens)
+        }),
+    )
+}
+
+pub fn eval_value_with_hook(
+    attrs: &[Attribute],
+    fv: &FieldValue,
+    fn_name: TokenStream,
+    interpolated: bool,
+    captured: bool,
+) -> syn::Result<TokenStream> {
+    let value_expr = &fv.expr;
+    let value_tokens = value_with_hook(&value_expr, fn_name, interpolated, captured);
+
+    hook::eval_hooks(&attrs, syn::parse_quote_spanned!(fv.span()=>#value_tokens))
+}
+
+fn value_with_hook(
+    expr: &Expr,
+    fn_name: TokenStream,
+    interpolated: bool,
+    captured: bool,
+) -> TokenStream {
     let interpolated_expr = if interpolated {
         quote!(.__private_interpolated())
     } else {
@@ -52,19 +83,10 @@ pub fn key_value_with_hook(
         quote!(.__private_uncaptured())
     };
 
-    let key_tokens = key::key_with_hook(&[], &key_expr);
-    let value_tokens = quote_spanned!(fv.span()=> #[allow(unused_imports)] {
+    quote_spanned!(expr.span()=> #[allow(unused_imports)] {
         use emit::__private::{__PrivateCaptureHook as _, __PrivateOptionalCaptureHook as _, __PrivateOptionalMapHook as _, __PrivateInterpolatedHook as _};
         (#expr).__private_optional_capture_some().__private_optional_map_some(|v| v.#fn_name()) #interpolated_expr #captured_expr
-    });
-
-    hook::eval_hooks(
-        &attrs,
-        syn::parse_quote_spanned!(fv.span()=>
-        {
-            (#key_tokens, #value_tokens)
-        }),
-    )
+    })
 }
 
 pub fn default_fn_name(fv: &FieldValue) -> TokenStream {

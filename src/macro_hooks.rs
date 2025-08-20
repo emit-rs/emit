@@ -1028,14 +1028,14 @@ pub fn __private_metric<'a, P: Props + ?Sized>(
     props: &'a P,
     metric_name: impl Into<Str<'a>>,
     metric_agg: impl Into<Str<'a>>,
-    metric_value: &'a (impl ToValue + ?Sized),
+    metric_value: Option<Value<'a>>,
 ) -> Metric<'a, &'a P> {
     Metric::new(
         mdl.into(),
         metric_name,
         metric_agg,
         extent.to_extent(),
-        metric_value.to_value(),
+        metric_value.unwrap_or_else(|| Value::null()),
         props,
     )
 }
@@ -1048,7 +1048,7 @@ pub fn __private_sample<'a, S: Sampler, P: Props + ?Sized>(
     props: &'a P,
     metric_name: impl Into<Str<'a>>,
     metric_agg: impl Into<Str<'a>>,
-    metric_value: &'a (impl ToValue + ?Sized),
+    metric_value: Option<Value<'a>>,
 ) {
     sampler.metric(__private_metric(
         mdl,
