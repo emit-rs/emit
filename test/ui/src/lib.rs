@@ -18,7 +18,7 @@ mod util;
 
 mod emit;
 mod event;
-mod new_sample;
+mod metric;
 mod new_span;
 mod props;
 mod sample;

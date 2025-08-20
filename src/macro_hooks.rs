@@ -801,6 +801,7 @@ pub fn __private_emit_event<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R:
 }
 
 #[track_caller]
+#[must_use = "this macro returns an `Event` without emitting it; send it through an `emit::Emitter`, or use the `emit::emit!` macro instead"]
 pub fn __private_evt<'a, B: Props + ?Sized, P: Props>(
     mdl: impl Into<Path<'a>>,
     tpl: impl Into<Template<'a>>,
@@ -817,6 +818,7 @@ pub fn __private_evt<'a, B: Props + ?Sized, P: Props>(
 }
 
 #[track_caller]
+#[must_use = "this macro returns a `(SpanGuard, Frame)` without starting it; see the docs for `emit::span::SpanGuard::new` for details on starting and completing the returned span"]
 pub fn __private_begin_span<
     'a,
     'b,
@@ -1019,7 +1021,8 @@ where
 }
 
 #[track_caller]
-pub fn __private_new_sample<'a, P: Props + ?Sized>(
+#[must_use = "this macro returns a `Metric` without emitting it; sample it through an `emit::metric::Sampler`, or use the `emit::sample!` macro instead to sample and emit it"]
+pub fn __private_metric<'a, P: Props + ?Sized>(
     mdl: impl Into<Path<'a>>,
     extent: impl ToExtent,
     props: &'a P,
@@ -1047,7 +1050,7 @@ pub fn __private_sample<'a, S: Sampler, P: Props + ?Sized>(
     metric_agg: impl Into<Str<'a>>,
     metric_value: &'a (impl ToValue + ?Sized),
 ) {
-    sampler.metric(__private_new_sample(
+    sampler.metric(__private_metric(
         mdl,
         extent,
         props,

@@ -1,0 +1,16 @@
+error: unused return value of `__private_metric` that must be used
+ --> src/compile_fail/std/metric_unused.rs:5:5
+  |
+5 |     emit::metric!(value: my_metric);
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this macro returns a `Metric` without emitting it; sample it through an `emit::metric::Sampler`, or use the `emit::sample!` macro instead to sample and emit it
+note: the lint level is defined here
+ --> src/compile_fail/std/metric_unused.rs:1:9
+  |
+1 | #![deny(unused_must_use)]
+  |         ^^^^^^^^^^^^^^^
+help: use `let _ = ...` to ignore the resulting value
+  |
+5 |     let _ = emit::metric!(value: my_metric);
+  |     +++++++

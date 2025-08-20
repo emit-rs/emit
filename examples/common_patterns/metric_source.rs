@@ -14,8 +14,8 @@ impl emit::metric::Source for MyMetrics {
         let metric_a = self.metric_a.load(Ordering::Relaxed);
         let metric_b = self.metric_b.load(Ordering::Relaxed);
 
-        sampler.metric(emit::new_count_sample!(value: metric_a));
-        sampler.metric(emit::new_count_sample!(value: metric_b));
+        sampler.metric(emit::count_metric!(value: metric_a));
+        sampler.metric(emit::count_metric!(value: metric_b));
     }
 }
 

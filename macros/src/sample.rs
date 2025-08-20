@@ -178,7 +178,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     )
 }
 
-pub fn expand_new_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
+pub fn expand_metric_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     let args = syn::parse2::<Args>(opts.input)?;
 
     args::ensure_missing("rt", args.rt.take().map(|arg| arg.span()))?;
@@ -201,6 +201,6 @@ pub fn expand_new_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> 
     });
 
     Ok(
-        quote!(emit::__private::__private_new_sample(#mdl_tokens, #extent_tokens, #props_tokens, #name, #agg, #value)),
+        quote!(emit::__private::__private_metric(#mdl_tokens, #extent_tokens, #props_tokens, #name, #agg, #value)),
     )
 }

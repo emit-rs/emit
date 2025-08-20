@@ -650,7 +650,7 @@ Construct a metric sample from a value:
 ```ignore
 let my_metric = 42;
 
-let metric = emit::new_sample!(value: my_metric);
+let metric = emit::metric!(value: my_metric);
 ```
 
 In the above example, the `name` is inferred to be `"my_metric"` using the name of the identifier in the `value` control parameter.
@@ -658,7 +658,7 @@ In the above example, the `name` is inferred to be `"my_metric"` using the name 
 The `name` can also be specified manually, and is required if `value` is not an identifier:
 
 ```ignore
-let metric = emit::new_sample!(name: "my_metric", value: 42);
+let metric = emit::metric!(name: "my_metric", value: 42);
 ```
 
 Properties can be attached to metric samples:
@@ -666,14 +666,14 @@ Properties can be attached to metric samples:
 ```ignore
 let my_metric = 42;
 
-let metric = emit::new_sample!(value: my_metric, props: emit::props! { my_property: "some value" });
+let metric = emit::metric!(value: my_metric, props: emit::props! { my_property: "some value" });
 ```
 */
 #[doc = ""]
-#[doc = include_str!("./doc_new_sample.md")]
+#[doc = include_str!("./doc_metric.md")]
 #[proc_macro]
-pub fn new_sample(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    sample::expand_new_tokens(sample::ExpandTokens {
+pub fn metric(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    sample::expand_metric_tokens(sample::ExpandTokens {
         agg: None,
         input: TokenStream::from(item),
     })
@@ -685,13 +685,13 @@ Construct a metric sample with `count` as its aggregation.
 
 # Examples
 
-See [`macro@new_sample`].
+See [`macro@metric`].
 */
 #[doc = ""]
-#[doc = include_str!("./doc_new_sample.md")]
+#[doc = include_str!("./doc_metric.md")]
 #[proc_macro]
-pub fn new_count_sample(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    sample::expand_new_tokens(sample::ExpandTokens {
+pub fn count_metric(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    sample::expand_metric_tokens(sample::ExpandTokens {
         agg: Some({
             let agg = emit_core::well_known::METRIC_AGG_COUNT;
 
@@ -707,13 +707,13 @@ Construct a metric sample with `sum` as its aggregation.
 
 # Examples
 
-See [`macro@new_sample`].
+See [`macro@metric`].
 */
 #[doc = ""]
-#[doc = include_str!("./doc_new_sample.md")]
+#[doc = include_str!("./doc_metric.md")]
 #[proc_macro]
-pub fn new_sum_sample(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    sample::expand_new_tokens(sample::ExpandTokens {
+pub fn sum_metric(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    sample::expand_metric_tokens(sample::ExpandTokens {
         agg: Some({
             let agg = emit_core::well_known::METRIC_AGG_SUM;
 
@@ -729,13 +729,13 @@ Construct a metric sample with `min` as its aggregation.
 
 # Examples
 
-See [`macro@new_sample`].
+See [`macro@metric`].
 */
 #[doc = ""]
-#[doc = include_str!("./doc_new_sample.md")]
+#[doc = include_str!("./doc_metric.md")]
 #[proc_macro]
-pub fn new_min_sample(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    sample::expand_new_tokens(sample::ExpandTokens {
+pub fn min_metric(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    sample::expand_metric_tokens(sample::ExpandTokens {
         agg: Some({
             let agg = emit_core::well_known::METRIC_AGG_MIN;
 
@@ -751,13 +751,13 @@ Construct a metric sample with `max` as its aggregation.
 
 # Examples
 
-See [`macro@new_sample`].
+See [`macro@metric`].
 */
 #[doc = ""]
-#[doc = include_str!("./doc_new_sample.md")]
+#[doc = include_str!("./doc_metric.md")]
 #[proc_macro]
-pub fn new_max_sample(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    sample::expand_new_tokens(sample::ExpandTokens {
+pub fn max_metric(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    sample::expand_metric_tokens(sample::ExpandTokens {
         agg: Some({
             let agg = emit_core::well_known::METRIC_AGG_MAX;
 
@@ -773,13 +773,13 @@ Construct a metric sample with `last` as its aggregation.
 
 # Examples
 
-See [`macro@new_sample`].
+See [`macro@metric`].
 */
 #[doc = ""]
-#[doc = include_str!("./doc_new_sample.md")]
+#[doc = include_str!("./doc_metric.md")]
 #[proc_macro]
-pub fn new_last_sample(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    sample::expand_new_tokens(sample::ExpandTokens {
+pub fn last_metric(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    sample::expand_metric_tokens(sample::ExpandTokens {
         agg: Some({
             let agg = emit_core::well_known::METRIC_AGG_LAST;
 
