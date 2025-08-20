@@ -2,7 +2,7 @@
 The [`Metric`] type.
 */
 
-use core::ops::ControlFlow;
+use core::{fmt, ops::ControlFlow};
 
 use emit_core::{
     and::And,
@@ -222,6 +222,12 @@ impl<'a, P> Metric<'a, P> {
             value: self.value,
             props: map(self.props),
         }
+    }
+}
+
+impl<'a, P: Props> fmt::Debug for Metric<'a, P> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&self.to_event(), f)
     }
 }
 

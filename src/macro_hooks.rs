@@ -22,7 +22,7 @@ use emit_core::{
 
 use emit_core::{empty::Empty, event::Event};
 
-use crate::{frame::Frame, span::Span};
+use crate::{frame::Frame, span::Span, Metric};
 
 #[cfg(feature = "std")]
 use std::error::Error;
@@ -1015,6 +1015,25 @@ where
                 .map_props(|span_props| [lvl_prop, err_prop].and_props(span_props)),
         );
     }
+}
+
+#[track_caller]
+pub fn __private_new_sample<'a, P: Props + ?Sized>(
+    mdl: impl Into<Path<'a>>,
+    extent: impl ToExtent,
+    props: &'a P,
+    metric_name: impl Into<Str<'a>>,
+    metric_agg: impl Into<Str<'a>>,
+    metric_value: impl Into<Value<'a>>,
+) -> Metric<'a, &'a P> {
+    Metric::new(
+        mdl.into(),
+        metric_name,
+        metric_agg,
+        extent.to_extent(),
+        metric_value,
+        props,
+    )
 }
 
 #[repr(transparent)]

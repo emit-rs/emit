@@ -1,50 +1,42 @@
 /*!
-This example demonstrates how to construct a span manually, without using `#[span]`.
+This example is a variant of `span_manual_creation` that doesn't use the `emit::new_span!` macro.
 
-It can be useful in applications that use disconnected middleware that makes it difficult to pick a single point to introduce `#[span]` to.
-
-This example differs from `span_manual_creation` by not using any `SpanGuard` guard type to manage the span's creation or completion.
+It instead constructs a `SpanGuard` directly, which is what the `emit::new_span!` macro de-sugars to.
 */
 
 use std::time::Duration;
 
 fn example(i: i32) {
-    // Start a timer to track the runtime of the span
-    let timer = emit::Timer::start(emit::clock());
-
-    // Generate trace and span ids
-    let ctxt = emit::SpanCtxt::current(emit::ctxt()).new_child(emit::rng());
-
-    // Push into the ambient context, so emitted events see the trace and span ids
-    let frame = ctxt.push(emit::ctxt());
+    let (mut span, frame) = emit::span::SpanGuard::new(
+        emit::filter(),
+        emit::ctxt(),
+        emit::clock(),
+        emit::rng(),
+        emit::span::completion::default(emit::emitter(), emit::ctxt()),
+        emit::props! {
+            // Properties that will be shared by all events emitted within this span
+        },
+        emit::mdl!(),
+        "example",
+        emit::props! {
+            // Properties that will appear just on this span event
+        },
+    );
 
     // Execute our code within the context of the frame
     // If this function was async, then you would use `frame.in_future(..).await`
-    frame.call(|| {
+    frame.call(move || {
+        // Call `start` on the span to begin it
+        // This *must* be done in the body of `frame.call` or `frame.in_future`
+        span.start();
+
         let r = i + 1;
 
         if r == 4 {
             // Emit a span event on completion
-            emit::error!(
-                evt: emit::Span::new(
-                    emit::mdl!(),
-                    "example",
-                    timer,
-                    emit::props! {},
-                ),
-                "Running an example failed with {r}",
-            );
-        } else {
-            // Emit a span event on completion
-            emit::info!(
-                evt: emit::Span::new(
-                    emit::mdl!(),
-                    "example",
-                    timer,
-                    emit::props! {},
-                ),
-                "Running an example produced {r}",
-            );
+            span.complete_with(emit::span::completion::from_fn(|evt| {
+                emit::error!(evt, "Running an example failed with {r}")
+            }));
         }
     })
 }

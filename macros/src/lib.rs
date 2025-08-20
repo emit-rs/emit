@@ -44,6 +44,7 @@ mod hook;
 mod key;
 mod optional;
 mod props;
+mod sample;
 mod span;
 mod template;
 mod util;
@@ -484,6 +485,17 @@ pub fn error(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 #[proc_macro]
 pub fn dbg(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     dbg::expand_tokens(dbg::ExpandTokens {
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
+}
+
+/**
+Construct a metric sample.
+*/
+#[proc_macro]
+pub fn new_sample(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    sample::expand_tokens(sample::ExpandTokens {
         input: TokenStream::from(item),
     })
     .unwrap_or_compile_error()

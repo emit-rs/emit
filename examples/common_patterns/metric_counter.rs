@@ -18,6 +18,33 @@ impl emit::metric::Source for MyMetrics {
         let metric_a = self.metric_a.load(Ordering::Relaxed);
         let metric_b = self.metric_b.load(Ordering::Relaxed);
 
+        /*
+        emit::sample!(sampler, extent: ts, mdl: "my_app", metric_agg: "count", metric_name: "metric_a", metric_value: metric_a, props: emit::props! {});
+        emit::sample_count!(sampler, extent: ts, metric_a);
+
+        emit::new_sample_count!(metric_a);
+                                --------
+                                infer:
+                                  - metric_name: "metric_a"
+                                  - metric_value: metric_a
+        - sampler: default to `emit::sampler()`
+        - extent: default to `emit::clock().now()`
+        - mdl: default to `emit::mdl!()`
+        - metric_agg: default to "last"
+        - metric_name: infer from trailing prop, or require along with metric_value
+        - metric_value: infer from trailing prop, or require along with metric_name
+
+        Note that using a trailing prop is a compatibility hazard; we can't introduce any new control parameters.
+
+        --> emit::count_sample!(metric_value: metric_a);
+
+        If `metric_value` is an identifier, then infer `metric_name` from it. That seems like the cleanest API.
+        In other cases, you'll need to specify `metric_name` as well.
+        The `metric_value` is _always_ required.
+
+        -----
+        */
+
         sampler.metric(emit::Metric::new(
             emit::mdl!(),
             "metric_a",

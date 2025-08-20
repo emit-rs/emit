@@ -645,6 +645,12 @@ impl<'a, P: Props> Span<'a, P> {
     }
 }
 
+impl<'a, P: Props> fmt::Debug for Span<'a, P> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&self.to_event(), f)
+    }
+}
+
 // "{span_name} started"
 const START_TEMPLATE_PARTS: &'static [template::Part<'static>] = &[
     template::Part::hole("span_name"),

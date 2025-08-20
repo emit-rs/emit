@@ -3,7 +3,7 @@ This example demonstrates how to construct a span manually, without using `#[spa
 
 It can be useful in applications that have more complex control flow or organization that makes picking a function to annotate difficult.
 
-This example differs from `span_manual_creation_full` in still using the same `SpanGuard` type that the `#[span]` attribute generates for you.
+This example differs from `span_manual_full` in still using the same `SpanGuard` type that the `#[span]` attribute generates for you.
 */
 
 use std::time::Duration;

@@ -108,6 +108,10 @@ name = "span_manual_creation_full"
 path = "span_manual_creation_full.rs"
 
 [[example]]
+name = "span_manual_full"
+path = "span_manual_full.rs"
+
+[[example]]
 name = "span_trace_propagation"
 path = "span_trace_propagation.rs"
 
