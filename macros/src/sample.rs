@@ -139,7 +139,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     let props_tokens = args.props.to_tokens().to_ref_tokens();
     let mdl_tokens = args.mdl.to_tokens();
     let metric_name = args.metric_name;
-    let metric_value = args.metric_value.to_tokens();
+    let metric_value = args.metric_value.to_tokens().to_ref_tokens();
     let metric_agg = args.metric_agg;
 
     Ok(
