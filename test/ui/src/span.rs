@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use emit::{Ctxt, Emitter, Props};
+use emit::{Ctxt, Emitter, Kind, Props, Str};
 
 use crate::util::{static_runtime, StaticCalled, StaticRuntime};
 
@@ -16,10 +16,7 @@ fn span_basic() {
             evt.props().pull::<&str, _>("span_name").unwrap()
         );
 
-        assert_eq!(
-            emit::Kind::Span,
-            evt.props().pull::<emit::Kind, _>("evt_kind").unwrap()
-        );
+        assert_eq!(Kind::Span, evt.props().pull::<Kind, _>("evt_kind").unwrap());
 
         assert!(evt.props().pull::<emit::TraceId, _>("trace_id").is_some());
         assert!(evt.props().pull::<emit::SpanId, _>("span_id").is_some());
@@ -1203,6 +1200,29 @@ async fn span_setup_async() {
 
     assert!(SETUP_CALLED.was_called());
     assert!(DROP_CALLED.was_called());
+}
+
+#[test]
+fn span_well_known_props_precedence() {
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!(Kind::Span, evt.props().pull::<Kind, _>("evt_kind").unwrap());
+            assert_eq!("test", evt.props().pull::<Str, _>("span_name").unwrap());
+        },
+        |evt| {
+            assert_eq!(Kind::Span, evt.props().pull::<Kind, _>("evt_kind").unwrap());
+            assert_eq!("test", evt.props().pull::<Str, _>("span_name").unwrap());
+
+            true
+        },
+    );
+
+    #[emit::span(rt: RT, "test", span_name: "custom_name", evt_kind: "custom")]
+    fn exec() {}
+
+    exec();
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
 }
 
 #[test]

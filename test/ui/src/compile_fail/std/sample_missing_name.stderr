@@ -1,0 +1,5 @@
+error: either `name` needs to be specified, or `value` must be an identifier to infer `name` from, like: `let my_metric = 42; emit::sample!(value: my_metric);`
+ --> src/compile_fail/std/sample_missing_name.rs:2:26
+  |
+2 |     emit::sample!(value: 42);
+  |                          ^^

@@ -67,8 +67,6 @@ impl MetricValueArg {
 
 impl Parse for Args {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let span = input.span();
-
         let mut rt = Arg::new("rt", |fv| {
             let expr = &fv.expr;
 
@@ -128,9 +126,9 @@ impl Parse for Args {
 
         let agg = agg.take();
 
-        let value = value
-            .take()
-            .ok_or_else(|| syn::Error::new(span, "the `value` parameter is required"))?;
+        let value = value.take().ok_or_else(|| {
+            syn::Error::new(Span::call_site(), "the `value` parameter is required")
+        })?;
 
         let name = name.take();
 
