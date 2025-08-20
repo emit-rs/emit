@@ -27,6 +27,7 @@ use crate::{frame::Frame, span::Span, Metric};
 #[cfg(feature = "std")]
 use std::error::Error;
 
+use crate::metric::{sampler, Sampler};
 use crate::{
     span::{self, Completion, SpanGuard, SpanId, TraceId},
     Level,
@@ -1034,6 +1035,33 @@ pub fn __private_new_sample<'a, P: Props + ?Sized>(
         metric_value.to_value(),
         props,
     )
+}
+
+#[track_caller]
+pub fn __private_sample<'a, S: Sampler, P: Props + ?Sized>(
+    sampler: S,
+    mdl: impl Into<Path<'a>>,
+    extent: impl ToExtent,
+    props: &'a P,
+    metric_name: impl Into<Str<'a>>,
+    metric_agg: impl Into<Str<'a>>,
+    metric_value: &'a (impl ToValue + ?Sized),
+) {
+    sampler.metric(__private_new_sample(
+        mdl,
+        extent,
+        props,
+        metric_name,
+        metric_agg,
+        metric_value,
+    ));
+}
+
+#[track_caller]
+pub fn __private_default_sampler<E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
+    rt: &Runtime<E, F, C, T, R>,
+) -> sampler::FromEmitter<&Runtime<E, F, C, T, R>> {
+    sampler::from_emitter(rt)
 }
 
 #[repr(transparent)]

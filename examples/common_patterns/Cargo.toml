@@ -128,5 +128,9 @@ name = "metric_counter"
 path = "metric_counter.rs"
 
 [[example]]
+name = "metric_source"
+path = "metric_source.rs"
+
+[[example]]
 name = "testing"
 path = "testing.rs"

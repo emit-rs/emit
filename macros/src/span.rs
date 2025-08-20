@@ -542,11 +542,11 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
         err,
     } = args;
 
-    ensure_missing("guard", guard)?;
-    ensure_missing("setup", setup)?;
-    ensure_missing("ok_lvl", ok_lvl)?;
-    ensure_missing("err_lvl", err_lvl)?;
-    ensure_missing("err", err)?;
+    args::ensure_missing("guard", guard.map(|arg| arg.span()))?;
+    args::ensure_missing("setup", setup.map(|arg| arg.span()))?;
+    args::ensure_missing("ok_lvl", ok_lvl.map(|arg| arg.span()))?;
+    args::ensure_missing("err_lvl", err_lvl.map(|arg| arg.span()))?;
+    args::ensure_missing("err", err.map(|arg| arg.span()))?;
 
     let default_lvl_tokens = opts.level;
     let panic_lvl_tokens = panic_lvl;
@@ -586,15 +586,4 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
             ),
         )
     ))
-}
-
-fn ensure_missing(name: &str, value: Option<impl Spanned>) -> Result<(), syn::Error> {
-    if let Some(value) = value {
-        return Err(syn::Error::new(
-            value.span(),
-            format!("the `{name}` control parameter is not supported"),
-        ));
-    }
-
-    Ok(())
 }

@@ -12,13 +12,18 @@ pub struct ExpandTokens {
     pub input: TokenStream,
 }
 
-pub struct SampleArgs {
+pub struct Args {
+    /*
+    NOTE: Also update docs in _Control Parameters_ for this macro when adding new args
+    */
+    rt: args::RtArg,
+    sampler: Option<TokenStream>,
     mdl: args::MdlArg,
     props: args::PropsArg,
     extent: args::ExtentArg,
-    metric_value: MetricValueArg,
-    metric_name: TokenStream,
-    metric_agg: Option<TokenStream>,
+    value: MetricValueArg,
+    name: Option<TokenStream>,
+    agg: Option<TokenStream>,
 }
 
 struct MetricValueArg(Expr);
@@ -36,6 +41,19 @@ impl MetricValueArg {
         path.path.get_ident()
     }
 
+    pub fn infer_name(&self) -> syn::Result<TokenStream> {
+        let inferred = self
+            .ident()
+            .ok_or_else(|| {
+                let msg = format!("either `name` needs to be specified, or `value` must be an identifier to infer `name` from, like: `let my_metric = {}; emit::sample!(value: my_metric);`", self.to_tokens());
+
+                syn::Error::new(self.span(), msg)
+            })?
+            .to_string();
+
+        Ok(quote_spanned!(self.span()=> #inferred))
+    }
+
     fn span(&self) -> Span {
         self.0.span()
     }
@@ -47,10 +65,20 @@ impl MetricValueArg {
     }
 }
 
-impl Parse for SampleArgs {
+impl Parse for Args {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let span = input.span();
 
+        let mut rt = Arg::new("rt", |fv| {
+            let expr = &fv.expr;
+
+            Ok(args::RtArg::new(quote_spanned!(expr.span()=> #expr)))
+        });
+        let mut sampler = Arg::token_stream("sampler", |fv| {
+            let expr = &fv.expr;
+
+            Ok(quote_spanned!(expr.span()=> #expr))
+        });
         let mut mdl = Arg::new("mdl", |fv| {
             let expr = &fv.expr;
 
@@ -66,15 +94,13 @@ impl Parse for SampleArgs {
 
             Ok(args::PropsArg::new(quote_spanned!(expr.span()=> #expr)))
         });
-        let mut metric_value = Arg::new("metric_value", |fv| {
-            Ok(MetricValueArg::new(fv.expr.clone()))
-        });
-        let mut metric_name = Arg::token_stream("metric_name", |fv| {
+        let mut value = Arg::new("value", |fv| Ok(MetricValueArg::new(fv.expr.clone())));
+        let mut name = Arg::token_stream("name", |fv| {
             let expr = &fv.expr;
 
             Ok(quote_spanned!(expr.span()=> #expr))
         });
-        let mut metric_agg = Arg::token_stream("metric_agg", |fv| {
+        let mut agg = Arg::token_stream("agg", |fv| {
             let expr = &fv.expr;
 
             Ok(quote_spanned!(expr.span()=> #expr))
@@ -83,68 +109,100 @@ impl Parse for SampleArgs {
         args::set_from_field_values(
             input.parse_terminated(FieldValue::parse, Token![,])?.iter(),
             [
+                &mut rt,
+                &mut sampler,
                 &mut mdl,
                 &mut extent,
                 &mut props,
-                &mut metric_value,
-                &mut metric_name,
-                &mut metric_agg,
+                &mut value,
+                &mut name,
+                &mut agg,
             ],
         )?;
 
+        let rt = rt.take_or_default();
+        let sampler = sampler.take();
         let mdl = mdl.take_or_default();
         let props = props.take_or_default();
         let extent = extent.take_or_default();
 
-        let metric_agg = metric_agg.take();
+        let agg = agg.take();
 
-        let metric_value = metric_value
+        let value = value
             .take()
-            .ok_or_else(|| syn::Error::new(span, "the `metric_value` parameter is required"))?;
+            .ok_or_else(|| syn::Error::new(span, "the `value` parameter is required"))?;
 
-        let metric_name = match metric_name.take() {
-            Some(metric_name) => metric_name,
-            None => {
-                let inferred = metric_value
-                    .ident()
-                    .ok_or_else(|| {
-                        let msg = format!("either `metric_name` needs to be specified, or `metric_value` must be an identifier to infer `metric_name` from, like: `let my_metric = {}; emit::sample!(metric_value: my_metric);`", metric_value.to_tokens());
+        let name = name.take();
 
-                        syn::Error::new(metric_value.span(), msg)
-                    })?
-                    .to_string();
-
-                quote_spanned!(metric_value.span()=> #inferred)
-            }
-        };
-
-        Ok(SampleArgs {
+        Ok(Args {
+            rt,
+            sampler,
             mdl,
             props,
             extent,
-            metric_value,
-            metric_name,
-            metric_agg,
+            value,
+            name,
+            agg,
         })
     }
 }
 
 pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
-    let args = syn::parse2::<SampleArgs>(opts.input)?;
+    let args = syn::parse2::<Args>(opts.input)?;
+
+    let sampler_tokens = match args.sampler {
+        Some(sampler) => sampler,
+        None => {
+            let rt = args.rt.to_tokens()?.to_ref_tokens();
+
+            quote!(emit::__private::__private_default_sampler(#rt))
+        }
+    };
 
     let extent_tokens = args.extent.to_tokens().to_ref_tokens();
     let props_tokens = args.props.to_tokens().to_ref_tokens();
     let mdl_tokens = args.mdl.to_tokens();
-    let metric_name = args.metric_name;
-    let metric_value = args.metric_value.to_tokens().to_ref_tokens();
+    let name = if let Some(name) = args.name {
+        name
+    } else {
+        args.value.infer_name()?
+    };
+    let value = args.value.to_tokens().to_ref_tokens();
 
-    let metric_agg = args.metric_agg.or(opts.agg).unwrap_or_else(|| {
+    let agg = args.agg.or(opts.agg).unwrap_or_else(|| {
         let agg = emit_core::well_known::METRIC_AGG_LAST;
 
         quote!(#agg)
     });
 
     Ok(
-        quote!(emit::__private::__private_new_sample(#mdl_tokens, #extent_tokens, #props_tokens, #metric_name, #metric_agg, #metric_value)),
+        quote!(emit::__private::__private_sample(#sampler_tokens, #mdl_tokens, #extent_tokens, #props_tokens, #name, #agg, #value)),
+    )
+}
+
+pub fn expand_new_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
+    let args = syn::parse2::<Args>(opts.input)?;
+
+    args::ensure_missing("rt", args.rt.take().map(|arg| arg.span()))?;
+    args::ensure_missing("rt", args.sampler.map(|arg| arg.span()))?;
+
+    let extent_tokens = args.extent.to_tokens().to_ref_tokens();
+    let props_tokens = args.props.to_tokens().to_ref_tokens();
+    let mdl_tokens = args.mdl.to_tokens();
+    let name = if let Some(name) = args.name {
+        name
+    } else {
+        args.value.infer_name()?
+    };
+    let value = args.value.to_tokens().to_ref_tokens();
+
+    let agg = args.agg.or(opts.agg).unwrap_or_else(|| {
+        let agg = emit_core::well_known::METRIC_AGG_LAST;
+
+        quote!(#agg)
+    });
+
+    Ok(
+        quote!(emit::__private::__private_new_sample(#mdl_tokens, #extent_tokens, #props_tokens, #name, #agg, #value)),
     )
 }
