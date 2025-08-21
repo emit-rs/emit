@@ -70,6 +70,17 @@ async fn add_item(user: &str, item: &str) {
 
 Any diagnostics emitted within a traced function will be correlated with it. Any other traced functions it calls will form a trace hierarchy.
 
+## Sampling metrics
+
+Use [`sample!`](https://docs.rs/emit/1.12.0/emit/macro.sample.html) to write samples of the metrics your application tracks as events:
+
+```rust
+# extern crate emit;
+let bytes_written = 417;
+
+emit::sample!(value: bytes_written, agg: "count");
+```
+
 ## Quick debugging
 
 Use the [`dbg!`](https://docs.rs/emit/1.12.0/emit/macro.dbg.html) macro to help debug code as you're writing it:

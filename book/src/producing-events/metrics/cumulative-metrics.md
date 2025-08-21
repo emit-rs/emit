@@ -6,13 +6,7 @@ The following metric reports the current number of bytes written as 591:
 
 ```rust
 # extern crate emit;
-emit::emit!(
-    "{metric_agg} of {metric_name} is {metric_value}",
-    evt_kind: "metric",
-    metric_agg: "count",
-    metric_name: "bytes_written",
-    metric_value: 591,
-);
+emit::count_sample!(name: "bytes_written", value: 591);
 ```
 
 ```text

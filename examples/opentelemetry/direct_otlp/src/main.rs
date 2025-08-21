@@ -41,12 +41,5 @@ fn run() {
     emit::info!("Counted up to {counter}");
 
     // Emit a metric sample
-    emit::emit!(evt: emit::Metric::new(
-        emit::mdl!(),
-        "counter",
-        emit::well_known::METRIC_AGG_COUNT,
-        emit::Empty,
-        counter,
-        emit::Empty,
-    ));
+    emit::count_sample!(value: counter);
 }

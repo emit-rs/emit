@@ -1,0 +1,7 @@
+error: the `value` parameter is required
+ --> src/compile_fail/std/sample_missing_value.rs:2:5
+  |
+2 |     emit::sample!(name: "my_metric");
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the macro `emit::sample` (in Nightly builds, run with -Z macro-backtrace for more info)

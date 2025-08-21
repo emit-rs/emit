@@ -22,11 +22,12 @@ use emit_core::{
 
 use emit_core::{empty::Empty, event::Event};
 
-use crate::{frame::Frame, span::Span};
+use crate::{frame::Frame, span::Span, Metric};
 
 #[cfg(feature = "std")]
 use std::error::Error;
 
+use crate::metric::{sampler, Sampler};
 use crate::{
     span::{self, Completion, SpanGuard, SpanId, TraceId},
     Level,
@@ -800,6 +801,7 @@ pub fn __private_emit_event<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R:
 }
 
 #[track_caller]
+#[must_use = "this macro returns an `Event` without emitting it; send it through an `emit::Emitter`, or use the `emit::emit!` macro instead"]
 pub fn __private_evt<'a, B: Props + ?Sized, P: Props>(
     mdl: impl Into<Path<'a>>,
     tpl: impl Into<Template<'a>>,
@@ -816,6 +818,7 @@ pub fn __private_evt<'a, B: Props + ?Sized, P: Props>(
 }
 
 #[track_caller]
+#[must_use = "this macro returns a `(SpanGuard, Frame)` without starting it; see the docs for `emit::span::SpanGuard::new` for details on starting and completing the returned span"]
 pub fn __private_begin_span<
     'a,
     'b,
@@ -1015,6 +1018,53 @@ where
                 .map_props(|span_props| [lvl_prop, err_prop].and_props(span_props)),
         );
     }
+}
+
+#[track_caller]
+#[must_use = "this macro returns a `Metric` without emitting it; sample it through an `emit::metric::Sampler`, or use the `emit::sample!` macro instead to sample and emit it"]
+pub fn __private_metric<'a, P: Props + ?Sized>(
+    mdl: impl Into<Path<'a>>,
+    extent: impl ToExtent,
+    props: &'a P,
+    metric_name: impl Into<Str<'a>>,
+    metric_agg: impl Into<Str<'a>>,
+    metric_value: Option<Value<'a>>,
+) -> Metric<'a, &'a P> {
+    Metric::new(
+        mdl.into(),
+        metric_name,
+        metric_agg,
+        extent.to_extent(),
+        metric_value.unwrap_or_else(|| Value::null()),
+        props,
+    )
+}
+
+#[track_caller]
+pub fn __private_sample<'a, S: Sampler, P: Props + ?Sized>(
+    sampler: S,
+    mdl: impl Into<Path<'a>>,
+    extent: impl ToExtent,
+    props: &'a P,
+    metric_name: impl Into<Str<'a>>,
+    metric_agg: impl Into<Str<'a>>,
+    metric_value: Option<Value<'a>>,
+) {
+    sampler.metric(__private_metric(
+        mdl,
+        extent,
+        props,
+        metric_name,
+        metric_agg,
+        metric_value,
+    ));
+}
+
+#[track_caller]
+pub fn __private_default_sampler<E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
+    rt: &Runtime<E, F, C, T, R>,
+) -> sampler::FromEmitter<&Runtime<E, F, C, T, R>> {
+    sampler::from_emitter(rt)
 }
 
 #[repr(transparent)]

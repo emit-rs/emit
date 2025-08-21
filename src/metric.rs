@@ -2,7 +2,7 @@
 The [`Metric`] type.
 */
 
-use core::ops::ControlFlow;
+use core::{fmt, ops::ControlFlow};
 
 use emit_core::{
     and::And,
@@ -225,6 +225,12 @@ impl<'a, P> Metric<'a, P> {
     }
 }
 
+impl<'a, P: Props> fmt::Debug for Metric<'a, P> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&self.to_event(), f)
+    }
+}
+
 impl<'a, P: Props> ToEvent for Metric<'a, P> {
     type Props<'b>
         = &'b Self
@@ -374,6 +380,12 @@ pub mod source {
         fn sample_metrics<S: sampler::Sampler>(&self, sampler: S) {
             self.left().sample_metrics(&sampler);
             self.right().sample_metrics(&sampler);
+        }
+    }
+
+    impl<'a, P: Props> Source for Metric<'a, P> {
+        fn sample_metrics<S: Sampler>(&self, sampler: S) {
+            sampler.metric(self.by_ref());
         }
     }
 
@@ -583,6 +595,25 @@ pub mod source {
             }));
 
             assert_eq!(2, calls.get());
+        }
+
+        #[test]
+        fn metric_as_source() {
+            let sampler = sampler::from_fn(|metric| {
+                assert_eq!("metric", metric.name().to_string());
+                assert_eq!("count", metric.agg().to_string());
+            });
+
+            let metric = Metric::new(
+                Path::new_raw("test"),
+                "metric",
+                "count",
+                crate::Empty,
+                42,
+                crate::Empty,
+            );
+
+            metric.sample_metrics(sampler);
         }
     }
 }

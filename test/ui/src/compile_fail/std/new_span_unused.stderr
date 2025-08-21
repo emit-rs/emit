@@ -1,0 +1,16 @@
+error: unused return value of `__private_begin_span` that must be used
+ --> src/compile_fail/std/new_span_unused.rs:4:5
+  |
+4 |     emit::new_span!("test");
+  |     ^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this macro returns a `(SpanGuard, Frame)` without starting it; see the docs for `emit::span::SpanGuard::new` for details on starting and completing the returned span
+note: the lint level is defined here
+ --> src/compile_fail/std/new_span_unused.rs:1:9
+  |
+1 | #![deny(unused_must_use)]
+  |         ^^^^^^^^^^^^^^^
+help: use `let _ = ...` to ignore the resulting value
+  |
+4 |     let _ = emit::new_span!("test");
+  |     +++++++

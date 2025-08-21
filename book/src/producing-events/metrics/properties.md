@@ -4,16 +4,14 @@ Metric events can carry other properties in addition to their metadata:
 
 ```rust
 # extern crate emit;
-emit::emit!(
-    "{metric_agg} of {metric_name} is {metric_value}",
-    // Metadata
-    evt_kind: "metric",
-    metric_agg: "count",
-    metric_name: "bytes_written",
-    metric_value: 591,
-    // Additional properties
-    file: "./log.1.txt",
-    version: "1.2.3-dev",
+emit::sample!(
+    name: "bytes_written",
+    value: 591,
+    props: emit::props! {
+        // Additional properties
+        file: "./log.1.txt",
+        version: "1.2.3-dev",
+    },
 );
 ```
 

@@ -108,6 +108,10 @@ name = "span_manual_creation_full"
 path = "span_manual_creation_full.rs"
 
 [[example]]
+name = "span_manual_full"
+path = "span_manual_full.rs"
+
+[[example]]
 name = "span_trace_propagation"
 path = "span_trace_propagation.rs"
 
@@ -118,6 +122,22 @@ path = "span_trace_sampling.rs"
 [[example]]
 name = "span_trace_filtering"
 path = "span_trace_filtering.rs"
+
+[[example]]
+name = "metric_counter"
+path = "metric_counter.rs"
+
+[[example]]
+name = "metric_counter_manual"
+path = "metric_counter_manual.rs"
+
+[[example]]
+name = "metric_source"
+path = "metric_source.rs"
+
+[[example]]
+name = "metric_props"
+path = "metric_props.rs"
 
 [[example]]
 name = "testing"

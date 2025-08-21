@@ -44,6 +44,7 @@ mod hook;
 mod key;
 mod optional;
 mod props;
+mod sample;
 mod span;
 mod template;
 mod util;
@@ -490,6 +491,306 @@ pub fn dbg(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 }
 
 /**
+Emit a metric sample.
+
+# Examples
+
+Emit a metric sample from a value:
+
+```ignore
+let my_metric = 42;
+
+emit::sample!(value: my_metric);
+```
+
+In the above example, the `name` is inferred to be `"my_metric"` using the name of the identifier in the `value` control parameter.
+
+The `name` can also be specified manually, and is required if `value` is not an identifier:
+
+```ignore
+emit::sample!(name: "my_metric", value: 42);
+```
+
+Properties can be attached to metric samples:
+
+```ignore
+let my_metric = 42;
+
+let metric = emit::sample!(value: my_metric, props: emit::props! { my_property: "some value" });
+```
+*/
+#[doc = ""]
+#[doc = include_str!("./doc_sample.md")]
+#[proc_macro]
+pub fn sample(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    sample::expand_tokens(sample::ExpandTokens {
+        agg: None,
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
+}
+
+/**
+Emit a metric sample with `count` as its aggregation.
+
+# Examples
+
+See [`macro@sample`].
+*/
+#[doc = ""]
+#[doc = include_str!("./doc_sample.md")]
+#[proc_macro]
+pub fn count_sample(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    sample::expand_tokens(sample::ExpandTokens {
+        agg: Some({
+            let agg = emit_core::well_known::METRIC_AGG_COUNT;
+
+            quote!(#agg)
+        }),
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
+}
+
+/**
+Emit a metric sample with `sum` as its aggregation.
+
+# Examples
+
+See [`macro@sample`].
+*/
+#[doc = ""]
+#[doc = include_str!("./doc_sample.md")]
+#[proc_macro]
+pub fn sum_sample(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    sample::expand_tokens(sample::ExpandTokens {
+        agg: Some({
+            let agg = emit_core::well_known::METRIC_AGG_SUM;
+
+            quote!(#agg)
+        }),
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
+}
+
+/**
+Emit a metric sample with `min` as its aggregation.
+
+# Examples
+
+See [`macro@sample`].
+*/
+#[doc = ""]
+#[doc = include_str!("./doc_sample.md")]
+#[proc_macro]
+pub fn min_sample(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    sample::expand_tokens(sample::ExpandTokens {
+        agg: Some({
+            let agg = emit_core::well_known::METRIC_AGG_MIN;
+
+            quote!(#agg)
+        }),
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
+}
+
+/**
+Emit a metric sample with `max` as its aggregation.
+
+# Examples
+
+See [`macro@sample`].
+*/
+#[doc = ""]
+#[doc = include_str!("./doc_sample.md")]
+#[proc_macro]
+pub fn max_sample(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    sample::expand_tokens(sample::ExpandTokens {
+        agg: Some({
+            let agg = emit_core::well_known::METRIC_AGG_MAX;
+
+            quote!(#agg)
+        }),
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
+}
+
+/**
+Emit a metric sample with `last` as its aggregation.
+
+# Examples
+
+See [`macro@sample`].
+*/
+#[doc = ""]
+#[doc = include_str!("./doc_sample.md")]
+#[proc_macro]
+pub fn last_sample(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    sample::expand_tokens(sample::ExpandTokens {
+        agg: Some({
+            let agg = emit_core::well_known::METRIC_AGG_LAST;
+
+            quote!(#agg)
+        }),
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
+}
+
+/**
+Construct a metric sample.
+
+# Examples
+
+Construct a metric sample from a value:
+
+```ignore
+let my_metric = 42;
+
+let metric = emit::metric!(value: my_metric);
+```
+
+In the above example, the `name` is inferred to be `"my_metric"` using the name of the identifier in the `value` control parameter.
+
+The `name` can also be specified manually, and is required if `value` is not an identifier:
+
+```ignore
+let metric = emit::metric!(name: "my_metric", value: 42);
+```
+
+Properties can be attached to metric samples:
+
+```ignore
+let my_metric = 42;
+
+let metric = emit::metric!(value: my_metric, props: emit::props! { my_property: "some value" });
+```
+*/
+#[doc = ""]
+#[doc = include_str!("./doc_metric.md")]
+#[proc_macro]
+pub fn metric(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    sample::expand_metric_tokens(sample::ExpandTokens {
+        agg: None,
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
+}
+
+/**
+Construct a metric sample with `count` as its aggregation.
+
+# Examples
+
+See [`macro@metric`].
+*/
+#[doc = ""]
+#[doc = include_str!("./doc_metric.md")]
+#[proc_macro]
+pub fn count_metric(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    sample::expand_metric_tokens(sample::ExpandTokens {
+        agg: Some({
+            let agg = emit_core::well_known::METRIC_AGG_COUNT;
+
+            quote!(#agg)
+        }),
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
+}
+
+/**
+Construct a metric sample with `sum` as its aggregation.
+
+# Examples
+
+See [`macro@metric`].
+*/
+#[doc = ""]
+#[doc = include_str!("./doc_metric.md")]
+#[proc_macro]
+pub fn sum_metric(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    sample::expand_metric_tokens(sample::ExpandTokens {
+        agg: Some({
+            let agg = emit_core::well_known::METRIC_AGG_SUM;
+
+            quote!(#agg)
+        }),
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
+}
+
+/**
+Construct a metric sample with `min` as its aggregation.
+
+# Examples
+
+See [`macro@metric`].
+*/
+#[doc = ""]
+#[doc = include_str!("./doc_metric.md")]
+#[proc_macro]
+pub fn min_metric(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    sample::expand_metric_tokens(sample::ExpandTokens {
+        agg: Some({
+            let agg = emit_core::well_known::METRIC_AGG_MIN;
+
+            quote!(#agg)
+        }),
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
+}
+
+/**
+Construct a metric sample with `max` as its aggregation.
+
+# Examples
+
+See [`macro@metric`].
+*/
+#[doc = ""]
+#[doc = include_str!("./doc_metric.md")]
+#[proc_macro]
+pub fn max_metric(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    sample::expand_metric_tokens(sample::ExpandTokens {
+        agg: Some({
+            let agg = emit_core::well_known::METRIC_AGG_MAX;
+
+            quote!(#agg)
+        }),
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
+}
+
+/**
+Construct a metric sample with `last` as its aggregation.
+
+# Examples
+
+See [`macro@metric`].
+*/
+#[doc = ""]
+#[doc = include_str!("./doc_metric.md")]
+#[proc_macro]
+pub fn last_metric(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    sample::expand_metric_tokens(sample::ExpandTokens {
+        agg: Some({
+            let agg = emit_core::well_known::METRIC_AGG_LAST;
+
+            quote!(#agg)
+        }),
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
+}
+
+/**
 Construct a path.
 
 # Syntax
@@ -501,6 +802,10 @@ path
 where
 
 - `path`: A string literal containing a valid `emit` path.
+
+# Returns
+
+An `emit::Path`.
 */
 #[proc_macro]
 pub fn path(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -522,6 +827,10 @@ Construct a set of properties.
 where
 
 - `property`: A Rust field-value for a property. The identifier of the field-value is the key of the property.
+
+# Returns
+
+An `impl emit::Props`.
 */
 #[proc_macro]
 pub fn props(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -722,24 +1031,6 @@ pub fn as_error(
     (hook::get("as_error").unwrap())(TokenStream::from(args), TokenStream::from(item))
         .unwrap_or_compile_error()
 }
-
-/*
-fn base_emit(level: Option<TokenStream>, item: TokenStream) -> proc_macro::TokenStream {
-    emit::expand_tokens(emit::ExpandTokens { level, input: item }).unwrap_or_compile_error()
-}
-
-fn base_span(
-    level: Option<TokenStream>,
-    input: TokenStream,
-    item: TokenStream,
-) -> proc_macro::TokenStream {
-    if filter::matches_build_filter() {
-        span::expand_tokens(span::ExpandTokens { level, input, item }).unwrap_or_compile_error()
-    } else {
-        item.into()
-    }
-}
-*/
 
 fn capture_as(
     name: &'static str,

@@ -252,6 +252,10 @@ impl RtArg {
         RtArg(Some(value))
     }
 
+    pub fn take(self) -> Option<TokenStream> {
+        self.0
+    }
+
     pub fn to_tokens(&self) -> Result<TokenStream, syn::Error> {
         let provided = self.0.clone();
 
@@ -266,4 +270,15 @@ impl RtArg {
             provided.ok_or_else(|| syn::Error::new(Span::call_site(), "a runtime must be specified by the `rt` parameter unless the `implicit_rt` feature of `emit` is enabled"))
         }
     }
+}
+
+pub fn ensure_missing(name: &str, value: Option<Span>) -> Result<(), syn::Error> {
+    if let Some(value) = value {
+        return Err(syn::Error::new(
+            value,
+            format!("the `{name}` control parameter is not supported"),
+        ));
+    }
+
+    Ok(())
 }
