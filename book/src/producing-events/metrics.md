@@ -7,9 +7,9 @@ Metrics are an effective approach to monitoring applications at scale. They can 
 ```mermaid
 flowchart
     meter["`**meter/instrument**
-    _Gauges, counters, etc defined by your application as atomic integers, local variables, etc_`"] -- sample --> emit
+    _Atomic integers, local variables_`"] -- sample --> emit
     emit["`**emit event**
-    _Regular emit events using well-known properties to signal them as metric samples_
+    _Events in the metrics data model_
     `"]
 ```
 
