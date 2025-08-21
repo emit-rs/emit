@@ -30,7 +30,9 @@ This event will have:
 
 The core event data model doesn't encode any specific diagnostic paradigm. It doesn't even include log levels. `emit` uses well-known properties to support extensions to its data model. A well-known property is a reserved name and set of allowed values that consumers of diagnostic data can use to treat an event as something more specific. See the [`well_known`](https://docs.rs/emit/1.12.0/emit/well_known/index.html) module for a complete list of well-known properties.
 
-The two main extensions to the event data model are [tracing](../producing-events/tracing/data-model.md), and [metrics](../producing-events/metrics/data-model.md). You can also define your own extensions. These extensions are both based on the [`evt_kind`](https://docs.rs/emit/1.12.0/emit/well_known/constant.KEY_EVT_KIND.html) well-known property. Consumers that aren't specially aware of it will treat unknown extended events as regular ones.
+The two main extensions to the event data model are [tracing](../producing-events/tracing/data-model.md), and [metrics](../producing-events/metrics/data-model.md). Tracing events are represented by the [`Span`](https://docs.rs/emit/1.12.0/emit/span/struct.Span.html) type, and metric events by the [`Metric`](https://docs.rs/emit/1.12.0/emit/metric/struct.Metric.html) type. Each of these types implements the [`ToEvent`](https://docs.rs/emit/1.12.0/emit/event/trait.ToEvent.html) trait, and so can be treated as a regular [`Event`](https://docs.rs/emit/1.12.0/emit/struct.Event.html) within a runtime for filtering and emission.
+
+You can also define your own extensions by setting the [`evt_kind`](https://docs.rs/emit/1.12.0/emit/well_known/constant.KEY_EVT_KIND.html) well-known property to a value of your choice. Consumers that aren't specially aware of your extension will treat those events as regular ones.
 
 ## Value data model
 
