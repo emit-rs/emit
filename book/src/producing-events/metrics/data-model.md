@@ -11,3 +11,7 @@ The data model of metrics is an extension of [`emit`'s events](../../reference/e
     - `"last"`: The most recent value.
 - `metric_name`: the name of the underlying data stream.
 - `metric_value`: the sample itself. These values are expected to be numeric.
+
+## The type of `metric_value`
+
+The type of `metric_value` isn't constrained in any way, but will enjoy the broadest compatibility when it's numeric. Integral counts are best represented as `usize`, and derived statistics and other fractional values as `f64`. Keep in mind the potential for rounding errors and precision loss particularly when processing `f64` samples.

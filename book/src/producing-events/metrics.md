@@ -48,6 +48,8 @@ Event {
 }
 ```
 
+Note that the type of a sample value isn't required to be an integer as in the previous example. It can be any value, including floating points, booleans, strings, and objects. It's best to stick to numeric types though for the broadest compatibility.
+
 `emit` also defines macros for producing metric samples for specific aggregations:
 
 - [`count_sample!`](https://docs.rs/emit/1.12.0/emit/macro.count_sample.html) for samples of a monotonic counter.
