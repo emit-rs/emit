@@ -77,71 +77,128 @@ const fn with_set_low_word(f: f64, lo: u32) -> f64 {
     f64::from_bits(tmp)
 }
 
-const fn scalbn(mut x: f64, mut n: i32) -> f64 {
-    let zero = 0;
+pub mod scalbn {
+    use super::*;
 
-    // Bits including the implicit bit
-    let sig_total_bits = SIG_BITS + 1;
+    pub const fn scalbn(mut x: f64, mut n: i32) -> f64 {
+        let zero = 0;
 
-    // Maximum and minimum values when biased
-    let exp_max = EXP_MAX;
-    let exp_min = EXP_MIN;
+        // Bits including the implicit bit
+        let sig_total_bits = SIG_BITS + 1;
 
-    // 2 ^ Emax, maximum positive with null significand (0x1p1023 for f64)
-    let f_exp_max = from_parts(false, EXP_BIAS << 1, zero);
+        // Maximum and minimum values when biased
+        let exp_max = EXP_MAX;
+        let exp_min = EXP_MIN;
 
-    // 2 ^ Emin, minimum positive normal with null significand (0x1p-1022 for f64)
-    let f_exp_min = from_parts(false, 1, zero);
+        // 2 ^ Emax, maximum positive with null significand (0x1p1023 for f64)
+        let f_exp_max = from_parts(false, EXP_BIAS << 1, zero);
 
-    // 2 ^ sig_total_bits, moltiplier to normalize subnormals (0x1p53 for f64)
-    let f_pow_subnorm = from_parts(false, sig_total_bits + EXP_BIAS, zero);
+        // 2 ^ Emin, minimum positive normal with null significand (0x1p-1022 for f64)
+        let f_exp_min = from_parts(false, 1, zero);
 
-    /*
-     * The goal is to multiply `x` by a scale factor that applies `n`. However, there are cases
-     * where `2^n` is not representable by `F` but the result should be, e.g. `x = 2^Emin` with
-     * `n = -EMin + 2` (one out of range of 2^Emax). To get around this, reduce the magnitude of
-     * the final scale operation by prescaling by the max/min power representable by `F`.
-     */
+        // 2 ^ sig_total_bits, moltiplier to normalize subnormals (0x1p53 for f64)
+        let f_pow_subnorm = from_parts(false, sig_total_bits + EXP_BIAS, zero);
 
-    if n > exp_max {
-        // Worse case positive `n`: `x`  is the minimum subnormal value, the result is `MAX`.
-        // This can be reached by three scaling multiplications (two here and one final).
-        debug_assert!(-exp_min + SIG_BITS as i32 + exp_max <= exp_max * 3);
+        /*
+         * The goal is to multiply `x` by a scale factor that applies `n`. However, there are cases
+         * where `2^n` is not representable by `F` but the result should be, e.g. `x = 2^Emin` with
+         * `n = -EMin + 2` (one out of range of 2^Emax). To get around this, reduce the magnitude of
+         * the final scale operation by prescaling by the max/min power representable by `F`.
+         */
 
-        x *= f_exp_max;
-        n -= exp_max;
         if n > exp_max {
+            // Worse case positive `n`: `x`  is the minimum subnormal value, the result is `MAX`.
+            // This can be reached by three scaling multiplications (two here and one final).
+            debug_assert!(-exp_min + SIG_BITS as i32 + exp_max <= exp_max * 3);
+
             x *= f_exp_max;
             n -= exp_max;
             if n > exp_max {
-                n = exp_max;
+                x *= f_exp_max;
+                n -= exp_max;
+                if n > exp_max {
+                    n = exp_max;
+                }
             }
-        }
-    } else if n < exp_min {
-        // `mul` s.t. `!(x * mul).is_subnormal() ∀ x`
-        let mul = f_exp_min * f_pow_subnorm;
-        let add = -exp_min - sig_total_bits as i32;
+        } else if n < exp_min {
+            // `mul` s.t. `!(x * mul).is_subnormal() ∀ x`
+            let mul = f_exp_min * f_pow_subnorm;
+            let add = -exp_min - sig_total_bits as i32;
 
-        // Worse case negative `n`: `x`  is the maximum positive value, the result is `MIN`.
-        // This must be reachable by three scaling multiplications (two here and one final).
-        debug_assert!(-exp_min + SIG_BITS as i32 + exp_max <= add * 2 + -exp_min);
+            // Worse case negative `n`: `x`  is the maximum positive value, the result is `MIN`.
+            // This must be reachable by three scaling multiplications (two here and one final).
+            debug_assert!(-exp_min + SIG_BITS as i32 + exp_max <= add * 2 + -exp_min);
 
-        x *= mul;
-        n += add;
-
-        if n < exp_min {
             x *= mul;
             n += add;
 
             if n < exp_min {
-                n = exp_min;
+                x *= mul;
+                n += add;
+
+                if n < exp_min {
+                    n = exp_min;
+                }
             }
         }
+
+        let scale = from_parts(false, (EXP_BIAS as i32 + n) as u32, zero);
+        x * scale
     }
 
-    let scale = from_parts(false, (EXP_BIAS as i32 + n) as u32, zero);
-    x * scale
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        // Tests against N3220
+        #[test]
+        fn spec_test() {
+            // `scalbn(±0, n)` returns `±0`.
+            assert_eq!(scalbn(-0.0f64, 10).to_bits(), (-0.0f64).to_bits());
+            assert_eq!(scalbn(-0.0f64, 0).to_bits(), (-0.0f64).to_bits());
+            assert_eq!(scalbn(-0.0f64, -10).to_bits(), (-0.0f64).to_bits());
+            assert_eq!(scalbn(0.0, 10).to_bits(), 0.0f64.to_bits());
+            assert_eq!(scalbn(0.0, 0).to_bits(), 0.0f64.to_bits());
+            assert_eq!(scalbn(0.0, -10).to_bits(), 0.0f64.to_bits());
+
+            // `scalbn(x, 0)` returns `x`.
+            assert_eq!(scalbn(f64::MIN, 0).to_bits(), f64::MIN.to_bits());
+            assert_eq!(scalbn(f64::MAX, 0).to_bits(), f64::MAX.to_bits());
+            assert_eq!(scalbn(f64::INFINITY, 0).to_bits(), f64::INFINITY.to_bits());
+            assert_eq!(
+                scalbn(f64::NEG_INFINITY, 0).to_bits(),
+                f64::NEG_INFINITY.to_bits()
+            );
+            assert_eq!(scalbn(0.0, 0).to_bits(), 0.0f64.to_bits());
+            assert_eq!(scalbn(-0.0f64, 0).to_bits(), (-0.0f64).to_bits());
+
+            // `scalbn(±∞, n)` returns `±∞`.
+            assert_eq!(scalbn(f64::INFINITY, 10).to_bits(), f64::INFINITY.to_bits());
+            assert_eq!(
+                scalbn(f64::INFINITY, -10).to_bits(),
+                f64::INFINITY.to_bits()
+            );
+            assert_eq!(
+                scalbn(f64::NEG_INFINITY, 10).to_bits(),
+                f64::NEG_INFINITY.to_bits()
+            );
+            assert_eq!(
+                scalbn(f64::NEG_INFINITY, -10).to_bits(),
+                f64::NEG_INFINITY.to_bits()
+            );
+
+            // NaN should remain NaNs.
+            assert!(scalbn(f64::NAN, 10).is_nan());
+            assert!(scalbn(f64::NAN, 0).is_nan());
+            assert!(scalbn(f64::NAN, -10).is_nan());
+            assert!(scalbn(-f64::NAN, 10).is_nan());
+            assert!(scalbn(-f64::NAN, 0).is_nan());
+            assert!(scalbn(-f64::NAN, -10).is_nan());
+        }
+    }
 }
+
+pub use self::scalbn::*;
 
 const fn ex(v: f64) -> u32 {
     ((v.to_bits() >> SIG_BITS) as u32) & EXP_SAT
@@ -195,9 +252,6 @@ pub mod sqrt {
 
     #[inline]
     pub const fn sqrt(x: f64) -> f64 {
-        let zero = 0;
-        let one = 1;
-
         let mut ix = x.to_bits();
 
         // Top is the exponent and sign, which may or may not be shifted. If the float fits into a
@@ -210,7 +264,7 @@ pub mod sqrt {
             cold_path();
 
             // +/-0
-            if ix << 1 == zero {
+            if ix << 1 == 0 {
                 return x;
             }
 
@@ -225,7 +279,7 @@ pub mod sqrt {
             }
 
             // Normalize subnormals by multiplying by 1.0 << SIG_BITS (e.g. 0x1p52 for doubles).
-            let scaled = x * from_parts(false, SIG_BITS + EXP_BIAS, zero);
+            let scaled = x * from_parts(false, SIG_BITS + EXP_BIAS, 0);
             ix = scaled.to_bits();
             top = ex(scaled).wrapping_sub(SIG_BITS);
         }
@@ -242,25 +296,18 @@ pub mod sqrt {
         if even {
             m_u2 >>= 1;
         }
-        exp = (exp.wrapping_add(EXP_SAT >> 1)) >> 1;
+        exp = exp.wrapping_add(EXP_SAT >> 1) >> 1;
 
         // Extract the top 6 bits of the significand with the lowest bit of the exponent.
         let i = ((ix >> (SIG_BITS - 6)) as usize) & 0b1111111;
 
         // Start with an initial guess for `r = 1 / sqrt(m)` from the table, and shift `m` as an
         // initial value for `s = sqrt(m)`. See the module documentation for details.
-        let r1_u0: u32 = (RSQRT_TAB[i] as u32) << (u32::BITS - 16);
-        let s1_u2: u32 = ((m_u2) >> (BITS - u32::BITS)) as u32;
-
-        // Perform iterations, if any, at quarter width (used for `f128`).
-        let (r1_u0, _s1_u2) = goldschmidt_r1(r1_u0, s1_u2, 2);
-
-        // Widen values and perform iterations at half width (used for `f64` and `f128`).
-        let r2_u0: u32 = (r1_u0 as u32) << (u32::BITS - u32::BITS);
-        let s2_u2: u32 = ((m_u2) >> (BITS - u32::BITS)) as u32;
+        let r2_u0 = (RSQRT_TAB[i] as u32) << (u32::BITS - 16);
+        let s2_u2 = ((m_u2) >> (BITS - u32::BITS)) as u32;
         let (r2_u0, _s2_u2) = goldschmidt_r2(r2_u0, s2_u2, 2);
 
-        // Perform final iterations at full width (used for all float types).
+        // Perform final iterations at full width
         let r_u0: u64 = (r2_u0 as u64) << (BITS - u32::BITS);
         let s_u2: u64 = m_u2;
         let (_r_u0, s_u2) = goldschmidt_final(r_u0, s_u2, 2);
@@ -287,7 +334,7 @@ pub mod sqrt {
 
         // The value needed to shift `m_u2` by to create `m*2^(2p)`. `2p = 2 * SIG_BITS`,
         // `BITS - 2` accounts for the offset that `m_u2` already has.
-        let shift = 2 * SIG_BITS - (BITS - 2);
+        let shift = 2 * SIG_BITS - BITS - 2;
 
         // `2^(2p)m - m^2`
         let d0 = (m_u2 << shift).wrapping_sub(m.wrapping_mul(m));
@@ -299,22 +346,19 @@ pub mod sqrt {
 
         let mut y = f64::from_bits(m);
 
-        // FIXME(f16): the fenv math does not work for `f16`
-        if BITS > 16 {
-            // Handle rounding and inexact. `(m + 1)^2 == 2^shift m` is exact; for all other cases, add
-            // a tiny value to cause fenv effects.
-            let d2 = d1.wrapping_add(m).wrapping_add(one);
-            let mut tiny = if d2 == zero {
-                cold_path();
-                zero
-            } else {
-                IMPLICIT_BIT
-            };
+        // Handle rounding and inexact. `(m + 1)^2 == 2^shift m` is exact; for all other cases, add
+        // a tiny value to cause fenv effects.
+        let d2 = d1.wrapping_add(m).wrapping_add(1);
+        let mut tiny = if d2 == 0 {
+            cold_path();
+            0
+        } else {
+            IMPLICIT_BIT
+        };
 
-            tiny |= (d1 ^ d2) & SIGN_MASK;
-            let t = f64::from_bits(tiny);
-            y = y + t;
-        }
+        tiny |= (d1 ^ d2) & SIGN_MASK;
+        let t = f64::from_bits(tiny);
+        y = y + t;
 
         y
     }
@@ -328,14 +372,8 @@ pub mod sqrt {
     }
 
     #[inline]
-    const fn goldschmidt_r1(r_u0: u32, s_u2: u32, count: u32) -> (u32, u32) {
-        let _ = count;
-        (r_u0, s_u2)
-    }
-
-    #[inline]
     const fn goldschmidt_r2(mut r_u0: u32, mut s_u2: u32, count: u32) -> (u32, u32) {
-        let three_u2 = (0b11u8 as u32) << (u32::BITS - 2);
+        let three_u2 = (0b11u32) << (u32::BITS - 2);
         let mut u_u0 = r_u0;
 
         let mut i = 0;
@@ -381,7 +419,7 @@ pub mod sqrt {
     /// trivial, `count` is a constant when called).
     #[inline]
     const fn goldschmidt_final(mut r_u0: u64, mut s_u2: u64, count: u32) -> (u64, u64) {
-        let three_u2 = (0b11u8 as u64) << (u64::BITS - 2);
+        let three_u2 = (0b11u64) << (u64::BITS - 2);
         let mut u_u0 = r_u0;
 
         let mut i = 0;
@@ -437,6 +475,57 @@ pub mod sqrt {
         0xc116, 0xc03c, 0xbf65, 0xbe90, 0xbdbe, 0xbcef, 0xbc23, 0xbb59,
         0xba91, 0xb9cc, 0xb90a, 0xb84a, 0xb78c, 0xb6d0, 0xb617, 0xb560,
     ];
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        /// Test behavior specified in IEEE 754 `squareRoot`.
+        #[test]
+        fn spec_test() {
+            // Values that should return a NaN and raise invalid
+            let nan = [f64::NEG_INFINITY, -1.0, f64::NAN, f64::MIN];
+
+            // Values that return unaltered
+            let roundtrip = [0.0f64, -0.0, f64::INFINITY];
+
+            for x in nan {
+                let val = sqrt(x);
+                assert!(val.is_nan());
+            }
+
+            for x in roundtrip {
+                let val = sqrt(x);
+                assert_eq!(val.to_bits(), x.to_bits());
+            }
+        }
+
+        #[test]
+        fn sanity_check() {
+            assert_eq!(sqrt(100.0f64).to_bits(), 10.0f64.to_bits());
+            assert_eq!(sqrt(4.0f64).to_bits(), 2.0f64.to_bits());
+        }
+
+        #[test]
+        #[allow(clippy::approx_constant)]
+        fn conformance_tests() {
+            let cases = [
+                (core::f64::consts::PI, 0x3ffc5bf891b4ef6a_u64),
+                (10000.0, 0x4059000000000000_u64),
+                (f64::from_bits(0x0000000f), 0x1e7efbdeb14f4eda_u64),
+                (f64::INFINITY, f64::INFINITY.to_bits()),
+            ];
+
+            for (input, output) in cases {
+                assert_eq!(
+                    sqrt(input).to_bits(),
+                    output,
+                    "input: {input:?} ({:#018x})",
+                    input.to_bits()
+                );
+            }
+        }
+    }
 }
 
 pub use self::sqrt::*;
@@ -852,6 +941,231 @@ pub mod pow {
 
         s * z
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        use core::f64::consts::{E, PI};
+
+        const POS_ZERO: &[f64] = &[0.0];
+        const NEG_ZERO: &[f64] = &[-0.0];
+        const POS_ONE: &[f64] = &[1.0];
+        const NEG_ONE: &[f64] = &[-1.0];
+        const POS_FLOATS: &[f64] = &[99.0 / 70.0, E, PI];
+        const NEG_FLOATS: &[f64] = &[-99.0 / 70.0, -E, -PI];
+        const POS_SMALL_FLOATS: &[f64] = &[(1.0 / 2.0), f64::MIN_POSITIVE, f64::EPSILON];
+        const NEG_SMALL_FLOATS: &[f64] = &[-(1.0 / 2.0), -f64::MIN_POSITIVE, -f64::EPSILON];
+        const POS_EVENS: &[f64] = &[2.0, 6.0, 8.0, 10.0, 22.0, 100.0, f64::MAX];
+        const NEG_EVENS: &[f64] = &[f64::MIN, -100.0, -22.0, -10.0, -8.0, -6.0, -2.0];
+        const POS_ODDS: &[f64] = &[3.0, 7.0];
+        const NEG_ODDS: &[f64] = &[-7.0, -3.0];
+        const NANS: &[f64] = &[f64::NAN];
+        const POS_INF: &[f64] = &[f64::INFINITY];
+        const NEG_INF: &[f64] = &[f64::NEG_INFINITY];
+
+        const ALL: &[&[f64]] = &[
+            POS_ZERO,
+            NEG_ZERO,
+            NANS,
+            NEG_SMALL_FLOATS,
+            POS_SMALL_FLOATS,
+            NEG_FLOATS,
+            POS_FLOATS,
+            NEG_EVENS,
+            POS_EVENS,
+            NEG_ODDS,
+            POS_ODDS,
+            NEG_INF,
+            POS_INF,
+            NEG_ONE,
+            POS_ONE,
+        ];
+        const POS: &[&[f64]] = &[POS_ZERO, POS_ODDS, POS_ONE, POS_FLOATS, POS_EVENS, POS_INF];
+        const NEG: &[&[f64]] = &[NEG_ZERO, NEG_ODDS, NEG_ONE, NEG_FLOATS, NEG_EVENS, NEG_INF];
+
+        fn pow_test(base: f64, exponent: f64, expected: f64) {
+            let res = pow(base, exponent);
+            assert!(
+                if expected.is_nan() {
+                    res.is_nan()
+                } else {
+                    pow(base, exponent) == expected
+                },
+                "{base} ** {exponent} was {res} instead of {expected}",
+            );
+        }
+
+        fn test_sets_as_base(sets: &[&[f64]], exponent: f64, expected: f64) {
+            sets.iter()
+                .for_each(|s| s.iter().for_each(|val| pow_test(*val, exponent, expected)));
+        }
+
+        fn test_sets_as_exponent(base: f64, sets: &[&[f64]], expected: f64) {
+            sets.iter()
+                .for_each(|s| s.iter().for_each(|val| pow_test(base, *val, expected)));
+        }
+
+        fn test_sets(
+            sets: &[&[f64]],
+            computed: &dyn Fn(f64) -> f64,
+            expected: &dyn Fn(f64) -> f64,
+        ) {
+            sets.iter().for_each(|s| {
+                s.iter().for_each(|val| {
+                    let exp = expected(*val);
+                    let res = computed(*val);
+
+                    #[cfg(all(target_arch = "x86", not(target_feature = "sse2")))]
+                    let exp = force_eval!(exp);
+                    #[cfg(all(target_arch = "x86", not(target_feature = "sse2")))]
+                    let res = force_eval!(res);
+                    assert!(
+                        if exp.is_nan() {
+                            res.is_nan()
+                        } else {
+                            exp == res
+                        },
+                        "test for {val} was {res} instead of {exp}",
+                    );
+                })
+            });
+        }
+
+        #[test]
+        fn zero_as_exponent() {
+            test_sets_as_base(ALL, 0.0, 1.0);
+            test_sets_as_base(ALL, -0.0, 1.0);
+        }
+
+        #[test]
+        fn one_as_base() {
+            test_sets_as_exponent(1.0, ALL, 1.0);
+        }
+
+        #[test]
+        fn nan_inputs() {
+            // NAN as the base:
+            // (f64::NAN ^ anything *but 0* should be f64::NAN)
+            test_sets_as_exponent(f64::NAN, &ALL[2..], f64::NAN);
+
+            // f64::NAN as the exponent:
+            // (anything *but 1* ^ f64::NAN should be f64::NAN)
+            test_sets_as_base(&ALL[..(ALL.len() - 2)], f64::NAN, f64::NAN);
+        }
+
+        #[test]
+        fn infinity_as_base() {
+            // Positive Infinity as the base:
+            // (+Infinity ^ positive anything but 0 and f64::NAN should be +Infinity)
+            test_sets_as_exponent(f64::INFINITY, &POS[1..], f64::INFINITY);
+
+            // (+Infinity ^ negative anything except 0 and f64::NAN should be 0.0)
+            test_sets_as_exponent(f64::INFINITY, &NEG[1..], 0.0);
+
+            // Negative Infinity as the base:
+            // (-Infinity ^ positive odd ints should be -Infinity)
+            test_sets_as_exponent(f64::NEG_INFINITY, &[POS_ODDS], f64::NEG_INFINITY);
+
+            // (-Infinity ^ anything but odd ints should be == -0 ^ (-anything))
+            // We can lump in pos/neg odd ints here because they don't seem to
+            // cause panics (div by zero) in release mode (I think).
+            test_sets(ALL, &|v: f64| pow(f64::NEG_INFINITY, v), &|v: f64| {
+                pow(-0.0, -v)
+            });
+        }
+
+        #[test]
+        fn infinity_as_exponent() {
+            // Positive/Negative base greater than 1:
+            // (pos/neg > 1 ^ Infinity should be Infinity - note this excludes f64::NAN as the base)
+            test_sets_as_base(&ALL[5..(ALL.len() - 2)], f64::INFINITY, f64::INFINITY);
+
+            // (pos/neg > 1 ^ -Infinity should be 0.0)
+            test_sets_as_base(&ALL[5..ALL.len() - 2], f64::NEG_INFINITY, 0.0);
+
+            // Positive/Negative base less than 1:
+            let base_below_one = &[POS_ZERO, NEG_ZERO, NEG_SMALL_FLOATS, POS_SMALL_FLOATS];
+
+            // (pos/neg < 1 ^ Infinity should be 0.0 - this also excludes f64::NAN as the base)
+            test_sets_as_base(base_below_one, f64::INFINITY, 0.0);
+
+            // (pos/neg < 1 ^ -Infinity should be Infinity)
+            test_sets_as_base(base_below_one, f64::NEG_INFINITY, f64::INFINITY);
+
+            // Positive/Negative 1 as the base:
+            // (pos/neg 1 ^ Infinity should be 1)
+            test_sets_as_base(&[NEG_ONE, POS_ONE], f64::INFINITY, 1.0);
+
+            // (pos/neg 1 ^ -Infinity should be 1)
+            test_sets_as_base(&[NEG_ONE, POS_ONE], f64::NEG_INFINITY, 1.0);
+        }
+
+        #[test]
+        fn zero_as_base() {
+            // Positive Zero as the base:
+            // (+0 ^ anything positive but 0 and f64::NAN should be +0)
+            test_sets_as_exponent(0.0, &POS[1..], 0.0);
+
+            // (+0 ^ anything negative but 0 and f64::NAN should be Infinity)
+            // (this should panic because we're dividing by zero)
+            test_sets_as_exponent(0.0, &NEG[1..], f64::INFINITY);
+
+            // Negative Zero as the base:
+            // (-0 ^ anything positive but 0, f64::NAN, and odd ints should be +0)
+            test_sets_as_exponent(-0.0, &POS[3..], 0.0);
+
+            // (-0 ^ anything negative but 0, f64::NAN, and odd ints should be Infinity)
+            // (should panic because of divide by zero)
+            test_sets_as_exponent(-0.0, &NEG[3..], f64::INFINITY);
+
+            // (-0 ^ positive odd ints should be -0)
+            test_sets_as_exponent(-0.0, &[POS_ODDS], -0.0);
+
+            // (-0 ^ negative odd ints should be -Infinity)
+            // (should panic because of divide by zero)
+            test_sets_as_exponent(-0.0, &[NEG_ODDS], f64::NEG_INFINITY);
+        }
+
+        #[test]
+        fn special_cases() {
+            // One as the exponent:
+            // (anything ^ 1 should be anything - i.e. the base)
+            test_sets(ALL, &|v: f64| pow(v, 1.0), &|v: f64| v);
+
+            // Negative One as the exponent:
+            // (anything ^ -1 should be 1/anything)
+            test_sets(ALL, &|v: f64| pow(v, -1.0), &|v: f64| 1.0 / v);
+
+            // Factoring -1 out:
+            // (negative anything ^ integer should be (-1 ^ integer) * (positive anything ^ integer))
+            [POS_ZERO, NEG_ZERO, POS_ONE, NEG_ONE, POS_EVENS, NEG_EVENS]
+                .iter()
+                .for_each(|int_set| {
+                    int_set.iter().for_each(|int| {
+                        test_sets(ALL, &|v: f64| pow(-v, *int), &|v: f64| {
+                            pow(-1.0, *int) * pow(v, *int)
+                        });
+                    })
+                });
+
+            // Negative base (imaginary results):
+            // (-anything except 0 and Infinity ^ non-integer should be NAN)
+            NEG[1..(NEG.len() - 1)].iter().for_each(|set| {
+                set.iter().for_each(|val| {
+                    test_sets(&ALL[3..7], &|v: f64| pow(*val, v), &|_| f64::NAN);
+                })
+            });
+        }
+
+        #[test]
+        fn normal_cases() {
+            assert_eq!(pow(2.0, 20.0), (1 << 20) as f64);
+            assert_eq!(pow(-1.0, 9.0), -1.0);
+            assert!(pow(-1.0, 2.2).is_nan());
+            assert!(pow(-1.0, -1.14).is_nan());
+        }
+    }
 }
 
 pub use self::pow::*;
@@ -966,6 +1280,8 @@ pub mod log {
     pub const fn log(v: f64, b: f64) -> f64 {
         log2(v) / log2(b)
     }
+
+    // TODO: Cook up some sanity tests for `log`
 }
 
 pub use self::log::*;
