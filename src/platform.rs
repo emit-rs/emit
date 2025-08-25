@@ -166,3 +166,5 @@ The default [`crate::Rng`].
     target_os = "unknown"
 ))]
 pub type DefaultRng = web::crypto_rng::CryptoRng;
+
+pub(crate) mod libm;

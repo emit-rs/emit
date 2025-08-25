@@ -1207,6 +1207,144 @@ pub mod sampler {
     }
 }
 
+pub mod dist {
+    /*!
+    Functions to produce exponential buckets.
+    */
+
+    /**
+    Compute the exponential bucket value for the given input `v` and error `e`.
+    */
+    pub fn bucket_value(v: f64, e: f64) -> f64 {
+        // If the value is 0 then the bucket is 0
+        if v == 0.0 {
+            return 0.0;
+        }
+
+        // Remove the sign, adding it back at the end
+        let sc = if v.is_sign_negative() { -1.0 } else { 1.0 };
+        let v = v.abs();
+
+        // Calculate gamma (`g`) and the bucket index (`i`)
+        let g = (1.0 + e) / (1.0 - e);
+        let i = v.log(g).ceil();
+
+        // Calculate the midpoint of the value at the bucket index where:
+        // - `l` is the lower bound of the bucket
+        // - `u` is the upper bound of the bucket
+        let l = g.powi(i as i32 - 1);
+        let u = l * g;
+
+        // Find the midpoint of the bucket
+        u.midpoint(l) * sc
+    }
+
+    /**
+    The index of a bucket.
+    */
+    pub enum Index {
+        /**
+        The index belongs to the zero bucket.
+
+        There is only a single zero bucket, so it doesn't carry an index.
+        */
+        ZeroBucket,
+        /**
+        The index belongs to a positive bucket.
+        */
+        PositiveBucket(usize),
+        /**
+        The index belongs to a negative bucket.
+        */
+        NegativeBucket(usize),
+    }
+
+    /**
+    Convert a bucket value computed by [`bucket_value`] into its index.
+    */
+    pub fn bucket_value_to_index(b: f64, e: f64) -> Index {
+        // If the value is 0 then the bucket is 0
+        if b == 0.0 {
+            return Index::ZeroBucket;
+        }
+
+        // Remove the sign, adding it back at the end
+        let negative = b.is_sign_negative();
+        let b = b.abs();
+
+        // Calculate gamma (`g`) and the bucket index (`i`)
+        let g = (1.0 + e) / (1.0 - e);
+        let i = b.log(g).ceil() as usize;
+
+        if negative {
+            Index::NegativeBucket(i)
+        } else {
+            Index::PositiveBucket(i)
+        }
+    }
+
+    /**
+    Convert a bucket index to its bucket value.
+    */
+    pub fn bucket_index_to_value(i: Index, s: f64) -> f64 {
+        let (i, sc) = match i {
+            Index::ZeroBucket => return 0.0,
+            Index::NegativeBucket(i) => (i as f64, -1.0),
+            Index::PositiveBucket(i) => (i as f64, 1.0),
+        };
+
+        // Calculate gamma (`g`)
+        let g = 2.0f64.powf(2.0f64.powf(-s));
+
+        // Calculate the midpoint of the value at the bucket index where:
+        // - `l` is the lower bound of the bucket
+        // - `u` is the upper bound of the bucket
+        let l = g.powi(i as i32 - 1);
+        let u = l * g;
+
+        // Find the midpoint of the bucket
+        u.midpoint(l) * sc
+    }
+
+    /**
+    Convert an error parameter `e` into a scale `s`.
+    */
+    pub fn error_to_scale(e: f64) -> f64 {
+        (-((1.0 + e) / (1.0 - e)).log2().log2()).floor()
+    }
+
+    /**
+    Convert a scale parameter `s` into an error parameter `e`.
+    */
+    pub fn scale_to_error(s: f64) -> f64 {
+        (2.0f64.powf(2.0f64.powf(-s)) - 1.0) / (1.0 + 2.0f64.powf(2.0f64.powf(-s)))
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn errors() {
+            let errors = [
+                scale_to_error(0.0),
+                scale_to_error(1.0),
+                scale_to_error(2.0),
+                scale_to_error(3.0),
+                scale_to_error(4.0),
+                scale_to_error(5.0),
+                scale_to_error(6.0),
+                scale_to_error(7.0),
+                scale_to_error(8.0),
+                scale_to_error(9.0),
+                scale_to_error(10.0),
+            ];
+
+            panic!("{errors:?}");
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
