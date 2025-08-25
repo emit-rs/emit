@@ -57,11 +57,6 @@ const fn get_high_word(x: f64) -> u32 {
 }
 
 #[inline]
-const fn get_low_word(x: f64) -> u32 {
-    x.to_bits() as u32
-}
-
-#[inline]
 const fn with_set_high_word(f: f64, hi: u32) -> f64 {
     let mut tmp = f.to_bits();
     tmp &= 0x00000000_ffffffff;
@@ -480,6 +475,8 @@ pub mod sqrt {
     mod tests {
         use super::*;
 
+        use core::f64::consts::PI;
+
         /// Test behavior specified in IEEE 754 `squareRoot`.
         #[test]
         fn spec_test() {
@@ -510,7 +507,7 @@ pub mod sqrt {
         #[allow(clippy::approx_constant)]
         fn conformance_tests() {
             let cases = [
-                (core::f64::consts::PI, 0x3ffc5bf891b4ef6a_u64),
+                (PI, 0x3ffc5bf891b4ef6a_u64),
                 (10000.0, 0x4059000000000000_u64),
                 (f64::from_bits(0x0000000f), 0x1e7efbdeb14f4eda_u64),
                 (f64::INFINITY, f64::INFINITY.to_bits()),
@@ -623,7 +620,7 @@ pub mod pow {
     const IVLN2_L: f64 = 1.92596299112661746887e-08; /* 0x3e54ae0b_f85ddf44 =1/ln2 tail*/
 
     /// Returns `x` to the power of `y` (f64).
-    pub fn pow(x: f64, y: f64) -> f64 {
+    pub const fn pow(x: f64, y: f64) -> f64 {
         let t1: f64;
         let t2: f64;
 
@@ -1281,7 +1278,65 @@ pub mod log {
         log2(v) / log2(b)
     }
 
-    // TODO: Cook up some sanity tests for `log`
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn cases() {
+            for (i, (case, base, expected)) in [
+                (0.0, 0.0, f64::NAN),
+                (0.0, 1.0, f64::NEG_INFINITY),
+                (-0.0, 0.0, f64::NAN),
+                (-0.0, 1.0, f64::NEG_INFINITY),
+                (f64::INFINITY, 0.0, f64::NAN),
+                (f64::INFINITY, 1.0, f64::INFINITY),
+                (f64::NEG_INFINITY, 0.0, f64::NAN),
+                (f64::NEG_INFINITY, 1.0, f64::NAN),
+                (f64::NAN, 0.0, f64::NAN),
+                (f64::NAN, 1.0, f64::NAN),
+                (0.3740745044301024, 0.0, 0.0),
+                (0.3740745044301024, 1.0, f64::NEG_INFINITY),
+                (0.3740745044301024, 1.001, -983.7918599462805),
+                (0.3740745044301024, 1.00001, -98330.52081878904),
+                (0.3740745044301024, 1.000000001, -983300210.8340938),
+                (0.3740745044301024, 2.0, -1.4186024545418017),
+                (0.3740745044301024, 10.0, -0.42704189073963167),
+                (0.7518324957739956, 0.0, 0.0),
+                (0.7518324957739956, 1.0, f64::NEG_INFINITY),
+                (0.7518324957739956, 1.001, -285.38432192921164),
+                (0.7518324957739956, 1.00001, -28524.315102941237),
+                (0.7518324957739956, 1.000000001, -285241701.3666506),
+                (0.7518324957739956, 2.0, -0.41151682185969074),
+                (0.7518324957739956, 10.0, -0.12387890710007803),
+                (67.0512060439072, 0.0, -0.0),
+                (67.0512060439072, 1.0, f64::INFINITY),
+                (67.0512060439072, 1.001, 4207.558974817205),
+                (67.0512060439072, 1.00001, 420547.7624018331),
+                (67.0512060439072, 1.000000001, 4205456250.939661),
+                (67.0512060439072, 2.0, 6.067191376874169),
+                (67.0512060439072, 10.0, 1.8264065938729754),
+                (0.0, 51.3852839123838, f64::NEG_INFINITY),
+                (1.0, 51.3852839123838, 0.0),
+                (1.001, 51.3852839123838, 0.0002537220276747872),
+                (1.00001, 51.3852839123838, 0.0000025384759832150207),
+                (1.000000001, 51.3852839123838, 0.0000000002538488884323403),
+                (2.0, 51.3852839123838, 0.17595462683457902),
+                (10.0, 51.3852839123838, 0.5845086183072099),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let actual = log(case, base);
+
+                assert_eq!(
+                    expected.to_bits(),
+                    actual.to_bits(),
+                    "{i}: {case}.log({base}) produced {actual} instead of {expected}"
+                );
+            }
+        }
+    }
 }
 
 pub use self::log::*;

@@ -1212,10 +1212,12 @@ pub mod dist {
     Functions to produce exponential buckets.
     */
 
+    use crate::platform::libm;
+
     /**
     Compute the exponential bucket value for the given input `v` and error `e`.
     */
-    pub fn bucket_value(v: f64, e: f64) -> f64 {
+    pub const fn bucket_value(v: f64, e: f64) -> f64 {
         // If the value is 0 then the bucket is 0
         if v == 0.0 {
             return 0.0;
@@ -1227,12 +1229,12 @@ pub mod dist {
 
         // Calculate gamma (`g`) and the bucket index (`i`)
         let g = (1.0 + e) / (1.0 - e);
-        let i = v.log(g).ceil();
+        let i = libm::log(v, g).ceil();
 
         // Calculate the midpoint of the value at the bucket index where:
         // - `l` is the lower bound of the bucket
         // - `u` is the upper bound of the bucket
-        let l = g.powi(i as i32 - 1);
+        let l = libm::pow(g, i - 1.0);
         let u = l * g;
 
         // Find the midpoint of the bucket
@@ -1262,7 +1264,7 @@ pub mod dist {
     /**
     Convert a bucket value computed by [`bucket_value`] into its index.
     */
-    pub fn bucket_value_to_index(b: f64, e: f64) -> Index {
+    pub const fn bucket_value_to_index(b: f64, e: f64) -> Index {
         // If the value is 0 then the bucket is 0
         if b == 0.0 {
             return Index::ZeroBucket;
@@ -1274,7 +1276,7 @@ pub mod dist {
 
         // Calculate gamma (`g`) and the bucket index (`i`)
         let g = (1.0 + e) / (1.0 - e);
-        let i = b.log(g).ceil() as usize;
+        let i = libm::log(b, g).ceil() as usize;
 
         if negative {
             Index::NegativeBucket(i)
@@ -1286,7 +1288,7 @@ pub mod dist {
     /**
     Convert a bucket index to its bucket value.
     */
-    pub fn bucket_index_to_value(i: Index, s: f64) -> f64 {
+    pub const fn bucket_index_to_value(i: Index, s: f64) -> f64 {
         let (i, sc) = match i {
             Index::ZeroBucket => return 0.0,
             Index::NegativeBucket(i) => (i as f64, -1.0),
@@ -1294,12 +1296,12 @@ pub mod dist {
         };
 
         // Calculate gamma (`g`)
-        let g = 2.0f64.powf(2.0f64.powf(-s));
+        let g = libm::pow(2.0, libm::pow(2.0, -s));
 
         // Calculate the midpoint of the value at the bucket index where:
         // - `l` is the lower bound of the bucket
         // - `u` is the upper bound of the bucket
-        let l = g.powi(i as i32 - 1);
+        let l = libm::pow(g, i - 1.0);
         let u = l * g;
 
         // Find the midpoint of the bucket
@@ -1309,15 +1311,15 @@ pub mod dist {
     /**
     Convert an error parameter `e` into a scale `s`.
     */
-    pub fn error_to_scale(e: f64) -> f64 {
-        (-((1.0 + e) / (1.0 - e)).log2().log2()).floor()
+    pub const fn error_to_scale(e: f64) -> f64 {
+        libm::log2(libm::log2(-((1.0 + e) / (1.0 - e)))).floor()
     }
 
     /**
     Convert a scale parameter `s` into an error parameter `e`.
     */
-    pub fn scale_to_error(s: f64) -> f64 {
-        (2.0f64.powf(2.0f64.powf(-s)) - 1.0) / (1.0 + 2.0f64.powf(2.0f64.powf(-s)))
+    pub const fn scale_to_error(s: f64) -> f64 {
+        (libm::pow(2.0, libm::pow(2.0, -s)) - 1.0) / (1.0 + libm::pow(2.0, libm::pow(2.0, -s)))
     }
 
     #[cfg(test)]
