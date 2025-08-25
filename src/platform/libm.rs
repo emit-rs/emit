@@ -985,10 +985,6 @@ mod pow {
                     let exp = expected(*val);
                     let res = computed(*val);
 
-                    #[cfg(all(target_arch = "x86", not(target_feature = "sse2")))]
-                    let exp = force_eval!(exp);
-                    #[cfg(all(target_arch = "x86", not(target_feature = "sse2")))]
-                    let res = force_eval!(res);
                     assert!(
                         if exp.is_nan() {
                             res.is_nan()

@@ -1312,7 +1312,7 @@ pub mod dist {
     Convert an error parameter `e` into a scale `s`.
     */
     pub const fn error_to_scale(e: f64) -> f64 {
-        libm::log2(libm::log2(-((1.0 + e) / (1.0 - e)))).floor()
+        (-libm::log2(libm::log2((1.0 + e) / (1.0 - e)))).round()
     }
 
     /**
@@ -1328,21 +1328,24 @@ pub mod dist {
 
         #[test]
         fn errors() {
-            let errors = [
-                scale_to_error(0.0),
-                scale_to_error(1.0),
-                scale_to_error(2.0),
-                scale_to_error(3.0),
-                scale_to_error(4.0),
-                scale_to_error(5.0),
-                scale_to_error(6.0),
-                scale_to_error(7.0),
-                scale_to_error(8.0),
-                scale_to_error(9.0),
-                scale_to_error(10.0),
-            ];
+            for (scale, error) in [
+                (1.0, 0.17157287525380996),
+                (2.0, 0.08642723372588978),
+                (3.0, 0.04329461749938919),
+                (4.0, 0.02165746232622625),
+                (5.0, 0.010830001253373618),
+                (6.0, 0.005415159415902577),
+                (7.0, 0.002707599557476281),
+                (8.0, 0.0013538022599560973),
+                (9.0, 0.0006769014401311412),
+                (10.0, 0.00033845075883475454),
+            ] {
+                let actual_error = scale_to_error(scale);
+                assert_eq!(error, actual_error, "scale: {scale}, error: {error}");
 
-            panic!("{errors:?}");
+                let actual_scale = error_to_scale(error);
+                assert_eq!(scale, actual_scale, "scale: {scale}, error: {error}");
+            }
         }
     }
 }
