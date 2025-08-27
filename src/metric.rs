@@ -1249,7 +1249,8 @@ pub mod dist {
     The implementation here uses a portable implementation of `powf` and `log` that is consistent across platforms.
     You may also consider using a native port of it for performance reasons.
     */
-    pub const fn bucket_midpoint(value: f64, scale: i32) -> f64 {
+    // TODO: Mark as `const` once `1.90.0` stabilizes
+    pub fn bucket_midpoint(value: f64, scale: i32) -> f64 {
         let sign = if value == 0.0 || value.is_sign_positive() {
             1.0
         } else {
