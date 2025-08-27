@@ -1372,6 +1372,10 @@ pub mod dist {
                 for (case, expected) in cases.iter().copied().zip(expected.iter().copied()) {
                     let actual = bucket_midpoint(case, scale);
 
+                    if expected.is_nan() && actual.is_nan() {
+                        continue;
+                    }
+
                     assert_eq!(expected.to_bits(), actual.to_bits(), "expected bucket_midpoint({case}, {scale}) to be {expected}, but got {actual}");
                 }
             }
