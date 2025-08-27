@@ -43,6 +43,93 @@ const SIGN_MASK: u64 = 1 << (BITS - 1);
 const SIG_MASK: u64 = (1 << SIG_BITS) - 1;
 const EXP_MASK: u64 = !(SIGN_MASK | SIG_MASK);
 
+mod ceil {
+    use super::*;
+
+    /**
+    Find the smallest integer greater than or equal to `x`.
+    */
+    #[inline]
+    pub const fn ceil(x: f64) -> f64 {
+        let zero = 0;
+
+        let mut ix = x.to_bits();
+        let e = exp_unbiased(x);
+
+        // If the represented value has no fractional part, no truncation is needed.
+        if e >= SIG_BITS as i32 {
+            return x;
+        }
+
+        if e >= 0 {
+            // |x| >= 1.0
+            let m = SIG_MASK >> e as u32;
+            if (ix & m) == zero {
+                // Portion to be masked is already zero; no adjustment needed.
+                return x;
+            }
+
+            if x.is_sign_positive() {
+                ix += m;
+            }
+
+            ix &= !m;
+            f64::from_bits(ix)
+        } else {
+            if x.is_sign_negative() {
+                // -1.0 < x <= -0.0; rounding up goes toward -0.0.
+                -0.0
+            } else if ix << 1 != zero {
+                // 0.0 < x < 1.0; rounding up goes toward +1.0.
+                1.0
+            } else {
+                // +0.0 remains unchanged
+                x
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        /// Test against https://en.cppreference.com/w/cpp/numeric/math/ceil
+        #[test]
+        fn spec_test() {
+            let cases = [
+                (0.1f64, 1.0f64),
+                (-0.1, -0.0),
+                (0.9, 1.0),
+                (-0.9, -0.0),
+                (1.1, 2.0),
+                (-1.1, -1.0),
+                (1.9, 2.0),
+                (-1.9, -1.0),
+            ];
+
+            let roundtrip = [0.0f64, 1.0, -1.0, -0.0, f64::INFINITY, f64::NEG_INFINITY];
+
+            for x in roundtrip {
+                let val = ceil(x);
+                assert_eq!(val.to_bits(), x.to_bits(), "{}", x);
+            }
+
+            for (x, res) in cases {
+                let val = ceil(x);
+                assert_eq!(val.to_bits(), res.to_bits(), "{}", x);
+            }
+        }
+
+        #[test]
+        fn sanity_check() {
+            assert_eq!(ceil(1.1f64), 2.0);
+            assert_eq!(ceil(2.9f64), 3.0);
+        }
+    }
+}
+
+pub use self::ceil::*;
+
 mod scalbn {
     use super::*;
 
@@ -64,7 +151,7 @@ mod scalbn {
     > If the calculation does not overflow or underflow, the returned value is exact and
     > independent of the current rounding direction mode.
     */
-    pub fn scalbn(mut x: f64, mut n: i32) -> f64 {
+    pub const fn scalbn(mut x: f64, mut n: i32) -> f64 {
         let zero = 0;
 
         // Bits including the implicit bit
@@ -232,7 +319,7 @@ mod sqrt {
     computed at the same time, i.e. there is no need to calculate `1/sqrt(x)` and invert it.
     */
     #[inline]
-    pub fn sqrt(x: f64) -> f64 {
+    pub const fn sqrt(x: f64) -> f64 {
         let mut ix = x.to_bits();
 
         // Top is the exponent and sign, which may or may not be shifted. If the float fits into a
@@ -344,16 +431,16 @@ mod sqrt {
         y
     }
 
-    fn wmulh_u32(a: u32, b: u32) -> u32 {
+    const fn wmulh_u32(a: u32, b: u32) -> u32 {
         (((a as u64).wrapping_mul(b as u64)) >> 32) as u32
     }
 
-    fn wmulh_u64(a: u64, b: u64) -> u64 {
+    const fn wmulh_u64(a: u64, b: u64) -> u64 {
         (((a as u128).wrapping_mul(b as u128)) >> 64) as u64
     }
 
     #[inline]
-    fn goldschmidt_r2(mut r_u0: u32, mut s_u2: u32, count: u32) -> (u32, u32) {
+    const fn goldschmidt_r2(mut r_u0: u32, mut s_u2: u32, count: u32) -> (u32, u32) {
         let three_u2 = (0b11u32) << (u32::BITS - 2);
         let mut u_u0 = r_u0;
 
@@ -389,7 +476,7 @@ mod sqrt {
     }
 
     #[inline]
-    fn goldschmidt_final(mut r_u0: u64, mut s_u2: u64, count: u32) -> (u64, u64) {
+    const fn goldschmidt_final(mut r_u0: u64, mut s_u2: u64, count: u32) -> (u64, u64) {
         let three_u2 = (0b11u64) << (u64::BITS - 2);
         let mut u_u0 = r_u0;
 
@@ -595,7 +682,7 @@ mod pow {
     compiler will convert from decimal to binary accurately enough
     to produce the hexadecimal values shown.
     */
-    pub fn pow(x: f64, y: f64) -> f64 {
+    pub const fn pow(x: f64, y: f64) -> f64 {
         let t1: f64;
         let t2: f64;
 
@@ -1167,7 +1254,7 @@ mod log {
     as in log.c, then combine and scale in extra precision:
        `log2(x) = (f - f*f/2 + r)/log(2) + k`
     */
-    pub fn log2(mut x: f64) -> f64 {
+    pub const fn log2(mut x: f64) -> f64 {
         let x1p54 = f64::from_bits(0x4350000000000000); // 0x1p54 === 2 ^ 54
 
         let mut ui: u64 = x.to_bits();
@@ -1245,7 +1332,7 @@ mod log {
     /**
     Compute the base `b` logarithm of `v`.
     */
-    pub fn log(v: f64, b: f64) -> f64 {
+    pub const fn log(v: f64, b: f64) -> f64 {
         log2(v) / log2(b)
     }
 
@@ -1318,10 +1405,10 @@ pub use self::log::*;
 
 #[inline(never)]
 #[cold]
-fn cold_path() {}
+const fn cold_path() {}
 
 #[inline]
-fn from_parts(negative: bool, exponent: u32, significand: u64) -> f64 {
+const fn from_parts(negative: bool, exponent: u32, significand: u64) -> f64 {
     let sign = if negative { 1u64 } else { 0 };
     f64::from_bits(
         (sign << (BITS - 1))
@@ -1331,12 +1418,12 @@ fn from_parts(negative: bool, exponent: u32, significand: u64) -> f64 {
 }
 
 #[inline]
-fn get_high_word(x: f64) -> u32 {
+const fn get_high_word(x: f64) -> u32 {
     (x.to_bits() >> 32) as u32
 }
 
 #[inline]
-fn with_set_high_word(f: f64, hi: u32) -> f64 {
+const fn with_set_high_word(f: f64, hi: u32) -> f64 {
     let mut tmp = f.to_bits();
     tmp &= 0x00000000_ffffffff;
     tmp |= (hi as u64) << 32;
@@ -1344,7 +1431,7 @@ fn with_set_high_word(f: f64, hi: u32) -> f64 {
 }
 
 #[inline]
-fn with_set_low_word(f: f64, lo: u32) -> f64 {
+const fn with_set_low_word(f: f64, lo: u32) -> f64 {
     let mut tmp = f.to_bits();
     tmp &= 0xffffffff_00000000;
     tmp |= lo as u64;
@@ -1352,6 +1439,10 @@ fn with_set_low_word(f: f64, lo: u32) -> f64 {
 }
 
 #[inline]
-fn ex(v: f64) -> u32 {
+const fn ex(v: f64) -> u32 {
     ((v.to_bits() >> SIG_BITS) as u32) & EXP_SAT
+}
+
+const fn exp_unbiased(v: f64) -> i32 {
+    ex(v) as i32 - (EXP_BIAS as i32)
 }

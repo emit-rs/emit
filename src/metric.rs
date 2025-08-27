@@ -1249,8 +1249,7 @@ pub mod dist {
     The implementation here uses a portable implementation of `powf` and `log` that is consistent across platforms.
     You may also consider using a native port of it for performance reasons.
     */
-    // TODO: Mark as `const` once `1.90.0` stabilizes
-    pub fn bucket_midpoint(value: f64, scale: i32) -> f64 {
+    pub const fn bucket_midpoint(value: f64, scale: i32) -> f64 {
         let sign = if value == 0.0 || value.is_sign_positive() {
             1.0
         } else {
@@ -1259,7 +1258,7 @@ pub mod dist {
         let value = value.abs();
 
         let gamma = libm::pow(2.0, libm::pow(2.0, -(scale as f64)));
-        let index = libm::log(value, gamma).ceil();
+        let index = libm::ceil(libm::log(value, gamma));
 
         let lower = libm::pow(gamma, index - 1.0);
         let upper = lower * gamma;
