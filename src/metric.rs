@@ -1215,136 +1215,165 @@ pub mod dist {
     use crate::platform::libm;
 
     /**
-    Compute the exponential bucket value for the given input `v` and error `e`.
+    Compute the exponential bucket midpoint for the given value `v` and scale `s`.
+
+    This function accepts the following parameters:
+
+    - `value`: The observed sample value to be bucketed.
+    - `scale`: The size of exponential buckets. Larger scales produce larger numbers of smaller buckets.
+
+    This function can be used to compress an input data stream by feeding it input values and tracking the counts of resulting buckets.
+    Larger buckets count more unique input values in fewer unique bucket values, and so are more compressed but less accurate.
+    The choice of `scale` is a trade-off between size and accuracy.
+
+    This function uses the same `scale` as OpenTelemetry's metrics, but returns the midpoint of the bucket instead of its index.
+    The index can still be computed from the midpoint if needed.
+
+    ## Algorithm
+
+    This function implements the following procedure:
+
+    ```text
+    let sign = if value == 0.0 || value.is_sign_positive() { 1.0 } else { -1.0 };
+    let value = value.abs();
+
+    let gamma = 2.0f64.powf(2.0f64.powf(-scale));
+    let index = value.log(gamma).ceil();
+
+    let lower = gamma.log(index - 1.0);
+    let upper = lower * gamma;
+
+    sign * lower.midpoint(upper)
+    ```
+
+    The implementation here uses a portable implementation of `powf` and `log` that is consistent across platforms.
+    You may also consider using a native port of it for performance reasons.
     */
-    pub const fn bucket_value(v: f64, e: f64) -> f64 {
-        // If the value is 0 then the bucket is 0
-        if v == 0.0 {
-            return 0.0;
-        }
-
-        // Remove the sign, adding it back at the end
-        let sc = if v.is_sign_negative() { -1.0 } else { 1.0 };
-        let v = v.abs();
-
-        // Calculate gamma (`g`) and the bucket index (`i`)
-        let g = (1.0 + e) / (1.0 - e);
-        let i = libm::log(v, g).ceil();
-
-        // Calculate the midpoint of the value at the bucket index where:
-        // - `l` is the lower bound of the bucket
-        // - `u` is the upper bound of the bucket
-        let l = libm::pow(g, i - 1.0);
-        let u = l * g;
-
-        // Find the midpoint of the bucket
-        u.midpoint(l) * sc
-    }
-
-    /**
-    The index of a bucket.
-    */
-    pub enum Index {
-        /**
-        The index belongs to the zero bucket.
-
-        There is only a single zero bucket, so it doesn't carry an index.
-        */
-        ZeroBucket,
-        /**
-        The index belongs to a positive bucket.
-        */
-        PositiveBucket(usize),
-        /**
-        The index belongs to a negative bucket.
-        */
-        NegativeBucket(usize),
-    }
-
-    /**
-    Convert a bucket value computed by [`bucket_value`] into its index.
-    */
-    pub const fn bucket_value_to_index(b: f64, e: f64) -> Index {
-        // If the value is 0 then the bucket is 0
-        if b == 0.0 {
-            return Index::ZeroBucket;
-        }
-
-        // Remove the sign, adding it back at the end
-        let negative = b.is_sign_negative();
-        let b = b.abs();
-
-        // Calculate gamma (`g`) and the bucket index (`i`)
-        let g = (1.0 + e) / (1.0 - e);
-        let i = libm::log(b, g).ceil() as usize;
-
-        if negative {
-            Index::NegativeBucket(i)
+    pub const fn bucket_midpoint(value: f64, scale: i32) -> f64 {
+        let sign = if value == 0.0 || value.is_sign_positive() {
+            1.0
         } else {
-            Index::PositiveBucket(i)
-        }
-    }
-
-    /**
-    Convert a bucket index to its bucket value.
-    */
-    pub const fn bucket_index_to_value(i: Index, s: f64) -> f64 {
-        let (i, sc) = match i {
-            Index::ZeroBucket => return 0.0,
-            Index::NegativeBucket(i) => (i as f64, -1.0),
-            Index::PositiveBucket(i) => (i as f64, 1.0),
+            -1.0
         };
+        let value = value.abs();
 
-        // Calculate gamma (`g`)
-        let g = libm::pow(2.0, libm::pow(2.0, -s));
+        let gamma = libm::pow(2.0, libm::pow(2.0, -(scale as f64)));
+        let index = libm::log(value, gamma).ceil();
 
-        // Calculate the midpoint of the value at the bucket index where:
-        // - `l` is the lower bound of the bucket
-        // - `u` is the upper bound of the bucket
-        let l = libm::pow(g, i - 1.0);
-        let u = l * g;
+        let lower = libm::pow(gamma, index - 1.0);
+        let upper = lower * gamma;
 
-        // Find the midpoint of the bucket
-        u.midpoint(l) * sc
-    }
-
-    /**
-    Convert an error parameter `e` into a scale `s`.
-    */
-    pub const fn error_to_scale(e: f64) -> f64 {
-        (-libm::log2(libm::log2((1.0 + e) / (1.0 - e)))).round()
-    }
-
-    /**
-    Convert a scale parameter `s` into an error parameter `e`.
-    */
-    pub const fn scale_to_error(s: f64) -> f64 {
-        (libm::pow(2.0, libm::pow(2.0, -s)) - 1.0) / (1.0 + libm::pow(2.0, libm::pow(2.0, -s)))
+        sign * lower.midpoint(upper)
     }
 
     #[cfg(test)]
     mod tests {
+        use core::f64::consts::PI;
+
         use super::*;
 
         #[test]
-        fn errors() {
-            for (scale, error) in [
-                (1.0, 0.17157287525380996),
-                (2.0, 0.08642723372588978),
-                (3.0, 0.04329461749938919),
-                (4.0, 0.02165746232622625),
-                (5.0, 0.010830001253373618),
-                (6.0, 0.005415159415902577),
-                (7.0, 0.002707599557476281),
-                (8.0, 0.0013538022599560973),
-                (9.0, 0.0006769014401311412),
-                (10.0, 0.00033845075883475454),
+        fn compute_bucket_midpoints() {
+            let cases = [
+                0.0f64,
+                PI,
+                PI * 100.0f64,
+                PI * 1000.0f64,
+                -0.0f64,
+                -PI,
+                -(PI * 100.0f64),
+                -(PI * 1000.0f64),
+                f64::INFINITY,
+                f64::NEG_INFINITY,
+                f64::NAN,
+            ];
+            for (scale, expected) in [
+                (
+                    0i32,
+                    [
+                        0.0f64,
+                        3.0f64,
+                        384.0f64,
+                        3072.0f64,
+                        0.0f64,
+                        -3.0f64,
+                        -384.0f64,
+                        -3072.0f64,
+                        f64::INFINITY,
+                        f64::NEG_INFINITY,
+                        f64::NAN,
+                    ],
+                ),
+                (
+                    2i32,
+                    [
+                        0.0f64,
+                        3.0960063928805233f64,
+                        333.2378467041041f64,
+                        3170.3105463096517f64,
+                        0.0f64,
+                        -3.0960063928805233f64,
+                        -333.2378467041041f64,
+                        -3170.3105463096517f64,
+                        f64::INFINITY,
+                        f64::NEG_INFINITY,
+                        f64::NAN,
+                    ],
+                ),
+                (
+                    4i32,
+                    [
+                        0.0f64,
+                        3.152701157357188f64,
+                        311.17631066575086f64,
+                        3091.493858659732f64,
+                        0.0f64,
+                        -3.152701157357188f64,
+                        -311.17631066575086f64,
+                        -3091.493858659732f64,
+                        f64::INFINITY,
+                        f64::NEG_INFINITY,
+                        f64::NAN,
+                    ],
+                ),
+                (
+                    8i32,
+                    [
+                        0.0f64,
+                        3.1391891212579424f64,
+                        314.0658342072582f64,
+                        3145.6489181930947f64,
+                        0.0f64,
+                        -3.1391891212579424f64,
+                        -314.0658342072582f64,
+                        -3145.6489181930947f64,
+                        f64::INFINITY,
+                        f64::NEG_INFINITY,
+                        f64::NAN,
+                    ],
+                ),
+                (
+                    16i32,
+                    [
+                        0.0f64,
+                        3.141594303685526f64,
+                        314.1602303152259f64,
+                        3141.606302893263f64,
+                        0.0f64,
+                        -3.141594303685526f64,
+                        -314.1602303152259f64,
+                        -3141.606302893263f64,
+                        f64::INFINITY,
+                        f64::NEG_INFINITY,
+                        f64::NAN,
+                    ],
+                ),
             ] {
-                let actual_error = scale_to_error(scale);
-                assert_eq!(error, actual_error, "scale: {scale}, error: {error}");
+                for (case, expected) in cases.iter().copied().zip(expected.iter().copied()) {
+                    let actual = bucket_midpoint(case, scale);
 
-                let actual_scale = error_to_scale(error);
-                assert_eq!(scale, actual_scale, "scale: {scale}, error: {error}");
+                    assert_eq!(expected.to_bits(), actual.to_bits(), "expected bucket_midpoint({case}, {scale}) to be {expected}, but got {actual}");
+                }
             }
         }
     }

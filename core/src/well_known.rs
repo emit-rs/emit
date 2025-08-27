@@ -37,6 +37,15 @@ Extensions to the data model are signaled by the well-known [`KEY_EVT_KIND`] pro
         - [`METRIC_AGG_LAST`]: The sample is the last or most recent value.
     - [`KEY_METRIC_VALUE`]: The sample itself.
     - [`KEY_METRIC_UNIT`]: The measurement unit the sample is in.
+    - [`KEY_METRIC_DESCRIPTION`]: A description of the underlying data source.
+    - [`KEY_DIST_BUCKET_MIDPOINTS`]: The midpoint values of buckets in a distribution.
+    - [`KEY_DIST_BUCKET_COUNTS`]: The count of values in a bucket in a distribution.
+    - [`KEY_DIST_BUCKET_SCALE`]: The scale of buckets in a distribution.
+    - [`KEY_DIST_COUNT`]: The count of values in a distribution.
+    - [`KEY_DIST_SUM`]: The sum of values in a distribution.
+    - [`KEY_DIST_MIN`]: The minimum value in a distribution.
+    - [`KEY_DIST_MAX`]: The maximum value in a distribution.
+    - [`KEY_DIST_LAST`]: The last value in a distribution.
 */
 
 // Event
@@ -107,6 +116,25 @@ pub const KEY_METRIC_AGG: &'static str = "metric_agg";
 pub const KEY_METRIC_VALUE: &'static str = "metric_value";
 /** The measurement unit the sample is in. */
 pub const KEY_METRIC_UNIT: &'static str = "metric_unit";
+/** A description of the underlying data source. */
+pub const KEY_METRIC_DESCRIPTION: &'static str = "metric_description";
+
+/** The midpoint values of buckets in a distribution. */
+pub const KEY_DIST_BUCKET_MIDPOINTS: &'static str = "dist_bucket_midpoints";
+/** The count of values in a bucket in a distribution. */
+pub const KEY_DIST_BUCKET_COUNTS: &'static str = "dist_bucket_counts";
+/** The scale of buckets in a distribution. */
+pub const KEY_DIST_BUCKET_SCALE: &'static str = "dist_bucket_scale";
+/** The count of values in a distribution. */
+pub const KEY_DIST_COUNT: &'static str = "dist_count";
+/** The sum of values in a distribution. */
+pub const KEY_DIST_SUM: &'static str = "dist_sum";
+/** The minimum value in a distribution. */
+pub const KEY_DIST_MIN: &'static str = "dist_min";
+/** The maximum value in a distribution. */
+pub const KEY_DIST_MAX: &'static str = "dist_max";
+/** The last value in a distribution. */
+pub const KEY_DIST_LAST: &'static str = "dist_last";
 
 /** The sample is the possibly non-monotonic sum of values. */
 pub const METRIC_AGG_SUM: &'static str = "sum";
