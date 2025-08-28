@@ -1209,13 +1209,13 @@ pub mod sampler {
 
 pub mod dist {
     /*!
-    Functions to produce exponential buckets.
+    Functions for working with metric distributions.
     */
 
     use crate::platform::libm;
 
     /**
-    Compute the exponential bucket midpoint for the given value `v` and scale `s`.
+    Compute the exponential bucket midpoint for the given input value at a given scale.
 
     This function accepts the following parameters:
 
@@ -1223,11 +1223,10 @@ pub mod dist {
     - `scale`: The size of exponential buckets. Larger scales produce larger numbers of smaller buckets.
 
     This function can be used to compress an input data stream by feeding it input values and tracking the counts of resulting buckets.
-    Larger buckets count more unique input values in fewer unique bucket values, and so are more compressed but less accurate.
     The choice of `scale` is a trade-off between size and accuracy.
+    Larger buckets (smaller scales) count more unique input values in fewer unique bucket values, and resulting in higher compression but lower accuracy.
 
-    This function uses the same `scale` as OpenTelemetry's metrics, but returns the midpoint of the bucket instead of its index.
-    The index can still be computed from the midpoint if needed.
+    This function uses the same `scale` as OpenTelemetry's metrics data model, but returns the midpoint of the bucket a value belongs to instead of its index.
 
     ## Algorithm
 
