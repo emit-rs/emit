@@ -1207,6 +1207,181 @@ pub mod sampler {
     }
 }
 
+pub mod dist {
+    /*!
+    Functions for working with metric distributions.
+    */
+
+    use crate::platform::libm;
+
+    /**
+    Compute the exponential bucket midpoint for the given input value at a given scale.
+
+    This function accepts the following parameters:
+
+    - `value`: The observed sample value to be bucketed.
+    - `scale`: The size of exponential buckets. Larger scales produce larger numbers of smaller buckets.
+
+    This function can be used to compress an input data stream by feeding it input values and tracking the counts of resulting buckets.
+    The choice of `scale` is a trade-off between size and accuracy.
+    Larger buckets (smaller scales) count more unique input values in fewer unique bucket values, and resulting in higher compression but lower accuracy.
+
+    This function uses the same `scale` as OpenTelemetry's metrics data model, but returns the midpoint of the bucket a value belongs to instead of its index.
+
+    ## Algorithm
+
+    This function implements the following procedure:
+
+    ```text
+    let sign = if value == 0.0 || value.is_sign_positive() { 1.0 } else { -1.0 };
+    let value = value.abs();
+
+    let gamma = 2.0f64.powf(2.0f64.powf(-scale));
+    let index = value.log(gamma).ceil();
+
+    let lower = gamma.log(index - 1.0);
+    let upper = lower * gamma;
+
+    sign * lower.midpoint(upper)
+    ```
+
+    The implementation here uses a portable implementation of `powf` and `log` that is consistent across platforms.
+    You may also consider using a native port of it for performance reasons.
+    */
+    pub const fn bucket_midpoint(value: f64, scale: i32) -> f64 {
+        let sign = if value == 0.0 || value.is_sign_positive() {
+            1.0
+        } else {
+            -1.0
+        };
+        let value = value.abs();
+
+        let gamma = libm::pow(2.0, libm::pow(2.0, -(scale as f64)));
+        let index = libm::ceil(libm::log(value, gamma));
+
+        let lower = libm::pow(gamma, index - 1.0);
+        let upper = lower * gamma;
+
+        sign * lower.midpoint(upper)
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use core::f64::consts::PI;
+
+        use super::*;
+
+        #[test]
+        fn compute_bucket_midpoints() {
+            let cases = [
+                0.0f64,
+                PI,
+                PI * 100.0f64,
+                PI * 1000.0f64,
+                -0.0f64,
+                -PI,
+                -(PI * 100.0f64),
+                -(PI * 1000.0f64),
+                f64::INFINITY,
+                f64::NEG_INFINITY,
+                f64::NAN,
+            ];
+            for (scale, expected) in [
+                (
+                    0i32,
+                    [
+                        0.0f64,
+                        3.0f64,
+                        384.0f64,
+                        3072.0f64,
+                        0.0f64,
+                        -3.0f64,
+                        -384.0f64,
+                        -3072.0f64,
+                        f64::INFINITY,
+                        f64::NEG_INFINITY,
+                        f64::NAN,
+                    ],
+                ),
+                (
+                    2i32,
+                    [
+                        0.0f64,
+                        3.0960063928805233f64,
+                        333.2378467041041f64,
+                        3170.3105463096517f64,
+                        0.0f64,
+                        -3.0960063928805233f64,
+                        -333.2378467041041f64,
+                        -3170.3105463096517f64,
+                        f64::INFINITY,
+                        f64::NEG_INFINITY,
+                        f64::NAN,
+                    ],
+                ),
+                (
+                    4i32,
+                    [
+                        0.0f64,
+                        3.152701157357188f64,
+                        311.17631066575086f64,
+                        3091.493858659732f64,
+                        0.0f64,
+                        -3.152701157357188f64,
+                        -311.17631066575086f64,
+                        -3091.493858659732f64,
+                        f64::INFINITY,
+                        f64::NEG_INFINITY,
+                        f64::NAN,
+                    ],
+                ),
+                (
+                    8i32,
+                    [
+                        0.0f64,
+                        3.1391891212579424f64,
+                        314.0658342072582f64,
+                        3145.6489181930947f64,
+                        0.0f64,
+                        -3.1391891212579424f64,
+                        -314.0658342072582f64,
+                        -3145.6489181930947f64,
+                        f64::INFINITY,
+                        f64::NEG_INFINITY,
+                        f64::NAN,
+                    ],
+                ),
+                (
+                    16i32,
+                    [
+                        0.0f64,
+                        3.141594303685526f64,
+                        314.1602303152259f64,
+                        3141.606302893263f64,
+                        0.0f64,
+                        -3.141594303685526f64,
+                        -314.1602303152259f64,
+                        -3141.606302893263f64,
+                        f64::INFINITY,
+                        f64::NEG_INFINITY,
+                        f64::NAN,
+                    ],
+                ),
+            ] {
+                for (case, expected) in cases.iter().copied().zip(expected.iter().copied()) {
+                    let actual = bucket_midpoint(case, scale);
+
+                    if expected.is_nan() && actual.is_nan() {
+                        continue;
+                    }
+
+                    assert_eq!(expected.to_bits(), actual.to_bits(), "expected bucket_midpoint({case}, {scale}) to be {expected}, but got {actual}");
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -438,7 +438,10 @@ mod tests {
                 match de.data {
                     Some(metrics::metric::Data::Sum(sum)) => {
                         assert!(sum.is_monotonic);
-                        assert_eq!(AggregationTemporality::Unspecified as i32, sum.aggregation_temporality);
+                        assert_eq!(
+                            AggregationTemporality::Unspecified as i32,
+                            sum.aggregation_temporality
+                        );
 
                         assert_eq!(Some(int_point(43)), sum.data_points[0].value);
                     }
@@ -531,7 +534,10 @@ mod tests {
 
                 match de.data {
                     Some(metrics::metric::Data::Sum(sum)) => {
-                        assert_eq!(AggregationTemporality::Cumulative as i32, sum.aggregation_temporality);
+                        assert_eq!(
+                            AggregationTemporality::Cumulative as i32,
+                            sum.aggregation_temporality
+                        );
                     }
                     other => panic!("unexpected {other:?}"),
                 }
@@ -555,7 +561,10 @@ mod tests {
 
                 match de.data {
                     Some(metrics::metric::Data::Sum(sum)) => {
-                        assert_eq!(AggregationTemporality::Delta as i32, sum.aggregation_temporality);
+                        assert_eq!(
+                            AggregationTemporality::Delta as i32,
+                            sum.aggregation_temporality
+                        );
                     }
                     other => panic!("unexpected {other:?}"),
                 }
