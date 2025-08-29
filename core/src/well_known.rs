@@ -38,7 +38,8 @@ Extensions to the data model are signaled by the well-known [`KEY_EVT_KIND`] pro
     - [`KEY_METRIC_VALUE`]: The sample itself.
     - [`KEY_METRIC_UNIT`]: The measurement unit the sample is in.
     - [`KEY_METRIC_DESCRIPTION`]: A description of the underlying data source.
-    - [`KEY_DIST_BUCKET_POINTS`]: The bucket midpoint/count pairs in a distribution.
+    - [`KEY_DIST_BUCKET_MIDPOINTS`]: The midpoint values of buckets in a distribution.
+    - [`KEY_DIST_BUCKET_COUNTS`]: The count of values in a bucket in a distribution.
     - [`KEY_DIST_BUCKET_SCALE`]: The scale of buckets in a distribution.
     - [`KEY_DIST_COUNT`]: The count of values in a distribution.
     - [`KEY_DIST_SUM`]: The sum of values in a distribution.
@@ -119,7 +120,9 @@ pub const KEY_METRIC_UNIT: &'static str = "metric_unit";
 pub const KEY_METRIC_DESCRIPTION: &'static str = "metric_description";
 
 /** The midpoint values of buckets in a distribution. */
-pub const KEY_DIST_BUCKET_POINTS: &'static str = "dist_bucket_points";
+pub const KEY_DIST_BUCKET_MIDPOINTS: &'static str = "dist_bucket_midpoints";
+/** The count of values in a bucket in a distribution. */
+pub const KEY_DIST_BUCKET_COUNTS: &'static str = "dist_bucket_counts";
 /** The scale of buckets in a distribution. */
 pub const KEY_DIST_BUCKET_SCALE: &'static str = "dist_bucket_scale";
 /** The count of values in a distribution. */

@@ -1248,7 +1248,7 @@ pub mod dist {
     The implementation here uses a portable implementation of `powf` and `log` that is consistent across platforms.
     You may also consider using a native port of it for performance reasons.
     */
-    pub const fn midpoint(value: f64, scale: i32) -> f64 {
+    pub const fn bucket_midpoint(value: f64, scale: i32) -> f64 {
         let sign = if value == 0.0 || value.is_sign_positive() {
             1.0
         } else {
@@ -1265,247 +1265,6 @@ pub mod dist {
         sign * lower.midpoint(upper)
     }
 
-    #[cfg(feature = "sval")]
-    mod visit {
-        use core::{fmt, ops::ControlFlow};
-
-        use crate::Value;
-
-        /**
-        An error encountered attempting to visit bucket midpoint/count pairs.
-        */
-        #[derive(Debug)]
-        pub struct VisitBucketPointsError {}
-
-        impl fmt::Display for VisitBucketPointsError {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                write!(
-                    f,
-                    "the input was not a valid sequence of bucket midpoint/count pairs"
-                )
-            }
-        }
-
-        #[cfg(feature = "std")]
-        impl std::error::Error for VisitBucketPointsError {}
-
-        /**
-        Visit the bucket midpoint/count pairs in a value.
-        */
-        pub fn visit_bucket_points(
-            buckets: Value,
-            for_each: impl FnMut(f64, u64) -> ControlFlow<()>,
-        ) -> Result<(), VisitBucketPointsError> {
-            struct Stream<F> {
-                depth: usize,
-                next_midpoint: Option<f64>,
-                next_count: Option<u64>,
-                next: F,
-                done: bool,
-            }
-
-            impl<F> Stream<F> {
-                fn push(
-                    &mut self,
-                    midpoint: impl FnOnce() -> Option<f64>,
-                    count: impl FnOnce() -> Option<u64>,
-                ) -> sval::Result {
-                    if self.depth == 2 {
-                        if self.next_midpoint.is_none() {
-                            self.next_midpoint = midpoint();
-
-                            return Ok(());
-                        }
-
-                        if self.next_count.is_none() {
-                            self.next_count = count();
-
-                            return Ok(());
-                        }
-                    }
-
-                    sval::error()
-                }
-
-                fn take(&mut self) -> Option<sval::Result<(f64, u64)>> {
-                    if self.depth == 2 {
-                        let (next_midpoint, next_count) =
-                            (self.next_midpoint.take(), self.next_count.take());
-
-                        Some((|| {
-                            sval::Result::Ok((
-                                next_midpoint.ok_or_else(|| sval::Error::new())?,
-                                next_count.ok_or_else(|| sval::Error::new())?,
-                            ))
-                        })())
-                    } else {
-                        None
-                    }
-                }
-            }
-
-            impl<'sval, F: FnMut(f64, u64) -> ControlFlow<()>> sval::Stream<'sval> for Stream<F> {
-                fn null(&mut self) -> sval::Result {
-                    sval::error()
-                }
-
-                fn bool(&mut self, _: bool) -> sval::Result {
-                    sval::error()
-                }
-
-                fn text_begin(&mut self, _: Option<usize>) -> sval::Result {
-                    sval::error()
-                }
-
-                fn text_fragment_computed(&mut self, _: &str) -> sval::Result {
-                    sval::error()
-                }
-
-                fn text_end(&mut self) -> sval::Result {
-                    sval::error()
-                }
-
-                fn i64(&mut self, value: i64) -> sval::Result {
-                    self.push(|| Some(value as f64), || value.try_into().ok())
-                }
-
-                fn u64(&mut self, value: u64) -> sval::Result {
-                    self.push(|| Some(value as f64), || value.try_into().ok())
-                }
-
-                fn f64(&mut self, value: f64) -> sval::Result {
-                    self.push(|| Some(value), || Some(value as u64))
-                }
-
-                fn seq_begin(&mut self, _: Option<usize>) -> sval::Result {
-                    self.depth += 1;
-
-                    if self.depth > 2 {
-                        sval::error()
-                    } else {
-                        Ok(())
-                    }
-                }
-
-                fn seq_value_begin(&mut self) -> sval::Result {
-                    Ok(())
-                }
-
-                fn seq_value_end(&mut self) -> sval::Result {
-                    Ok(())
-                }
-
-                fn seq_end(&mut self) -> sval::Result {
-                    if let Some(next) = self.take() {
-                        let (midpoint, count) = next?;
-
-                        if let ControlFlow::Break(()) = (self.next)(midpoint, count) {
-                            self.done = true;
-                            return sval::error();
-                        };
-                    }
-
-                    self.depth -= 1;
-
-                    Ok(())
-                }
-
-                fn map_begin(&mut self, _: Option<usize>) -> sval::Result {
-                    sval::error()
-                }
-            }
-
-            let mut stream = Stream {
-                depth: 0,
-                next_midpoint: None,
-                next_count: None,
-                next: for_each,
-                done: false,
-            };
-
-            let r = sval::stream(&mut stream, &buckets);
-
-            if r.is_ok() || stream.done {
-                Ok(())
-            } else {
-                Err(VisitBucketPointsError {})
-            }
-        }
-
-        #[cfg(test)]
-        mod tests {
-            use super::*;
-
-            #[test]
-            fn visit_bucket_points_valid() {
-                let value = [(1.0, 1), (2.0, 2), (3.0, 3)];
-
-                let mut actual = Vec::new();
-
-                let r = visit_bucket_points(Value::from_sval(&value), |midpoint, count| {
-                    actual.push((midpoint, count));
-
-                    ControlFlow::Continue(())
-                });
-
-                assert!(r.is_ok());
-
-                assert_eq!(&value, &*actual);
-            }
-
-            #[test]
-            fn visit_bucket_points_empty() {
-                assert!(
-                    visit_bucket_points(Value::from_any(&[] as &[f64; 0]), |_, _| {
-                        ControlFlow::Continue(())
-                    })
-                    .is_ok()
-                );
-            }
-
-            #[test]
-            fn visit_bucket_points_invalid() {
-                assert!(
-                    visit_bucket_points(Value::from(0.0), |_, _| ControlFlow::Continue(()))
-                        .is_err()
-                );
-                assert!(
-                    visit_bucket_points(Value::from_any(&[1.0, 2.0, 3.0]), |_, _| {
-                        ControlFlow::Continue(())
-                    })
-                    .is_err()
-                );
-                assert!(
-                    visit_bucket_points(Value::from_sval(&[[(1.0, 42)]]), |_, _| {
-                        ControlFlow::Continue(())
-                    })
-                    .is_err()
-                );
-                assert!(
-                    visit_bucket_points(Value::from_sval(&[(1.0, 42, 1.0)]), |_, _| {
-                        ControlFlow::Continue(())
-                    })
-                    .is_err()
-                );
-                assert!(
-                    visit_bucket_points(Value::from_sval(&[(true, 42)]), |_, _| {
-                        ControlFlow::Continue(())
-                    })
-                    .is_err()
-                );
-                assert!(
-                    visit_bucket_points(Value::from_sval(&[("text", 42)]), |_, _| {
-                        ControlFlow::Continue(())
-                    })
-                    .is_err()
-                );
-            }
-        }
-    }
-
-    #[cfg(feature = "sval")]
-    pub use self::visit::*;
-
     #[cfg(test)]
     mod tests {
         use core::f64::consts::PI;
@@ -1513,7 +1272,7 @@ pub mod dist {
         use super::*;
 
         #[test]
-        fn compute_midpoints() {
+        fn compute_bucket_midpoints() {
             let cases = [
                 0.0f64,
                 PI,
@@ -1610,17 +1369,13 @@ pub mod dist {
                 ),
             ] {
                 for (case, expected) in cases.iter().copied().zip(expected.iter().copied()) {
-                    let actual = midpoint(case, scale);
+                    let actual = bucket_midpoint(case, scale);
 
                     if expected.is_nan() && actual.is_nan() {
                         continue;
                     }
 
-                    assert_eq!(
-                        expected.to_bits(),
-                        actual.to_bits(),
-                        "expected midpoint({case}, {scale}) to be {expected}, but got {actual}"
-                    );
+                    assert_eq!(expected.to_bits(), actual.to_bits(), "expected bucket_midpoint({case}, {scale}) to be {expected}, but got {actual}");
                 }
             }
         }
