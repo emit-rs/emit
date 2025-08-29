@@ -1,7 +1,7 @@
 mod export_metrics_service;
 mod metric;
 
-use std::ops::ControlFlow;
+use std::{cmp, ops::ControlFlow};
 
 use crate::Error;
 
@@ -125,19 +125,23 @@ impl EventEncoder for MetricsEventEncoder {
                         )?,
                     }),
                 }),
-                Some(emit::well_known::METRIC_AGG_COUNT) => E::encode(Metric::<_, _, _> {
-                    name: &sval::Display::new(metric_name),
-                    unit: &metric_unit.map(sval::Display::new),
-                    data: &MetricData::Sum::<_>(Sum::<_> {
-                        aggregation_temporality,
-                        is_monotonic: true,
-                        data_points: &SumPoints::new(&attributes).points_from_value(
-                            start_time_unix_nano,
-                            time_unix_nano,
-                            metric_value,
-                        )?,
-                    }),
-                }),
+                Some(emit::well_known::METRIC_AGG_COUNT) => {
+                    // TODO: If we have `dist_bucket_points` and `dist_scale` then try make histograms
+
+                    E::encode(Metric::<_, _, _> {
+                        name: &sval::Display::new(metric_name),
+                        unit: &metric_unit.map(sval::Display::new),
+                        data: &MetricData::Sum::<_>(Sum::<_> {
+                            aggregation_temporality,
+                            is_monotonic: true,
+                            data_points: &SumPoints::new(&attributes).points_from_value(
+                                start_time_unix_nano,
+                                time_unix_nano,
+                                metric_value,
+                            )?,
+                        }),
+                    })
+                }
                 _ => E::encode(Metric::<_, _, _> {
                     name: &sval::Display::new(metric_name),
                     unit: &metric_unit.map(sval::Display::new),
@@ -369,6 +373,45 @@ impl<'a, A> DataPointBuilder for RawPointSet<'a, A> {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum Index {
+    ZeroBucket,
+    PositiveBucket(i32),
+    NegativeBucket(i32),
+}
+
+fn bucket_index(value: f64, scale: i32) -> Option<Index> {
+    let positive = value == 0.0 || value.is_sign_positive();
+    let value = value.abs();
+
+    if value == 0.0 {
+        return Some(Index::ZeroBucket);
+    }
+
+    let gamma = 2.0f64.powf(2.0f64.powi(-scale));
+    let index = value.log(gamma).ceil();
+
+    let index = (index as i64).try_into().ok()?;
+
+    if positive {
+        Some(Index::PositiveBucket(index))
+    } else {
+        Some(Index::NegativeBucket(index))
+    }
+}
+
+fn rescale(min: f64, max: f64, scale: i32, target_buckets: usize) -> i32 {
+    let gamma = 2.0f64.powf(2.0f64.powi(-scale));
+    let min = min.abs().log(gamma).ceil();
+    let max = max.abs().log(gamma).ceil();
+    let size = (max + -min).abs();
+
+    cmp::min(
+        scale,
+        scale - ((size / target_buckets as f64).log2().ceil()) as i32,
+    )
+}
+
 #[derive(Default)]
 pub(crate) struct MetricsRequestEncoder;
 
@@ -410,7 +453,7 @@ mod tests {
 
     use prost::Message;
 
-    use crate::data::{generated::metrics::v1 as metrics, util::*};
+    use crate::data::{generated::metrics::v1 as metrics, util::*, AnyValue};
 
     fn double_point(v: impl Into<f64>) -> metrics::number_data_point::Value {
         metrics::number_data_point::Value::AsDouble(v.into())
@@ -752,5 +795,71 @@ mod tests {
                 }
             },
         );
+    }
+
+    #[test]
+    fn compute_bucket_indexes() {
+        for (value, scale, expected) in [
+            (0.0f64, 3, Some(Index::ZeroBucket)),
+            (-0.0f64, 3, Some(Index::ZeroBucket)),
+            (50f64, 3, Some(Index::PositiveBucket(46))),
+            (51f64, 3, Some(Index::PositiveBucket(46))),
+            (-50f64, 3, Some(Index::NegativeBucket(46))),
+            (-51f64, 3, Some(Index::NegativeBucket(46))),
+        ] {
+            let actual = bucket_index(value, scale);
+            assert_eq!(
+                expected, actual,
+                "expected bucket_index({value}, {scale}) to be {expected:?} but got {actual:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn compute_rescale() {
+        for (min, max, scale, target_buckets, expected) in [
+            (1f64, 1000f64, 2, 160, 2),
+            (0.1f64, 100.0f64, 3, 160, 3),
+            (0.1f64, 100.0f64, 6, 160, 4),
+            (0.000001f64, 100.0f64, 5, 160, 2),
+            (-100.0f64, -0.1f64, 3, 160, 3),
+            (-100.0f64, -0.1f64, 6, 160, 4),
+            (-100.0f64, -0.000001f64, 5, 160, 2),
+            (1f64, 1000000f64, -2, 3, -3),
+        ] {
+            let actual = rescale(min, max, scale, target_buckets);
+
+            assert_eq!(
+                expected, actual,
+                "expected rescale({min}, {max}, {scale}) to be {expected} but got {actual}"
+            );
+            assert_eq!(actual, rescale(min, max, actual, target_buckets));
+        }
+    }
+
+    #[test]
+    fn decode_histogram() {
+        // TODO: Replace this with a proper test once we've wired up histograms fully
+        let encoded = sval_protobuf::stream_to_protobuf(ExponentialHistogram {
+            data_points: &[ExponentialHistogramDataPoint {
+                attributes: &[KeyValue {
+                    key: "attribute_1",
+                    value: AnyValue::String("value_1"),
+                }],
+                start_time_unix_nano: 1,
+                time_unix_nano: 2,
+                count: 8,
+                scale: 1,
+                zero_count: 3,
+                positive: Some(Buckets {
+                    offset: 2,
+                    bucket_counts: &[1, 2, 3, 4, 5],
+                }),
+                negative: None,
+            }],
+            aggregation_temporality: AggregationTemporality::Delta,
+        });
+
+        assert!(metrics::ExponentialHistogram::decode(&*encoded.to_vec()).is_ok());
     }
 }
