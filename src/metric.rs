@@ -1409,10 +1409,6 @@ pub mod dist {
 
                     Ok(())
                 }
-
-                fn map_begin(&mut self, _: Option<usize>) -> sval::Result {
-                    sval::error()
-                }
             }
 
             let mut stream = Stream {
@@ -1434,6 +1430,8 @@ pub mod dist {
 
         #[cfg(test)]
         mod tests {
+            use std::collections::BTreeMap;
+
             use super::*;
 
             #[test]
@@ -1447,6 +1445,29 @@ pub mod dist {
 
                     ControlFlow::Continue(())
                 });
+
+                assert!(r.is_ok());
+
+                assert_eq!(&value, &*actual);
+            }
+
+            #[test]
+            fn visit_bucket_points_map() {
+                let mut value = BTreeMap::new();
+
+                value.insert(1, 1);
+                value.insert(2, 2);
+                value.insert(3, 3);
+
+                let mut actual = Vec::new();
+
+                let r = visit_bucket_points(Value::from_sval(&value), |midpoint, count| {
+                    actual.push((midpoint, count));
+
+                    ControlFlow::Continue(())
+                });
+
+                let value = [(1.0, 1), (2.0, 2), (3.0, 3)];
 
                 assert!(r.is_ok());
 
