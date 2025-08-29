@@ -1,7 +1,7 @@
 mod export_metrics_service;
 mod metric;
 
-use std::ops::ControlFlow;
+use std::{cmp, ops::ControlFlow};
 
 use crate::Error;
 
@@ -369,14 +369,6 @@ impl<'a, A> DataPointBuilder for RawPointSet<'a, A> {
     }
 }
 
-/*
-Building an exponential histogram:
-
-1. Walk the `dist_bucket_counts`, collecting them into a `Vec`
-2. Walk the `dist_bucket_midpoints`, zipping with counts, mapping into bucket indexes
-3. Compute the offset to use, convert indexes into dense buckets
-*/
-
 #[derive(Debug, PartialEq, Eq)]
 enum Index {
     ZeroBucket,
@@ -388,7 +380,7 @@ fn bucket_index(value: f64, scale: i32) -> Option<Index> {
     let positive = value == 0.0 || value.is_sign_positive();
     let value = value.abs();
 
-    if value <= zero_threshold(scale) {
+    if value == 0.0 {
         return Some(Index::ZeroBucket);
     }
 
@@ -404,13 +396,16 @@ fn bucket_index(value: f64, scale: i32) -> Option<Index> {
     }
 }
 
-#[inline]
-fn zero_threshold(scale: i32) -> f64 {
+fn rescale(min: f64, max: f64, scale: i32, target_buckets: usize) -> i32 {
     let gamma = 2.0f64.powf(2.0f64.powi(-scale));
+    let min = min.abs().log(gamma).ceil();
+    let max = max.abs().log(gamma).ceil();
+    let size = (max + -min).abs();
 
-    // Pick a zero threshold that allows 100 buckets
-    // between `gamma` (a value close to 1) and 0
-    gamma.powi(-101)
+    cmp::min(
+        scale,
+        scale - ((size / target_buckets as f64).log2().ceil()) as i32,
+    )
 }
 
 #[derive(Default)]
@@ -803,10 +798,6 @@ mod tests {
         for (value, scale, expected) in [
             (0.0f64, 3, Some(Index::ZeroBucket)),
             (-0.0f64, 3, Some(Index::ZeroBucket)),
-            (f64::EPSILON, 3, Some(Index::ZeroBucket)),
-            (-f64::EPSILON, 3, Some(Index::ZeroBucket)),
-            (zero_threshold(3), 3, Some(Index::ZeroBucket)),
-            (-zero_threshold(3), 3, Some(Index::ZeroBucket)),
             (50f64, 3, Some(Index::PositiveBucket(46))),
             (51f64, 3, Some(Index::PositiveBucket(46))),
             (-50f64, 3, Some(Index::NegativeBucket(46))),
@@ -817,6 +808,28 @@ mod tests {
                 expected, actual,
                 "expected bucket_index({value}, {scale}) to be {expected:?} but got {actual:?}"
             );
+        }
+    }
+
+    #[test]
+    fn compute_rescale() {
+        for (min, max, scale, target_buckets, expected) in [
+            (1f64, 1000f64, 2, 160, 2),
+            (0.1f64, 100.0f64, 3, 160, 3),
+            (0.1f64, 100.0f64, 6, 160, 4),
+            (0.000001f64, 100.0f64, 5, 160, 2),
+            (-100.0f64, -0.1f64, 3, 160, 3),
+            (-100.0f64, -0.1f64, 6, 160, 4),
+            (-100.0f64, -0.000001f64, 5, 160, 2),
+            (1f64, 1000000f64, -2, 3, -3),
+        ] {
+            let actual = rescale(min, max, scale, target_buckets);
+
+            assert_eq!(
+                expected, actual,
+                "expected rescale({min}, {max}, {scale}) to be {expected} but got {actual}"
+            );
+            assert_eq!(actual, rescale(min, max, actual, target_buckets));
         }
     }
 }
