@@ -369,6 +369,50 @@ impl<'a, A> DataPointBuilder for RawPointSet<'a, A> {
     }
 }
 
+/*
+Building an exponential histogram:
+
+1. Walk the `dist_bucket_counts`, collecting them into a `Vec`
+2. Walk the `dist_bucket_midpoints`, zipping with counts, mapping into bucket indexes
+3. Compute the offset to use, convert indexes into dense buckets
+*/
+
+#[derive(Debug, PartialEq, Eq)]
+enum Index {
+    ZeroBucket,
+    PositiveBucket(i32),
+    NegativeBucket(i32),
+}
+
+fn bucket_index(value: f64, scale: i32) -> Option<Index> {
+    let positive = value == 0.0 || value.is_sign_positive();
+    let value = value.abs();
+
+    if value <= zero_threshold(scale) {
+        return Some(Index::ZeroBucket);
+    }
+
+    let gamma = 2.0f64.powf(2.0f64.powi(-scale));
+    let index = value.log(gamma).ceil();
+
+    let index = (index as i64).try_into().ok()?;
+
+    if positive {
+        Some(Index::PositiveBucket(index))
+    } else {
+        Some(Index::NegativeBucket(index))
+    }
+}
+
+#[inline]
+fn zero_threshold(scale: i32) -> f64 {
+    let gamma = 2.0f64.powf(2.0f64.powi(-scale));
+
+    // Pick a zero threshold that allows 100 buckets
+    // between `gamma` (a value close to 1) and 0
+    gamma.powi(-101)
+}
+
 #[derive(Default)]
 pub(crate) struct MetricsRequestEncoder;
 
@@ -752,5 +796,27 @@ mod tests {
                 }
             },
         );
+    }
+
+    #[test]
+    fn compute_bucket_indexes() {
+        for (value, scale, expected) in [
+            (0.0f64, 3, Some(Index::ZeroBucket)),
+            (-0.0f64, 3, Some(Index::ZeroBucket)),
+            (f64::EPSILON, 3, Some(Index::ZeroBucket)),
+            (-f64::EPSILON, 3, Some(Index::ZeroBucket)),
+            (zero_threshold(3), 3, Some(Index::ZeroBucket)),
+            (-zero_threshold(3), 3, Some(Index::ZeroBucket)),
+            (50f64, 3, Some(Index::PositiveBucket(46))),
+            (51f64, 3, Some(Index::PositiveBucket(46))),
+            (-50f64, 3, Some(Index::NegativeBucket(46))),
+            (-51f64, 3, Some(Index::NegativeBucket(46))),
+        ] {
+            let actual = bucket_index(value, scale);
+            assert_eq!(
+                expected, actual,
+                "expected bucket_index({value}, {scale}) to be {expected:?} but got {actual:?}"
+            );
+        }
     }
 }
