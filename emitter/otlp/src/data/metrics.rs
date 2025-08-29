@@ -125,19 +125,23 @@ impl EventEncoder for MetricsEventEncoder {
                         )?,
                     }),
                 }),
-                Some(emit::well_known::METRIC_AGG_COUNT) => E::encode(Metric::<_, _, _> {
-                    name: &sval::Display::new(metric_name),
-                    unit: &metric_unit.map(sval::Display::new),
-                    data: &MetricData::Sum::<_>(Sum::<_> {
-                        aggregation_temporality,
-                        is_monotonic: true,
-                        data_points: &SumPoints::new(&attributes).points_from_value(
-                            start_time_unix_nano,
-                            time_unix_nano,
-                            metric_value,
-                        )?,
-                    }),
-                }),
+                Some(emit::well_known::METRIC_AGG_COUNT) => {
+                    // TODO: If we have `dist_bucket_points` and `dist_scale` then try make histograms
+
+                    E::encode(Metric::<_, _, _> {
+                        name: &sval::Display::new(metric_name),
+                        unit: &metric_unit.map(sval::Display::new),
+                        data: &MetricData::Sum::<_>(Sum::<_> {
+                            aggregation_temporality,
+                            is_monotonic: true,
+                            data_points: &SumPoints::new(&attributes).points_from_value(
+                                start_time_unix_nano,
+                                time_unix_nano,
+                                metric_value,
+                            )?,
+                        }),
+                    })
+                }
                 _ => E::encode(Metric::<_, _, _> {
                     name: &sval::Display::new(metric_name),
                     unit: &metric_unit.map(sval::Display::new),
@@ -449,7 +453,7 @@ mod tests {
 
     use prost::Message;
 
-    use crate::data::{generated::metrics::v1 as metrics, util::*};
+    use crate::data::{generated::metrics::v1 as metrics, util::*, AnyValue};
 
     fn double_point(v: impl Into<f64>) -> metrics::number_data_point::Value {
         metrics::number_data_point::Value::AsDouble(v.into())
@@ -831,5 +835,31 @@ mod tests {
             );
             assert_eq!(actual, rescale(min, max, actual, target_buckets));
         }
+    }
+
+    #[test]
+    fn decode_histogram() {
+        // TODO: Replace this with a proper test once we've wired up histograms fully
+        let encoded = sval_protobuf::stream_to_protobuf(ExponentialHistogram {
+            data_points: &[ExponentialHistogramDataPoint {
+                attributes: &[KeyValue {
+                    key: "attribute_1",
+                    value: AnyValue::String("value_1"),
+                }],
+                start_time_unix_nano: 1,
+                time_unix_nano: 2,
+                count: 8,
+                scale: 1,
+                zero_count: 3,
+                positive: Some(Buckets {
+                    offset: 2,
+                    bucket_counts: &[1, 2, 3, 4, 5],
+                }),
+                negative: None,
+            }],
+            aggregation_temporality: AggregationTemporality::Delta,
+        });
+
+        assert!(metrics::ExponentialHistogram::decode(&*encoded.to_vec()).is_ok());
     }
 }
