@@ -118,11 +118,12 @@ impl EventEncoder for MetricsEventEncoder {
                     data: &MetricData::Sum::<_>(Sum::<_> {
                         aggregation_temporality,
                         is_monotonic: false,
-                        data_points: &SumPoints::new(&attributes).points_from_value(
+                        data_points: &[NumberDataPoint {
+                            attributes: &attributes,
                             start_time_unix_nano,
                             time_unix_nano,
-                            metric_value,
-                        )?,
+                            value: number_data_point_from_value(metric_value)?,
+                        }],
                     }),
                 }),
                 Some(emit::well_known::METRIC_AGG_COUNT) => E::encode(Metric::<_, _, _> {
@@ -131,22 +132,24 @@ impl EventEncoder for MetricsEventEncoder {
                     data: &MetricData::Sum::<_>(Sum::<_> {
                         aggregation_temporality,
                         is_monotonic: true,
-                        data_points: &SumPoints::new(&attributes).points_from_value(
+                        data_points: &[NumberDataPoint {
+                            attributes: &attributes,
                             start_time_unix_nano,
                             time_unix_nano,
-                            metric_value,
-                        )?,
+                            value: number_data_point_from_value(metric_value)?,
+                        }],
                     }),
                 }),
                 _ => E::encode(Metric::<_, _, _> {
                     name: &sval::Display::new(metric_name),
                     unit: &metric_unit.map(sval::Display::new),
                     data: &MetricData::Gauge(Gauge::<_> {
-                        data_points: &RawPointSet::new(&attributes).points_from_value(
+                        data_points: &[NumberDataPoint {
+                            attributes: &attributes,
                             start_time_unix_nano,
                             time_unix_nano,
-                            metric_value,
-                        )?,
+                            value: number_data_point_from_value(metric_value)?,
+                        }],
                     }),
                 }),
             };
@@ -161,212 +164,62 @@ impl EventEncoder for MetricsEventEncoder {
     }
 }
 
-trait DataPointBuilder {
-    type Points;
-
-    fn points_from_value(
-        self,
-        start_time_unix_nano: u64,
-        time_unix_nano: u64,
-        value: emit::Value<'_>,
-    ) -> Option<Self::Points>
-    where
-        Self: Sized,
-    {
-        struct Extract<A> {
-            in_seq: bool,
-            aggregator: A,
+fn number_data_point_from_value(value: emit::Value) -> Option<NumberDataPointValue> {
+    struct Extract(Option<NumberDataPointValue>);
+    impl<'sval> sval::Stream<'sval> for Extract {
+        fn null(&mut self) -> sval::Result {
+            sval::error()
         }
 
-        impl<'sval, A: DataPointBuilder> sval::Stream<'sval> for Extract<A> {
-            fn null(&mut self) -> sval::Result {
-                sval::error()
-            }
-
-            fn bool(&mut self, _: bool) -> sval::Result {
-                sval::error()
-            }
-
-            fn text_begin(&mut self, _: Option<usize>) -> sval::Result {
-                sval::error()
-            }
-
-            fn text_fragment_computed(&mut self, _: &str) -> sval::Result {
-                sval::error()
-            }
-
-            fn text_end(&mut self) -> sval::Result {
-                sval::error()
-            }
-
-            fn i64(&mut self, value: i64) -> sval::Result {
-                self.aggregator.push_point_i64(value);
-
-                Ok(())
-            }
-
-            fn f64(&mut self, value: f64) -> sval::Result {
-                self.aggregator.push_point_f64(value);
-
-                Ok(())
-            }
-
-            fn seq_begin(&mut self, _: Option<usize>) -> sval::Result {
-                if self.in_seq {
-                    return sval::error();
-                }
-
-                self.in_seq = true;
-
-                Ok(())
-            }
-
-            fn seq_value_begin(&mut self) -> sval::Result {
-                Ok(())
-            }
-
-            fn seq_value_end(&mut self) -> sval::Result {
-                Ok(())
-            }
-
-            fn seq_end(&mut self) -> sval::Result {
-                self.in_seq = false;
-
-                Ok(())
-            }
+        fn bool(&mut self, _: bool) -> sval::Result {
+            sval::error()
         }
 
-        let mut extract = Extract {
-            in_seq: false,
-            aggregator: self,
-        };
-        value.stream(&mut extract).ok()?;
+        fn text_begin(&mut self, _: Option<usize>) -> sval::Result {
+            sval::error()
+        }
 
-        extract
-            .aggregator
-            .into_points(start_time_unix_nano, time_unix_nano)
-    }
+        fn text_fragment_computed(&mut self, _: &str) -> sval::Result {
+            sval::error()
+        }
 
-    fn push_point_i64(&mut self, value: i64);
-    fn push_point_f64(&mut self, value: f64);
+        fn text_end(&mut self) -> sval::Result {
+            sval::error()
+        }
 
-    fn into_points(self, start_time_unix_nano: u64, time_unix_nano: u64) -> Option<Self::Points>;
-}
+        fn i64(&mut self, value: i64) -> sval::Result {
+            self.0 = Some(NumberDataPointValue::AsInt(AsInt(value)));
 
-struct SumPoints<'a, A>(NumberDataPoint<'a, A>);
+            Ok(())
+        }
 
-impl<'a, A> SumPoints<'a, A> {
-    fn new(attributes: &'a A) -> Self {
-        SumPoints(NumberDataPoint {
-            attributes,
-            start_time_unix_nano: Default::default(),
-            time_unix_nano: Default::default(),
-            value: NumberDataPointValue::AsInt(AsInt(0)),
-        })
-    }
-}
+        fn f64(&mut self, value: f64) -> sval::Result {
+            self.0 = Some(NumberDataPointValue::AsDouble(AsDouble(value)));
 
-impl<'a, A> DataPointBuilder for SumPoints<'a, A> {
-    type Points = [NumberDataPoint<'a, A>; 1];
+            Ok(())
+        }
 
-    fn push_point_i64(&mut self, value: i64) {
-        self.0.value = match self.0.value {
-            NumberDataPointValue::AsInt(AsInt(current)) => current
-                .checked_add(value)
-                .map(|value| NumberDataPointValue::AsInt(AsInt(value)))
-                .unwrap_or(NumberDataPointValue::AsDouble(AsDouble(f64::INFINITY))),
-            NumberDataPointValue::AsDouble(AsDouble(current)) => {
-                NumberDataPointValue::AsDouble(AsDouble(current + value as f64))
-            }
-        };
-    }
+        fn seq_begin(&mut self, _: Option<usize>) -> sval::Result {
+            sval::error()
+        }
 
-    fn push_point_f64(&mut self, value: f64) {
-        self.0.value = match self.0.value {
-            NumberDataPointValue::AsInt(AsInt(current)) => {
-                NumberDataPointValue::AsDouble(AsDouble(value + current as f64))
-            }
-            NumberDataPointValue::AsDouble(AsDouble(current)) => {
-                NumberDataPointValue::AsDouble(AsDouble(current + value))
-            }
-        };
-    }
+        fn seq_value_begin(&mut self) -> sval::Result {
+            sval::error()
+        }
 
-    fn into_points(
-        mut self,
-        start_time_unix_nano: u64,
-        time_unix_nano: u64,
-    ) -> Option<Self::Points> {
-        self.0.start_time_unix_nano = start_time_unix_nano;
-        self.0.time_unix_nano = time_unix_nano;
+        fn seq_value_end(&mut self) -> sval::Result {
+            sval::error()
+        }
 
-        Some([self.0])
-    }
-}
-
-struct RawPointSet<'a, A> {
-    attributes: &'a A,
-    points: Vec<NumberDataPoint<'a, A>>,
-}
-
-impl<'a, A> RawPointSet<'a, A> {
-    fn new(attributes: &'a A) -> Self {
-        RawPointSet {
-            attributes,
-            points: Vec::new(),
+        fn seq_end(&mut self) -> sval::Result {
+            sval::error()
         }
     }
-}
 
-impl<'a, A> DataPointBuilder for RawPointSet<'a, A> {
-    type Points = Vec<NumberDataPoint<'a, A>>;
+    let mut extract = Extract(None);
+    let _ = value.stream(&mut extract);
 
-    fn push_point_i64(&mut self, value: i64) {
-        self.points.push(NumberDataPoint {
-            attributes: self.attributes,
-            start_time_unix_nano: Default::default(),
-            time_unix_nano: Default::default(),
-            value: NumberDataPointValue::AsInt(AsInt(value)),
-        });
-    }
-
-    fn push_point_f64(&mut self, value: f64) {
-        self.points.push(NumberDataPoint {
-            attributes: self.attributes,
-            start_time_unix_nano: Default::default(),
-            time_unix_nano: Default::default(),
-            value: NumberDataPointValue::AsDouble(AsDouble(value)),
-        });
-    }
-
-    fn into_points(
-        mut self,
-        start_time_unix_nano: u64,
-        time_unix_nano: u64,
-    ) -> Option<Self::Points> {
-        match self.points.len() as u64 {
-            0 => None,
-            1 => {
-                self.points[0].start_time_unix_nano = start_time_unix_nano;
-                self.points[0].time_unix_nano = time_unix_nano;
-
-                Some(self.points)
-            }
-            points => {
-                let point_time_range = time_unix_nano.saturating_sub(start_time_unix_nano);
-                let step = point_time_range / points;
-
-                let mut point_time = start_time_unix_nano;
-                for point in &mut self.points {
-                    point.start_time_unix_nano = point_time;
-                    point_time += step;
-                    point.time_unix_nano = point_time;
-                }
-
-                Some(self.points)
-            }
-        }
-    }
+    extract.0
 }
 
 #[derive(Default)]
@@ -405,8 +258,6 @@ impl<'a> sval::Value for EncodedScopeMetrics<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use std::time::Duration;
 
     use prost::Message;
 
@@ -471,46 +322,6 @@ mod tests {
                         assert!(sum.is_monotonic);
 
                         assert_eq!(Some(double_point(43.1)), sum.data_points[0].value);
-                    }
-                    other => panic!("unexpected {other:?}"),
-                }
-            },
-        );
-    }
-
-    #[test]
-    fn encode_count_timeseries_int() {
-        encode_event::<MetricsEventEncoder>(
-            emit::evt!(
-                extent: emit::Timestamp::MIN..(emit::Timestamp::MIN + Duration::from_secs(10)),
-                "{metric_agg} of {metric_name} is {metric_value}",
-                evt_kind: "metric",
-                metric_name: "test",
-                metric_agg: "count",
-                #[emit::as_value]
-                metric_value: [
-                    1,
-                    1,
-                    1,
-                    1,
-                    1,
-                    1,
-                    1,
-                    1,
-                    1,
-                    1,
-                ],
-            ),
-            |buf| {
-                let de = metrics::Metric::decode(buf).unwrap();
-
-                assert_eq!("test", de.name);
-
-                match de.data {
-                    Some(metrics::metric::Data::Sum(sum)) => {
-                        assert!(sum.is_monotonic);
-
-                        assert_eq!(Some(int_point(10)), sum.data_points[0].value);
                     }
                     other => panic!("unexpected {other:?}"),
                 }
@@ -627,46 +438,6 @@ mod tests {
     }
 
     #[test]
-    fn encode_sum_timeseries_int() {
-        encode_event::<MetricsEventEncoder>(
-            emit::evt!(
-                extent: emit::Timestamp::MIN..(emit::Timestamp::MIN + Duration::from_secs(10)),
-                "{metric_agg} of {metric_name} is {metric_value}",
-                evt_kind: "metric",
-                metric_name: "test",
-                metric_agg: "sum",
-                #[emit::as_value]
-                metric_value: [
-                    -1,
-                    -1,
-                    -1,
-                    -1,
-                    -1,
-                    -1,
-                    -1,
-                    -1,
-                    -1,
-                    -1,
-                ],
-            ),
-            |buf| {
-                let de = metrics::Metric::decode(buf).unwrap();
-
-                assert_eq!("test", de.name);
-
-                match de.data {
-                    Some(metrics::metric::Data::Sum(sum)) => {
-                        assert!(!sum.is_monotonic);
-
-                        assert_eq!(Some(int_point(-10)), sum.data_points[0].value);
-                    }
-                    other => panic!("unexpected {other:?}"),
-                }
-            },
-        );
-    }
-
-    #[test]
     fn encode_gauge_int() {
         encode_event::<MetricsEventEncoder>(
             emit::evt!(
@@ -709,44 +480,6 @@ mod tests {
                 match de.data {
                     Some(metrics::metric::Data::Gauge(gauge)) => {
                         assert_eq!(Some(double_point(43.1)), gauge.data_points[0].value);
-                    }
-                    other => panic!("unexpected {other:?}"),
-                }
-            },
-        );
-    }
-
-    #[test]
-    fn encode_gauge_timeseries_int() {
-        encode_event::<MetricsEventEncoder>(
-            emit::evt!(
-                extent: emit::Timestamp::MIN..(emit::Timestamp::MIN + Duration::from_secs(10)),
-                "{metric_agg} of {metric_name} is {metric_value}",
-                evt_kind: "metric",
-                metric_name: "test",
-                metric_agg: "max",
-                #[emit::as_value]
-                metric_value: [
-                    -1,
-                    -1,
-                    -1,
-                    -1,
-                    -1,
-                    -1,
-                    -1,
-                    -1,
-                    -1,
-                    -1,
-                ],
-            ),
-            |buf| {
-                let de = metrics::Metric::decode(buf).unwrap();
-
-                assert_eq!("test", de.name);
-
-                match de.data {
-                    Some(metrics::metric::Data::Gauge(gauge)) => {
-                        assert_eq!(10, gauge.data_points.len());
                     }
                     other => panic!("unexpected {other:?}"),
                 }
