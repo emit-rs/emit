@@ -337,34 +337,6 @@ fn write_event(buf: &mut Buffer, evt: emit::event::Event<impl emit::props::Props
             }
         }
     }
-
-    if let Some(value) = evt.props().get(KEY_METRIC_VALUE) {
-        let buckets = value.to_f64_sequence().unwrap_or_default();
-
-        if !buckets.is_empty() {
-            write_timeseries(buf, &buckets);
-        }
-    }
-}
-
-fn write_timeseries(buf: &mut Buffer, buckets: &[f64]) {
-    const BLOCKS: [&'static str; 7] = ["▁", "▂", "▃", "▄", "▅", "▆", "▇"];
-
-    let mut bucket_min = f64::NAN;
-    let mut bucket_max = -f64::NAN;
-
-    for v in buckets {
-        bucket_min = cmp::min_by(*v, bucket_min, f64::total_cmp);
-        bucket_max = cmp::max_by(*v, bucket_max, f64::total_cmp);
-    }
-
-    for v in buckets {
-        let idx = (((v - bucket_min) / (bucket_max - bucket_min)) * ((BLOCKS.len() - 1) as f64))
-            .ceil() as usize;
-        let _ = buf.write(BLOCKS[idx].as_bytes());
-    }
-
-    let _ = buf.write(b"\n");
 }
 
 fn hex_slice<'a>(hex: &'a [u8], len: usize) -> impl fmt::Display + 'a {
@@ -731,40 +703,5 @@ mod tests {
             "2024-01-01T01:02:03Z metric emit_term tests count of test is 42\n",
             str::from_utf8(buf.as_slice()).unwrap()
         );
-    }
-
-    #[test]
-    fn write_metric_timeseries() {
-        let mut buf = Buffer::no_color();
-
-        write_event(
-            &mut buf,
-            emit::evt!(
-                extent:
-                    emit::Timestamp::try_from_str("2024-01-01T01:02:00.000Z").unwrap()..
-                    emit::Timestamp::try_from_str("2024-01-01T01:02:10.000Z").unwrap(),
-                "{metric_agg} of {metric_name} is {metric_value}",
-                user: "Rust",
-                evt_kind: "metric",
-                metric_name: "test",
-                metric_agg: "count",
-                #[emit::as_value]
-                metric_value: [
-                    0,
-                    1,
-                    2,
-                    3,
-                    4,
-                    5,
-                    1,
-                    2,
-                    3,
-                    4,
-                    5,
-                ],
-            ),
-        );
-
-        assert_eq!("2024-01-01T01:02:10Z 10s metric emit_term tests count of test is [0, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5]\n▁▃▄▅▆▇▃▄▅▆▇\n", str::from_utf8(buf.as_slice()).unwrap());
     }
 }
