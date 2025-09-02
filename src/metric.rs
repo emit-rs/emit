@@ -1214,6 +1214,8 @@ pub mod dist {
 
     use crate::platform::libm;
 
+    use core::ops::Range;
+
     /**
     Compute the exponential bucket midpoint for the given input value at a given scale.
 
@@ -1233,8 +1235,10 @@ pub mod dist {
     This function implements the following procedure:
 
     ```text
-    let sign = if value == 0.0 || value.is_sign_positive() { 1.0 } else { -1.0 };
+    let sign = value.signum();
     let value = value.abs();
+
+    if value == 0.0 { return value; }
 
     let gamma = 2.0f64.powf(2.0f64.powf(-scale));
     let index = value.log(gamma).ceil();
@@ -1249,14 +1253,15 @@ pub mod dist {
     You may also consider using a native port of it for performance reasons.
     */
     pub const fn midpoint(value: f64, scale: i32) -> f64 {
-        let sign = if value == 0.0 || value.is_sign_positive() {
-            1.0
-        } else {
-            -1.0
-        };
+        let sign = value.signum();
         let value = value.abs();
 
+        if value == 0.0 {
+            return value;
+        }
+
         let gamma = libm::pow(2.0, libm::pow(2.0, -(scale as f64)));
+
         let index = libm::ceil(libm::log(value, gamma));
 
         let lower = libm::pow(gamma, index - 1.0);
@@ -1265,11 +1270,128 @@ pub mod dist {
         sign * lower.midpoint(upper)
     }
 
+    /**
+    Compute the index of the bucket a value belongs to at a given scale.
+
+    # Panics
+
+    This function panics if `value` is `0` or `-0`.
+    */
+    pub const fn bucket(value: f64, scale: i32) -> isize {
+        let value = value.abs();
+
+        if value == 0.0 {
+            panic!("cannot compute a bucket index for the value 0");
+        }
+
+        let gamma = libm::pow(2.0, libm::pow(2.0, -(scale as f64)));
+
+        libm::ceil(libm::log(value, gamma)) as isize
+    }
+
+    /**
+    Compute the number of buckets between a range of values at a given scale.
+    */
+    pub const fn size(values: Range<f64>, scale: i32) -> usize {
+        let gamma = libm::pow(2.0, libm::pow(2.0, -(scale as f64)));
+
+        let min = values.start.signum() * libm::ceil(libm::log(values.start.abs(), gamma));
+        let max = values.end.signum() * libm::ceil(libm::log(values.end.abs(), gamma));
+
+        (max + -min).abs() as usize
+    }
+
+    /**
+    Compute a scale that will fit the range of values within a target size.
+    */
+    pub const fn scale(values: Range<f64>, buckets: usize) -> i32 {
+        -libm::log2(size(values, 0) as f64 / buckets as f64).ceil() as i32
+    }
+
     #[cfg(test)]
     mod tests {
         use core::f64::consts::PI;
 
         use super::*;
+
+        fn index(index: isize, scale: i32) -> f64 {
+            let gamma = 2.0f64.powf(2.0f64.powi(-scale));
+            let lower = gamma.powi((index - 1) as i32);
+            let upper = lower * gamma;
+
+            lower.midpoint(upper)
+        }
+
+        #[test]
+        fn compute_size() {
+            for scale in [-1, 0, 1, 2, 3] {
+                for (range, expected) in [
+                    (index(0, scale)..index(0, scale), 0),
+                    (index(0, scale)..index(1, scale), 1),
+                    (index(-1, scale)..index(0, scale), 1),
+                    (index(-1, scale)..index(1, scale), 2),
+                ] {
+                    let actual = size(range.clone(), scale);
+
+                    assert_eq!(
+                        expected, actual,
+                        "expected size({range:?}, {scale}) to be {expected} but got {actual}"
+                    );
+
+                    assert_eq!(actual, size(range.end..range.start, scale));
+                }
+            }
+        }
+
+        #[test]
+        fn compute_bucket() {
+            for (value, scale, expected) in [
+                (50f64, 3, 46),
+                (51f64, 3, 46),
+                (-50f64, 3, 46),
+                (-51f64, 3, 46),
+            ] {
+                let actual = bucket(value, scale);
+
+                assert_eq!(
+                    expected, actual,
+                    "expected bucket({value}, {scale}) to be {expected:?} but got {actual:?}"
+                );
+            }
+        }
+
+        #[test]
+        #[should_panic]
+        fn compute_bucket_0() {
+            bucket(0.0, 2);
+        }
+
+        #[test]
+        #[should_panic]
+        fn compute_bucket_neg_0() {
+            bucket(-0.0, 2);
+        }
+
+        #[test]
+        fn compute_scale() {
+            for (range, size, expected) in [
+                (1f64..1000f64, 160, 4),
+                (0.1f64..100.0f64, 160, 4),
+                (0.000001f64..100.0f64, 160, 2),
+                (-100.0f64..-0.1f64, 160, 4),
+                (-100.0f64..-0.000001f64, 160, 2),
+                (1f64..1000000f64, 3, -3),
+            ] {
+                let actual = scale(range.clone(), size);
+
+                assert_eq!(
+                    expected, actual,
+                    "expected scale({range:?}, {size}) to be {expected} but got {actual}"
+                );
+
+                assert_eq!(actual, scale(range.end..range.start, size));
+            }
+        }
 
         #[test]
         fn compute_midpoints() {

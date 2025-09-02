@@ -85,11 +85,9 @@ fn main() {
 #![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]
 #![deny(missing_docs)]
 
-use std::{cell::RefCell, cmp, fmt, io::Write, iter, str, time::Duration};
+use std::{cell::RefCell, fmt, io::Write, iter, str, time::Duration};
 
-use emit::well_known::{
-    KEY_ERR, KEY_EVT_KIND, KEY_LVL, KEY_METRIC_VALUE, KEY_SPAN_ID, KEY_TRACE_ID,
-};
+use emit::well_known::{KEY_ERR, KEY_EVT_KIND, KEY_LVL, KEY_SPAN_ID, KEY_TRACE_ID};
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
 /**

@@ -152,18 +152,18 @@ impl EventEncoder for MetricsEventEncoder {
                                         attributes: &attributes,
                                         start_time_unix_nano,
                                         time_unix_nano,
-                                        count: distribution.total_count,
+                                        count: distribution.count,
                                         scale: distribution.scale,
                                         zero_count: distribution.zero,
                                         positive: distribution.positive.as_ref().map(|buckets| {
                                             Buckets {
-                                                offset: bucket_index(buckets.min.0, buckets.scale),
+                                                offset: buckets.offset,
                                                 bucket_counts: buckets,
                                             }
                                         }),
                                         negative: distribution.negative.as_ref().map(|buckets| {
                                             Buckets {
-                                                offset: bucket_index(buckets.min.0, buckets.scale),
+                                                offset: buckets.offset,
                                                 bucket_counts: buckets,
                                             }
                                         }),
@@ -277,13 +277,13 @@ struct Distribution {
     positive: Option<DistributionBuckets>,
     negative: Option<DistributionBuckets>,
     zero: u64,
-    total_count: u64,
+    count: u64,
     scale: i32,
 }
 
 struct DistributionBuckets {
-    scale: i32,
-    min: Midpoint,
+    gamma: f64,
+    offset: i32,
     buckets: BTreeMap<Midpoint, u64>,
 }
 
@@ -320,7 +320,7 @@ impl Distribution {
             positive: BTreeMap<Midpoint, u64>,
             negative: BTreeMap<Midpoint, u64>,
             zero: u64,
-            total_count: u64,
+            count: u64,
             next_midpoint: Option<f64>,
             next_count: Option<u64>,
         }
@@ -374,7 +374,7 @@ impl Distribution {
                         *buckets.entry(Midpoint(midpoint)).or_insert(0) += count;
                     }
 
-                    self.total_count += count;
+                    self.count += count;
 
                     Ok(())
                 } else {
@@ -446,52 +446,47 @@ impl Distribution {
             dist_bucket_scale.and_then(|v| v.cast::<i32>()),
             dist_bucket_points,
         ) {
-            let target_buckets = 160;
-            let mut scale = dist_bucket_scale;
+            let scale = dist_bucket_scale;
+            let gamma = 2.0f64.powf(2.0f64.powi(-scale));
 
             let mut extract = Extract {
                 depth: 0,
                 positive: BTreeMap::new(),
                 negative: BTreeMap::new(),
                 zero: 0,
-                total_count: 0,
+                count: 0,
                 next_midpoint: None,
                 next_count: None,
             };
 
             sval::stream(&mut extract, &dist_bucket_points).ok()?;
 
-            let distribution_buckets_from_map =
-                |buckets: BTreeMap<Midpoint, u64>, scale: &mut i32| {
-                    let Some((min, _)) = buckets.first_key_value() else {
-                        return None;
-                    };
-
-                    let Some((max, _)) = buckets.last_key_value() else {
-                        return Some((*min, buckets));
-                    };
-
-                    *scale = rescale(min.0, max.0, *scale, target_buckets);
-
-                    Some((*min, buckets))
+            let distribution_buckets_from_map = |buckets: BTreeMap<Midpoint, u64>| {
+                let Some((min, _)) = buckets.first_key_value() else {
+                    return None;
                 };
 
-            let positive = distribution_buckets_from_map(extract.positive, &mut scale);
-            let negative = distribution_buckets_from_map(extract.negative, &mut scale);
+                let offset = bucket(min.0, gamma).try_into().ok()?;
+
+                Some((offset, buckets))
+            };
+
+            let positive = distribution_buckets_from_map(extract.positive);
+            let negative = distribution_buckets_from_map(extract.negative);
 
             return Some(Distribution {
-                positive: positive.map(|(min, buckets)| DistributionBuckets {
-                    scale,
-                    min,
+                positive: positive.map(|(offset, buckets)| DistributionBuckets {
+                    gamma,
+                    offset,
                     buckets,
                 }),
-                negative: negative.map(|(min, buckets)| DistributionBuckets {
-                    scale,
-                    min,
+                negative: negative.map(|(offset, buckets)| DistributionBuckets {
+                    gamma,
+                    offset,
                     buckets,
                 }),
                 zero: extract.zero,
-                total_count: extract.total_count,
+                count: extract.count,
                 scale,
             });
         }
@@ -503,10 +498,10 @@ impl Distribution {
 impl Value for DistributionBuckets {
     fn stream<'sval, S: Stream<'sval> + ?Sized>(&'sval self, stream: &mut S) -> sval::Result {
         stream.seq_begin(None)?;
-        let mut last_index = bucket_index(self.min.0, self.scale);
+        let mut last_index = self.offset as isize;
 
         for (midpoint, count) in &self.buckets {
-            let index = bucket_index(midpoint.0, self.scale);
+            let index = bucket(midpoint.0, self.gamma);
 
             for _ in (last_index + 1)..index {
                 stream.seq_value_begin()?;
@@ -525,25 +520,8 @@ impl Value for DistributionBuckets {
     }
 }
 
-fn bucket_index(value: f64, scale: i32) -> i32 {
-    let value = value.abs();
-
-    let gamma = 2.0f64.powf(2.0f64.powi(-scale));
-    let index = value.log(gamma).ceil();
-
-    index as i32
-}
-
-fn rescale(min: f64, max: f64, scale: i32, target_buckets: usize) -> i32 {
-    let gamma = 2.0f64.powf(2.0f64.powi(-scale));
-    let min = min.abs().log(gamma).ceil();
-    let max = max.abs().log(gamma).ceil();
-    let size = (max + -min).abs();
-
-    cmp::min(
-        scale,
-        scale - (size / target_buckets as f64).log2().ceil() as i32,
-    )
+fn bucket(value: f64, gamma: f64) -> isize {
+    value.log(gamma).ceil() as isize
 }
 
 #[derive(Default)]
@@ -809,44 +787,6 @@ mod tests {
                 }
             },
         );
-    }
-
-    #[test]
-    fn compute_bucket_indexes() {
-        for (value, scale, expected) in [
-            (50f64, 3, 46),
-            (51f64, 3, 46),
-            (-50f64, 3, 46),
-            (-51f64, 3, 46),
-        ] {
-            let actual = bucket_index(value, scale);
-            assert_eq!(
-                expected, actual,
-                "expected bucket_index({value}, {scale}) to be {expected:?} but got {actual:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn compute_rescale() {
-        for (min, max, scale, target_buckets, expected) in [
-            (1f64, 1000f64, 2, 160, 2),
-            (0.1f64, 100.0f64, 3, 160, 3),
-            (0.1f64, 100.0f64, 6, 160, 4),
-            (0.000001f64, 100.0f64, 5, 160, 2),
-            (-100.0f64, -0.1f64, 3, 160, 3),
-            (-100.0f64, -0.1f64, 6, 160, 4),
-            (-100.0f64, -0.000001f64, 5, 160, 2),
-            (1f64, 1000000f64, -2, 3, -3),
-        ] {
-            let actual = rescale(min, max, scale, target_buckets);
-
-            assert_eq!(
-                expected, actual,
-                "expected rescale({min}, {max}, {scale}) to be {expected} but got {actual}"
-            );
-            assert_eq!(actual, rescale(min, max, actual, target_buckets));
-        }
     }
 
     fn midpoint_from_index(index: i32, scale: i32) -> f64 {

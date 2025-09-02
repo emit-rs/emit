@@ -1,4 +1,4 @@
-## Cumulative metrics
+# Cumulative metrics
 
 Metric events where their extent is a point are cumulative. Their `metric_value` is the result of applying their `metric_agg` over the entire underlying stream up to that point.
 
