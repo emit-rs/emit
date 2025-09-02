@@ -139,10 +139,8 @@ impl EventEncoder for MetricsEventEncoder {
                     }),
                 }),
                 Some(emit::well_known::METRIC_AGG_COUNT) => {
-                    if let Some(distribution) = Distribution::from_values(
-                        dist_scale,
-                        dist_buckets,
-                    ) {
+                    if let Some(distribution) = Distribution::from_values(dist_scale, dist_buckets)
+                    {
                         E::encode(Metric::<_, _, _> {
                             name: &sval::Display::new(metric_name),
                             unit: &metric_unit.map(sval::Display::new),
@@ -156,13 +154,17 @@ impl EventEncoder for MetricsEventEncoder {
                                         count: distribution.total_count,
                                         scale: distribution.scale,
                                         zero_count: distribution.zero,
-                                        positive: distribution.positive.as_ref().map(|buckets| Buckets {
-                                            offset: bucket_index(buckets.min.0, buckets.scale),
-                                            bucket_counts: buckets,
+                                        positive: distribution.positive.as_ref().map(|buckets| {
+                                            Buckets {
+                                                offset: bucket_index(buckets.min.0, buckets.scale),
+                                                bucket_counts: buckets,
+                                            }
                                         }),
-                                        negative: distribution.negative.as_ref().map(|buckets| Buckets {
-                                            offset: bucket_index(buckets.min.0, buckets.scale),
-                                            bucket_counts: buckets,
+                                        negative: distribution.negative.as_ref().map(|buckets| {
+                                            Buckets {
+                                                offset: bucket_index(buckets.min.0, buckets.scale),
+                                                bucket_counts: buckets,
+                                            }
                                         }),
                                     }],
                                 },
@@ -309,48 +311,154 @@ impl Distribution {
         dist_bucket_scale: Option<emit::Value>,
         dist_bucket_points: Option<emit::Value>,
     ) -> Option<Self> {
+        struct Extract {
+            depth: usize,
+            positive: BTreeMap<Midpoint, u64>,
+            negative: BTreeMap<Midpoint, u64>,
+            zero: u64,
+            total_count: u64,
+            next_midpoint: Option<f64>,
+            next_count: Option<u64>,
+        }
+
+        impl Extract {
+            fn push(
+                &mut self,
+                midpoint: impl FnOnce() -> Option<f64>,
+                count: impl FnOnce() -> Option<u64>,
+            ) -> sval::Result {
+                if self.depth == 2 {
+                    if self.next_midpoint.is_none() {
+                        self.next_midpoint = midpoint();
+
+                        return Ok(());
+                    }
+
+                    if self.next_count.is_none() {
+                        self.next_count = count();
+
+                        return Ok(());
+                    }
+                }
+
+                sval::error()
+            }
+
+            fn apply(&mut self) -> sval::Result {
+                if self.depth == 2 {
+                    let midpoint = self
+                        .next_midpoint
+                        .take()
+                        .ok_or_else(|| sval::Error::new())?;
+                    let count = self.next_count.take().ok_or_else(|| sval::Error::new())?;
+
+                    if !midpoint.is_finite() {
+                        return sval::error();
+                    }
+
+                    let buckets = if midpoint.is_sign_positive() {
+                        &mut self.positive
+                    } else {
+                        &mut self.negative
+                    };
+
+                    let midpoint = midpoint.abs();
+
+                    if midpoint == 0.0 {
+                        self.zero += count;
+                    } else {
+                        *buckets.entry(Midpoint(midpoint)).or_insert(0) += count;
+                    }
+
+                    self.total_count += count;
+
+                    Ok(())
+                } else {
+                    Ok(())
+                }
+            }
+        }
+
+        impl<'sval> Stream<'sval> for Extract {
+            fn null(&mut self) -> sval::Result {
+                sval::error()
+            }
+
+            fn bool(&mut self, _: bool) -> sval::Result {
+                sval::error()
+            }
+
+            fn text_begin(&mut self, _: Option<usize>) -> sval::Result {
+                sval::error()
+            }
+
+            fn text_fragment_computed(&mut self, _: &str) -> sval::Result {
+                sval::error()
+            }
+
+            fn text_end(&mut self) -> sval::Result {
+                sval::error()
+            }
+
+            fn i64(&mut self, value: i64) -> sval::Result {
+                self.push(|| Some(value as f64), || value.try_into().ok())
+            }
+
+            fn u64(&mut self, value: u64) -> sval::Result {
+                self.push(|| Some(value as f64), || Some(value))
+            }
+
+            fn f64(&mut self, value: f64) -> sval::Result {
+                self.push(|| Some(value), || Some(value as u64))
+            }
+
+            fn seq_begin(&mut self, _: Option<usize>) -> sval::Result {
+                self.depth += 1;
+
+                if self.depth > 2 {
+                    sval::error()
+                } else {
+                    Ok(())
+                }
+            }
+
+            fn seq_value_begin(&mut self) -> sval::Result {
+                Ok(())
+            }
+
+            fn seq_value_end(&mut self) -> sval::Result {
+                Ok(())
+            }
+
+            fn seq_end(&mut self) -> sval::Result {
+                self.apply()?;
+                self.depth -= 1;
+
+                Ok(())
+            }
+        }
+
         if let (Some(dist_bucket_scale), Some(dist_bucket_points)) = (
             dist_bucket_scale.and_then(|v| v.cast::<i32>()),
             dist_bucket_points,
         ) {
             let target_buckets = 160;
             let mut scale = dist_bucket_scale;
-            let mut positive = BTreeMap::new();
-            let mut negative = BTreeMap::new();
-            let mut zero = 0;
-            let mut total_count = 0;
-            let mut valid = true;
 
-            if emit::metric::dist::visit_bucket_points(dist_bucket_points, |midpoint, count| {
-                if !midpoint.is_finite() {
-                    valid = false;
+            let mut extract = Extract {
+                depth: 0,
+                positive: BTreeMap::new(),
+                negative: BTreeMap::new(),
+                zero: 0,
+                total_count: 0,
+                next_midpoint: None,
+                next_count: None,
+            };
 
-                    return ControlFlow::Break(());
-                }
+            sval::stream(&mut extract, &dist_bucket_points).ok()?;
 
-                let buckets = if midpoint.is_sign_positive() {
-                    &mut positive
-                } else {
-                    &mut negative
-                };
-
-                let midpoint = midpoint.abs();
-
-                if midpoint == 0.0 {
-                    zero += count;
-                } else {
-                    *buckets.entry(Midpoint(midpoint)).or_insert(0) += count;
-                }
-
-                total_count += count;
-
-                ControlFlow::Continue(())
-            })
-            .map_err(|_| ())
-            .and_then(|_| if valid { Ok(()) } else { Err(()) })
-            .is_ok()
-            {
-                let distribution_buckets_from_map = |buckets: BTreeMap<Midpoint, u64>, scale: &mut i32| {
+            let distribution_buckets_from_map =
+                |buckets: BTreeMap<Midpoint, u64>, scale: &mut i32| {
                     let Some((min, _)) = buckets.first_key_value() else {
                         return None;
                     };
@@ -363,26 +471,25 @@ impl Distribution {
 
                     Some((*min, buckets))
                 };
-                
-                let positive = distribution_buckets_from_map(positive, &mut scale);
-                let negative = distribution_buckets_from_map(negative, &mut scale);
 
-                return Some(Distribution {
-                    positive: positive.map(|(min, buckets)| DistributionBuckets {
-                        scale,
-                        min,
-                        buckets,
-                    }),
-                    negative: negative.map(|(min, buckets)| DistributionBuckets {
-                        scale,
-                        min,
-                        buckets,
-                    }),
-                    zero,
-                    total_count,
+            let positive = distribution_buckets_from_map(extract.positive, &mut scale);
+            let negative = distribution_buckets_from_map(extract.negative, &mut scale);
+
+            return Some(Distribution {
+                positive: positive.map(|(min, buckets)| DistributionBuckets {
                     scale,
-                });
-            }
+                    min,
+                    buckets,
+                }),
+                negative: negative.map(|(min, buckets)| DistributionBuckets {
+                    scale,
+                    min,
+                    buckets,
+                }),
+                zero: extract.zero,
+                total_count: extract.total_count,
+                scale,
+            });
         }
 
         None
@@ -391,12 +498,30 @@ impl Distribution {
 
 impl Value for DistributionBuckets {
     fn stream<'sval, S: Stream<'sval> + ?Sized>(&'sval self, stream: &mut S) -> sval::Result {
-        todo!()
+        stream.seq_begin(None)?;
+        let mut last_index = bucket_index(self.min.0, self.scale);
+
+        for (midpoint, count) in &self.buckets {
+            let index = bucket_index(midpoint.0, self.scale);
+
+            for _ in (last_index + 1)..index {
+                stream.seq_value_begin()?;
+                stream.u64(0)?;
+                stream.seq_value_end()?;
+            }
+
+            stream.seq_value_begin()?;
+            stream.u64(*count)?;
+            stream.seq_value_end()?;
+
+            last_index = index;
+        }
+
+        stream.seq_end()
     }
 }
 
 fn bucket_index(value: f64, scale: i32) -> i32 {
-    let positive = value == 0.0 || value.is_sign_positive();
     let value = value.abs();
 
     let gamma = 2.0f64.powf(2.0f64.powi(-scale));
@@ -413,7 +538,7 @@ fn rescale(min: f64, max: f64, scale: i32, target_buckets: usize) -> i32 {
 
     cmp::min(
         scale,
-        scale - ((size / target_buckets as f64).log2().ceil()) as i32,
+        scale - (size / target_buckets as f64).log2().ceil() as i32,
     )
 }
 
