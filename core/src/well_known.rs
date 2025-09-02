@@ -119,7 +119,7 @@ pub const KEY_METRIC_UNIT: &'static str = "metric_unit";
 pub const KEY_METRIC_DESCRIPTION: &'static str = "metric_description";
 
 /** The midpoint values of buckets in a distribution. */
-pub const KEY_DIST_BUCKET_POINTS: &'static str = "dist_bucket_midpoints";
+pub const KEY_DIST_BUCKET_POINTS: &'static str = "dist_bucket_points";
 /** The scale of buckets in a distribution. */
 pub const KEY_DIST_BUCKET_SCALE: &'static str = "dist_bucket_scale";
 /** The count of values in a distribution. */

@@ -79,8 +79,8 @@ impl EventEncoder for MetricsEventEncoder {
             };
 
             let mut metric_unit = None;
-            let mut dist_scale = None;
-            let mut dist_buckets = None;
+            let mut dist_bucket_scale = None;
+            let mut dist_bucket_points = None;
             let mut attributes = Vec::new();
 
             let _ = evt.props().for_each(|k, v| match k.get() {
@@ -91,12 +91,12 @@ impl EventEncoder for MetricsEventEncoder {
                     ControlFlow::Continue(())
                 }
                 emit::well_known::KEY_DIST_BUCKET_SCALE => {
-                    dist_scale = Some(v);
+                    dist_bucket_scale = Some(v);
 
                     ControlFlow::Continue(())
                 }
                 emit::well_known::KEY_DIST_BUCKET_POINTS => {
-                    dist_buckets = Some(v);
+                    dist_bucket_points = Some(v);
 
                     ControlFlow::Continue(())
                 }
@@ -134,12 +134,13 @@ impl EventEncoder for MetricsEventEncoder {
                             attributes: &attributes,
                             start_time_unix_nano,
                             time_unix_nano,
-                            value: number_data_point_from_value(metric_value)?,
+                            value: NumberDataPointValue::from_value(metric_value)?,
                         }],
                     }),
                 }),
                 Some(emit::well_known::METRIC_AGG_COUNT) => {
-                    if let Some(distribution) = Distribution::from_values(dist_scale, dist_buckets)
+                    if let Some(distribution) =
+                        Distribution::from_values(dist_bucket_scale, dist_bucket_points)
                     {
                         E::encode(Metric::<_, _, _> {
                             name: &sval::Display::new(metric_name),
@@ -181,7 +182,7 @@ impl EventEncoder for MetricsEventEncoder {
                                     attributes: &attributes,
                                     start_time_unix_nano,
                                     time_unix_nano,
-                                    value: number_data_point_from_value(metric_value)?,
+                                    value: NumberDataPointValue::from_value(metric_value)?,
                                 }],
                             }),
                         })
@@ -195,7 +196,7 @@ impl EventEncoder for MetricsEventEncoder {
                             attributes: &attributes,
                             start_time_unix_nano,
                             time_unix_nano,
-                            value: number_data_point_from_value(metric_value)?,
+                            value: NumberDataPointValue::from_value(metric_value)?,
                         }],
                     }),
                 }),
@@ -211,62 +212,65 @@ impl EventEncoder for MetricsEventEncoder {
     }
 }
 
-fn number_data_point_from_value(value: emit::Value) -> Option<NumberDataPointValue> {
-    struct Extract(Option<NumberDataPointValue>);
-    impl<'sval> sval::Stream<'sval> for Extract {
-        fn null(&mut self) -> sval::Result {
-            sval::error()
+impl NumberDataPointValue {
+    fn from_value(value: emit::Value) -> Option<Self> {
+        struct Extract(Option<NumberDataPointValue>);
+
+        impl<'sval> sval::Stream<'sval> for Extract {
+            fn null(&mut self) -> sval::Result {
+                sval::error()
+            }
+
+            fn bool(&mut self, _: bool) -> sval::Result {
+                sval::error()
+            }
+
+            fn text_begin(&mut self, _: Option<usize>) -> sval::Result {
+                sval::error()
+            }
+
+            fn text_fragment_computed(&mut self, _: &str) -> sval::Result {
+                sval::error()
+            }
+
+            fn text_end(&mut self) -> sval::Result {
+                sval::error()
+            }
+
+            fn i64(&mut self, value: i64) -> sval::Result {
+                self.0 = Some(NumberDataPointValue::AsInt(AsInt(value)));
+
+                Ok(())
+            }
+
+            fn f64(&mut self, value: f64) -> sval::Result {
+                self.0 = Some(NumberDataPointValue::AsDouble(AsDouble(value)));
+
+                Ok(())
+            }
+
+            fn seq_begin(&mut self, _: Option<usize>) -> sval::Result {
+                sval::error()
+            }
+
+            fn seq_value_begin(&mut self) -> sval::Result {
+                sval::error()
+            }
+
+            fn seq_value_end(&mut self) -> sval::Result {
+                sval::error()
+            }
+
+            fn seq_end(&mut self) -> sval::Result {
+                sval::error()
+            }
         }
 
-        fn bool(&mut self, _: bool) -> sval::Result {
-            sval::error()
-        }
+        let mut extract = Extract(None);
+        value.stream(&mut extract).ok()?;
 
-        fn text_begin(&mut self, _: Option<usize>) -> sval::Result {
-            sval::error()
-        }
-
-        fn text_fragment_computed(&mut self, _: &str) -> sval::Result {
-            sval::error()
-        }
-
-        fn text_end(&mut self) -> sval::Result {
-            sval::error()
-        }
-
-        fn i64(&mut self, value: i64) -> sval::Result {
-            self.0 = Some(NumberDataPointValue::AsInt(AsInt(value)));
-
-            Ok(())
-        }
-
-        fn f64(&mut self, value: f64) -> sval::Result {
-            self.0 = Some(NumberDataPointValue::AsDouble(AsDouble(value)));
-
-            Ok(())
-        }
-
-        fn seq_begin(&mut self, _: Option<usize>) -> sval::Result {
-            sval::error()
-        }
-
-        fn seq_value_begin(&mut self) -> sval::Result {
-            sval::error()
-        }
-
-        fn seq_value_end(&mut self) -> sval::Result {
-            sval::error()
-        }
-
-        fn seq_end(&mut self) -> sval::Result {
-            sval::error()
-        }
+        extract.0
     }
-
-    let mut extract = Extract(None);
-    let _ = value.stream(&mut extract);
-
-    extract.0
 }
 
 struct Distribution {
@@ -581,7 +585,7 @@ mod tests {
 
     use prost::Message;
 
-    use crate::data::{generated::metrics::v1 as metrics, util::*, AnyValue};
+    use crate::data::{generated::metrics::v1 as metrics, util::*};
 
     fn double_point(v: impl Into<f64>) -> metrics::number_data_point::Value {
         metrics::number_data_point::Value::AsDouble(v.into())
@@ -845,29 +849,78 @@ mod tests {
         }
     }
 
-    #[test]
-    fn decode_histogram() {
-        // TODO: Replace this with a proper test once we've wired up histograms fully
-        let encoded = sval_protobuf::stream_to_protobuf(ExponentialHistogram {
-            data_points: &[ExponentialHistogramDataPoint {
-                attributes: &[KeyValue {
-                    key: "attribute_1",
-                    value: AnyValue::String("value_1"),
-                }],
-                start_time_unix_nano: 1,
-                time_unix_nano: 2,
-                count: 8,
-                scale: 1,
-                zero_count: 3,
-                positive: Some(Buckets {
-                    offset: 2,
-                    bucket_counts: &[1, 2, 3, 4, 5],
-                }),
-                negative: None,
-            }],
-            aggregation_temporality: AggregationTemporality::Delta,
-        });
+    fn midpoint_from_index(index: i32, scale: i32) -> f64 {
+        let gamma = 2.0f64.powf(2.0f64.powi(-scale));
+        let lower = gamma.powi(index - 1);
+        let upper = lower * gamma;
 
-        assert!(metrics::ExponentialHistogram::decode(&*encoded.to_vec()).is_ok());
+        lower.midpoint(upper)
+    }
+
+    #[test]
+    fn encode_histogram_seq() {
+        encode_event::<MetricsEventEncoder>(
+            emit::evt!(
+                "{metric_agg} of {metric_name} is {metric_value}",
+                evt_kind: "metric",
+                metric_name: "test",
+                metric_agg: "count",
+                metric_value: 100,
+                #[emit::as_sval]
+                dist_bucket_points: [
+                    (0.0, 3),
+                    (midpoint_from_index(-1, 2), 4),
+                    (midpoint_from_index(3, 2), 5),
+                    (midpoint_from_index(4, 2), 6),
+                    (midpoint_from_index(10, 2), 1),
+                    (-midpoint_from_index(1, 2), 1),
+                    (-midpoint_from_index(3, 2), 2),
+                ],
+                dist_bucket_scale: 2,
+            ),
+            |buf| {
+                let de = metrics::Metric::decode(buf).unwrap();
+
+                assert_eq!("test", de.name);
+
+                match de.data {
+                    Some(metrics::metric::Data::ExponentialHistogram(histogram)) => {
+                        assert_eq!(1, histogram.data_points.len());
+
+                        assert_eq!(2, histogram.data_points[0].scale);
+                        assert_eq!(
+                            -1,
+                            histogram.data_points[0].positive.as_ref().unwrap().offset
+                        );
+                        assert_eq!(
+                            &[4, 0, 0, 0, 5, 6, 0, 0, 0, 0, 0, 1],
+                            &*histogram.data_points[0]
+                                .positive
+                                .as_ref()
+                                .unwrap()
+                                .bucket_counts
+                        );
+
+                        assert_eq!(
+                            1,
+                            histogram.data_points[0].negative.as_ref().unwrap().offset
+                        );
+                        assert_eq!(
+                            &[1, 0, 2],
+                            &*histogram.data_points[0]
+                                .negative
+                                .as_ref()
+                                .unwrap()
+                                .bucket_counts
+                        );
+
+                        assert_eq!(3, histogram.data_points[0].zero_count);
+
+                        assert_eq!(22, histogram.data_points[0].count);
+                    }
+                    other => panic!("unexpected {other:?}"),
+                }
+            },
+        );
     }
 }
