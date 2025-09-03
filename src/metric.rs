@@ -1230,26 +1230,9 @@ pub mod dist {
 
     This function uses the same `scale` as OpenTelemetry's metrics data model, but returns the midpoint of the bucket a value belongs to instead of its index.
 
-    ## Algorithm
+    # Implementation
 
-    This function implements the following procedure:
-
-    ```text
-    let sign = value.signum();
-    let value = value.abs();
-
-    if value == 0.0 { return value; }
-
-    let gamma = 2.0f64.powf(2.0f64.powf(-scale));
-    let index = value.log(gamma).ceil();
-
-    let lower = gamma.log(index - 1.0);
-    let upper = lower * gamma;
-
-    sign * lower.midpoint(upper)
-    ```
-
-    The implementation here uses a portable implementation of `powf` and `log` that is consistent across platforms.
+    This function uses a portable implementation of `powf` and `log` that is consistent across platforms.
     You may also consider using a native port of it for performance reasons.
     */
     pub const fn midpoint(value: f64, scale: i32) -> f64 {
@@ -1271,17 +1254,36 @@ pub mod dist {
     }
 
     /**
-    Compute the index of the bucket a value belongs to at a given scale.
+    Compute the exponential bucket index of a finite, non-zero value belongs to at a given scale.
+
+    This function is a step in computing a bucket's midpoint value, as in [`midpoint`].
+
+    A negative result does not mean the input value was negative, values close to zero get negative indexes.
+    Negative values will produce the same index as their absolute counterpart.
+
+    This function accepts the following parameters:
+
+    - `value`: A raw observed value, or a midpoint computed by [`midpoint`].
+    - `scale`: The size of exponential buckets. Larger scales produce larger numbers of smaller buckets.
 
     # Panics
 
-    This function panics if `value` is `0` or `-0`.
+    This function panics if `value` is `0`, `-0`, or non-finite.
+
+    # Implementation
+
+    This function uses a portable implementation of `powf` and `log` that is consistent across platforms.
+    You may also consider using a native port of it for performance reasons.
     */
-    pub const fn bucket(value: f64, scale: i32) -> isize {
+    pub const fn index(value: f64, scale: i32) -> isize {
         let value = value.abs();
 
         if value == 0.0 {
             panic!("cannot compute a bucket index for the value 0");
+        }
+
+        if !value.is_finite() {
+            panic!("cannot compute a bucket index for a non-finite value");
         }
 
         let gamma = libm::pow(2.0, libm::pow(2.0, -(scale as f64)));
@@ -1290,22 +1292,84 @@ pub mod dist {
     }
 
     /**
-    Compute the number of buckets between a range of values at a given scale.
+    Compute the number of exponential buckets that exist between a range of finite, non-zero values at a given scale.
+
+    This function can be used to detect whether the range of stored bucket midpoints would produce a histogram with too many buckets.
+
+    This function accepts the following parameters:
+
+    - `values`: A range of raw observed values or midpoints computed by [`midpoint`].
+    - `scale`: The size of exponential buckets. Larger scales produce larger numbers of smaller buckets.
+
+    # Panics
+
+    This function panics if either end of `values` is `0`, `-0`, or non-finite.
+
+    # Implementation
+
+    This function uses a portable implementation of `powf` and `log` that is consistent across platforms.
+    You may also consider using a native port of it for performance reasons.
     */
     pub const fn size(values: Range<f64>, scale: i32) -> usize {
         let gamma = libm::pow(2.0, libm::pow(2.0, -(scale as f64)));
 
-        let min = values.start.signum() * libm::ceil(libm::log(values.start.abs(), gamma));
-        let max = values.end.signum() * libm::ceil(libm::log(values.end.abs(), gamma));
+        let min = {
+            let sign = values.start.signum();
+            let value = values.start.abs();
+
+            if value == 0.0 {
+                panic!("cannot compute the size of a range where the start bound is 0");
+            }
+
+            if !value.is_finite() {
+                panic!("cannot compute the size of a range where the start bound is non-finite");
+            }
+
+            sign * libm::ceil(libm::log(value, gamma))
+        };
+        let max = {
+            let sign = values.end.signum();
+            let value = values.end.abs();
+
+            if value == 0.0 {
+                panic!("cannot compute the size of a range where the end bound is 0");
+            }
+
+            if !value.is_finite() {
+                panic!("cannot compute the size of a range where the end bound is non-finite");
+            }
+
+            sign * libm::ceil(libm::log(value, gamma))
+        };
 
         (max + -min).abs() as usize
     }
 
     /**
-    Compute a scale that will fit the range of values within a target size.
+    Compute a scale that will fit the range of finite, non-zero values within a target number of buckets.
+
+    This function can be used to rescale stored bucket midpoints to fewer, coarser values.
+
+    This function accepts the following parameters:
+
+    - `values`: A range of raw observed values or midpoints computed by [`midpoint`].
+    - `size`: The maximum number of buckets within the range when values are converted into indexes by [`index`].
+
+    # Panics
+
+    This function panics if `buckets` is `0`, or if either end of `values` is `0`, `-0`, or non-finite.
+
+    # Implementation
+
+    This function uses a portable implementation of `powf` and `log` that is consistent across platforms.
+    You may also consider using a native port of it for performance reasons.
     */
-    pub const fn scale(values: Range<f64>, buckets: usize) -> i32 {
-        -libm::log2(size(values, 0) as f64 / buckets as f64).ceil() as i32
+    pub const fn scale(values: Range<f64>, size: usize) -> i32 {
+        if size == 0 {
+            panic!("cannot compute a scale for a size of zero");
+        }
+
+        -libm::log2(self::size(values, 0) as f64 / size as f64).ceil() as i32
     }
 
     #[cfg(test)]
@@ -1314,7 +1378,7 @@ pub mod dist {
 
         use super::*;
 
-        fn index(index: isize, scale: i32) -> f64 {
+        fn index_of(index: isize, scale: i32) -> f64 {
             let gamma = 2.0f64.powf(2.0f64.powi(-scale));
             let lower = gamma.powi((index - 1) as i32);
             let upper = lower * gamma;
@@ -1326,10 +1390,10 @@ pub mod dist {
         fn compute_size() {
             for scale in [-1, 0, 1, 2, 3] {
                 for (range, expected) in [
-                    (index(0, scale)..index(0, scale), 0),
-                    (index(0, scale)..index(1, scale), 1),
-                    (index(-1, scale)..index(0, scale), 1),
-                    (index(-1, scale)..index(1, scale), 2),
+                    (index_of(0, scale)..index_of(0, scale), 0),
+                    (index_of(0, scale)..index_of(1, scale), 1),
+                    (index_of(-1, scale)..index_of(0, scale), 1),
+                    (index_of(-1, scale)..index_of(1, scale), 2),
                 ] {
                     let actual = size(range.clone(), scale);
 
@@ -1344,32 +1408,48 @@ pub mod dist {
         }
 
         #[test]
-        fn compute_bucket() {
+        fn compute_index() {
             for (value, scale, expected) in [
                 (50f64, 3, 46),
                 (51f64, 3, 46),
+                (f64::MAX, 3, 8192),
+                (f64::EPSILON, 3, -415),
                 (-50f64, 3, 46),
                 (-51f64, 3, 46),
+                (f64::MIN, 3, 8192),
+                (-f64::EPSILON, 3, -415),
             ] {
-                let actual = bucket(value, scale);
+                let actual = index(value, scale);
 
                 assert_eq!(
                     expected, actual,
-                    "expected bucket({value}, {scale}) to be {expected:?} but got {actual:?}"
+                    "expected index({value}, {scale}) to be {expected:?} but got {actual:?}"
                 );
             }
         }
 
         #[test]
         #[should_panic]
-        fn compute_bucket_0() {
-            bucket(0.0, 2);
+        fn compute_index_0() {
+            index(0.0, 2);
         }
 
         #[test]
         #[should_panic]
-        fn compute_bucket_neg_0() {
-            bucket(-0.0, 2);
+        fn compute_index_neg_0() {
+            index(-0.0, 2);
+        }
+
+        #[test]
+        #[should_panic]
+        fn compute_index_inf() {
+            index(f64::INFINITY, 2);
+        }
+
+        #[test]
+        #[should_panic]
+        fn compute_index_nan() {
+            index(f64::NAN, 2);
         }
 
         #[test]
@@ -1381,6 +1461,7 @@ pub mod dist {
                 (-100.0f64..-0.1f64, 160, 4),
                 (-100.0f64..-0.000001f64, 160, 2),
                 (1f64..1000000f64, 3, -3),
+                (f64::MIN..f64::MAX, 160, -4),
             ] {
                 let actual = scale(range.clone(), size);
 
@@ -1391,6 +1472,36 @@ pub mod dist {
 
                 assert_eq!(actual, scale(range.end..range.start, size));
             }
+        }
+
+        #[test]
+        #[should_panic]
+        fn compute_scale_buckets_0() {
+            scale(1.0f64..10.0f64, 0);
+        }
+
+        #[test]
+        #[should_panic]
+        fn compute_scale_bound_0() {
+            scale(0.0f64..1.0f64, 160);
+        }
+
+        #[test]
+        #[should_panic]
+        fn compute_scale_bound_neg_0() {
+            scale(-1.0f64..-0.0f64, 160);
+        }
+
+        #[test]
+        #[should_panic]
+        fn compute_scale_bound_inf() {
+            scale(0.0f64..f64::INFINITY, 160);
+        }
+
+        #[test]
+        #[should_panic]
+        fn compute_scale_bound_nan() {
+            scale(f64::NAN..1.0f64, 160);
         }
 
         #[test]
