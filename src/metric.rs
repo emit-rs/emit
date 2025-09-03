@@ -1212,9 +1212,182 @@ pub mod dist {
     Functions for working with metric distributions.
     */
 
-    use crate::platform::libm;
+    use crate::{
+        platform::libm,
+        value::{FromValue, ToValue, Value},
+    };
 
-    use core::ops::Range;
+    use core::{cmp, fmt, hash, ops::Range};
+
+    /**
+    A totally ordered value, representing the midpoint of an exponential bucket.
+
+    Values to construct midpoints from can be computed by the [`midpoint`] function.
+
+    This type is a plain wrapper over `f64`, but implements the necessary ordering traits needed to store them in `BTreeMap`s or `HashMap`s.
+    */
+    #[derive(Clone, Copy)]
+    #[repr(transparent)]
+    pub struct Midpoint(f64);
+
+    impl Midpoint {
+        /**
+        Treat a midpoint `f64` value as a `Midpoint`.
+        */
+        pub const fn new(midpoint: f64) -> Self {
+            Midpoint(midpoint)
+        }
+
+        /**
+        Get the value of this midpoint as an `f64`.
+        */
+        pub const fn get(&self) -> f64 {
+            self.0
+        }
+
+        /**
+        Whether the sign of the midpoint is positive.
+        */
+        pub const fn is_sign_positive(&self) -> bool {
+            self.get().is_sign_positive()
+        }
+
+        /**
+        Whether the sign of the midpoint is negative.
+        */
+        pub const fn is_sign_negative(&self) -> bool {
+            self.get().is_sign_negative()
+        }
+
+        /**
+        Whether the midpoint is for the zero bucket.
+
+        If this method returns `true`, then [`self.is_positive_bucket`] and [`self.is_negative_bucket`] will both return `false`.
+        */
+        pub const fn is_zero_bucket(&self) -> bool {
+            self.get() == 0.0
+        }
+
+        /**
+        Whether the midpoint belongs to a positive bucket.
+
+        If this method returns `true`, then [`self.is_zero_bucket`] and [`self.is_negative_bucket`] will both return `false`.
+        */
+        pub const fn is_positive_bucket(&self) -> bool {
+            self.is_indexable() && self.is_sign_positive()
+        }
+
+        /**
+        Whether the midpoint belongs to a negative bucket.
+
+        If this method returns `true`, then [`self.is_zero_bucket`] and [`self.is_positive_bucket`] will both return `false`.
+        */
+        pub const fn is_negative_bucket(&self) -> bool {
+            self.is_indexable() && self.is_sign_negative()
+        }
+
+        /**
+        Whether the midpoint can be represented as an exponential bucket index.
+
+        A midpoint is considered indexable if:
+
+        1. It is not `0` or `-0`.
+        2. It is finite (not infinity or NaN).
+        */
+        pub const fn is_indexable(&self) -> bool {
+            let value = self.get();
+
+            value != 0.0 && value.is_finite()
+        }
+    }
+
+    impl From<f64> for Midpoint {
+        fn from(value: f64) -> Self {
+            Midpoint::new(value)
+        }
+    }
+
+    impl From<Midpoint> for f64 {
+        fn from(value: Midpoint) -> Self {
+            value.get()
+        }
+    }
+
+    impl PartialEq for Midpoint {
+        fn eq(&self, other: &Self) -> bool {
+            self.cmp(other) == cmp::Ordering::Equal
+        }
+    }
+
+    impl Eq for Midpoint {}
+
+    impl PartialOrd for Midpoint {
+        fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+
+    impl Ord for Midpoint {
+        fn cmp(&self, other: &Self) -> cmp::Ordering {
+            libm::cmp(self.get()).cmp(&libm::cmp(other.get()))
+        }
+    }
+
+    impl hash::Hash for Midpoint {
+        fn hash<H: hash::Hasher>(&self, state: &mut H) {
+            libm::cmp(self.get()).hash(state)
+        }
+    }
+
+    impl fmt::Debug for Midpoint {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            fmt::Debug::fmt(&self.get(), f)
+        }
+    }
+
+    impl fmt::Display for Midpoint {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            fmt::Display::fmt(&self.get(), f)
+        }
+    }
+
+    #[cfg(feature = "sval")]
+    impl sval::Value for Midpoint {
+        fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(
+            &'sval self,
+            stream: &mut S,
+        ) -> sval::Result {
+            stream.f64(self.get())
+        }
+    }
+
+    #[cfg(feature = "serde")]
+    impl serde::Serialize for Midpoint {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            serializer.serialize_f64(self.get())
+        }
+    }
+
+    impl ToValue for Midpoint {
+        fn to_value(&self) -> Value<'_> {
+            Value::capture_display(self)
+        }
+    }
+
+    impl<'v> FromValue<'v> for Midpoint {
+        fn from_value(value: Value<'v>) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            value
+                .downcast_ref::<Midpoint>()
+                .copied()
+                .or_else(|| f64::from_value(value).map(Midpoint::new))
+        }
+    }
 
     /**
     Compute the exponential bucket midpoint for the given input value at a given scale.
@@ -1235,12 +1408,12 @@ pub mod dist {
     This function uses a portable implementation of `powf` and `log` that is consistent across platforms.
     You may also consider using a native port of it for performance reasons.
     */
-    pub const fn midpoint(value: f64, scale: i32) -> f64 {
+    pub const fn midpoint(value: f64, scale: i32) -> Midpoint {
         let sign = value.signum();
         let value = value.abs();
 
         if value == 0.0 {
-            return value;
+            return Midpoint::new(value);
         }
 
         let gamma = libm::pow(2.0, libm::pow(2.0, -(scale as f64)));
@@ -1250,7 +1423,7 @@ pub mod dist {
         let lower = libm::pow(gamma, index - 1.0);
         let upper = lower * gamma;
 
-        sign * lower.midpoint(upper)
+        Midpoint::new(sign * lower.midpoint(upper))
     }
 
     /**
@@ -1258,12 +1431,13 @@ pub mod dist {
 
     This function is a step in computing a bucket's midpoint value, as in [`midpoint`].
 
-    A negative result does not mean the input value was negative, values close to zero get negative indexes.
+    A negative result does not mean the input value was negative.
+    Values close to zero get negative indexes.
     Negative values will produce the same index as their absolute counterpart.
 
     This function accepts the following parameters:
 
-    - `value`: A raw observed value, or a midpoint computed by [`midpoint`].
+    - `value`: A bucket midpoint computed by [`midpoint`].
     - `scale`: The size of exponential buckets. Larger scales produce larger numbers of smaller buckets.
 
     # Panics
@@ -1275,8 +1449,8 @@ pub mod dist {
     This function uses a portable implementation of `powf` and `log` that is consistent across platforms.
     You may also consider using a native port of it for performance reasons.
     */
-    pub const fn index(value: f64, scale: i32) -> isize {
-        let value = value.abs();
+    pub const fn index(value: Midpoint, scale: i32) -> isize {
+        let value = value.get().abs();
 
         if value == 0.0 {
             panic!("cannot compute a bucket index for the value 0");
@@ -1298,7 +1472,7 @@ pub mod dist {
 
     This function accepts the following parameters:
 
-    - `values`: A range of raw observed values or midpoints computed by [`midpoint`].
+    - `values`: A range of bucket midpoints computed by [`midpoint`].
     - `scale`: The size of exponential buckets. Larger scales produce larger numbers of smaller buckets.
 
     # Panics
@@ -1310,12 +1484,12 @@ pub mod dist {
     This function uses a portable implementation of `powf` and `log` that is consistent across platforms.
     You may also consider using a native port of it for performance reasons.
     */
-    pub const fn size(values: Range<f64>, scale: i32) -> usize {
+    pub const fn size(values: Range<Midpoint>, scale: i32) -> usize {
         let gamma = libm::pow(2.0, libm::pow(2.0, -(scale as f64)));
 
         let min = {
-            let sign = values.start.signum();
-            let value = values.start.abs();
+            let sign = values.start.get().signum();
+            let value = values.start.get().abs();
 
             if value == 0.0 {
                 panic!("cannot compute the size of a range where the start bound is 0");
@@ -1328,8 +1502,8 @@ pub mod dist {
             sign * libm::ceil(libm::log(value, gamma))
         };
         let max = {
-            let sign = values.end.signum();
-            let value = values.end.abs();
+            let sign = values.end.get().signum();
+            let value = values.end.get().abs();
 
             if value == 0.0 {
                 panic!("cannot compute the size of a range where the end bound is 0");
@@ -1352,7 +1526,7 @@ pub mod dist {
 
     This function accepts the following parameters:
 
-    - `values`: A range of raw observed values or midpoints computed by [`midpoint`].
+    - `values`: A range of bucket midpoints computed by [`midpoint`].
     - `size`: The maximum number of buckets within the range when values are converted into indexes by [`index`].
 
     # Panics
@@ -1364,7 +1538,7 @@ pub mod dist {
     This function uses a portable implementation of `powf` and `log` that is consistent across platforms.
     You may also consider using a native port of it for performance reasons.
     */
-    pub const fn scale(values: Range<f64>, size: usize) -> i32 {
+    pub const fn scale(values: Range<Midpoint>, size: usize) -> i32 {
         if size == 0 {
             panic!("cannot compute a scale for a size of zero");
         }
@@ -1395,14 +1569,17 @@ pub mod dist {
                     (index_of(-1, scale)..index_of(0, scale), 1),
                     (index_of(-1, scale)..index_of(1, scale), 2),
                 ] {
-                    let actual = size(range.clone(), scale);
+                    let actual = size(Midpoint::new(range.start)..Midpoint::new(range.end), scale);
 
                     assert_eq!(
                         expected, actual,
                         "expected size({range:?}, {scale}) to be {expected} but got {actual}"
                     );
 
-                    assert_eq!(actual, size(range.end..range.start, scale));
+                    assert_eq!(
+                        actual,
+                        size(Midpoint::new(range.end)..Midpoint::new(range.start), scale)
+                    );
                 }
             }
         }
@@ -1419,7 +1596,7 @@ pub mod dist {
                 (f64::MIN, 3, 8192),
                 (-f64::EPSILON, 3, -415),
             ] {
-                let actual = index(value, scale);
+                let actual = index(Midpoint::new(value), scale);
 
                 assert_eq!(
                     expected, actual,
@@ -1431,25 +1608,25 @@ pub mod dist {
         #[test]
         #[should_panic]
         fn compute_index_0() {
-            index(0.0, 2);
+            index(Midpoint::new(0.0), 2);
         }
 
         #[test]
         #[should_panic]
         fn compute_index_neg_0() {
-            index(-0.0, 2);
+            index(Midpoint::new(-0.0), 2);
         }
 
         #[test]
         #[should_panic]
         fn compute_index_inf() {
-            index(f64::INFINITY, 2);
+            index(Midpoint::new(f64::INFINITY), 2);
         }
 
         #[test]
         #[should_panic]
         fn compute_index_nan() {
-            index(f64::NAN, 2);
+            index(Midpoint::new(f64::NAN), 2);
         }
 
         #[test]
@@ -1463,45 +1640,48 @@ pub mod dist {
                 (1f64..1000000f64, 3, -3),
                 (f64::MIN..f64::MAX, 160, -4),
             ] {
-                let actual = scale(range.clone(), size);
+                let actual = scale(Midpoint::new(range.start)..Midpoint::new(range.end), size);
 
                 assert_eq!(
                     expected, actual,
                     "expected scale({range:?}, {size}) to be {expected} but got {actual}"
                 );
 
-                assert_eq!(actual, scale(range.end..range.start, size));
+                assert_eq!(
+                    actual,
+                    scale(Midpoint::new(range.end)..Midpoint::new(range.start), size)
+                );
             }
         }
 
         #[test]
         #[should_panic]
         fn compute_scale_buckets_0() {
-            scale(1.0f64..10.0f64, 0);
+            scale(Midpoint::new(1.0f64)..Midpoint::new(10.0f64), 0);
         }
 
         #[test]
         #[should_panic]
         fn compute_scale_bound_0() {
-            scale(0.0f64..1.0f64, 160);
+            scale(Midpoint::new(0.0f64)..Midpoint::new(1.0f64), 160);
         }
 
         #[test]
         #[should_panic]
         fn compute_scale_bound_neg_0() {
-            scale(-1.0f64..-0.0f64, 160);
+            scale(Midpoint::new(-1.0f64)..Midpoint::new(-0.0f64), 160);
         }
 
         #[test]
         #[should_panic]
         fn compute_scale_bound_inf() {
-            scale(0.0f64..f64::INFINITY, 160);
+            scale(Midpoint::new(0.0f64)..Midpoint::new(f64::INFINITY), 160);
         }
 
         #[test]
         #[should_panic]
         fn compute_scale_bound_nan() {
-            scale(f64::NAN..1.0f64, 160);
+            scale(Midpoint::new(f64::NAN)..Midpoint::new(1.0f64), 160);
         }
 
         #[test]
@@ -1603,21 +1783,21 @@ pub mod dist {
             ] {
                 for (case, expected) in cases.iter().copied().zip(expected.iter().copied()) {
                     let actual = midpoint(case, scale);
-                    let roundtrip = midpoint(actual, scale);
+                    let roundtrip = midpoint(actual.get(), scale);
 
-                    if expected.is_nan() && actual.is_nan() && roundtrip.is_nan() {
+                    if expected.is_nan() && actual.get().is_nan() && roundtrip.get().is_nan() {
                         continue;
                     }
 
                     assert_eq!(
                         expected.to_bits(),
-                        actual.to_bits(),
+                        actual.get().to_bits(),
                         "expected midpoint({case}, {scale}) to be {expected}, but got {actual}"
                     );
 
                     assert_eq!(
-                        actual.to_bits(),
-                        roundtrip.to_bits(),
+                        actual.get().to_bits(),
+                        roundtrip.get().to_bits(),
                         "expected midpoint(midpoint({case}, {scale}), {scale}) to roundtrip to {actual}, but got {roundtrip}"
                     );
                 }
