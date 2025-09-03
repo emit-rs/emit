@@ -1220,22 +1220,22 @@ pub mod dist {
     use core::{cmp, fmt, hash, ops::Range};
 
     /**
-    A totally ordered value, representing the midpoint of an exponential bucket.
+    A totally ordered value, representing a point within an exponential bucket.
 
-    Values to construct midpoints from can be computed by the [`midpoint`] function.
+    Values to construct points from can be computed by the [`midpoint`] function.
 
     This type is a plain wrapper over `f64`, but implements the necessary ordering traits needed to store them in `BTreeMap`s or `HashMap`s.
     */
     #[derive(Clone, Copy)]
     #[repr(transparent)]
-    pub struct Midpoint(f64);
+    pub struct Point(f64);
 
-    impl Midpoint {
+    impl Point {
         /**
-        Treat a midpoint `f64` value as a `Midpoint`.
+        Treat a midpoint `f64` value as a `Point`.
         */
-        pub const fn new(midpoint: f64) -> Self {
-            Midpoint(midpoint)
+        pub const fn new(value: f64) -> Self {
+            Point(value)
         }
 
         /**
@@ -1301,58 +1301,58 @@ pub mod dist {
         }
     }
 
-    impl From<f64> for Midpoint {
+    impl From<f64> for Point {
         fn from(value: f64) -> Self {
-            Midpoint::new(value)
+            Point::new(value)
         }
     }
 
-    impl From<Midpoint> for f64 {
-        fn from(value: Midpoint) -> Self {
+    impl From<Point> for f64 {
+        fn from(value: Point) -> Self {
             value.get()
         }
     }
 
-    impl PartialEq for Midpoint {
+    impl PartialEq for Point {
         fn eq(&self, other: &Self) -> bool {
             self.cmp(other) == cmp::Ordering::Equal
         }
     }
 
-    impl Eq for Midpoint {}
+    impl Eq for Point {}
 
-    impl PartialOrd for Midpoint {
+    impl PartialOrd for Point {
         fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
             Some(self.cmp(other))
         }
     }
 
-    impl Ord for Midpoint {
+    impl Ord for Point {
         fn cmp(&self, other: &Self) -> cmp::Ordering {
             libm::cmp(self.get()).cmp(&libm::cmp(other.get()))
         }
     }
 
-    impl hash::Hash for Midpoint {
+    impl hash::Hash for Point {
         fn hash<H: hash::Hasher>(&self, state: &mut H) {
             libm::cmp(self.get()).hash(state)
         }
     }
 
-    impl fmt::Debug for Midpoint {
+    impl fmt::Debug for Point {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             fmt::Debug::fmt(&self.get(), f)
         }
     }
 
-    impl fmt::Display for Midpoint {
+    impl fmt::Display for Point {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             fmt::Display::fmt(&self.get(), f)
         }
     }
 
     #[cfg(feature = "sval")]
-    impl sval::Value for Midpoint {
+    impl sval::Value for Point {
         fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(
             &'sval self,
             stream: &mut S,
@@ -1362,7 +1362,7 @@ pub mod dist {
     }
 
     #[cfg(feature = "serde")]
-    impl serde::Serialize for Midpoint {
+    impl serde::Serialize for Point {
         fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where
             S: serde::Serializer,
@@ -1371,22 +1371,37 @@ pub mod dist {
         }
     }
 
-    impl ToValue for Midpoint {
+    impl ToValue for Point {
         fn to_value(&self) -> Value<'_> {
             Value::capture_display(self)
         }
     }
 
-    impl<'v> FromValue<'v> for Midpoint {
+    impl<'v> FromValue<'v> for Point {
         fn from_value(value: Value<'v>) -> Option<Self>
         where
             Self: Sized,
         {
             value
-                .downcast_ref::<Midpoint>()
+                .downcast_ref::<Point>()
                 .copied()
-                .or_else(|| f64::from_value(value).map(Midpoint::new))
+                .or_else(|| f64::from_value(value).map(Point::new))
         }
+    }
+
+    /**
+    Compute γ, the base of an exponential histogram.
+
+    The value of γ is a number close to 1, computed by `2^2^(-scale)`.
+    The exponential bucket of a value, `v`, can be computed from γ by `⌈logγ(v)⌉`.
+
+    # Implementation
+
+    This function uses a portable implementation of `powf` that is consistent across platforms.
+    You may also consider using a native port of it for performance reasons.
+    */
+    pub const fn gamma(scale: i32) -> f64 {
+        libm::pow(2.0, libm::pow(2.0, -(scale as f64)))
     }
 
     /**
@@ -1408,22 +1423,22 @@ pub mod dist {
     This function uses a portable implementation of `powf` and `log` that is consistent across platforms.
     You may also consider using a native port of it for performance reasons.
     */
-    pub const fn midpoint(value: f64, scale: i32) -> Midpoint {
+    pub const fn midpoint(value: f64, scale: i32) -> Point {
         let sign = value.signum();
         let value = value.abs();
 
         if value == 0.0 {
-            return Midpoint::new(value);
+            return Point::new(value);
         }
 
-        let gamma = libm::pow(2.0, libm::pow(2.0, -(scale as f64)));
+        let gamma = gamma(scale);
 
         let index = libm::ceil(libm::log(value, gamma));
 
         let lower = libm::pow(gamma, index - 1.0);
         let upper = lower * gamma;
 
-        Midpoint::new(sign * lower.midpoint(upper))
+        Point::new(sign * lower.midpoint(upper))
     }
 
     /**
@@ -1442,25 +1457,21 @@ pub mod dist {
 
     # Panics
 
-    This function panics if `value` is `0`, `-0`, or non-finite.
+    This function panics if [`Point::is_indexable`] is `false`. That is, if `0`, `-0`, or non-finite.
 
     # Implementation
 
     This function uses a portable implementation of `powf` and `log` that is consistent across platforms.
     You may also consider using a native port of it for performance reasons.
     */
-    pub const fn index(value: Midpoint, scale: i32) -> isize {
+    pub const fn index(value: Point, scale: i32) -> isize {
+        if !value.is_indexable() {
+            panic!("the value to compute an index for is non-indexable");
+        }
+
         let value = value.get().abs();
 
-        if value == 0.0 {
-            panic!("cannot compute a bucket index for the value 0");
-        }
-
-        if !value.is_finite() {
-            panic!("cannot compute a bucket index for a non-finite value");
-        }
-
-        let gamma = libm::pow(2.0, libm::pow(2.0, -(scale as f64)));
+        let gamma = gamma(scale);
 
         libm::ceil(libm::log(value, gamma)) as isize
     }
@@ -1477,26 +1488,22 @@ pub mod dist {
 
     # Panics
 
-    This function panics if either end of `values` is `0`, `-0`, or non-finite.
+    This function panics if [`Point::is_indexable`] is `false` for either end of `values`. That is, if `0`, `-0`, or non-finite.
 
     # Implementation
 
     This function uses a portable implementation of `powf` and `log` that is consistent across platforms.
     You may also consider using a native port of it for performance reasons.
     */
-    pub const fn size(values: Range<Midpoint>, scale: i32) -> usize {
-        let gamma = libm::pow(2.0, libm::pow(2.0, -(scale as f64)));
+    pub const fn size(values: Range<Point>, scale: i32) -> usize {
+        let gamma = gamma(scale);
 
         let min = {
             let sign = values.start.get().signum();
             let value = values.start.get().abs();
 
-            if value == 0.0 {
-                panic!("cannot compute the size of a range where the start bound is 0");
-            }
-
-            if !value.is_finite() {
-                panic!("cannot compute the size of a range where the start bound is non-finite");
+            if !values.start.is_indexable() {
+                panic!("the start bound is non-indexable");
             }
 
             sign * libm::ceil(libm::log(value, gamma))
@@ -1505,12 +1512,8 @@ pub mod dist {
             let sign = values.end.get().signum();
             let value = values.end.get().abs();
 
-            if value == 0.0 {
-                panic!("cannot compute the size of a range where the end bound is 0");
-            }
-
-            if !value.is_finite() {
-                panic!("cannot compute the size of a range where the end bound is non-finite");
+            if !values.end.is_indexable() {
+                panic!("the end bound is non-indexable");
             }
 
             sign * libm::ceil(libm::log(value, gamma))
@@ -1531,14 +1534,14 @@ pub mod dist {
 
     # Panics
 
-    This function panics if `size` is `0`, or if either end of `values` is `0`, `-0`, or non-finite.
+    This function panics if `size` is `0`, or if [`Point::is_indexable`] is `false` for either end of `values`. That is, if `0`, `-0`, or non-finite.
 
     # Implementation
 
     This function uses a portable implementation of `powf` and `log` that is consistent across platforms.
     You may also consider using a native port of it for performance reasons.
     */
-    pub const fn scale(values: Range<Midpoint>, size: usize) -> i32 {
+    pub const fn scale(values: Range<Point>, size: usize) -> i32 {
         if size == 0 {
             panic!("cannot compute a scale for a size of zero");
         }
@@ -1561,6 +1564,89 @@ pub mod dist {
         }
 
         #[test]
+        fn point_cmp() {
+            let mut values = vec![
+                Point::new(1.0),
+                Point::new(f64::NAN),
+                Point::new(0.0),
+                Point::new(f64::NEG_INFINITY),
+                Point::new(-1.0),
+                Point::new(-0.0),
+                Point::new(f64::INFINITY),
+            ];
+
+            values.sort();
+
+            assert_eq!(
+                vec![
+                    Point::new(f64::NEG_INFINITY),
+                    Point::new(-1.0),
+                    Point::new(-0.0),
+                    Point::new(0.0),
+                    Point::new(1.0),
+                    Point::new(f64::INFINITY),
+                    Point::new(f64::NAN)
+                ],
+                &*values
+            );
+        }
+
+        #[test]
+        fn point_is_indexable() {
+            for (case, indexable) in [
+                (Point::new(0.0), false),
+                (Point::new(-0.0), false),
+                (Point::new(f64::INFINITY), false),
+                (Point::new(f64::NEG_INFINITY), false),
+                (Point::new(f64::NAN), false),
+                (Point::new(f64::EPSILON), true),
+                (Point::new(-f64::EPSILON), true),
+                (Point::new(f64::MIN), true),
+                (Point::new(f64::MAX), true),
+            ] {
+                assert_eq!(indexable, case.is_indexable());
+            }
+        }
+
+        #[test]
+        fn point_is_bucket() {
+            for (case, zero, neg, pos) in [
+                (Point::new(0.0), true, false, false),
+                (Point::new(-0.0), true, false, false),
+                (Point::new(f64::INFINITY), false, false, false),
+                (Point::new(f64::NEG_INFINITY), false, false, false),
+                (Point::new(f64::NAN), false, false, false),
+                (Point::new(f64::EPSILON), false, false, true),
+                (Point::new(-f64::EPSILON), false, true, false),
+                (Point::new(f64::MIN), false, true, false),
+                (Point::new(f64::MAX), false, false, true),
+            ] {
+                assert_eq!(zero, case.is_zero_bucket());
+                assert_eq!(neg, case.is_negative_bucket());
+                assert_eq!(pos, case.is_positive_bucket());
+            }
+        }
+
+        #[cfg(feature = "sval")]
+        #[test]
+        fn point_stream() {
+            sval_test::assert_tokens(&Point::new(3.1), &[sval_test::Token::F64(3.1)]);
+        }
+
+        #[cfg(feature = "serde")]
+        #[test]
+        fn point_serialize() {
+            serde_test::assert_ser_tokens(&Point::new(3.1), &[serde_test::Token::F64(3.1)]);
+        }
+
+        #[test]
+        fn point_to_from_value() {
+            let point = Point::new(3.1);
+
+            assert_eq!(point, Point::from_value(point.to_value()).unwrap());
+        }
+
+        #[test]
         fn compute_size() {
             for scale in [-1, 0, 1, 2, 3] {
                 for (range, expected) in [
@@ -1569,7 +1655,7 @@ pub mod dist {
                     (index_of(-1, scale)..index_of(0, scale), 1),
                     (index_of(-1, scale)..index_of(1, scale), 2),
                 ] {
-                    let actual = size(Midpoint::new(range.start)..Midpoint::new(range.end), scale);
+                    let actual = size(Point::new(range.start)..Point::new(range.end), scale);
 
                     assert_eq!(
                         expected, actual,
@@ -1578,7 +1664,7 @@ pub mod dist {
 
                     assert_eq!(
                         actual,
-                        size(Midpoint::new(range.end)..Midpoint::new(range.start), scale)
+                        size(Point::new(range.end)..Point::new(range.start), scale)
                     );
                 }
             }
@@ -1596,7 +1682,7 @@ pub mod dist {
                 (f64::MIN, 3, 8192),
                 (-f64::EPSILON, 3, -415),
             ] {
-                let actual = index(Midpoint::new(value), scale);
+                let actual = index(Point::new(value), scale);
 
                 assert_eq!(
                     expected, actual,
@@ -1608,25 +1694,25 @@ pub mod dist {
         #[test]
         #[should_panic]
         fn compute_index_0() {
-            index(Midpoint::new(0.0), 2);
+            index(Point::new(0.0), 2);
         }
 
         #[test]
         #[should_panic]
         fn compute_index_neg_0() {
-            index(Midpoint::new(-0.0), 2);
+            index(Point::new(-0.0), 2);
         }
 
         #[test]
         #[should_panic]
         fn compute_index_inf() {
-            index(Midpoint::new(f64::INFINITY), 2);
+            index(Point::new(f64::INFINITY), 2);
         }
 
         #[test]
         #[should_panic]
         fn compute_index_nan() {
-            index(Midpoint::new(f64::NAN), 2);
+            index(Point::new(f64::NAN), 2);
         }
 
         #[test]
@@ -1640,7 +1726,7 @@ pub mod dist {
                 (1f64..1000000f64, 3, -3),
                 (f64::MIN..f64::MAX, 160, -4),
             ] {
-                let actual = scale(Midpoint::new(range.start)..Midpoint::new(range.end), size);
+                let actual = scale(Point::new(range.start)..Point::new(range.end), size);
 
                 assert_eq!(
                     expected, actual,
@@ -1649,7 +1735,7 @@ pub mod dist {
 
                 assert_eq!(
                     actual,
-                    scale(Midpoint::new(range.end)..Midpoint::new(range.start), size)
+                    scale(Point::new(range.end)..Point::new(range.start), size)
                 );
             }
         }
@@ -1657,31 +1743,31 @@ pub mod dist {
         #[test]
         #[should_panic]
         fn compute_scale_buckets_0() {
-            scale(Midpoint::new(1.0f64)..Midpoint::new(10.0f64), 0);
+            scale(Point::new(1.0f64)..Point::new(10.0f64), 0);
         }
 
         #[test]
         #[should_panic]
         fn compute_scale_bound_0() {
-            scale(Midpoint::new(0.0f64)..Midpoint::new(1.0f64), 160);
+            scale(Point::new(0.0f64)..Point::new(1.0f64), 160);
         }
 
         #[test]
         #[should_panic]
         fn compute_scale_bound_neg_0() {
-            scale(Midpoint::new(-1.0f64)..Midpoint::new(-0.0f64), 160);
+            scale(Point::new(-1.0f64)..Point::new(-0.0f64), 160);
         }
 
         #[test]
         #[should_panic]
         fn compute_scale_bound_inf() {
-            scale(Midpoint::new(0.0f64)..Midpoint::new(f64::INFINITY), 160);
+            scale(Point::new(0.0f64)..Point::new(f64::INFINITY), 160);
         }
 
         #[test]
         #[should_panic]
         fn compute_scale_bound_nan() {
-            scale(Midpoint::new(f64::NAN)..Midpoint::new(1.0f64), 160);
+            scale(Point::new(f64::NAN)..Point::new(1.0f64), 160);
         }
 
         #[test]

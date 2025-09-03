@@ -135,7 +135,6 @@ fn main() {
 #[cfg(feature = "alloc")]
 extern crate alloc;
 extern crate core;
-extern crate core;
 
 /**
 Get a [`Path`] of the executing module for use in [`Event::mdl`].
