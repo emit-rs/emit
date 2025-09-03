@@ -1357,7 +1357,7 @@ pub mod dist {
 
     # Panics
 
-    This function panics if `buckets` is `0`, or if either end of `values` is `0`, `-0`, or non-finite.
+    This function panics if `size` is `0`, or if either end of `values` is `0`, `-0`, or non-finite.
 
     # Implementation
 
