@@ -1254,7 +1254,7 @@ pub mod dist {
     }
 
     /**
-    Compute the exponential bucket index of a finite, non-zero value belongs to at a given scale.
+    Compute the exponential bucket index that a finite, non-zero value belongs to at a given scale.
 
     This function is a step in computing a bucket's midpoint value, as in [`midpoint`].
 
