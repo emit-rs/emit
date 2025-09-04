@@ -136,6 +136,10 @@ name = "metric_distribution"
 path = "metric_distribution.rs"
 
 [[example]]
+name = "metric_distribution_resampling"
+path = "metric_distribution_resampling.rs"
+
+[[example]]
 name = "metric_source"
 path = "metric_source.rs"
 
