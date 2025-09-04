@@ -25,6 +25,7 @@
         - [Attaching properties](./producing-events/metrics/properties.md)
         - [Cumulative metrics](./producing-events/metrics/cumulative-metrics.md)
         - [Delta metrics](./producing-events/metrics/delta-metrics.md)
+        - [Distributions](./producing-events/metrics/distributions.md)
         - [Reporting from sources](./producing-events/metrics/reporting-sources.md)
         - [Limitations](./producing-events/metrics/limitations.md)
     - [Quick debugging](./producing-events/quick-debugging.md)

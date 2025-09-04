@@ -1,34 +1,38 @@
 /*
-This file comes from `rust-lang/libm`
+This file comes from `rust-lang/rust`
 
 It includes the functionality needed for exponential bucketing.
 These functions have been made `const` and specialized to `f64`.
 This implementation lives here so that bucketing can be done consistently
 across platforms, including in `no_std` programs.
 
-`rust-lang/libm` includes the following license:
+`rust-lang/rust` includes the following license:
 
-rust-lang/libm as a whole is available for use under the MIT license:
+Copyright (c) The Rust Project Contributors
 
-------------------------------------------------------------------------------
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-------------------------------------------------------------------------------
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
 */
 
 const BITS: u32 = 64;
@@ -42,6 +46,46 @@ const IMPLICIT_BIT: u64 = 1 << SIG_BITS;
 const SIGN_MASK: u64 = 1 << (BITS - 1);
 const SIG_MASK: u64 = (1 << SIG_BITS) - 1;
 const EXP_MASK: u64 = !(SIGN_MASK | SIG_MASK);
+
+mod cmp {
+    /**
+    Get a representation of `v` that can be used for total ordering.
+    */
+    pub const fn cmp(v: f64) -> i64 {
+        // This routine is taken from:
+        // https://github.com/rust-lang/rust/blob/698db13cd068b1807780f97344bb764efc87703f/library/core/src/num/f64.rs#L1364-L1394
+        //
+        // We expose it as a raw value instead of wrapped in `Ordering` so we can also use it
+        // to implement `Hash`
+        let bits = v.to_bits() as i64;
+
+        // In case of negatives, flip all the bits except the sign
+        // to achieve a similar layout as two's complement integers
+        //
+        // Why does this work? IEEE 754 floats consist of three fields:
+        // Sign bit, exponent and mantissa. The set of exponent and mantissa
+        // fields as a whole have the property that their bitwise order is
+        // equal to the numeric magnitude where the magnitude is defined.
+        // The magnitude is not normally defined on NaN values, but
+        // IEEE 754 totalOrder defines the NaN values also to follow the
+        // bitwise order. This leads to order explained in the doc comment.
+        // However, the representation of magnitude is the same for negative
+        // and positive numbers – only the sign bit is different.
+        // To easily compare the floats as signed integers, we need to
+        // flip the exponent and mantissa bits in case of negative numbers.
+        // We effectively convert the numbers to "two's complement" form.
+        //
+        // To do the flipping, we construct a mask and XOR against it.
+        // We branchlessly calculate an "all-ones except for the sign bit"
+        // mask from negative-signed values: right shifting sign-extends
+        // the integer, so we "fill" the mask with sign bits, and then
+        // convert to unsigned to push one more zero bit.
+        // On positive values, the mask is all zeros, so it's a no-op.
+        bits ^ (((bits >> 63) as u64) >> 1) as i64
+    }
+}
+
+pub use self::cmp::*;
 
 mod ceil {
     use super::*;
