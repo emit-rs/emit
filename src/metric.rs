@@ -1217,7 +1217,7 @@ pub mod dist {
         value::{FromValue, ToValue, Value},
     };
 
-    use core::{cmp, fmt, hash, ops::Range};
+    use core::{cmp, fmt, hash};
 
     /**
     A totally ordered value, representing a point within an exponential bucket.
@@ -1441,127 +1441,11 @@ pub mod dist {
         Point::new(sign * lower.midpoint(upper))
     }
 
-    /**
-    Compute the exponential bucket index that a finite, non-zero value belongs to at a given scale.
-
-    This function is a step in computing a bucket's midpoint value, as in [`midpoint`].
-
-    A negative result does not mean the input value was negative.
-    Values close to zero get negative indexes.
-    Negative values will produce the same index as their absolute counterpart.
-
-    This function accepts the following parameters:
-
-    - `value`: A bucket midpoint computed by [`midpoint`].
-    - `scale`: The size of exponential buckets. Larger scales produce larger numbers of smaller buckets.
-
-    # Panics
-
-    This function panics if [`Point::is_indexable`] is `false`. That is, if `0`, `-0`, or non-finite.
-
-    # Implementation
-
-    This function uses a portable implementation of `powf` and `log` that is consistent across platforms.
-    You may also consider using a native port of it for performance reasons.
-    */
-    pub const fn index(value: Point, scale: i32) -> isize {
-        if !value.is_indexable() {
-            panic!("the value to compute an index for is non-indexable");
-        }
-
-        let value = value.get().abs();
-
-        let gamma = gamma(scale);
-
-        libm::ceil(libm::log(value, gamma)) as isize
-    }
-
-    /**
-    Compute the number of exponential buckets that exist between a range of finite, non-zero values at a given scale.
-
-    This function can be used to detect whether the range of stored bucket midpoints would produce a histogram with too many buckets.
-
-    This function accepts the following parameters:
-
-    - `values`: A range of bucket midpoints computed by [`midpoint`].
-    - `scale`: The size of exponential buckets. Larger scales produce larger numbers of smaller buckets.
-
-    # Panics
-
-    This function panics if [`Point::is_indexable`] is `false` for either end of `values`. That is, if `0`, `-0`, or non-finite.
-
-    # Implementation
-
-    This function uses a portable implementation of `powf` and `log` that is consistent across platforms.
-    You may also consider using a native port of it for performance reasons.
-    */
-    pub const fn size(values: Range<Point>, scale: i32) -> usize {
-        let gamma = gamma(scale);
-
-        let min = {
-            let sign = values.start.get().signum();
-            let value = values.start.get().abs();
-
-            if !values.start.is_indexable() {
-                panic!("the start bound is non-indexable");
-            }
-
-            sign * libm::ceil(libm::log(value, gamma))
-        };
-        let max = {
-            let sign = values.end.get().signum();
-            let value = values.end.get().abs();
-
-            if !values.end.is_indexable() {
-                panic!("the end bound is non-indexable");
-            }
-
-            sign * libm::ceil(libm::log(value, gamma))
-        };
-
-        (max + -min).abs() as usize
-    }
-
-    /**
-    Compute a scale that will fit the range of finite, non-zero values within a target number of buckets.
-
-    This function can be used to rescale stored bucket midpoints to fewer, coarser values.
-
-    This function accepts the following parameters:
-
-    - `values`: A range of bucket midpoints computed by [`midpoint`].
-    - `size`: The maximum number of buckets within the range when values are converted into indexes by [`index`].
-
-    # Panics
-
-    This function panics if `size` is `0`, or if [`Point::is_indexable`] is `false` for either end of `values`. That is, if `0`, `-0`, or non-finite.
-
-    # Implementation
-
-    This function uses a portable implementation of `powf` and `log` that is consistent across platforms.
-    You may also consider using a native port of it for performance reasons.
-    */
-    pub const fn scale(values: Range<Point>, size: usize) -> i32 {
-        if size == 0 {
-            panic!("cannot compute a scale for a size of zero");
-        }
-
-        -libm::log2(self::size(values, 0) as f64 / size as f64).ceil() as i32
-    }
-
     #[cfg(test)]
     mod tests {
         use core::f64::consts::PI;
 
         use super::*;
-
-        fn index_of(index: isize, scale: i32) -> f64 {
-            let gamma = 2.0f64.powf(2.0f64.powi(-scale));
-            let lower = gamma.powi((index - 1) as i32);
-            let upper = lower * gamma;
-
-            lower.midpoint(upper)
-        }
 
         #[test]
         fn point_cmp() {
@@ -1644,130 +1528,6 @@ pub mod dist {
             let point = Point::new(3.1);
 
             assert_eq!(point, Point::from_value(point.to_value()).unwrap());
-        }
-
-        #[test]
-        fn compute_size() {
-            for scale in [-1, 0, 1, 2, 3] {
-                for (range, expected) in [
-                    (index_of(0, scale)..index_of(0, scale), 0),
-                    (index_of(0, scale)..index_of(1, scale), 1),
-                    (index_of(-1, scale)..index_of(0, scale), 1),
-                    (index_of(-1, scale)..index_of(1, scale), 2),
-                ] {
-                    let actual = size(Point::new(range.start)..Point::new(range.end), scale);
-
-                    assert_eq!(
-                        expected, actual,
-                        "expected size({range:?}, {scale}) to be {expected} but got {actual}"
-                    );
-
-                    assert_eq!(
-                        actual,
-                        size(Point::new(range.end)..Point::new(range.start), scale)
-                    );
-                }
-            }
-        }
-
-        #[test]
-        fn compute_index() {
-            for (value, scale, expected) in [
-                (50f64, 3, 46),
-                (51f64, 3, 46),
-                (f64::MAX, 3, 8192),
-                (f64::EPSILON, 3, -415),
-                (-50f64, 3, 46),
-                (-51f64, 3, 46),
-                (f64::MIN, 3, 8192),
-                (-f64::EPSILON, 3, -415),
-            ] {
-                let actual = index(Point::new(value), scale);
-
-                assert_eq!(
-                    expected, actual,
-                    "expected index({value}, {scale}) to be {expected:?} but got {actual:?}"
-                );
-            }
-        }
-
-        #[test]
-        #[should_panic]
-        fn compute_index_0() {
-            index(Point::new(0.0), 2);
-        }
-
-        #[test]
-        #[should_panic]
-        fn compute_index_neg_0() {
-            index(Point::new(-0.0), 2);
-        }
-
-        #[test]
-        #[should_panic]
-        fn compute_index_inf() {
-            index(Point::new(f64::INFINITY), 2);
-        }
-
-        #[test]
-        #[should_panic]
-        fn compute_index_nan() {
-            index(Point::new(f64::NAN), 2);
-        }
-
-        #[test]
-        fn compute_scale() {
-            for (range, size, expected) in [
-                (1f64..1000f64, 160, 4),
-                (0.1f64..100.0f64, 160, 4),
-                (0.000001f64..100.0f64, 160, 2),
-                (-100.0f64..-0.1f64, 160, 4),
-                (-100.0f64..-0.000001f64, 160, 2),
-                (1f64..1000000f64, 3, -3),
-                (f64::MIN..f64::MAX, 160, -4),
-            ] {
-                let actual = scale(Point::new(range.start)..Point::new(range.end), size);
-
-                assert_eq!(
-                    expected, actual,
-                    "expected scale({range:?}, {size}) to be {expected} but got {actual}"
-                );
-
-                assert_eq!(
-                    actual,
-                    scale(Point::new(range.end)..Point::new(range.start), size)
-                );
-            }
-        }
-
-        #[test]
-        #[should_panic]
-        fn compute_scale_buckets_0() {
-            scale(Point::new(1.0f64)..Point::new(10.0f64), 0);
-        }
-
-        #[test]
-        #[should_panic]
-        fn compute_scale_bound_0() {
-            scale(Point::new(0.0f64)..Point::new(1.0f64), 160);
-        }
-
-        #[test]
-        #[should_panic]
-        fn compute_scale_bound_neg_0() {
-            scale(Point::new(-1.0f64)..Point::new(-0.0f64), 160);
-        }
-
-        #[test]
-        #[should_panic]
-        fn compute_scale_bound_inf() {
-            scale(Point::new(0.0f64)..Point::new(f64::INFINITY), 160);
-        }
-
-        #[test]
-        #[should_panic]
-        fn compute_scale_bound_nan() {
-            scale(Point::new(f64::NAN)..Point::new(1.0f64), 160);
         }
 
         #[test]
