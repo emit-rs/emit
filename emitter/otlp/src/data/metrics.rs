@@ -79,8 +79,8 @@ impl EventEncoder for MetricsEventEncoder {
             };
 
             let mut metric_unit = None;
-            let mut dist_scale = None;
-            let mut dist_buckets = None;
+            let mut dist_exp_scale = None;
+            let mut dist_exp_buckets = None;
             let mut attributes = Vec::new();
 
             let _ = evt.props().for_each(|k, v| match k.get() {
@@ -90,13 +90,13 @@ impl EventEncoder for MetricsEventEncoder {
 
                     ControlFlow::Continue(())
                 }
-                emit::well_known::KEY_DIST_SCALE => {
-                    dist_scale = Some(v);
+                emit::well_known::KEY_DIST_EXP_SCALE => {
+                    dist_exp_scale = Some(v);
 
                     ControlFlow::Continue(())
                 }
-                emit::well_known::KEY_DIST_BUCKETS => {
-                    dist_buckets = Some(v);
+                emit::well_known::KEY_DIST_EXP_BUCKETS => {
+                    dist_exp_buckets = Some(v);
 
                     ControlFlow::Continue(())
                 }
@@ -139,7 +139,8 @@ impl EventEncoder for MetricsEventEncoder {
                     }),
                 }),
                 Some(emit::well_known::METRIC_AGG_COUNT) => {
-                    if let Some(distribution) = Distribution::from_values(dist_scale, dist_buckets)
+                    if let Some(distribution) =
+                        Distribution::from_values(dist_exp_scale, dist_exp_buckets)
                     {
                         E::encode(Metric::<_, _, _> {
                             name: &sval::Display::new(metric_name),
@@ -311,8 +312,8 @@ impl Ord for Midpoint {
 
 impl Distribution {
     fn from_values(
-        dist_scale: Option<emit::Value>,
-        dist_buckets: Option<emit::Value>,
+        dist_exp_scale: Option<emit::Value>,
+        dist_exp_buckets: Option<emit::Value>,
     ) -> Option<Self> {
         struct Extract {
             depth: usize,
@@ -441,10 +442,11 @@ impl Distribution {
             }
         }
 
-        if let (Some(dist_scale), Some(dist_buckets)) =
-            (dist_scale.and_then(|v| v.cast::<i32>()), dist_buckets)
-        {
-            let scale = dist_scale;
+        if let (Some(dist_exp_scale), Some(dist_exp_buckets)) = (
+            dist_exp_scale.and_then(|v| v.cast::<i32>()),
+            dist_exp_buckets,
+        ) {
+            let scale = dist_exp_scale;
             let gamma = 2.0f64.powf(2.0f64.powi(-scale));
 
             let mut extract = Extract {
@@ -457,7 +459,7 @@ impl Distribution {
                 next_count: None,
             };
 
-            sval::stream(&mut extract, &dist_buckets).ok()?;
+            sval::stream(&mut extract, &dist_exp_buckets).ok()?;
 
             let distribution_buckets_from_map = |buckets: BTreeMap<Midpoint, u64>| {
                 let Some((min, _)) = buckets.first_key_value() else {
@@ -805,7 +807,7 @@ mod tests {
                 metric_agg: "count",
                 metric_value: 100,
                 #[emit::as_sval]
-                dist_buckets: [
+                dist_exp_buckets: [
                     (0.0, 3),
                     (midpoint_from_index(-1, 2), 4),
                     (midpoint_from_index(3, 2), 5),
@@ -814,7 +816,7 @@ mod tests {
                     (-midpoint_from_index(1, 2), 1),
                     (-midpoint_from_index(3, 2), 2),
                 ],
-                dist_scale: 2,
+                dist_exp_scale: 2,
             ),
             |buf| {
                 let de = metrics::Metric::decode(buf).unwrap();

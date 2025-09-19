@@ -71,19 +71,19 @@ fn main() {
         name: "metric_a",
         value: metric_a.total,
         props: emit::props! {
-            // `dist_buckets` are our `(midpoint, count)` pairs
+            // `dist_exp_buckets` are our `(midpoint, count)` pairs
             // They can be attached either as an array of tuples, or as a map
             // where keys are midpoints, and values are counts.
             //
-            // The shape of `dist_buckets` is complex, so we need to use `#[emit::as_sval]`
+            // The shape of `dist_exp_buckets` is complex, so we need to use `#[emit::as_sval]`
             // or `#[emit::as_serde]` to capture them.
             #[emit::as_sval]
-            dist_buckets: metric_a.buckets,
-            // `dist_scale` is our scale parameter, which tells us how big our buckets are.
+            dist_exp_buckets: metric_a.buckets,
+            // `dist_exp_scale` is our scale parameter, which tells us how big our buckets are.
             //
             // Buckets can be resampled into smaller scales, but can't be correctly split
             // into larger ones.
-            dist_scale: metric_a.scale,
+            dist_exp_scale: metric_a.scale,
         },
     );
 

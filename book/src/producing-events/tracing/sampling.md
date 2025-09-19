@@ -1,6 +1,6 @@
 # Sampling and filtering traces
 
-Sampling is a tool to help limit the volume of ingested trace data. It's typically applied when a trace begins by making an upfront decision about whether to produce and/or emit the trace. This is usually called "head sampling" and is limited to probablistic methods. Tail sampling, or deciding whether to ingest a trace after it's completed is much harder to implement, because there's no absolute way to know when a particular trace is finished, or how long it will take.
+Sampling is a tool to help limit the volume of ingested trace data. It's typically applied when a trace begins by making an upfront decision about whether to produce and/or emit the trace. This is usually called "head sampling" and is limited to probabilistic methods. Tail sampling, or deciding whether to ingest a trace after it's completed is much harder to implement, because there's no absolute way to know when a particular trace is finished, or how long it will take.
 
 Sampling and [propagation](./propagating-across-services.md) are tied together. If a service decides not to sample a given trace then it _must_ propagate that decision to downstream services. Otherwise you'll end up with a broken trace.
 

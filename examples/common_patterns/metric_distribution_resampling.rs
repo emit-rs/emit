@@ -76,8 +76,8 @@ fn main() {
         value: metric_a.total,
         props: emit::props! {
             #[emit::as_sval]
-            dist_buckets: metric_a.buckets,
-            dist_scale: metric_a.scale,
+            dist_exp_buckets: metric_a.buckets,
+            dist_exp_scale: metric_a.scale,
         },
     );
 

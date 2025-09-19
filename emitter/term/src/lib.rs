@@ -90,7 +90,8 @@ use std::{cell::RefCell, collections::BTreeMap, fmt, io::Write, iter, str, time:
 use emit::{
     metric::dist::Point,
     well_known::{
-        KEY_DIST_BUCKETS, KEY_DIST_SCALE, KEY_ERR, KEY_EVT_KIND, KEY_LVL, KEY_SPAN_ID, KEY_TRACE_ID,
+        KEY_DIST_EXP_BUCKETS, KEY_DIST_EXP_SCALE, KEY_ERR, KEY_EVT_KIND, KEY_LVL, KEY_SPAN_ID,
+        KEY_TRACE_ID,
     },
 };
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
@@ -342,8 +343,8 @@ fn write_event(buf: &mut Buffer, evt: emit::event::Event<impl emit::props::Props
     }
 
     if let (Some(scale), Some((count, buckets))) = (
-        evt.props().pull::<i32, _>(KEY_DIST_SCALE),
-        evt.props().get(KEY_DIST_BUCKETS).and_then(distribution),
+        evt.props().pull::<i32, _>(KEY_DIST_EXP_SCALE),
+        evt.props().get(KEY_DIST_EXP_BUCKETS).and_then(distribution),
     ) {
         let error = ((2.0f64.powf(2.0f64.powi(-scale)) - 1.0)
             / (1.0 + 2.0f64.powf(2.0f64.powi(-scale))))
