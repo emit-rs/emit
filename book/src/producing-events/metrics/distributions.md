@@ -4,7 +4,7 @@ Distributions are an optional extension to metric samples that tell you more abo
 
 Emitters that are distribution-aware may treat events that carry them differently. [`emit_otlp`](../../emitting-events/otlp.md) treats samples carrying an [exponential histogram](#exponential-histograms) as an [OTLP exponential histogram](https://opentelemetry.io/docs/specs/otel/metrics/data-model/#exponentialhistogram). [`emit_term`](../../emitting-events/console.md) summarizes these same samples with [quartiles](https://en.wikipedia.org/wiki/Quartile).
 
-## Sums and Extrema
+## Sums and extrema
 
 Say we have the following metric sample:
 
@@ -46,6 +46,10 @@ emit::count_sample!(
     }
 );
 ```
+
+### Sum and extrema data model
+
+Each well-known metric aggregation (the value of `metric_agg`) has a corresponding `dist_{metric_agg}`. The type and semantics of distribution properties is the same as their aggregation.
 
 ### Distribution properties vs separate metrics
 
@@ -125,7 +129,7 @@ emit::count_sample!(
 );
 ```
 
-### Data model
+### Exponential histogram data model
 
 `emit`'s exponential histograms are a pair of well-known properties:
 
