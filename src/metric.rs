@@ -26,7 +26,7 @@ pub use self::{sampler::Sampler, source::Source};
 /**
 A diagnostic event that represents a metric sample.
 
-Metrics are an extension of [`Event`]s that explicitly take the well-known properties that signal an event as being a metric sample. See the [`crate::metric`] module for details.
+Metrics are an extension of [`Event`]s that explicitly take the well-known properties that signal an event as being a metric sample. See the [`mod@crate::metric`] module for details.
 
 A `Metric` can be converted into an [`Event`] through its [`ToEvent`] implemenation, or passed directly to an [`Emitter`] to emit it.
 */
@@ -49,7 +49,7 @@ impl<'a, P> Metric<'a, P> {
     - `mdl`: The module that owns the underlying data source.
     - `extent`: The [`Extent`] that the sample covers.
     - `name`: The name of the underlying data source.
-    - `agg`: The aggregation applied to the underlying data source to produce the sample. See the [`crate::metric`] module for details.
+    - `agg`: The aggregation applied to the underlying data source to produce the sample. See the [`mod@crate::metric`] module for details.
     - `value`: The value of the sample itself.
     - `props`: Additional [`Props`] to associate with the sample.
     */

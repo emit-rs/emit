@@ -83,7 +83,9 @@ emit::count_sample!(
         dist_min: 100,
         dist_max: 29046,
         dist_exp_scale: 2,
-        #[emit::as_serde]
+        // Buckets have a complex type so need to be captured with
+        // either `serde` or `sval`
+        #[emit::as_sval]
         dist_exp_buckets: [
             (99.07220457217667, 7),
             (117.81737057623761, 7),
@@ -123,22 +125,116 @@ emit::count_sample!(
 );
 ```
 
-### Managing accuracy and memory usage
+### Data model
 
-Picking a bucket scale is a trade-off between memory usage and accuracy. Without knowing the underlying distribution of your data it's not possible to pick a correct value for your scale upfront. You can target a maximum number of buckets though, and reduce your scale as you overflow your maximum buckets. The process works like this:
+`emit`'s exponential histograms are a pair of well-known properties:
 
-1. Pick a maximum number of buckets, for example `160`.
-2. Pick a high initial scale, for example `20`.
-3. Store samples at the target scale.
-4. Once the number of stored buckets overflows your maximum buckets, decrement the scale and re-ingest the samples at the new scale. You'll end up with half the number of buckets.
+- `dist_exp_scale`: An integer with the scale of the histogram.
+- `dist_exp_buckets`: A 2-dimensional sequence of bucket midpoints and counts. The sequence may be constructed from an array of 2-element tuples, or a map where the keys are bucket midpoints and the values are counts. Buckets have a complex type, so need to be captured using either the [`as_serde`](https://docs.rs/emit/1.12.0/emit/attr.as_serde.html) or [`as_sval`](https://docs.rs/emit/1.12.0/emit/attr.as_sval.html) attributes. See [Property Capturing](../../reference/property-capturing.md) for more details.
 
-### Exponential histograms in detail
+### Building exponential histograms
 
-Exponential histograms internally use γ, a value close to `1`, as a log base for computing the bucket a sample belongs to. 
+`emit` doesn't directly define a type that builds an exponential histogram for you. What it does provide is the [`midpoint`](https://docs.rs/emit/1.12.0/emit/metric/dist/fn.midpoint.html) function, returning a [`Point`](https://docs.rs/emit/1.12.0/emit/metric/dist/struct.Point.html) that can be stored in a `BTreeMap` or `HashMap`.
+
+Here's an example type that can collect an exponential histogram from raw values:
+
+```rust
+# extern crate emit;
+use std::collections::BTreeMap;
+
+struct MyDistribution {
+    scale: i32,
+    max_buckets: usize,
+    total: u64,
+    buckets: BTreeMap<emit::metric::dist::Point, u64>,
+}
+
+impl MyDistribution {
+    pub fn new() -> Self {
+        MyDistribution {
+            // Pick a large initial scale, we'll resample automatically
+            // when the number of stored buckets overflows `max_buckets`
+            scale: 20,
+            max_buckets: 160,
+            total: 0,
+            buckets: BTreeMap::new(),
+        }
+    }
+
+    pub fn buckets(&self) -> &BTreeMap<emit::metric::dist::Point, u64> {
+        &self.buckets
+    }
+
+    pub fn total(&self) -> u64 {
+        self.total
+    }
+
+    pub fn scale(&self) -> i32 {
+        self.scale
+    }
+
+    pub fn observe(&mut self, value: f64) {
+        *self
+            .buckets
+            .entry(emit::metric::dist::midpoint(value, self.scale))
+            .or_default() += 1;
+
+        self.total += 1;
+
+        // If we've overflowed then reduce our scale and resample
+        // Each time `scale` is decremented, our number of buckets will be halved
+        if self.buckets.len() >= self.max_buckets {
+            self.scale -= 1;
+
+            let mut resampled = BTreeMap::new();
+
+            for (value, count) in &self.buckets {
+                *resampled
+                    .entry(emit::metric::dist::midpoint(value.get(), self.scale))
+                    .or_default() += *count;
+            }
+
+            self.buckets = resampled;
+        }
+    }
+}
+```
+
+An exponential histogram in `MyDistribution` can then be converted into a metric sample:
+
+```rust
+# extern crate emit;
+# #[derive(Default)]
+# struct MyDistribution {
+#     scale: i32,
+#     max_buckets: usize,
+#     total: u64,
+#     buckets: std::collections::BTreeMap<emit::metric::dist::Point, u64>,
+# }
+# impl MyDistribution {
+#     pub fn buckets(&self) -> &std::collections::BTreeMap<emit::metric::dist::Point, u64> { &self.buckets }
+#     pub fn total(&self) -> u64 { self.total }
+#     pub fn scale(&self) -> i32 { self.scale }
+# }
+# let my_distribution = MyDistribution::default();
+emit::count_sample!(
+    name: "http_response",
+    value: my_distribution.total(),
+    props: emit::props! {
+        dist_exp_scale: my_distribution.scale(),
+        #[emit::as_sval]
+        dist_exp_buckets: my_distribution.buckets(),
+    },
+);
+```
+
+### How exponential histograms work
+
+Exponential histograms internally use γ, a value close to `1`, as a log base for computing the bucket a sample belongs to.
+
+The [`midpoint`](https://docs.rs/emit/1.12.0/emit/metric/dist/fn.midpoint.html) function computes γ from `scale` and uses it to find the midpoint of the bucket a raw value belongs to. You can also compute these values yourself if you don't want to store midpoints, or can use a faster but possibly non-portable implementation.
 
 #### Computing γ
-
-γ is a value close to 1 that's used as a log base for computing the bucket a value belongs to.
 
 From `scale`:
 
@@ -147,6 +243,8 @@ From `scale`:
 From `error`:
 
 \\[ γ = \frac{1 + error}{1 - error} \\]
+
+`emit` uses the same scheme as OpenTelemetry for computing γ from `scale`. This form has the benefit of _perfect subsetting_, where each decrement of the scale exactly halves the number of buckets. This makes it possible to resample or merge histograms with different scales without needing to interpolate any buckets.
 
 #### Computing `index`
 
