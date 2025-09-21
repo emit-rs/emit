@@ -1,4 +1,4 @@
-## Delta metrics
+# Delta metrics
 
 Metric events where their extent is a time range are deltas. Their `metric_value` is the result of applying their `metric_agg` over the underlying stream within the extent.
 

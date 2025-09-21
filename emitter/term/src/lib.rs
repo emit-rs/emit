@@ -85,10 +85,14 @@ fn main() {
 #![doc(html_logo_url = "https://raw.githubusercontent.com/emit-rs/emit/main/asset/logo.svg")]
 #![deny(missing_docs)]
 
-use std::{cell::RefCell, cmp, fmt, io::Write, iter, str, time::Duration};
+use std::{cell::RefCell, collections::BTreeMap, fmt, io::Write, iter, str, time::Duration};
 
-use emit::well_known::{
-    KEY_ERR, KEY_EVT_KIND, KEY_LVL, KEY_METRIC_VALUE, KEY_SPAN_ID, KEY_TRACE_ID,
+use emit::{
+    metric::dist::Point,
+    well_known::{
+        KEY_DIST_EXP_BUCKETS, KEY_DIST_EXP_SCALE, KEY_ERR, KEY_EVT_KIND, KEY_LVL, KEY_SPAN_ID,
+        KEY_TRACE_ID,
+    },
 };
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
@@ -337,6 +341,53 @@ fn write_event(buf: &mut Buffer, evt: emit::event::Event<impl emit::props::Props
             }
         }
     }
+
+    if let (Some(scale), Some((count, buckets))) = (
+        evt.props().pull::<i32, _>(KEY_DIST_EXP_SCALE),
+        evt.props().get(KEY_DIST_EXP_BUCKETS).and_then(distribution),
+    ) {
+        let error = ((2.0f64.powf(2.0f64.powi(-scale)) - 1.0)
+            / (1.0 + 2.0f64.powf(2.0f64.powi(-scale))))
+            * 100.0;
+
+        let default = buckets.last_key_value().unwrap().0.get();
+
+        let mut qs = [
+            ("Q1", count / 4, default),
+            ("Q2", count / 2, default),
+            ("Q3", count - (count / 4), default),
+        ];
+
+        let mut seen = 0;
+        let mut fill = 0;
+        for (bucket, count) in &buckets {
+            seen += count;
+
+            let qs = &mut qs[fill..];
+            if qs.len() == 0 {
+                break;
+            }
+
+            for (_, q, v) in qs {
+                if seen >= *q {
+                    *v = bucket.get();
+                    fill += 1;
+                }
+            }
+        }
+
+        for (q, _, v) in qs {
+            write_fg(buf, format_args!("{q}"), FIELD);
+            write_plain(buf, format_args!(": "));
+            write_fg(buf, format_args!("{v}"), NUMBER);
+            write_plain(buf, ", ");
+        }
+
+        write_fg(buf, "error", FIELD);
+        write_plain(buf, format_args!(": "));
+        write_fg(buf, format_args!("{error:.2}%"), NUMBER);
+        write_plain(buf, "\n");
+    }
 }
 
 fn hex_slice<'a>(hex: &'a [u8], len: usize) -> impl fmt::Display + 'a {
@@ -444,6 +495,126 @@ fn write_duration(buf: &mut Buffer, duration: Duration) {
 
     write_fg(buf, value, NUMBER);
     write_fg(buf, unit, TEXT);
+}
+
+fn distribution(value: emit::Value) -> Option<(u64, BTreeMap<Point, u64>)> {
+    #[derive(Default)]
+    struct Extract {
+        depth: usize,
+        buckets: BTreeMap<Point, u64>,
+        count: u64,
+        next_midpoint: Option<f64>,
+        next_count: Option<u64>,
+    }
+
+    impl Extract {
+        fn push(
+            &mut self,
+            midpoint: impl FnOnce() -> Option<f64>,
+            count: impl FnOnce() -> Option<u64>,
+        ) -> sval::Result {
+            if self.depth == 2 {
+                if self.next_midpoint.is_none() {
+                    self.next_midpoint = midpoint();
+
+                    return Ok(());
+                }
+
+                if self.next_count.is_none() {
+                    self.next_count = count();
+
+                    return Ok(());
+                }
+            }
+
+            sval::error()
+        }
+
+        fn apply(&mut self) -> sval::Result {
+            if self.depth == 2 {
+                let midpoint = self
+                    .next_midpoint
+                    .take()
+                    .ok_or_else(|| sval::Error::new())?;
+                let count = self.next_count.take().ok_or_else(|| sval::Error::new())?;
+
+                *self.buckets.entry(Point::new(midpoint)).or_default() += count;
+                self.count += count;
+
+                Ok(())
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    impl<'sval> sval::Stream<'sval> for Extract {
+        fn null(&mut self) -> sval::Result {
+            sval::error()
+        }
+
+        fn bool(&mut self, _: bool) -> sval::Result {
+            sval::error()
+        }
+
+        fn text_begin(&mut self, _: Option<usize>) -> sval::Result {
+            sval::error()
+        }
+
+        fn text_fragment_computed(&mut self, _: &str) -> sval::Result {
+            sval::error()
+        }
+
+        fn text_end(&mut self) -> sval::Result {
+            sval::error()
+        }
+
+        fn i64(&mut self, value: i64) -> sval::Result {
+            self.push(|| Some(value as f64), || value.try_into().ok())
+        }
+
+        fn u64(&mut self, value: u64) -> sval::Result {
+            self.push(|| Some(value as f64), || Some(value))
+        }
+
+        fn f64(&mut self, value: f64) -> sval::Result {
+            self.push(|| Some(value), || Some(value as u64))
+        }
+
+        fn seq_begin(&mut self, _: Option<usize>) -> sval::Result {
+            self.depth += 1;
+
+            if self.depth > 2 {
+                sval::error()
+            } else {
+                Ok(())
+            }
+        }
+
+        fn seq_value_begin(&mut self) -> sval::Result {
+            Ok(())
+        }
+
+        fn seq_value_end(&mut self) -> sval::Result {
+            Ok(())
+        }
+
+        fn seq_end(&mut self) -> sval::Result {
+            self.apply()?;
+            self.depth -= 1;
+
+            Ok(())
+        }
+    }
+
+    let mut extract = Extract::default();
+    sval::stream(&mut extract, &value).ok()?;
+
+    if extract.buckets.len() == 0 {
+        return None;
+    }
+
+    Some((extract.count, extract.buckets))
 }
 
 struct TokenWriter<'a> {

@@ -18,6 +18,8 @@ pub enum MetricData<'a, DP: ?Sized = [NumberDataPoint<'a>]> {
     Gauge(Gauge<'a, DP>),
     #[sval(label = "sum", index = 7)]
     Sum(Sum<'a, DP>),
+    #[sval(label = "exponentialHistogram", index = 10)]
+    ExponentialHistogram(ExponentialHistogram<'a, DP>),
 }
 
 #[derive(Value)]
@@ -34,6 +36,14 @@ pub struct Sum<'a, DP: ?Sized = [NumberDataPoint<'a>]> {
     pub aggregation_temporality: AggregationTemporality,
     #[sval(label = "isMonotonic", index = 3)]
     pub is_monotonic: bool,
+}
+
+#[derive(Value)]
+pub struct ExponentialHistogram<'a, DP: ?Sized = [ExponentialHistogramDataPoint<'a>]> {
+    #[sval(label = "dataPoints", index = 1)]
+    pub data_points: &'a DP,
+    #[sval(label = "aggregationTemporality", index = 2)]
+    pub aggregation_temporality: AggregationTemporality,
 }
 
 #[derive(Value)]
@@ -79,3 +89,59 @@ pub struct AsDouble(pub f64);
 #[derive(Value)]
 #[sval(tag = "sval_protobuf::tags::PROTOBUF_I64")]
 pub struct AsInt(pub i64);
+
+#[derive(Value)]
+pub struct ExponentialHistogramDataPoint<
+    'a,
+    A: ?Sized = [KeyValue<&'a str, &'a AnyValue<'a>>],
+    P: ?Sized = [u64],
+> {
+    #[sval(label = "attributes", index = 1)]
+    pub attributes: &'a A,
+    #[sval(
+        label = "startTimeUnixNano",
+        index = 2,
+        data_tag = "sval_protobuf::tags::PROTOBUF_I64"
+    )]
+    pub start_time_unix_nano: u64,
+    #[sval(
+        label = "timeUnixNano",
+        index = 3,
+        data_tag = "sval_protobuf::tags::PROTOBUF_I64"
+    )]
+    pub time_unix_nano: u64,
+    #[sval(
+        label = "count",
+        index = 4,
+        data_tag = "sval_protobuf::tags::PROTOBUF_I64"
+    )]
+    pub count: u64,
+    #[sval(
+        label = "scale",
+        index = 6,
+        data_tag = "sval_protobuf::tags::PROTOBUF_VARINT_SIGNED"
+    )]
+    pub scale: i32,
+    #[sval(
+        label = "zeroCount",
+        index = 7,
+        data_tag = "sval_protobuf::tags::PROTOBUF_I64"
+    )]
+    pub zero_count: u64,
+    #[sval(label = "positive", index = 8)]
+    pub positive: Option<Buckets<'a, P>>,
+    #[sval(label = "negative", index = 9)]
+    pub negative: Option<Buckets<'a, P>>,
+}
+
+#[derive(Value)]
+pub struct Buckets<'a, P: ?Sized = [u64]> {
+    #[sval(
+        label = "offset",
+        index = 1,
+        data_tag = "sval_protobuf::tags::PROTOBUF_VARINT_SIGNED"
+    )]
+    pub offset: i32,
+    #[sval(label = "bucketCounts", index = 2)]
+    pub bucket_counts: &'a P,
+}

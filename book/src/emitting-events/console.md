@@ -65,6 +65,10 @@ write_to_file("./file.txt", b"Hello")?;
 
 ![`emit_term` output for the above program](../asset/term-span.png)
 
+If the event is a metric sample carrying an [exponential histogram](../producing-events/metrics/distributions.md#exponential-histograms), the distribution will be summarized as quartiles:
+
+![`emit_term` output for the above program](../asset/term-exp-dist.png)
+
 ## Emitting JSON
 
 The `emit_term` [source code](https://github.com/emit-rs/emit/blob/main/emitter/term/src/lib.rs) is written to be hackable rather than configurable. It doesn't support changing its output into other formats, but you can write your own emitter that suits your specific needs. Here is an example of an emitter that writes minified JSON via [`serde_json`](docs.rs/serde_json) to the console using the [`println!`](https://doc.rust-lang.org/std/macro.println.html) macro:

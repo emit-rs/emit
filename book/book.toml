@@ -15,4 +15,5 @@ build-dir = "./dist"
 command = "mdbook-mermaid"
 
 [output.html]
+mathjax-support = true
 additional-js = ["mermaid.min.js", "mermaid-init.js"]
