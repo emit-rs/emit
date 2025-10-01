@@ -17,7 +17,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use self::{
     http::{HttpConnection, HttpVersion},
-    imp::{Handle, Instant},
+    imp::Handle,
 };
 
 #[cfg(not(all(
@@ -605,25 +605,33 @@ impl emit::Emitter for Otlp {
 }
 
 impl OtlpInner {
+    fn configured_signals(&self) -> u32 {
+        self.otlp_logs.as_ref().map(|_| 1).unwrap_or_default()
+            + self.otlp_traces.as_ref().map(|_| 1).unwrap_or_default()
+            + self.otlp_metrics.as_ref().map(|_| 1).unwrap_or_default()
+    }
+
     async fn flush(&self, timeout: Duration) -> bool {
         // Same impl as `blocking_flush` below
-        let start = Instant::now();
+        let configured_signals = self.configured_signals();
+        let timeout = timeout / configured_signals;
+
         let mut fully_flushed = true;
 
         if let Some((_, ref sender)) = self.otlp_logs {
-            if !imp::flush(sender, timeout.saturating_sub(start.elapsed())).await {
+            if !imp::flush(sender, timeout).await {
                 fully_flushed = false;
             }
         }
 
         if let Some((_, ref sender)) = self.otlp_traces {
-            if !imp::flush(sender, timeout.saturating_sub(start.elapsed())).await {
+            if !imp::flush(sender, timeout).await {
                 fully_flushed = false;
             }
         }
 
         if let Some((_, ref sender)) = self.otlp_metrics {
-            if !imp::flush(sender, timeout.saturating_sub(start.elapsed())).await {
+            if !imp::flush(sender, timeout).await {
                 fully_flushed = false;
             }
         }
@@ -666,24 +674,28 @@ impl emit::Emitter for OtlpInner {
         self.metrics.event_discarded.increment();
     }
 
+    /**
+    Wait for up to `timeout` for any pending events to be sent to the backend OTLP service.
+    */
     fn blocking_flush(&self, timeout: Duration) -> bool {
-        let start = Instant::now();
+        let configured_signals = self.configured_signals();
+        let timeout = timeout / configured_signals;
         let mut fully_flushed = true;
 
         if let Some((_, ref sender)) = self.otlp_logs {
-            if !emit_batcher::blocking_flush(sender, timeout.saturating_sub(start.elapsed())) {
+            if !emit_batcher::blocking_flush(sender, timeout) {
                 fully_flushed = false;
             }
         }
 
         if let Some((_, ref sender)) = self.otlp_traces {
-            if !emit_batcher::blocking_flush(sender, timeout.saturating_sub(start.elapsed())) {
+            if !emit_batcher::blocking_flush(sender, timeout) {
                 fully_flushed = false;
             }
         }
 
         if let Some((_, ref sender)) = self.otlp_metrics {
-            if !emit_batcher::blocking_flush(sender, timeout.saturating_sub(start.elapsed())) {
+            if !emit_batcher::blocking_flush(sender, timeout) {
                 fully_flushed = false;
             }
         }

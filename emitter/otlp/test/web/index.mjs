@@ -14,6 +14,9 @@ otelcol.stderr.on("data", (data) => {
   output += data;
   console.log(output);
 });
+otelcol.on('close', (code) => {
+  console.log(`otelcol exited with ${code}`);
+});
 
 wasm.setup();
 

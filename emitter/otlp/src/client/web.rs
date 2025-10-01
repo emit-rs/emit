@@ -87,26 +87,6 @@ impl OtlpBuilder {
     }
 }
 
-pub(crate) struct Instant(f64);
-
-impl Instant {
-    pub fn now() -> Self {
-        Instant(performance_now())
-    }
-
-    pub fn elapsed(&self) -> Duration {
-        let now = performance_now();
-
-        let elapsed_secs = (now - self.0) * 1000.0;
-
-        if elapsed_secs.is_finite() && !elapsed_secs.is_sign_negative() {
-            Duration::from_secs_f64(elapsed_secs)
-        } else {
-            Duration::MAX
-        }
-    }
-}
-
 pub(crate) async fn flush(sender: &emit_batcher::Sender<Channel>, timeout: Duration) -> bool {
     emit_batcher::web::flush(sender, timeout).await
 }
