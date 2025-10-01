@@ -1207,9 +1207,9 @@ pub mod sampler {
     }
 }
 
-pub mod dist {
+pub mod exp {
     /*!
-    Functions for working with metric distributions.
+    Functions for working with exponential histograms.
     */
 
     use crate::{

@@ -18,14 +18,14 @@ struct MyDistribution {
     scale: i32,
     total: u64,
     max_buckets: usize,
-    buckets: BTreeMap<emit::metric::dist::Point, u64>,
+    buckets: BTreeMap<emit::metric::exp::Point, u64>,
 }
 
 impl MyDistribution {
     fn observe(&mut self, value: f64) {
         *self
             .buckets
-            .entry(emit::metric::dist::midpoint(value, self.scale))
+            .entry(emit::metric::exp::midpoint(value, self.scale))
             .or_default() += 1;
         self.total += 1;
 
@@ -38,7 +38,7 @@ impl MyDistribution {
 
             for (value, count) in &self.buckets {
                 *resampled
-                    .entry(emit::metric::dist::midpoint(value.get(), self.scale))
+                    .entry(emit::metric::exp::midpoint(value.get(), self.scale))
                     .or_default() += *count;
             }
 

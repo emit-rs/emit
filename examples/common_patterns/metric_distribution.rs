@@ -3,7 +3,7 @@ This example demonstrates attaching a distribution to a metric sample.
 
 Distributions give you an idea of what the individual values that made up your sample look like
 without actually storing all of them. Values that are close together are bucketed together by
-a single `emit::metric::dist::midpoint`. The `scale` parameter decides how big these buckets are.
+a single `emit::metric::exp::midpoint`. The `scale` parameter decides how big these buckets are.
 Bigger buckets take up less space, because there are fewer of them, but are less accurate than
 smaller buckets. There's no single right `scale` to use, it depends on the shape of your input data.
 
@@ -25,14 +25,14 @@ use std::{
 struct MyDistribution {
     scale: i32,
     total: u64,
-    buckets: BTreeMap<emit::metric::dist::Point, u64>,
+    buckets: BTreeMap<emit::metric::exp::Point, u64>,
 }
 
 impl MyDistribution {
     fn observe(&mut self, value: f64) {
         *self
             .buckets
-            .entry(emit::metric::dist::midpoint(value, self.scale))
+            .entry(emit::metric::exp::midpoint(value, self.scale))
             .or_default() += 1;
         self.total += 1;
     }

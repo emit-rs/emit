@@ -88,7 +88,7 @@ fn main() {
 use std::{cell::RefCell, collections::BTreeMap, fmt, io::Write, iter, str, time::Duration};
 
 use emit::{
-    metric::dist::Point,
+    metric::exp::Point,
     well_known::{
         KEY_DIST_EXP_BUCKETS, KEY_DIST_EXP_SCALE, KEY_ERR, KEY_EVT_KIND, KEY_LVL, KEY_SPAN_ID,
         KEY_TRACE_ID,
