@@ -4,7 +4,7 @@ You can use `emit` in WebAssembly applications.
 
 When WebAssembly support requires bindings to JavaScript APIs, crates will use a `web` Cargo feature that enables them.
 
-If you're targeting WASI via the `wasm32-wasip1` or `wasm32-wasip2` targets, you shouldn't need to do anything special to make `emit` work, but not all emitters support WASI yet. The following emitters are compatible with WASI:
+If you're targeting WASI via the `wasm32-wasip2` or `wasm32-wasip2` targets, you shouldn't need to do anything special to make `emit` work, but not all emitters support WASI yet. The following emitters are compatible with WASI:
 
 - [`emit_term`](../emitting-events/console.md) to emit events to stdout.
 

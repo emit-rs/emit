@@ -69,8 +69,8 @@ jobs:
       - name: No features
         run: cargo +nightly miri test --lib --no-default-features
 
-  wasip1:
-    name: Test (Wasip1)
+  wasip2:
+    name: Test (Wasip2)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
@@ -85,17 +85,17 @@ jobs:
       - name: Install Rust toolchain
         run: rustup default nightly
 
-      - name: Install wasm32-wasip1 target
-        run: rustup target add wasm32-wasip1
+      - name: Install wasm32-wasip2 target
+        run: rustup target add wasm32-wasip2
 
       - name: Install cargo-hack
         run: cargo install cargo-hack
 
       - name: All
-        run: cargo test --target wasm32-wasip1 --all-features
+        run: cargo test --target wasm32-wasip2 --all-features
 
       - name: Build powerset
-        run: cargo hack build --target wasm32-wasip1 --feature-powerset --lib
+        run: cargo hack build --target wasm32-wasip2 --feature-powerset --lib
 
   wasm:
     name: Test (Node)
