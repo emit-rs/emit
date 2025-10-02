@@ -352,7 +352,7 @@ where
 
         #[cfg(feature = "implicit_internal_rt")]
         {
-            use crate::{mdl, Frame};
+            use crate::Frame;
             use emit_core::{
                 empty::Empty, event::Event, props::Props as _, runtime::internal_slot,
                 template::Template,

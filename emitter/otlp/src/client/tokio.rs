@@ -1,9 +1,4 @@
-use std::{
-    future::Future,
-    pin::Pin,
-    sync::Arc,
-    time::{self, Duration},
-};
+use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 
 use futures_util::{stream::FuturesUnordered, StreamExt};
 
@@ -118,18 +113,6 @@ impl OtlpBuilder {
             metrics,
             _handle: handle,
         })
-    }
-}
-
-pub(crate) struct Instant(time::Instant);
-
-impl Instant {
-    pub fn now() -> Self {
-        Instant(time::Instant::now())
-    }
-
-    pub fn elapsed(&self) -> Duration {
-        self.0.elapsed()
     }
 }
 

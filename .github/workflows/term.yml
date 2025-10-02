@@ -38,8 +38,8 @@ jobs:
         working-directory: ./emitter/term
         run: cargo hack test --feature-powerset --lib -Z minimal-versions
 
-  wasip1:
-    name: Test (Wasip1)
+  wasip2:
+    name: Test (Wasip2)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
@@ -54,16 +54,16 @@ jobs:
       - name: Install Rust toolchain
         run: rustup default nightly
 
-      - name: Install wasm32-wasip1 target
-        run: rustup target add wasm32-wasip1
+      - name: Install wasm32-wasip2 target
+        run: rustup target add wasm32-wasip2
 
       - name: Install cargo-hack
         run: cargo install cargo-hack
 
       - name: All
         working-directory: ./emitter/term
-        run: cargo test --target wasm32-wasip1 --all-features
+        run: cargo test --target wasm32-wasip2 --all-features
 
       - name: Build powerset
         working-directory: ./emitter/term
-        run: cargo hack build --target wasm32-wasip1 --feature-powerset --lib
+        run: cargo hack build --target wasm32-wasip2 --feature-powerset --lib

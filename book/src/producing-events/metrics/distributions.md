@@ -150,7 +150,7 @@ struct MyDistribution {
     scale: i32,
     max_buckets: usize,
     total: u64,
-    buckets: BTreeMap<emit::metric::dist::Point, u64>,
+    buckets: BTreeMap<emit::metric::exp::Point, u64>,
 }
 
 impl MyDistribution {
@@ -165,7 +165,7 @@ impl MyDistribution {
         }
     }
 
-    pub fn buckets(&self) -> &BTreeMap<emit::metric::dist::Point, u64> {
+    pub fn buckets(&self) -> &BTreeMap<emit::metric::exp::Point, u64> {
         &self.buckets
     }
 
@@ -180,7 +180,7 @@ impl MyDistribution {
     pub fn observe(&mut self, value: f64) {
         *self
             .buckets
-            .entry(emit::metric::dist::midpoint(value, self.scale))
+            .entry(emit::metric::exp::midpoint(value, self.scale))
             .or_default() += 1;
 
         self.total += 1;
@@ -194,7 +194,7 @@ impl MyDistribution {
 
             for (value, count) in &self.buckets {
                 *resampled
-                    .entry(emit::metric::dist::midpoint(value.get(), self.scale))
+                    .entry(emit::metric::exp::midpoint(value.get(), self.scale))
                     .or_default() += *count;
             }
 
@@ -213,10 +213,10 @@ An exponential histogram in `MyDistribution` can then be converted into a metric
 #     scale: i32,
 #     max_buckets: usize,
 #     total: u64,
-#     buckets: std::collections::BTreeMap<emit::metric::dist::Point, u64>,
+#     buckets: std::collections::BTreeMap<emit::metric::exp::Point, u64>,
 # }
 # impl MyDistribution {
-#     pub fn buckets(&self) -> &std::collections::BTreeMap<emit::metric::dist::Point, u64> { &self.buckets }
+#     pub fn buckets(&self) -> &std::collections::BTreeMap<emit::metric::exp::Point, u64> { &self.buckets }
 #     pub fn total(&self) -> u64 { self.total }
 #     pub fn scale(&self) -> i32 { self.scale }
 # }
