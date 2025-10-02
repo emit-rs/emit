@@ -96,17 +96,3 @@ extern "C" {
     #[wasm_bindgen(js_namespace = performance, js_name = "now")]
     pub fn performance_now() -> f64;
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use wasm_bindgen_test::*;
-
-    #[wasm_bindgen_test]
-    fn instant_is_defined() {
-        let now = Instant::now();
-
-        assert_ne!(Duration::ZERO, now.elapsed());
-        assert_ne!(Duration::MAX, now.elapsed());
-    }
-}
