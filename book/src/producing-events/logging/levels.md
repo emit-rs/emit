@@ -14,4 +14,86 @@ When emitting events, you can use a macro corresponding to a given level to have
 - [`warn!`](https://docs.rs/emit/1.13.0/emit/macro.warn.html)
 - [`error!`](https://docs.rs/emit/1.13.0/emit/macro.error.html)
 
-`emit`'s levels are intentionally very coarse-grained and aren't intended to be extended. You can define your own levelling scheme in your applications if you want.
+## Custom levels
+
+`emit`'s well-known levels are intentionally very coarse-grained and aren't intended to be extended. If you need finer grained levels, you can define your own scheme. Your scheme should integrate with the `debug`, `info`, `warn`, and `error` scheme `emit` uses by default, but doesn't technically have to either.
+
+To use a custom level, you can specify your own value for the `lvl` [well-known property](https://docs.rs/emit/1.13.0/emit/well_known/index.html) when emitting an event:
+
+```rust
+# extern crate emit;
+emit::emit!("Some noteworthy event", lvl: "notice");
+```
+
+If you define your own level type, you can also use it when constructing [a level filter](../../filtering-events.md#filtering-by-level):
+
+```rust
+# extern crate emit;
+// Define your custom level as a struct or enum
+//
+// To use your level in a `MinLevelPathMap`, it needs to implement the following traits:
+// - `Default`
+// - `FromValue`
+// - `Ord`
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum MyLevel {
+    Debug,
+    Info,
+    Notice,
+    Warn,
+    Error,
+    Critical,
+    Alert,
+    Emergency,
+}
+
+impl Default for MyLevel {
+    fn default() -> Self {
+        MyLevel::Info
+    }
+}
+
+// The `FromStr` impl here is primitive, but makes the `FromValue` impl able
+// to parse levels supplied as strings
+impl std::str::FromStr for MyLevel {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match &*s.to_ascii_lowercase() {
+            "debug" => Ok(MyLevel::Debug),
+            "info" => Ok(MyLevel::Info),
+            "notice" => Ok(MyLevel::Notice),
+            "warn" => Ok(MyLevel::Warn),
+            "error" => Ok(MyLevel::Error),
+            "critical" => Ok(MyLevel::Critical),
+            "alert" => Ok(MyLevel::Alert),
+            "emergency" => Ok(MyLevel::Emergency),
+            _ => Err(format!("'{s}' was not recognized as a level")),
+        }
+    }
+}
+
+impl<'a> emit::value::FromValue<'a> for MyLevel {
+    fn from_value(value: emit::Value<'a>) -> Option<Self> {
+        value.downcast_ref().copied().or_else(|| value.parse())
+    }
+}
+
+let rt = emit::setup()
+    .emit_when({
+        // If you're using a custom level, you need to construct your `MinLevelPathMap` manually
+        let mut filter = emit::level::MinLevelPathMap::new();
+
+        filter.min_level(
+            emit::path!("level_custom::noisy"),
+            emit::level::MinLevelFilter::new(MyLevel::Notice),
+        );
+
+        filter
+    })
+    .init();
+
+// Your app code goes here
+
+rt.blocking_flush(std::time::Duration::from_secs(5));
+```
