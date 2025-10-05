@@ -148,5 +148,9 @@ name = "metric_props"
 path = "metric_props.rs"
 
 [[example]]
+name = "level_custom"
+path = "level_custom.rs"
+
+[[example]]
 name = "testing"
 path = "testing.rs"
