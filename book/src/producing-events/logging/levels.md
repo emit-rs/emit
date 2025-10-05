@@ -55,7 +55,7 @@ impl Default for MyLevel {
 
 // The `FromStr` impl here is primitive, but makes the `FromValue` impl able
 // to parse levels supplied as strings
-impl FromStr for MyLevel {
+impl std::str::FromStr for MyLevel {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
