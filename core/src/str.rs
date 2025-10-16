@@ -10,6 +10,8 @@ Values can be converted into [`Str`]s either directly using methods like [`Str::
 
 use core::{borrow::Borrow, fmt, hash, marker::PhantomData};
 
+use crate::value::{FromValue, ToValue, Value};
+
 #[cfg(feature = "alloc")]
 use alloc::{boxed::Box, sync::Arc};
 
@@ -569,7 +571,26 @@ mod alloc_support {
     }
 }
 
-use crate::value::{FromValue, ToValue, Value};
+// Work-around for const-fn in traits
+// Mirrors trait fns in `macro_hooks`
+#[doc(hidden)]
+impl Str<'static> {
+    pub const fn __private_interpolated(self) -> Self {
+        self
+    }
+
+    pub const fn __private_uninterpolated(self) -> Self {
+        self
+    }
+
+    pub const fn __private_captured(self) -> Self {
+        self
+    }
+
+    pub const fn __private_uncaptured(self) -> Self {
+        self
+    }
+}
 
 #[cfg(test)]
 mod tests {

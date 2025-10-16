@@ -696,6 +696,16 @@ impl Key {
     }
 }
 
+pub trait __PrivateKeyExternalHook {
+    fn __private_key_external(self) -> Self;
+}
+
+impl<T> __PrivateKeyExternalHook for T {
+    fn __private_key_external(self) -> Self {
+        self
+    }
+}
+
 #[track_caller]
 #[cfg(feature = "alloc")]
 pub fn __private_format(tpl: Template, props: impl Props) -> alloc::string::String {

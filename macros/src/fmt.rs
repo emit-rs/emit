@@ -27,7 +27,7 @@ pub fn template_hole_with_hook(
         quote!(.__private_uncaptured())
     };
 
-    let hole = key::key_with_hook(&[], hole);
+    let hole = key::key_with_hook(&[], hole, interpolated, captured);
 
     hook::eval_hooks(
         &attrs,

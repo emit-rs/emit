@@ -249,7 +249,6 @@ fn inject_sync(
     err_lvl_tokens: Option<TokenStream>,
     err_tokens: Option<TokenStream>,
 ) -> Result<TokenStream, syn::Error> {
-    let ctxt_props_tokens = ctxt_props.props_tokens().to_ref_tokens();
     let template_tokens = template.template_tokens();
     let span_name_tokens = template.template_literal_tokens();
 
@@ -292,18 +291,20 @@ fn inject_sync(
 
     let setup_tokens = setup_tokens.map(|setup| quote!(let __setup = (#setup)();));
 
+    let span_guard_tokens = span_guard_tokens(
+        rt_tokens,
+        mdl_tokens,
+        when_tokens,
+        ctxt_props,
+        &span_name_tokens,
+        &default_completion_tokens,
+        &default_lvl_tokens,
+    );
+
     Ok(quote!({
         #setup_tokens
 
-        let (mut __span_guard, __ctxt) = emit::__private::__private_begin_span(
-            #rt_tokens,
-            #mdl_tokens,
-            #span_name_tokens,
-            #default_lvl_tokens,
-            #when_tokens,
-            #ctxt_props_tokens,
-            #default_completion_tokens,
-        );
+        let (mut __span_guard, __ctxt) = #span_guard_tokens;
 
         __ctxt.call(move || {
             __span_guard.start();
@@ -330,7 +331,6 @@ fn inject_async(
     err_lvl_tokens: Option<TokenStream>,
     err_tokens: Option<TokenStream>,
 ) -> Result<TokenStream, syn::Error> {
-    let ctxt_props_tokens = ctxt_props.props_tokens().to_ref_tokens();
     let template_tokens = template.template_tokens();
     let span_name_tokens = template.template_literal_tokens();
 
@@ -369,18 +369,20 @@ fn inject_async(
 
     let setup_tokens = setup_tokens.map(|setup| quote!(let __setup = (#setup)();));
 
+    let span_guard_tokens = span_guard_tokens(
+        rt_tokens,
+        mdl_tokens,
+        when_tokens,
+        ctxt_props,
+        &span_name_tokens,
+        &default_completion_tokens,
+        &default_lvl_tokens,
+    );
+
     Ok(quote!({
         #setup_tokens
 
-        let (mut __span_guard, __ctxt) = emit::__private::__private_begin_span(
-            #rt_tokens,
-            #mdl_tokens,
-            #span_name_tokens,
-            #default_lvl_tokens,
-            #when_tokens,
-            #ctxt_props_tokens,
-            #default_completion_tokens,
-        );
+        let (mut __span_guard, __ctxt) = #span_guard_tokens;
 
         __ctxt.in_future(async move {
             __span_guard.start();
@@ -389,6 +391,34 @@ fn inject_async(
             #body_tokens
         }).await
     }))
+}
+
+fn span_guard_tokens(
+    rt_tokens: &TokenStream,
+    mdl_tokens: &TokenStream,
+    when_tokens: &TokenStream,
+    ctxt_props: &Props,
+    span_name_tokens: &TokenStream,
+    default_completion_tokens: &TokenStream,
+    default_lvl_tokens: &TokenStream,
+) -> TokenStream {
+    let ctxt_props_match_input_tokens = ctxt_props.match_input_tokens();
+    let ctxt_props_match_binding_tokens = ctxt_props.match_binding_tokens();
+    let ctxt_props_tokens = ctxt_props.match_bound_tokens().to_ref_tokens();
+
+    quote!(match (#(#ctxt_props_match_input_tokens),*) {
+        (#(#ctxt_props_match_binding_tokens),*) => {
+            emit::__private::__private_begin_span(
+                #rt_tokens,
+                #mdl_tokens,
+                #span_name_tokens,
+                #default_lvl_tokens,
+                #when_tokens,
+                #ctxt_props_tokens,
+                #default_completion_tokens,
+            )
+        }
+    })
 }
 
 struct Completion {

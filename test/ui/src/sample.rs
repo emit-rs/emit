@@ -1,4 +1,4 @@
-use crate::util::{simple_runtime, Called};
+use crate::util::{Called, simple_runtime};
 use emit::{Kind, Props, Str};
 
 #[test]
