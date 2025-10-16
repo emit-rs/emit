@@ -9,8 +9,8 @@ use std::{
     mem,
     ops::ControlFlow,
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc, LazyLock, Mutex,
+        atomic::{AtomicU64, Ordering},
     },
     time::Duration,
 };

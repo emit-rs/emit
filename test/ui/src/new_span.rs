@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use emit::{Emitter, Props};
 
-use crate::util::{simple_runtime, Called};
+use crate::util::{Called, simple_runtime};
 
 #[test]
 fn new_span_basic() {

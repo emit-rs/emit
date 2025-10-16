@@ -2,14 +2,14 @@ use std::time::Duration;
 
 use emit::{Ctxt, Emitter, Kind, Props, Str};
 
-use crate::util::{static_runtime, StaticCalled, StaticRuntime};
+use crate::util::{StaticCalled, StaticRuntime, static_runtime};
 
 #[test]
 fn span_basic() {
     fn assert_event_base(evt: &emit::Event<impl Props>) {
         assert_eq!(module_path!(), evt.mdl());
 
-        assert!(evt.props().pull::<&str, _>("user").is_some());
+        assert!(evt.props().get("user").is_some());
 
         assert_eq!(
             "greet {user}",
@@ -148,6 +148,13 @@ fn span_basic() {
         let _ = user;
     }
 
+    #[emit::info_span(rt: INFO_RT, "greet {user}", user: String::from("Rust"))]
+    fn exec_info_temporary() {
+        INFO_RT.ctxt().with_current(|props| {
+            assert_eq!("Rust", props.pull::<&str, _>("user").unwrap());
+        });
+    }
+
     #[emit::warn_span(rt: WARN_RT, "greet {user}")]
     fn exec_warn(user: &str) {
         WARN_RT.ctxt().with_current(|props| {
@@ -168,6 +175,7 @@ fn span_basic() {
 
     exec("Rust");
     exec_debug("Rust");
+    exec_info_temporary();
     exec_info("Rust");
     exec_warn("Rust");
     exec_error("Rust");
@@ -208,7 +216,11 @@ async fn span_basic_async() {
         let _ = user;
     }
 
+    #[emit::span(rt: RT, "greet {user}", user: String::from("Rust"))]
+    async fn exec_temporary() {}
+
     exec("Rust").await;
+    exec_temporary().await;
 
     RT.emitter().blocking_flush(Duration::from_secs(1));
 

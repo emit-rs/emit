@@ -68,8 +68,10 @@ fn props_cfg() {
 fn props_capture_err() {
     use std::{error, io};
 
+    let err = io::Error::new(io::ErrorKind::Other, "Some error");
+
     match emit::props! {
-        err: io::Error::new(io::ErrorKind::Other, "Some error"),
+        err,
     } {
         props => {
             let err = props
@@ -350,13 +352,19 @@ fn props_as_display() {
 #[test]
 #[cfg(feature = "std")]
 fn props_ref() {
+    let a = String::from("short lived");
+
+    // NOTE: `a` worked inline on 2021 edition, but doesn't anymore
+    // We've fixed this for macros like `emit!()` that don't return values
     match emit::props! {
-        a: String::from("short lived"),
+        a,
     } {
         props => {
             assert_eq!("short lived", props.pull::<&str, _>("a").unwrap());
         }
     }
+
+    drop(a);
 }
 
 #[test]
@@ -364,8 +372,10 @@ fn props_ref() {
 fn props_as_error() {
     use std::{error, io};
 
+    let a = io::Error::new(io::ErrorKind::Other, "Some error");
+
     match emit::props! {
-        #[emit::as_error] a: io::Error::new(io::ErrorKind::Other, "Some error"),
+        #[emit::as_error] a,
     } {
         props => {
             let err = props.pull::<&(dyn error::Error + 'static), _>("a").unwrap();

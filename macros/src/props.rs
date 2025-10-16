@@ -4,8 +4,8 @@ use proc_macro2::{Span, TokenStream};
 use syn::{parse::Parse, spanned::Spanned, Attribute, FieldValue, Ident};
 
 use crate::{
-    capture,
-    util::{AttributeCfg, FieldValueKey},
+    capture, hook,
+    util::{maybe_cfg, AttributeCfg, ExprIsLocalVariable, FieldValueKey},
 };
 
 #[derive(Debug)]
@@ -129,22 +129,59 @@ impl Props {
 
         let match_bound_ident = self.next_match_binding_ident(fv.span());
 
-        let key_value_tokens = {
-            let key_value_tokens =
-                capture::eval_key_value_with_hook(&attrs, &fv, fn_name, interpolated, captured)?;
+        let key_value_tokens = maybe_cfg(
+            cfg_attr.as_ref(),
+            fv.span(),
+            capture::eval_key_value_with_hook(&attrs, &fv, &fn_name, interpolated, captured)?,
+        );
 
-            match cfg_attr {
-                Some(ref cfg_attr) => quote_spanned!(fv.span()=>
-                    #cfg_attr
-                    {
-                        #key_value_tokens
-                    }
-                ),
-                None => key_value_tokens,
-            }
+        let direct_bound_tokens = quote_spanned!(fv.span()=> #key_value_tokens);
+
+        // This is one of the few places we end up looking at the shape of an expression and deciding how to emit code for it.
+        //
+        // In the 2021 edition and prior, lifetimes of temporaries created in a `match expr` would be extended to the end of the
+        // `match`. In the 2024 edition, that doesn't happen anymore. So to keep the semantics that you can capture a value in scope
+        // by reference, and supply temporaries inline, we check whether the field value is a local like `x: a.b.c` and take a reference
+        // inside the `match expr`, or a complex expression like `x: a.b()`, where it's taken by value in the `match expr`.
+        let (match_value_tokens, match_bound_tokens) = if fv.expr.is_local_variable() {
+            // If the expression is a local variable then it's an already in-scope identifier
+            // We take the expression by reference in a `match`
+
+            let match_value_tokens = quote_spanned!(fv.span()=>#key_value_tokens);
+            let match_bound_tokens =
+                quote_spanned!(fv.span()=>#cfg_attr (#match_bound_ident.0, #match_bound_ident.1));
+
+            (match_value_tokens, match_bound_tokens)
+        } else {
+            // If the expression is not a local variable then it's constructed for the call
+            // We take the expression by value in a `match`
+
+            let key_tokens = capture::eval_key_with_hook(&attrs, &fv, interpolated, captured)?;
+            let value_expr = &fv.expr;
+
+            let match_value_tokens = maybe_cfg(
+                cfg_attr.as_ref(),
+                fv.span(),
+                quote_spanned!(fv.span()=> (#key_tokens, #value_expr)),
+            );
+
+            let bound_value_tokens = capture::value_with_hook(
+                &syn::parse_quote_spanned!(fv.span()=>#match_bound_ident.1),
+                &fn_name,
+                interpolated,
+                captured,
+            );
+            let bound_value_tokens = hook::eval_hooks(
+                &attrs,
+                syn::parse_quote_spanned!(fv.span()=>#bound_value_tokens),
+            )?;
+
+            let match_bound_tokens = quote!(#cfg_attr (#match_bound_ident.0, #bound_value_tokens));
+
+            (match_value_tokens, match_bound_tokens)
         };
 
-        self.match_value_tokens.push(key_value_tokens.clone());
+        self.match_value_tokens.push(match_value_tokens);
 
         // If there's a #[cfg] then also push its reverse
         // This is to give a dummy value to the pattern binding since they don't support attributes
@@ -171,8 +208,8 @@ impl Props {
         let previous = self.key_values.insert(
             fv.key_name()?,
             KeyValue {
-                match_bound_tokens: quote_spanned!(fv.span()=> #cfg_attr (#match_bound_ident.0, #match_bound_ident.1)),
-                direct_bound_tokens: quote_spanned!(fv.span()=> #key_value_tokens),
+                match_bound_tokens,
+                direct_bound_tokens,
                 span: fv.span(),
                 label: fv.key_ident()?,
                 cfg_attr,

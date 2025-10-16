@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use emit::{Emitter, Props};
 
-use crate::util::{simple_runtime, Called};
+use crate::util::{Called, simple_runtime};
 
 #[test]
 fn emit_basic() {
@@ -70,6 +70,10 @@ fn emit_interpolation() {
     emit::emit!(rt, "Hello, {user}", user: {"Rust"});
     emit::emit!(rt, "Hello, {user: {\"Rust\"}}");
     emit::emit!(rt, "Hello, {user: {String::from(\"Rust\")}}");
+
+    let user = String::from("Rust");
+    emit::emit!(rt, "Hello, {user}");
+    drop(user);
 }
 
 #[test]

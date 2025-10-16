@@ -2,7 +2,7 @@
 name = "emit_test_ui"
 version = "0.0.0"
 publish = false
-edition = "2021"
+edition = "2024"
 
 [features]
 compile = ["std", "implicit_rt"]

@@ -64,7 +64,7 @@ impl MetricValueArg {
         capture::eval_value_with_hook(
             &self.0.attrs,
             &self.0,
-            capture::default_fn_name(&self.0),
+            &capture::default_fn_name(&self.0),
             false,
             true,
         )

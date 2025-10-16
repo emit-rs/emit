@@ -1,12 +1,13 @@
 use std::{fmt, marker::PhantomData};
 
-use proc_macro2::TokenStream;
+use proc_macro2::{Span, TokenStream};
 use syn::{
     ext::IdentExt,
     parse::{self, Parse, ParseStream},
     punctuated::Punctuated,
     spanned::Spanned,
-    Attribute, ExprLit, FieldValue, Ident, Lit, LitStr, MacroDelimiter, Member, Meta, MetaList,
+    Attribute, Expr, ExprField, ExprLit, ExprParen, FieldValue, Ident, Lit, LitStr, MacroDelimiter,
+    Member, Meta, MetaList,
 };
 
 pub trait FieldValueKey {
@@ -42,6 +43,21 @@ impl FieldValueKey for FieldValue {
                 self.span(),
                 "field values must used named identifiers",
             )),
+        }
+    }
+}
+
+pub trait ExprIsLocalVariable {
+    fn is_local_variable(&self) -> bool;
+}
+
+impl ExprIsLocalVariable for Expr {
+    fn is_local_variable(&self) -> bool {
+        match self {
+            Expr::Path(_) => true,
+            Expr::Field(ExprField { base, .. }) => base.is_local_variable(),
+            Expr::Paren(ExprParen { expr, .. }) => expr.is_local_variable(),
+            _ => false,
         }
     }
 }
@@ -85,6 +101,18 @@ impl AttributeCfg for Attribute {
             }
             _ => None,
         }
+    }
+}
+
+pub fn maybe_cfg(cfg_attr: Option<&Attribute>, span: Span, wrap: TokenStream) -> TokenStream {
+    match cfg_attr {
+        Some(cfg_attr) => quote_spanned!(span=>
+            #cfg_attr
+            {
+                #wrap
+            }
+        ),
+        None => wrap,
     }
 }
 

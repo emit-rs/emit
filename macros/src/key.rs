@@ -9,13 +9,30 @@ use crate::{
     hook,
 };
 
-pub fn key_with_hook(attrs: &[Attribute], key_expr: &ExprLit) -> TokenStream {
+pub fn key_with_hook(
+    attrs: &[Attribute],
+    key_expr: &ExprLit,
+    interpolated: bool,
+    captured: bool,
+) -> TokenStream {
+    let interpolated_expr = if interpolated {
+        quote!(.__private_interpolated())
+    } else {
+        quote!(.__private_uninterpolated())
+    };
+
+    let captured_expr = if captured {
+        quote!(.__private_captured())
+    } else {
+        quote!(.__private_uncaptured())
+    };
+
     quote_spanned!(key_expr.span()=>
         #(#attrs)*
         #[allow(unused_imports)]
         {
-            use emit::__private::__PrivateKeyHook as _;
-            emit::__private::Key(#key_expr).__private_key_as_default()
+            use emit::__private::{__PrivateKeyHook as _, __PrivateInterpolatedHook as _};
+            emit::__private::Key(#key_expr).__private_key_as_default() #interpolated_expr #captured_expr
         }
     )
 }
@@ -79,7 +96,11 @@ pub fn rename_hook_tokens(opts: RenameHookTokens) -> Result<TokenStream, syn::Er
         args: opts.args,
         expr: opts.expr,
         predicate: |ident: &str| ident.starts_with("__private_key"),
-        to: move |args: &Args, _: &Ident, _: &Punctuated<Expr, Comma>| {
+        to: move |args: &Args, ident: &Ident, _: &Punctuated<Expr, Comma>| {
+            if ident.to_string().starts_with("__private_key_external") {
+                return None;
+            }
+
             let (to_ident, to_arg) = match args.name {
                 Name::Str(ref name) => (quote!(__private_key_as), quote!(#name)),
                 Name::Any(ref name) => (quote!(__private_key_as), name.clone()),
