@@ -1,6 +1,6 @@
 # Property attributes
 
-This section calls out a few attributes you can use to change the way properties are captured. See [the crate docs](https://docs.rs/emit/1.13.0/emit/index.html#attributes) for a complete list of attributes defined by `emit`.
+This section calls out a few attributes you can use to change the way properties are captured. See [the crate docs](https://docs.rs/emit/1.13.1/emit/index.html#attributes) for a complete list of attributes defined by `emit`.
 
 ## `#[cfg]`
 
@@ -24,7 +24,7 @@ Event {
 
 ## `#[key]`
 
-The [`#[key`](https://docs.rs/emit/1.13.0/emit/attr.key.html) attribute can be used to set the name of a captured property. This can be used to give a property a name that isn't a valid Rust identifier:
+The [`#[key`](https://docs.rs/emit/1.13.1/emit/attr.key.html) attribute can be used to set the name of a captured property. This can be used to give a property a name that isn't a valid Rust identifier:
 
 ```rust
 # extern crate emit;
@@ -47,7 +47,7 @@ Event {
 
 ## `#[fmt]`
 
-The [`#[fmt]`](https://docs.rs/emit/1.13.0/emit/attr.fmt.html) attribute applies a formatter to a property value when rendering it in the template. The accepted syntax is the same as Rust's [`std::fmt`](https://doc.rust-lang.org/std/fmt/index.html):
+The [`#[fmt]`](https://docs.rs/emit/1.13.1/emit/attr.fmt.html) attribute applies a formatter to a property value when rendering it in the template. The accepted syntax is the same as Rust's [`std::fmt`](https://doc.rust-lang.org/std/fmt/index.html):
 
 ```rust
 # extern crate emit;
@@ -75,7 +75,7 @@ pi is 3.142
 
 ## `#[as_debug]`
 
-The [`#[as_debug]`](https://docs.rs/emit/1.13.0/emit/attr.as_debug.html) attribute captures a property value using its [`Debug`](https://doc.rust-lang.org/std/fmt/trait.Debug.html) implementation, instead of the default `Display + 'static`:
+The [`#[as_debug]`](https://docs.rs/emit/1.13.1/emit/attr.as_debug.html) attribute captures a property value using its [`Debug`](https://doc.rust-lang.org/std/fmt/trait.Debug.html) implementation, instead of the default `Display + 'static`:
 
 ```rust
 # extern crate emit;
@@ -123,7 +123,7 @@ See [Property capturing](./property-capturing.md) for more details.
 
 ## `#[as_serde]`
 
-The [`#[as_serde]`](https://docs.rs/emit/1.13.0/emit/attr.as_serde.html) attribute captures a property value using its [`Serialize`](https://docs.rs/serde/latest/serde/trait.Serialize.html) implementation, instead of the default `Display + 'static`:
+The [`#[as_serde]`](https://docs.rs/emit/1.13.1/emit/attr.as_serde.html) attribute captures a property value using its [`Serialize`](https://docs.rs/serde/latest/serde/trait.Serialize.html) implementation, instead of the default `Display + 'static`:
 
 ```rust
 # extern crate emit;
