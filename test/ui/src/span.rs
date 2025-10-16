@@ -9,7 +9,7 @@ fn span_basic() {
     fn assert_event_base(evt: &emit::Event<impl Props>) {
         assert_eq!(module_path!(), evt.mdl());
 
-        assert!(evt.props().pull::<&str, _>("user").is_some());
+        assert!(evt.props().get("user").is_some());
 
         assert_eq!(
             "greet {user}",
