@@ -117,7 +117,7 @@ fn greet(user: &User) {
 
 ### Using `serde::Serialize`
 
-If you want to log a type that implements `Serialize`, you can apply the [`#[as_serialize]`](../../reference/property-attributes.md#as_serialize) attribute to it to capture it as a structured value:
+If you want to log a type that implements `Serialize`, you can apply the [`#[as_serde]`](../../reference/property-attributes.md#as_serde) attribute to it to capture it as a structured value:
 
 ```rust
 # extern crate emit;
