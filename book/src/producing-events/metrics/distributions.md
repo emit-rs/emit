@@ -138,7 +138,7 @@ emit::count_sample!(
 
 ### Building exponential histograms
 
-`emit` doesn't directly define a type that builds an exponential histogram for you. What it does provide is the [`midpoint`](https://docs.rs/emit/1.13.1/emit/metric/dist/fn.midpoint.html) function, returning a [`Point`](https://docs.rs/emit/1.13.1/emit/metric/dist/struct.Point.html) that can be stored in a `BTreeMap` or `HashMap`.
+`emit` doesn't directly define a type that builds an exponential histogram for you. What it does provide is the [`midpoint`](https://docs.rs/emit/1.13.1/emit/metric/exp/fn.midpoint.html) function, returning a [`Point`](https://docs.rs/emit/1.13.1/emit/metric/exp/struct.Point.html) that can be stored in a `BTreeMap` or `HashMap`.
 
 Here's an example type that can collect an exponential histogram from raw values:
 
@@ -236,7 +236,7 @@ emit::count_sample!(
 
 Exponential histograms internally use γ, a value close to `1`, as a log base for computing the bucket a sample belongs to.
 
-The [`midpoint`](https://docs.rs/emit/1.13.1/emit/metric/dist/fn.midpoint.html) function computes γ from `scale` and uses it to find the midpoint of the bucket a raw value belongs to. You can also compute these values yourself if you don't want to store midpoints, or can use a faster but possibly non-portable implementation.
+The [`midpoint`](https://docs.rs/emit/1.13.1/emit/metric/exp/fn.midpoint.html) function computes γ from `scale` and uses it to find the midpoint of the bucket a raw value belongs to. You can also compute these values yourself if you don't want to store midpoints, or can use a faster but possibly non-portable implementation.
 
 #### Computing γ
 
