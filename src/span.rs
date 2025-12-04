@@ -1149,6 +1149,7 @@ impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
     /**
     Set the default completion that will be called when the span is dropped or [`SpanGuard::complete`] is called.
     */
+    #[must_use = "this method returns a new `SpanGuard` that will be immediately dropped unless used"]
     pub fn with_completion<U: Completion>(mut self, completion: U) -> SpanGuard<'a, T, P, U> {
         // Ensure this guard won't complete on drop
         self.completion.take();
