@@ -2,34 +2,20 @@
 This example demonstrates how to attach additional properties to a span on completion.
 */
 
-use std::{cell::RefCell, collections::HashMap, rc::Rc, time::Duration};
+use std::{collections::HashMap, time::Duration};
+
+use emit::Props as _;
 
 #[emit::span(guard: span, "Running an example", i)]
 fn example(i: i32) {
-    // This example uses a `HashMap` to store additional properties to include.
-    //
-    // To make sure additional properties are always included regardless of early returns,
-    // we use a local clonable wrapper for them. If you don't need to worry about early
-    // returns you can use a raw `HashMap` or other structure instead.
-    let additional_props = Rc::new(RefCell::new(HashMap::new()));
+    // This example uses a `HashMap` to store additional properties to include
+    let additional_props = HashMap::new();
 
-    let _span = span.with_completion(emit::span::completion::from_fn({
-        let additional_props = additional_props.clone();
-
-        move |evt| {
-            use emit::Props as _;
-
-            // Add the additional properties to the outgoing event
-            let additional_props = &*additional_props.borrow();
-            let evt = evt.map_props(|props| additional_props.and_props(props));
-
-            // Emit the outgoing event
-            emit::info!(evt, "Running an example");
-        }
-    }));
+    let mut span = span.map_props(|props| additional_props.and_props(props));
 
     if i > 4 {
-        additional_props.borrow_mut().insert("is_big", true);
+        span.props_mut()
+            .map(|props| props.left_mut().insert("is_big", true));
     }
 }
 
