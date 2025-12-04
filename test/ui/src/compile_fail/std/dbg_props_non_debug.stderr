@@ -4,7 +4,11 @@ error[E0277]: capturing with `#[emit::as_debug]` requires `Data` implements `Deb
 6 |     emit::dbg!(a: Data { id: 42 });
   |                ^^^^^^^^^^^^^^^^^^ the trait `std::fmt::Debug` is not implemented for `Data`
   |
-  = help: the trait `CaptureAsAnonDebug` is implemented for `str`
+help: the trait `CaptureAsAnonDebug` is implemented for `str`
+ --> $WORKSPACE/src/macro_hooks.rs
+  |
+  | impl CaptureAsAnonDebug for str {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   = note: required for `Data` to implement `CaptureAsAnonDebug`
 note: required by a bound in `__private_capture_anon_as_debug`
  --> $WORKSPACE/src/macro_hooks.rs
