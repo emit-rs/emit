@@ -1149,6 +1149,7 @@ impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
     /**
     Set the default completion that will be called when the span is dropped or [`SpanGuard::complete`] is called.
     */
+    #[must_use = "this method returns a new `SpanGuard` that will be immediately dropped unless used"]
     pub fn with_completion<U: Completion>(mut self, completion: U) -> SpanGuard<'a, T, P, U> {
         // Ensure this guard won't complete on drop
         self.completion.take();
@@ -1163,6 +1164,7 @@ impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
     /**
     Set the module of the span.
     */
+    #[must_use = "this method returns a new `SpanGuard` that will be immediately dropped unless used"]
     pub fn with_mdl(mut self, mdl: impl Into<Path<'a>>) -> Self {
         if let Some(ref mut data) = self.data {
             data.mdl = mdl.into();
@@ -1173,6 +1175,7 @@ impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
     /**
     Set the name of the span.
     */
+    #[must_use = "this method returns a new `SpanGuard` that will be immediately dropped unless used"]
     pub fn with_name(mut self, name: impl Into<Str<'a>>) -> Self {
         if let Some(ref mut data) = self.data {
             data.name = name.into();
@@ -1182,14 +1185,20 @@ impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
 
     /**
     Set the properties of the span.
+
+    If the span is disabled then this method is a no-op.
     */
+    #[must_use = "this method returns a new `SpanGuard` that will be immediately dropped unless used"]
     pub fn with_props<U: Props>(self, props: U) -> SpanGuard<'a, T, U, F> {
         self.map_props(|_| props)
     }
 
     /**
     Map the properties of the span.
+
+    If the span is disabled then this method is a no-op.
     */
+    #[must_use = "this method returns a new `SpanGuard` that will be immediately dropped unless used"]
     pub fn map_props<U: Props>(mut self, map: impl FnOnce(P) -> U) -> SpanGuard<'a, T, U, F> {
         let data = self.data.take().map(|data| SpanGuardData {
             mdl: data.mdl,
@@ -1203,6 +1212,15 @@ impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
             data,
             completion: self.completion.take(),
         }
+    }
+
+    /**
+    Get exclusive access to the properties of the span.
+
+    If the span is disabled this method will return `None`.
+    */
+    pub fn props_mut(&mut self) -> Option<&mut P> {
+        self.data.as_mut().map(|data| &mut data.props)
     }
 
     /**
