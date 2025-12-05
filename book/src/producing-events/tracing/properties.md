@@ -101,6 +101,9 @@ If you bind the implicit span guard created for an instrumented function to an i
 With a [`SpanGuard`](https://docs.rs/emit/1.13.1/emit/span/struct.SpanGuard.html), you can attach additional properties collection to the span:
 
 ```rust
+# extern crate emit;
+# use emit::Props;
+# use std::collections::HashMap;
 #[emit::span(guard: span, "checking a value", i)]
 fn check(i: i32) {
     // This example uses a `HashMap` to store additional properties to include
