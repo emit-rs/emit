@@ -94,6 +94,57 @@ Event {
 
 Notice the `span_parent` of `inner_span` is the same as the `span_id` of `outer_span`. That's because `inner_span` was called within the execution of `outer_span`.
 
+## Adding properties to a span as it runs
+
+If you bind the implicit span guard created for an instrumented function to an identifier, you can use it in the body of the function to interact with the span before it completes. See [Manual span creation](./manual-span-creation.md) for more details.
+
+With a [`SpanGuard`](https://docs.rs/emit/1.13.1/emit/span/struct.SpanGuard.html), you can attach additional properties collection to the span:
+
+```rust
+# extern crate emit;
+# use emit::Props;
+# use std::collections::HashMap;
+#[emit::span(guard: span, "checking a value", i)]
+fn check(i: i32) {
+    // This example uses a `HashMap` to store additional properties to include
+    let additional_props = HashMap::new();
+
+    let mut span = span.map_props(|props| additional_props.and_props(props));
+
+    if i > 4 {
+        // The type of the span's properties are now `And<HashMap<_, _>, _>`
+        // We can access the hash map through `And::left_mut` to insert into it
+        span.props_mut()
+            .map(|props| props.left_mut().insert("is_big", true));
+    }
+
+    // At this point `span` will be dropped
+    // It may or may not carry `is_big`
+}
+```
+
+```text
+Event {
+    mdl: "my_app",
+    tpl: "checking a value",
+    extent: Some(
+        "2024-04-27T22:50:49.180025000Z".."2024-04-27T22:50:50.994797000Z",
+    ),
+    props: {
+        "evt_kind": span,
+        "span_name": "checking a value",
+        "is_big": true,
+        "i": 5,
+        "span_id": 23995f85b4610391,
+        "trace_id": 12b2fde225aebfa6758ede9cac81bf4d,
+    },
+}
+```
+
+Attaching additional properties to the span guard is preferrable to adding them through the span's completion. When they're on the guard they'll be used even if the function panics.
+
+Note that adding additional properties to the span guard itself _won't_ make those properties part of any child spans. They'll only appear on the parent span containing those properties when it completes. To make additional properties ambiently available, see [Context](../logging/context.md#manually).
+
 ## Capturing complex values
 
 Properties aren't limited to strings; they can be arbitrarily complex structured values. See the following sections and [Value data model](../../reference/events.md#value-data-model) for more details.

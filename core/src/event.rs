@@ -136,6 +136,13 @@ impl<'a, P> Event<'a, P> {
     }
 
     /**
+    Get exclusive access to the properties of the event.
+    */
+    pub fn props_mut(&mut self) -> &mut P {
+        &mut self.props
+    }
+
+    /**
     Set the properties of the event, returning a new one.
     */
     pub fn with_props<U>(self, props: U) -> Event<'a, U> {

@@ -591,6 +591,13 @@ impl<'a, P: Props> Span<'a, P> {
     }
 
     /**
+    Get exclusive access to the additional properties on the span.
+    */
+    pub fn props_mut(&mut self) -> &mut P {
+        &mut self.props
+    }
+
+    /**
     Set the properties of the span.
     */
     pub fn with_props<U>(self, props: U) -> Span<'a, U> {

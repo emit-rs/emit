@@ -195,6 +195,13 @@ impl<'a, P> Metric<'a, P> {
     }
 
     /**
+    Get exclusive access to additional properties associated with the sample.
+    */
+    pub fn props_mut(&mut self) -> &mut P {
+        &mut self.props
+    }
+
+    /**
     Set the additional properties associated with the sample to a new value.
     */
     pub fn with_props<U>(self, props: U) -> Metric<'a, U> {
