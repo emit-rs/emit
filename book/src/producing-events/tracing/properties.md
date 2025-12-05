@@ -98,7 +98,7 @@ Notice the `span_parent` of `inner_span` is the same as the `span_id` of `outer_
 
 If you bind the implicit span guard created for an instrumented function to an identifier, you can use it in the body of the function to interact with the span before it completes. See [Manual span creation](./manual-span-creation.md) for more details.
 
-With a [`SpanGuard`](https://docs.rs/emit/1.13.1/emit/span/struct.SpanGuard.html), you can attach additional properties collection to the span:
+With a [`SpanGuard`](https://docs.rs/emit/1.14.0/emit/span/struct.SpanGuard.html), you can attach additional properties collection to the span:
 
 ```rust
 # extern crate emit;

@@ -1,10 +1,10 @@
 # Filtering events
 
-`emit` supports client-side filtering using a [`Filter`](https://docs.rs/emit/1.13.1/emit/trait.Filter.html).
+`emit` supports client-side filtering using a [`Filter`](https://docs.rs/emit/1.14.0/emit/trait.Filter.html).
 
 ## Setup
 
-Filters are configured through the [`setup`](https://docs.rs/emit/1.13.1/emit/setup/fn.setup.html) function at the start of your application by calling [`emit_when`](https://docs.rs/emit/1.13.1/emit/setup/struct.Setup.html#method.emit_when):
+Filters are configured through the [`setup`](https://docs.rs/emit/1.14.0/emit/setup/fn.setup.html) function at the start of your application by calling [`emit_when`](https://docs.rs/emit/1.14.0/emit/setup/struct.Setup.html#method.emit_when):
 
 ```rust
 # extern crate emit;
@@ -22,7 +22,7 @@ fn main() {
 }
 ```
 
-Filters can be combined with [`and_when`](https://docs.rs/emit/1.13.1/emit/trait.Filter.html#method.and_when) and [`or_when`](https://docs.rs/emit/1.13.1/emit/trait.Filter.html#method.or_when):
+Filters can be combined with [`and_when`](https://docs.rs/emit/1.14.0/emit/trait.Filter.html#method.and_when) and [`or_when`](https://docs.rs/emit/1.14.0/emit/trait.Filter.html#method.or_when):
 
 ```rust
 # extern crate emit;
@@ -46,7 +46,7 @@ fn main() {
 
 ## Wrapping emitters in filters
 
-You can also wrap an emitter in [`emit_to`](https://docs.rs/emit/1.13.1/emit/setup/struct.Setup.html#method.emit_to) in a filter:
+You can also wrap an emitter in [`emit_to`](https://docs.rs/emit/1.14.0/emit/setup/struct.Setup.html#method.emit_to) in a filter:
 
 ```rust
 # extern crate emit;
@@ -71,7 +71,7 @@ fn main() {
 
 Wrapping an emitter in a filter is not the same as providing an emitter and filter independently.
 
-When you use `emit_when`, the filter may be by-passed using the `when` [control parameter](./reference/control-parameters.md) on the [`emit!`](https://docs.rs/emit/1.13.1/emit/macro.emit.html) or [`#[span]`](https://docs.rs/emit/1.13.1/emit/attr.span.html) macros to emit an event even if the filter wouldn't match it. However, the filter specified by `emit_when` doesn't allow you to filter differently if you specify multiple emitters.
+When you use `emit_when`, the filter may be by-passed using the `when` [control parameter](./reference/control-parameters.md) on the [`emit!`](https://docs.rs/emit/1.14.0/emit/macro.emit.html) or [`#[span]`](https://docs.rs/emit/1.14.0/emit/attr.span.html) macros to emit an event even if the filter wouldn't match it. However, the filter specified by `emit_when` doesn't allow you to filter differently if you specify multiple emitters.
 
 When you wrap an emitter in a filter, the filter cannot by by-passed, but each emitter can use its own filter.
 
@@ -79,7 +79,7 @@ Also see [Wrapping emitters](./emitting-events.md#wrapping-emitters) for more de
 
 ## Filtering by level
 
-You can use the [`level::min_filter`](https://docs.rs/emit/1.13.1/emit/level/fn.min_filter.html) function to create a filter that matches events based on their level:
+You can use the [`level::min_filter`](https://docs.rs/emit/1.14.0/emit/level/fn.min_filter.html) function to create a filter that matches events based on their level:
 
 ```rust
 # extern crate emit;
@@ -97,11 +97,11 @@ fn main() {
 }
 ```
 
-See [the crate docs](https://docs.rs/emit/1.13.1/emit/level/struct.MinLevelFilter.html) for more details.
+See [the crate docs](https://docs.rs/emit/1.14.0/emit/level/struct.MinLevelFilter.html) for more details.
 
 ## Filtering by module
 
-You can use the [`level::min_by_path_filter`](https://docs.rs/emit/1.13.1/emit/level/fn.min_by_path_filter.html) function to create a filter that matches events based on their module path and level:
+You can use the [`level::min_by_path_filter`](https://docs.rs/emit/1.14.0/emit/level/fn.min_by_path_filter.html) function to create a filter that matches events based on their module path and level:
 
 ```rust
 # extern crate emit;
@@ -125,8 +125,8 @@ fn main() {
 
 Events in this filter are matched by prefix, using the most specific relevant path. In the above example, `noisy_module::important_sub_module` will match `Info` and higher, but `noisy_module::other_sub_module` will match `Warn` and higher.
 
-See [the crate docs](https://docs.rs/emit/1.13.1/emit/level/struct.MinLevelPathMap.html) for more details.
+See [the crate docs](https://docs.rs/emit/1.14.0/emit/level/struct.MinLevelPathMap.html) for more details.
 
 ## Filtering spans
 
-When you use the [`#[span]`](https://docs.rs/emit/1.13.1/emit/attr.span.html) macro, `emit` will apply the filter to determine whether the span should be created. If the span doesn't match the filter then no trace context will be generated for it. This isn't the same as trace sampling. `emit` doesn't have the concept of a trace that is not recorded. See [Sampling and filtering traces](./producing-events/tracing/sampling.md) for more details.
+When you use the [`#[span]`](https://docs.rs/emit/1.14.0/emit/attr.span.html) macro, `emit` will apply the filter to determine whether the span should be created. If the span doesn't match the filter then no trace context will be generated for it. This isn't the same as trace sampling. `emit` doesn't have the concept of a trace that is not recorded. See [Sampling and filtering traces](./producing-events/tracing/sampling.md) for more details.
