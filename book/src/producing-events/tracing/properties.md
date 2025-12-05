@@ -140,6 +140,8 @@ Event {
 
 Attaching additional properties to the span guard is preferrable to adding them through the span's completion. When they're on the guard they'll be used even if the function panics.
 
+Note that adding additional properties to the span guard itself _won't_ make those properties part of any child spans. They'll only appear on the parent span containing those properties when it completes. To make additional properties ambiently available, see [Context](../logging/context.md#manually).
+
 ## Capturing complex values
 
 Properties aren't limited to strings; they can be arbitrarily complex structured values. See the following sections and [Value data model](../../reference/events.md#value-data-model) for more details.
