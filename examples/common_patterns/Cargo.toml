@@ -152,6 +152,10 @@ name = "metric_props"
 path = "metric_props.rs"
 
 [[example]]
+name = "metric_delta_counter"
+path = "metric_delta_counter.rs"
+
+[[example]]
 name = "level_custom"
 path = "level_custom.rs"
 

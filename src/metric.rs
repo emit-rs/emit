@@ -1659,6 +1659,95 @@ pub mod exp {
     }
 }
 
+pub mod delta {
+    /*!
+    The [`Delta`] type.
+    */
+
+    use super::*;
+
+    use core::mem;
+
+    use crate::Timestamp;
+
+    /**
+    A container for tracking delta-encoded metrics.
+    */
+    pub struct Delta<T> {
+        start: Option<Timestamp>,
+        value: T,
+    }
+
+    impl<T> Delta<T> {
+        /**
+        Create a new delta container with an initial timestamp and value.
+        */
+        pub fn new(start: Option<Timestamp>, initial: T) -> Self {
+            Delta {
+                start,
+                value: initial,
+            }
+        }
+
+        /**
+        Create a new delta container with an initial timestamp and default value.
+        */
+        pub fn new_default(start: Option<Timestamp>) -> Self
+        where
+            T: Default,
+        {
+            Self::new(start, Default::default())
+        }
+
+        /**
+        Get a reference to the start of the current time period.
+        */
+        pub fn current_start(&self) -> Option<&Timestamp> {
+            self.start.as_ref()
+        }
+
+        /**
+        Get exclusive access to the value of the current time period.
+        */
+        pub fn current_value_mut(&mut self) -> &mut T {
+            &mut self.value
+        }
+
+        /**
+        Advance the delta to a new time period.
+
+        This method will return a range [`Extent`] from [`Delta::current_start`] to `end` along with the current accummulated value.
+        The next time period will start from `end`.
+
+        Callers are responsible for resetting the current value for the new time period.
+        */
+        pub fn advance(&mut self, end: Option<Timestamp>) -> (Option<Extent>, &mut T) {
+            let start = mem::replace(&mut self.start, end);
+
+            let extent = (start..end).to_extent();
+
+            (extent, &mut self.value)
+        }
+
+        /**
+        Advance the delta to a new time period.
+
+        This method is an alternative to [`Delta::advance`] that sets the value for the new time period with its default for you, returning the previously accummulated one.
+
+        This method will return a range [`Extent`] from [`Delta::current_start`] to `end` along with the current accummulated value.
+        The next time period will start from `end`.
+        */
+        pub fn advance_default(&mut self, end: Option<Timestamp>) -> (Option<Extent>, T)
+        where
+            T: Default,
+        {
+            let (extent, value) = self.advance(end);
+
+            (extent, mem::take(value))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
