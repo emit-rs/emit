@@ -156,6 +156,10 @@ name = "metric_delta_counter"
 path = "metric_delta_counter.rs"
 
 [[example]]
+name = "metric_delta_counter_shared"
+path = "metric_delta_counter_shared.rs"
+
+[[example]]
 name = "level_custom"
 path = "level_custom.rs"
 

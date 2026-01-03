@@ -21,7 +21,7 @@ use emit_core::{
 
 use crate::kind::Kind;
 
-pub use self::{sampler::Sampler, source::Source};
+pub use self::{delta::Delta, sampler::Sampler, source::Source};
 
 /**
 A diagnostic event that represents a metric sample.
@@ -1711,6 +1711,13 @@ pub mod delta {
         */
         pub fn current_value_mut(&mut self) -> &mut T {
             &mut self.value
+        }
+
+        /**
+        Get shared access to the value of the current time period.
+        */
+        pub fn current_value(&self) -> &T {
+            &self.value
         }
 
         /**

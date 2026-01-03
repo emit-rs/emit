@@ -12,7 +12,7 @@ fn main() {
     let rt = emit::setup().emit_to(emit_term::stdout()).init();
 
     // Define a metric wrapped in a `Delta` wrapper
-    let mut metric_a = emit::metric::delta::Delta::new(emit::clock().now(), 0);
+    let mut metric_a = emit::metric::Delta::new(emit::clock().now(), 0);
 
     // Update the current delta value
     *metric_a.current_value_mut() += 4;
