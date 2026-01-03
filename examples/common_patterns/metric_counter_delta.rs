@@ -21,7 +21,7 @@ fn main() {
     thread::sleep(Duration::from_secs(1));
 
     {
-        // Sample the metric, getting the accummulated change since the last time we read it
+        // Sample the metric, getting the accumulated change since the last time we read it
         let (extent, metric_a) = metric_a.advance(emit::clock().now());
 
         // Emit a metric sample with the delta of `metric_a`

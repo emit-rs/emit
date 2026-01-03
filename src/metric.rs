@@ -1740,7 +1740,7 @@ mod delta {
     `emit` represents delta metrics as [`Event`]s where the [`Extent`] is a range.
 
     `Delta` tracks the time its value was last sampled along with the current value itself.
-    The value can be accummulated into with [`Delta::current_value_mut`].
+    The value can be accumulated into with [`Delta::current_value_mut`].
 
     At the end of a user-defined time period, the value can be sampled with [`Delta::advance`].
     When sampled, an [`Extent`] between the last sample and the current is returned along with an exclusive reference to the current value.
@@ -1798,7 +1798,7 @@ mod delta {
         /**
         Advance the delta to a new time period.
 
-        This method will return a range [`Extent`] from [`Delta::current_start`] to `end` along with the current accummulated value.
+        This method will return a range [`Extent`] from [`Delta::current_start`] to `end` along with the current accumulated value.
         The next time period will start from `end`.
 
         Callers are responsible for resetting the current value for the new time period.
@@ -1814,9 +1814,9 @@ mod delta {
         /**
         Advance the delta to a new time period.
 
-        This method is an alternative to [`Delta::advance`] that sets the value for the new time period with its default for you, returning the previously accummulated one.
+        This method is an alternative to [`Delta::advance`] that sets the value for the new time period with its default for you, returning the previously accumulated one.
 
-        This method will return a range [`Extent`] from [`Delta::current_start`] to `end` along with the current accummulated value.
+        This method will return a range [`Extent`] from [`Delta::current_start`] to `end` along with the current accumulated value.
         The next time period will start from `end`.
         */
         pub fn advance_default(&mut self, end: Option<Timestamp>) -> (Option<Extent>, T)
