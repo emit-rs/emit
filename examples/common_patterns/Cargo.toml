@@ -144,6 +144,10 @@ name = "metric_distribution_resampling"
 path = "metric_distribution_resampling.rs"
 
 [[example]]
+name = "metric_distribution_resampling_delta_shared"
+path = "metric_distribution_resampling_delta_shared.rs"
+
+[[example]]
 name = "metric_source"
 path = "metric_source.rs"
 
@@ -152,12 +156,12 @@ name = "metric_props"
 path = "metric_props.rs"
 
 [[example]]
-name = "metric_delta_counter"
-path = "metric_delta_counter.rs"
+name = "metric_counter_delta"
+path = "metric_counter_delta.rs"
 
 [[example]]
-name = "metric_delta_counter_shared"
-path = "metric_delta_counter_shared.rs"
+name = "metric_counter_delta_shared"
+path = "metric_counter_delta_shared.rs"
 
 [[example]]
 name = "level_custom"
