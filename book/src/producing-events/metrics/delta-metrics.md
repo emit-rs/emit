@@ -27,3 +27,7 @@ Event {
     },
 }
 ```
+
+## The `Delta` type
+
+You can use the [`Delta`](https://docs.rs/emit/1.14.0/emit/metric/struct.Delta.html) type to implement metric sources that track deltas instead of cumulative values.

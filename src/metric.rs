@@ -21,7 +21,7 @@ use emit_core::{
 
 use crate::kind::Kind;
 
-pub use self::{delta::Delta, sampler::Sampler, source::Source};
+pub use self::{sampler::Sampler, source::Source};
 
 /**
 A diagnostic event that represents a metric sample.
@@ -718,7 +718,7 @@ mod alloc_support {
         Produce a current sample for all metrics, emitting them as diagnostic events to the given [`Emitter`].
         */
         pub fn emit_metrics<E: Emitter>(&self, emitter: E) {
-            self.sample_metrics(sampler::from_emitter(emitter))
+            self.sample_metrics(sampler::from_emitter(emitter).with_now(self.clock.now()))
         }
     }
 
@@ -762,6 +762,10 @@ mod alloc_support {
             } else {
                 self.inner.metric(metric)
             }
+        }
+
+        fn now(&self) -> Option<Timestamp> {
+            self.now
         }
     }
 
@@ -1042,16 +1046,66 @@ pub mod sampler {
         Receive a metric sample.
         */
         fn metric<P: Props>(&self, metric: Metric<P>);
+
+        /**
+        Get a value for the current timestamp, if set.
+
+        [`Source`]s can use this value to normalize the extents of their produced metric samples.
+        */
+        fn now(&self) -> Option<Timestamp> {
+            None
+        }
+
+        /**
+        Associate a [`Timestamp`] with the sampler.
+        */
+        fn with_now(self, now: Option<Timestamp>) -> WithNow<Self>
+        where
+            Self: Sized,
+        {
+            WithNow::new(self, now)
+        }
     }
 
     impl<'a, T: Sampler + ?Sized> Sampler for &'a T {
         fn metric<P: Props>(&self, metric: Metric<P>) {
             (**self).metric(metric)
         }
+
+        fn now(&self) -> Option<Timestamp> {
+            (**self).now()
+        }
     }
 
     impl Sampler for Empty {
         fn metric<P: Props>(&self, _: Metric<P>) {}
+    }
+
+    /**
+    A [`Sampler`] with an explicit value for [`Sampler::now`].
+    */
+    pub struct WithNow<S> {
+        sampler: S,
+        now: Option<Timestamp>,
+    }
+
+    impl<S> WithNow<S> {
+        /**
+        Associate a [`Timestamp`] with a [`Sampler`].
+        */
+        pub const fn new(sampler: S, now: Option<Timestamp>) -> Self {
+            WithNow { sampler, now }
+        }
+    }
+
+    impl<S: Sampler> Sampler for WithNow<S> {
+        fn metric<P: Props>(&self, metric: Metric<P>) {
+            self.sampler.metric(metric)
+        }
+
+        fn now(&self) -> Option<Timestamp> {
+            self.now
+        }
     }
 
     /**
@@ -1121,6 +1175,8 @@ pub mod sampler {
 
         pub trait DispatchSampler {
             fn dispatch_metric(&self, metric: Metric<&dyn ErasedProps>);
+
+            fn dispatch_now(&self) -> Option<Timestamp>;
         }
 
         pub trait SealedSampler {
@@ -1147,17 +1203,29 @@ pub mod sampler {
         fn dispatch_metric(&self, metric: Metric<&dyn ErasedProps>) {
             self.metric(metric)
         }
+
+        fn dispatch_now(&self) -> Option<Timestamp> {
+            self.now()
+        }
     }
 
     impl<'a> Sampler for dyn ErasedSampler + 'a {
         fn metric<P: Props>(&self, metric: Metric<P>) {
             self.erase_sampler().0.dispatch_metric(metric.erase())
         }
+
+        fn now(&self) -> Option<Timestamp> {
+            self.erase_sampler().0.dispatch_now()
+        }
     }
 
     impl<'a> Sampler for dyn ErasedSampler + Send + Sync + 'a {
         fn metric<P: Props>(&self, metric: Metric<P>) {
             (self as &(dyn ErasedSampler + 'a)).metric(metric)
+        }
+
+        fn now(&self) -> Option<Timestamp> {
+            (self as &(dyn ErasedSampler + 'a)).now()
         }
     }
 
@@ -1659,11 +1727,7 @@ pub mod exp {
     }
 }
 
-pub mod delta {
-    /*!
-    The [`Delta`] type.
-    */
-
+mod delta {
     use super::*;
 
     use core::mem;
@@ -1672,6 +1736,17 @@ pub mod delta {
 
     /**
     A container for tracking delta-encoded metrics.
+
+    `emit` represents delta metrics as [`Event`]s where the [`Extent`] is a range.
+
+    `Delta` tracks the time its value was last sampled along with the current value itself.
+    The value can be accummulated into with [`Delta::current_value_mut`].
+
+    At the end of a user-defined time period, the value can be sampled with [`Delta::advance`].
+    When sampled, an [`Extent`] between the last sample and the current is returned along with an exclusive reference to the current value.
+    Callers are expected to reset this value for the new time period before their borrow expires.
+
+    `Delta` is not a [`Source`] directly, but can be used as the underlying storage in implementations of them.
     */
     pub struct Delta<T> {
         start: Option<Timestamp>,
@@ -1753,7 +1828,33 @@ pub mod delta {
             (extent, mem::take(value))
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        use core::time::Duration;
+
+        #[test]
+        fn delta_advance() {
+            let mut delta = Delta::new(Some(Timestamp::MIN), 0);
+
+            *delta.current_value_mut() += 1;
+
+            let (extent, value) = delta.advance(Some(Timestamp::MIN + Duration::from_secs(1)));
+            let extent = extent.unwrap();
+            let range = extent.as_range().unwrap();
+
+            assert_eq!(
+                Timestamp::MIN..Timestamp::MIN + Duration::from_secs(1),
+                *range
+            );
+            assert_eq!(1, *value);
+        }
+    }
 }
+
+pub use self::delta::*;
 
 #[cfg(test)]
 mod tests {
