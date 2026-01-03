@@ -48,11 +48,11 @@ impl BytesWritten {
 }
 
 impl emit::metric::Source for BytesWritten {
-    fn sample<S: emit::metric::Sampler>(&self, sampler: S) {
+    fn sample_metrics<S: emit::metric::Sampler>(&self, sampler: S) {
         let mut guard = self.0.lock().unwrap();
 
         // Get the value for the current time period and an extent covering it
-        let (extent, value) = guard.advance(sampler.now().or_else(emit::clock().now()));
+        let (extent, value) = guard.advance(sampler.now().or_else(|| emit::clock().now()));
         let bytes_written = *value;
         
         // Reset the delta for the new time period
