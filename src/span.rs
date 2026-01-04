@@ -992,6 +992,96 @@ impl<'v> FromValue<'v> for SpanKind {
     }
 }
 
+#[derive(Clone, Copy)]
+pub struct SpanLink {
+    trace_id: TraceId,
+    span_id: SpanId,
+}
+
+impl SpanLink {
+    /**
+    Try parse a span kind from a formatted representation.
+    */
+    pub fn try_from_str(s: &str) -> Result<Self, ParseLinkError> {
+        s.parse()
+    }
+
+    pub fn try_from_fmt(s: impl fmt::Display) -> Result<Self, ParseLinkError> {
+        todo!()
+    }
+}
+
+impl FromStr for SpanLink {
+    type Err = ParseLinkError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // {traceid}-{spanid}
+        todo!()
+    }
+}
+
+impl fmt::Debug for SpanLink {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "\"{}\"", self)
+    }
+}
+
+impl fmt::Display for SpanLink {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut buf = [0; 49];
+
+        buf[0..32].copy_from_slice(&self.trace_id.to_hex());
+        buf[32] = b'-';
+        buf[33..49].copy_from_slice(&self.span_id.to_hex());
+
+        f.write_str(str::from_utf8(&buf).unwrap())
+    }
+}
+
+#[cfg(feature = "sval")]
+impl sval::Value for SpanLink {
+    fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(&'sval self, stream: &mut S) -> sval::Result {
+        sval::stream_display(stream, self)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for SpanLink {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+impl ToValue for SpanLink {
+    fn to_value(&self) -> Value<'_> {
+        Value::capture_display(self)
+    }
+}
+
+impl<'v> FromValue<'v> for SpanLink {
+    fn from_value(value: Value<'v>) -> Option<Self> {
+        value
+            .downcast_ref::<SpanLink>()
+            .copied()
+            .or_else(|| SpanLink::try_from_fmt(value).ok())
+    }
+}
+
+/**
+An error encountered attempting to parse a [`TraceId`] or [`SpanId`].
+*/
+#[derive(Debug)]
+pub struct ParseLinkError {}
+
+impl fmt::Display for ParseLinkError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "the input was not a valid span link")
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for ParseLinkError {}
+
 /**
 An active span in a distributed trace.
 
