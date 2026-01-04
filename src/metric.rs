@@ -718,7 +718,7 @@ mod alloc_support {
         Produce a current sample for all metrics, emitting them as diagnostic events to the given [`Emitter`].
         */
         pub fn emit_metrics<E: Emitter>(&self, emitter: E) {
-            self.sample_metrics(sampler::from_emitter(emitter).with_now(self.clock.now()))
+            self.sample_metrics(sampler::from_emitter(emitter).with_sampled_at(self.clock.now()))
         }
     }
 
@@ -764,7 +764,7 @@ mod alloc_support {
             }
         }
 
-        fn now(&self) -> Option<Timestamp> {
+        fn sampled_at(&self) -> Option<Timestamp> {
             self.now
         }
     }
@@ -1048,22 +1048,22 @@ pub mod sampler {
         fn metric<P: Props>(&self, metric: Metric<P>);
 
         /**
-        Get a value for the current timestamp, if set.
+        A value for the point in time that the sample was requested.
 
-        [`Source`]s can use this value to normalize the extents of their produced metric samples.
+        This value can be used to normalize timestamps for metrics that are logically sampled at the same time.
         */
-        fn now(&self) -> Option<Timestamp> {
+        fn sampled_at(&self) -> Option<Timestamp> {
             None
         }
 
         /**
         Associate a [`Timestamp`] with the sampler.
         */
-        fn with_now(self, now: Option<Timestamp>) -> WithNow<Self>
+        fn with_sampled_at(self, now: Option<Timestamp>) -> WithSampledAt<Self>
         where
             Self: Sized,
         {
-            WithNow::new(self, now)
+            WithSampledAt::new(self, now)
         }
     }
 
@@ -1072,8 +1072,8 @@ pub mod sampler {
             (**self).metric(metric)
         }
 
-        fn now(&self) -> Option<Timestamp> {
-            (**self).now()
+        fn sampled_at(&self) -> Option<Timestamp> {
+            (**self).sampled_at()
         }
     }
 
@@ -1084,26 +1084,26 @@ pub mod sampler {
     /**
     A [`Sampler`] with an explicit value for [`Sampler::now`].
     */
-    pub struct WithNow<S> {
+    pub struct WithSampledAt<S> {
         sampler: S,
         now: Option<Timestamp>,
     }
 
-    impl<S> WithNow<S> {
+    impl<S> WithSampledAt<S> {
         /**
         Associate a [`Timestamp`] with a [`Sampler`].
         */
         pub const fn new(sampler: S, now: Option<Timestamp>) -> Self {
-            WithNow { sampler, now }
+            WithSampledAt { sampler, now }
         }
     }
 
-    impl<S: Sampler> Sampler for WithNow<S> {
+    impl<S: Sampler> Sampler for WithSampledAt<S> {
         fn metric<P: Props>(&self, metric: Metric<P>) {
             self.sampler.metric(metric)
         }
 
-        fn now(&self) -> Option<Timestamp> {
+        fn sampled_at(&self) -> Option<Timestamp> {
             self.now
         }
     }
@@ -1176,7 +1176,7 @@ pub mod sampler {
         pub trait DispatchSampler {
             fn dispatch_metric(&self, metric: Metric<&dyn ErasedProps>);
 
-            fn dispatch_now(&self) -> Option<Timestamp>;
+            fn dispatch_sampled_at(&self) -> Option<Timestamp>;
         }
 
         pub trait SealedSampler {
@@ -1204,8 +1204,8 @@ pub mod sampler {
             self.metric(metric)
         }
 
-        fn dispatch_now(&self) -> Option<Timestamp> {
-            self.now()
+        fn dispatch_sampled_at(&self) -> Option<Timestamp> {
+            self.sampled_at()
         }
     }
 
@@ -1214,8 +1214,8 @@ pub mod sampler {
             self.erase_sampler().0.dispatch_metric(metric.erase())
         }
 
-        fn now(&self) -> Option<Timestamp> {
-            self.erase_sampler().0.dispatch_now()
+        fn sampled_at(&self) -> Option<Timestamp> {
+            self.erase_sampler().0.dispatch_sampled_at()
         }
     }
 
@@ -1224,8 +1224,8 @@ pub mod sampler {
             (self as &(dyn ErasedSampler + 'a)).metric(metric)
         }
 
-        fn now(&self) -> Option<Timestamp> {
-            (self as &(dyn ErasedSampler + 'a)).now()
+        fn sampled_at(&self) -> Option<Timestamp> {
+            (self as &(dyn ErasedSampler + 'a)).sampled_at()
         }
     }
 

@@ -52,7 +52,7 @@ impl emit::metric::Source for BytesWritten {
         let mut guard = self.0.lock().unwrap();
 
         // Get the value for the current time period and an extent covering it
-        let (extent, value) = guard.advance(sampler.now().or_else(|| emit::clock().now()));
+        let (extent, value) = guard.advance(sampler.sampled_at().or_else(|| emit::clock().now()));
         let bytes_written = *value;
         
         // Reset the delta for the new time period
