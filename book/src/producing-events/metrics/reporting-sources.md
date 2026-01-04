@@ -9,6 +9,7 @@ use emit::metric::{Source as _, Sampler as _};
 // Create some metric sources
 let source_1 = emit::metric::source::from_fn(|sampler| {
     sampler.metric(emit::count_metric!(
+        extent: sampler.sampled_at(),
         mdl: emit::path!("source_1"),
         name: "bytes_written",
         value: 1,
@@ -17,6 +18,7 @@ let source_1 = emit::metric::source::from_fn(|sampler| {
 
 let source_2 = emit::metric::source::from_fn(|sampler| {
     sampler.metric(emit::count_metric!(
+        extent: sampler.sampled_at(),
         mdl: emit::path!("source_2"),
         name: "bytes_written",
         value: 2,

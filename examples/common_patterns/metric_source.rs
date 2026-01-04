@@ -31,8 +31,8 @@ impl emit::metric::Source for MyMetrics {
         // The `emit::count_metric!` macro produces a metric sample value
         // with `count` as its aggregation. Other variants of this macro
         // exist for other well-known aggregations
-        sampler.metric(emit::count_metric!(value: metric_a));
-        sampler.metric(emit::count_metric!(value: metric_b));
+        sampler.metric(emit::count_metric!(extent: sampler.sampled_at(), value: metric_a));
+        sampler.metric(emit::count_metric!(extent: sampler.sampled_at(), value: metric_b));
     }
 }
 
