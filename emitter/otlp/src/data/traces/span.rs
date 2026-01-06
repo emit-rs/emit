@@ -71,9 +71,9 @@ const SPAN_PARENT_SPAN_ID_LABEL: sval::Label =
     sval::Label::new("parentSpanId").with_tag(&sval::tags::VALUE_IDENT);
 const SPAN_STATUS_LABEL: sval::Label =
     sval::Label::new("status").with_tag(&sval::tags::VALUE_IDENT);
-
 const SPAN_EVENTS_LABEL: sval::Label =
     sval::Label::new("events").with_tag(&sval::tags::VALUE_IDENT);
+const SPAN_LINKS_LABEL: sval::Label = sval::Label::new("links").with_tag(&sval::tags::VALUE_IDENT);
 
 const SPAN_ATTRIBUTES_INDEX: sval::Index = sval::Index::new(9);
 const SPAN_TRACE_ID_INDEX: sval::Index = sval::Index::new(1);
@@ -81,6 +81,7 @@ const SPAN_SPAN_ID_INDEX: sval::Index = sval::Index::new(2);
 const SPAN_PARENT_SPAN_ID_INDEX: sval::Index = sval::Index::new(4);
 const SPAN_STATUS_INDEX: sval::Index = sval::Index::new(15);
 const SPAN_EVENTS_INDEX: sval::Index = sval::Index::new(11);
+const SPAN_LINKS_INDEX: sval::Index = sval::Index::new(13);
 
 #[derive(Value)]
 pub struct InlineSpanAttributes<
@@ -88,6 +89,7 @@ pub struct InlineSpanAttributes<
     T: ?Sized = sval::BinaryArray<16>,
     S: ?Sized = sval::BinaryArray<8>,
     E: ?Sized = [Event<'a>],
+    L: ?Sized = [Link<'a>],
 > {
     #[sval(label = SPAN_ATTRIBUTES_LABEL, index = SPAN_ATTRIBUTES_INDEX)]
     pub attributes: &'a [KeyValue<&'a str, &'a AnyValue<'a>>],
@@ -101,6 +103,8 @@ pub struct InlineSpanAttributes<
     pub status: Status<'a>,
     #[sval(label = SPAN_EVENTS_LABEL, index = SPAN_EVENTS_INDEX)]
     pub events: &'a E,
+    #[sval(label = SPAN_LINKS_LABEL, index = SPAN_LINKS_INDEX)]
+    pub links: &'a L,
 }
 
 pub struct PropsSpanAttributes<T, S, P> {
@@ -129,6 +133,7 @@ impl<
         let mut trace_id = None;
         let mut span_id = None;
         let mut parent_span_id = None;
+        let mut links = None;
         let mut level = emit::level::Level::default();
         let mut has_err = false;
 
@@ -164,6 +169,10 @@ impl<
                             .by_ref()
                             .cast::<emit::TraceId>()
                             .map(|trace_id| TR::from(trace_id));
+                        Ok(())
+                    }
+                    emit::well_known::KEY_SPAN_LINKS => {
+                        links = Some(v);
                         Ok(())
                     }
                     emit::well_known::KEY_ERR => {
@@ -204,6 +213,20 @@ impl<
                 &SPAN_PARENT_SPAN_ID_LABEL,
                 &SPAN_PARENT_SPAN_ID_INDEX,
                 |stream| stream.value_computed(&parent_span_id),
+            )?;
+        }
+
+        if let Some(links) = links {
+            stream_field(
+                &mut *stream,
+                &SPAN_LINKS_LABEL,
+                &SPAN_LINKS_INDEX,
+                |stream| {
+                    stream.value_computed(&PropsLinks {
+                        value: links,
+                        _marker: PhantomData::<(TR, SP)>,
+                    })
+                },
             )?;
         }
 
@@ -292,6 +315,144 @@ impl<
     }
 }
 
+struct PropsLinks<TR, SP, V> {
+    value: V,
+    _marker: PhantomData<(TR, SP)>,
+}
+
+impl<
+        TR: From<emit::TraceId> + sval::Value,
+        SP: From<emit::SpanId> + sval::Value,
+        V: sval::Value,
+    > sval::Value for PropsLinks<TR, SP, V>
+{
+    fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(&self, stream: &mut S) -> sval::Result {
+        // Map a sequence of formatted span links like:
+        //   `["{traceid}-{spanid}", ..]`
+        // into a sequence of structured links like:
+        //   `[{traceId, spanId}, ..]`
+        struct TextToLinkElements<'a, TR, SP, S: ?Sized> {
+            stream: &'a mut S,
+            depth: usize,
+            buffered: [u8; 49],
+            buffered_len: usize,
+            _marker: PhantomData<(TR, SP)>,
+        }
+
+        impl<
+                'sval,
+                'a,
+                'b,
+                TR: From<emit::TraceId> + sval::Value,
+                SP: From<emit::SpanId> + sval::Value,
+                S: sval::Stream<'b> + ?Sized,
+            > sval::Stream<'sval> for TextToLinkElements<'a, TR, SP, S>
+        {
+            fn null(&mut self) -> sval::Result {
+                sval::error()
+            }
+
+            fn bool(&mut self, _: bool) -> sval::Result {
+                sval::error()
+            }
+
+            fn text_begin(&mut self, _: Option<usize>) -> sval::Result {
+                if self.depth != 1 {
+                    return sval::error();
+                }
+
+                self.buffered = [0; 49];
+                self.buffered_len = 0;
+
+                Ok(())
+            }
+
+            fn text_fragment_computed(&mut self, fragment: &str) -> sval::Result {
+                if self.depth != 1 {
+                    return sval::error();
+                }
+
+                let start = self.buffered_len;
+                let end = start + fragment.len();
+
+                if end > fragment.len() {
+                    return sval::error();
+                }
+
+                self.buffered[start..end].copy_from_slice(fragment.as_bytes());
+                self.buffered_len = end;
+
+                Ok(())
+            }
+
+            fn text_end(&mut self) -> sval::Result {
+                if self.depth != 1 {
+                    return sval::error();
+                }
+
+                if self.buffered_len != self.buffered.len() {
+                    return sval::error();
+                }
+
+                let buffered = str::from_utf8(&self.buffered).map_err(|_| sval::Error::new())?;
+                let link =
+                    emit::span::SpanLink::try_from_str(buffered).map_err(|_| sval::Error::new())?;
+
+                self.stream.seq_value_begin()?;
+                self.stream.value_computed(&Link {
+                    trace_id: &TR::from(*link.trace_id()),
+                    span_id: &SP::from(*link.span_id()),
+                })?;
+                self.stream.seq_value_end()?;
+
+                Ok(())
+            }
+
+            fn i64(&mut self, _: i64) -> sval::Result {
+                sval::error()
+            }
+
+            fn f64(&mut self, _: f64) -> sval::Result {
+                sval::error()
+            }
+
+            fn map_begin(&mut self, _: Option<usize>) -> sval::Result {
+                sval::error()
+            }
+
+            fn seq_begin(&mut self, _: Option<usize>) -> sval::Result {
+                self.depth += 1;
+
+                Ok(())
+            }
+
+            fn seq_value_begin(&mut self) -> sval::Result {
+                Ok(())
+            }
+
+            fn seq_value_end(&mut self) -> sval::Result {
+                Ok(())
+            }
+
+            fn seq_end(&mut self) -> sval::Result {
+                self.depth -= 1;
+
+                Ok(())
+            }
+        }
+
+        stream.seq_begin(None)?;
+        self.value.stream(&mut TextToLinkElements {
+            stream: &mut *stream,
+            depth: 0,
+            buffered: [0; 49],
+            buffered_len: 0,
+            _marker: PhantomData::<(TR, SP)>,
+        })?;
+        stream.seq_end()
+    }
+}
+
 #[derive(Value)]
 pub struct Status<'a, M: ?Sized = str> {
     #[sval(label = "message", index = 2)]
@@ -323,4 +484,12 @@ const EVENT_ATTRIBUTES_INDEX: sval::Index = sval::Index::new(3);
 pub struct InlineEventAttributes<'a, A: ?Sized = [KeyValue<&'a str, &'a AnyValue<'a>>]> {
     #[sval(label = EVENT_ATTRIBUTES_LABEL, index = EVENT_ATTRIBUTES_INDEX)]
     pub attributes: &'a A,
+}
+
+#[derive(Value)]
+pub struct Link<'a, T: ?Sized = sval::BinaryArray<16>, S: ?Sized = sval::BinaryArray<8>> {
+    #[sval(label = "traceId", index = 1)]
+    pub trace_id: &'a T,
+    #[sval(label = "spanId", index = 2)]
+    pub span_id: &'a S,
 }

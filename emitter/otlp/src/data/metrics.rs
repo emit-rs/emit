@@ -109,7 +109,8 @@ impl EventEncoder for MetricsEventEncoder {
                 | emit::well_known::KEY_TRACE_ID
                 | emit::well_known::KEY_EVT_KIND
                 | emit::well_known::KEY_SPAN_NAME
-                | emit::well_known::KEY_SPAN_KIND => ControlFlow::Continue(()),
+                | emit::well_known::KEY_SPAN_KIND
+                | emit::well_known::KEY_SPAN_LINKS => ControlFlow::Continue(()),
                 // Regular attributes
                 _ => {
                     if let Ok(value) = sval_buffer::stream_to_value_owned(any_value::EmitValue(v)) {

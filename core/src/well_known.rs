@@ -26,6 +26,7 @@ Extensions to the data model are signaled by the well-known [`KEY_EVT_KIND`] pro
     - [`KEY_TRACE_ID`]: The trace id.
     - [`KEY_SPAN_ID`]: The span id.
     - [`KEY_SPAN_PARENT`]: The parent span id.
+    - [`KEY_SPAN_LINKS`]: A set of links between the span and others that it's causally related to outside of its immediate parent.
 
 - Metrics [`KEY_EVT_KIND`] = [`EVENT_KIND_METRIC`]:
     - [`KEY_METRIC_NAME`]: The name of the underlying data source.
@@ -93,6 +94,8 @@ pub const KEY_TRACE_ID: &'static str = "trace_id";
 pub const KEY_SPAN_ID: &'static str = "span_id";
 /** The parent span id. */
 pub const KEY_SPAN_PARENT: &'static str = "span_parent";
+/** A set of links between the span and others that it's causally related to outside of its immediate parent. */
+pub const KEY_SPAN_LINKS: &'static str = "span_links";
 
 /** Internal spans represent operations which do not cross a process boundary. */
 pub const SPAN_KIND_INTERNAL: &'static str = "internal";

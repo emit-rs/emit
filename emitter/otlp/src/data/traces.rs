@@ -152,6 +152,9 @@ mod tests {
 
                 assert_eq!("test", de.name);
                 assert_eq!(trace::span::SpanKind::Server as i32, de.kind);
+
+                assert_eq!(0x1u128.to_be_bytes(), &*de.trace_id);
+                assert_eq!(0x1u64.to_be_bytes(), &*de.span_id);
             },
         );
     }
@@ -183,7 +186,32 @@ mod tests {
     }
 
     #[test]
-    fn encode_span_kind() {
+    fn encode_span_kind_default() {
+        let encoder = TracesEventEncoder {
+            name: default_name_formatter(),
+            kind: Box::new(|_| Some(emit::span::SpanKind::Client)),
+        };
+
+        encode_event_with(
+            encoder,
+            emit::evt!(
+                extent: ts(1)..ts(13),
+                "greet {user}",
+                user: "test",
+                evt_kind: "span",
+                trace_id: "00000000000000000000000000000001",
+                span_id: "0000000000000001"
+            ),
+            |buf| {
+                let de = trace::Span::decode(buf).unwrap();
+
+                assert_eq!(trace::span::SpanKind::Client as i32, de.kind);
+            },
+        );
+    }
+
+    #[test]
+    fn encode_span_links() {
         let encoder = TracesEventEncoder {
             name: default_name_formatter(),
             kind: Box::new(|_| Some(emit::span::SpanKind::Server)),
@@ -196,14 +224,24 @@ mod tests {
                 "greet {user}",
                 user: "test",
                 evt_kind: "span",
-                span_name: "test",
                 trace_id: "00000000000000000000000000000001",
-                span_id: "0000000000000001"
+                span_id: "0000000000000001",
+                #[emit::as_sval]
+                span_links: [
+                    "00000000000000000000000000000001-0000000000000001",
+                    "00000000000000000000000000000002-0000000000000002",
+                ],
             ),
             |buf| {
                 let de = trace::Span::decode(buf).unwrap();
 
-                assert_eq!(trace::span::SpanKind::Server as i32, de.kind);
+                assert_eq!(2, de.links.len());
+
+                assert_eq!(0x1u128.to_be_bytes(), &*de.links[0].trace_id);
+                assert_eq!(0x1u64.to_be_bytes(), &*de.links[0].span_id);
+
+                assert_eq!(0x2u128.to_be_bytes(), &*de.links[1].trace_id);
+                assert_eq!(0x2u64.to_be_bytes(), &*de.links[1].span_id);
             },
         );
     }
