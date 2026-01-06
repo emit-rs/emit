@@ -160,6 +160,31 @@ mod tests {
     }
 
     #[test]
+    fn encode_ids_structured() {
+        encode_event::<TracesEventEncoder>(
+            emit::evt!(
+                extent: ts(1)..ts(13),
+                "greet {user}",
+                user: "test",
+                evt_kind: "span",
+                span_name: "test",
+                span_kind: "server",
+                trace_id: emit::span::TraceId::from_u128(0x1).unwrap(),
+                span_id: emit::span::SpanId::from_u64(0x1).unwrap(),
+            ),
+            |buf| {
+                let de = trace::Span::decode(buf).unwrap();
+
+                assert_eq!("test", de.name);
+                assert_eq!(trace::span::SpanKind::Server as i32, de.kind);
+
+                assert_eq!(0x1u128.to_be_bytes(), &*de.trace_id);
+                assert_eq!(0x1u64.to_be_bytes(), &*de.span_id);
+            },
+        );
+    }
+
+    #[test]
     fn encode_span_name() {
         let encoder = TracesEventEncoder {
             name: Box::new(|_, f| f.write_str("custom name")),
@@ -230,6 +255,48 @@ mod tests {
                 span_links: [
                     "00000000000000000000000000000001-0000000000000001",
                     "00000000000000000000000000000002-0000000000000002",
+                ],
+            ),
+            |buf| {
+                let de = trace::Span::decode(buf).unwrap();
+
+                assert_eq!(2, de.links.len());
+
+                assert_eq!(0x1u128.to_be_bytes(), &*de.links[0].trace_id);
+                assert_eq!(0x1u64.to_be_bytes(), &*de.links[0].span_id);
+
+                assert_eq!(0x2u128.to_be_bytes(), &*de.links[1].trace_id);
+                assert_eq!(0x2u64.to_be_bytes(), &*de.links[1].span_id);
+            },
+        );
+    }
+
+    #[test]
+    fn encode_span_links_structured() {
+        let encoder = TracesEventEncoder {
+            name: default_name_formatter(),
+            kind: Box::new(|_| Some(emit::span::SpanKind::Server)),
+        };
+
+        encode_event_with(
+            encoder,
+            emit::evt!(
+                extent: ts(1)..ts(13),
+                "greet {user}",
+                user: "test",
+                evt_kind: "span",
+                trace_id: "00000000000000000000000000000001",
+                span_id: "0000000000000001",
+                #[emit::as_sval]
+                span_links: [
+                    emit::span::SpanLink::new(
+                        emit::span::TraceId::from_u128(0x1).unwrap(),
+                        emit::span::SpanId::from_u64(0x1).unwrap(),
+                    ),
+                    emit::span::SpanLink::new(
+                        emit::span::TraceId::from_u128(0x2).unwrap(),
+                        emit::span::SpanId::from_u64(0x2).unwrap(),
+                    ),
                 ],
             ),
             |buf| {
