@@ -93,6 +93,18 @@ pub trait Props {
     }
 
     /**
+    Filter the set of properties.
+
+    Only properties where the filter `F` returns `true` will be included.
+    */
+    fn filter<F: Fn(Str, Value) -> bool>(self, filter: F) -> Filter<Self, F>
+    where
+        Self: Sized,
+    {
+        Filter::new(self, filter)
+    }
+
+    /**
     Collect these properties into another collection type.
 
     This method defers to the [`FromProps`] implementation on `C`.
@@ -388,6 +400,51 @@ impl<A: Props, B: Props> Props for And<A, B> {
 
     fn size(&self) -> Option<usize> {
         Some(self.left().size()? + self.right().size()?)
+    }
+}
+
+/**
+The result of calling [`Props::filter`].
+*/
+pub struct Filter<P, F> {
+    props: P,
+    filter: F,
+}
+
+impl<P, F> Filter<P, F> {
+    fn new(props: P, filter: F) -> Self {
+        Filter { props, filter }
+    }
+}
+
+impl<P: Props, F: Fn(Str, Value) -> bool> Props for Filter<P, F> {
+    fn for_each<'kv, T: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
+        &'kv self,
+        mut for_each: T,
+    ) -> ControlFlow<()> {
+        self.props.for_each(|key, value| {
+            if !(self.filter)(key.by_ref(), value.by_ref()) {
+                return ControlFlow::Continue(());
+            }
+
+            for_each(key, value)
+        })
+    }
+
+    fn get<'v, K: ToStr>(&'v self, key: K) -> Option<Value<'v>> {
+        let key = key.to_str();
+
+        self.props
+            .get(key.by_ref())
+            .filter(|v| (self.filter)(key, v.by_ref()))
+    }
+
+    fn is_unique(&self) -> bool {
+        self.props.is_unique()
+    }
+
+    fn size(&self) -> Option<usize> {
+        None
     }
 }
 
@@ -1885,5 +1942,15 @@ mod tests {
                 serde_test::Token::MapEnd,
             ],
         );
+    }
+
+    #[test]
+    fn filter() {
+        let props =
+            [("a", 1), ("b", 2), ("c", 3)].filter(|k, v| k == "a" || v.cast::<usize>() == Some(3));
+
+        assert!(props.get("a").is_some());
+        assert!(props.get("b").is_none());
+        assert!(props.get("c").is_some());
     }
 }

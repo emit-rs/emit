@@ -859,6 +859,31 @@ http://localhost:4318/v1/traces
 }
 ```
 
+## Span links
+
+If the event contains a `span_links` property, then the resulting OTLP span will carry that set of links:
+
+```
+#[emit::span(
+    "Compute {a} + {b}",
+    #[emit::as_sval]
+    span_links: [
+        "0a85ccaf666e11aaca6bd5d469e2850d-2b9caa35eaefed3a",
+    ],
+)]
+fn add(a: i32, b: i32) -> i32 {
+    let r = a + b;
+
+    emit::info!("Produced {r}", r);
+
+    r
+}
+
+add(1, 3);
+```
+
+will produce the following HTTP+JSON export requests:
+
 ## Customizing span names
 
 By default, if an event contains a property called `span_name` then it will be used as the `name` field on the resulting OTLP span.

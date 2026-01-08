@@ -9,7 +9,7 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
-use emit_core::{ctxt::Ctxt, props::Props};
+use emit_core::{ctxt::Ctxt, empty::Empty, props::Props, str::Str, value::Value};
 
 /**
 A set of ambient properties that are cleaned up automatically.
@@ -30,7 +30,7 @@ impl<C: Ctxt> Frame<C> {
     #[track_caller]
     #[must_use = "call `enter`, `call`, `in_fn` or `in_future` to make the pushed properties active"]
     pub fn current(ctxt: C) -> Self {
-        Self::push(ctxt, crate::empty::Empty)
+        Self::push(ctxt, Empty)
     }
 
     /**
@@ -40,6 +40,17 @@ impl<C: Ctxt> Frame<C> {
     #[must_use = "call `enter`, `call`, `in_fn`, or `in_future` to make the pushed properties active"]
     pub fn push(ctxt: C, props: impl Props) -> Self {
         let scope = ctxt.open_push(props);
+
+        Self::from_parts(ctxt, scope)
+    }
+
+    /**
+    Get a frame with the given property removed from the current set.
+    */
+    #[track_caller]
+    #[must_use = "call `enter`, `call`, `in_fn`, or `in_future` to make unset property active"]
+    pub fn filter(ctxt: C, filter: impl Fn(Str, Value) -> bool) -> Self {
+        let scope = ctxt.with_current(|current| ctxt.open_root(current.filter(filter)));
 
         Self::from_parts(ctxt, scope)
     }
@@ -271,6 +282,11 @@ mod tests {
         });
 
         drop(frame);
+    }
+
+    #[cfg(feature = "std")]
+    fn frame_filter() {
+        todo!()
     }
 
     #[cfg(feature = "std")]

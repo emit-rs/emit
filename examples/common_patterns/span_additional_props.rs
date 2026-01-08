@@ -6,12 +6,14 @@ use std::{collections::HashMap, time::Duration};
 
 use emit::Props as _;
 
+// The `guard` control parameter lets us manipulate the span within the body of the function
 #[emit::span(guard: span, "Running an example", i)]
 fn example(i: i32) {
     // This example uses a `HashMap` to store additional properties to include
     let additional_props = HashMap::new();
-
     let mut span = span.map_props(|props| additional_props.and_props(props));
+
+    // Your code goes here
 
     if i > 4 {
         span.props_mut()
