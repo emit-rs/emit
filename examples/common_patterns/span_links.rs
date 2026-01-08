@@ -1,5 +1,8 @@
 /*!
-This example demonstrates how to attach additional properties to a span on completion.
+This example demonstrates how to add links to spans.
+
+Links relate spans outside of the normal parent-child hierarchy.
+Links are largely informative and may not be understood by downstream consumers.
 */
 
 use std::time::Duration;
@@ -27,7 +30,7 @@ fn main() {
     let frame = emit::Frame::push(
         emit::ctxt(),
         emit::props! {
-            #[emit::as_sval]
+            #[emit::as_serde]
             span_links: [
                 link,
             ]

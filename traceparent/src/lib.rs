@@ -825,7 +825,7 @@ impl<C: Ctxt> Ctxt for TraceparentCtxt<C> {
 
         TraceparentCtxtFrame {
             inner,
-            active: slot.is_some(),
+            active: true,
             slot,
         }
     }
@@ -1298,6 +1298,35 @@ mod tests {
                 );
                 assert!(traceparent.trace_flags().is_sampled());
             });
+        });
+    }
+
+    #[test]
+    fn traceparent_ctxt_unsets_on_empty_root() {
+        let rng = RandRng::new();
+        let ctxt = TraceparentCtxt::new(ThreadLocalCtxt::new());
+
+        let span_ctxt_1 = SpanCtxt::current(&ctxt).new_child(&rng);
+
+        span_ctxt_1.push(&ctxt).call(|| {
+            let traceparent = Traceparent::current();
+
+            assert_ne!(Traceparent::empty(), traceparent);
+
+            let frame = emit::Frame::root(&ctxt, emit::Empty);
+
+            frame.call(|| {
+                let traceparent = Traceparent::current();
+                let span_ctxt = SpanCtxt::current(&ctxt);
+
+                // Since there's no active span context, there
+                // also should be no active traceparent
+                assert_eq!(Traceparent::empty(), traceparent);
+
+                assert!(span_ctxt.trace_id().is_none());
+                assert!(span_ctxt.span_id().is_none());
+                assert!(span_ctxt.span_parent().is_none());
+            })
         });
     }
 
