@@ -69,25 +69,16 @@ impl<C: Ctxt> Frame<C> {
     }
 
     /**
-    Get a frame with the given property removed from the current set.
+    Get a frame with the given filter applied.
+
+    The properties visible when the frame is entered will be the current set that matches `filter`.
     */
     #[track_caller]
-    #[must_use = "call `enter`, `call`, `in_fn`, or `in_future` to make the properties active"]
-    pub fn filter(mut self, filter: impl Fn(Str, Value) -> bool) -> Self {
-        let filtered = {
-            let guard = self.enter();
-            guard
-                .scope
-                .ctxt
-                .with_current(|current| guard.scope.ctxt.open_root(current.filter(filter)))
-        };
+    #[must_use = "call `enter`, `call`, `in_fn`, or `in_future` to make unset property active"]
+    pub fn filtered(ctxt: C, filter: impl Fn(Str, Value) -> bool) -> Self {
+        let scope = ctxt.with_current(|current| ctxt.open_root(current.filter(filter)));
 
-        let (ctxt, scope) = self.into_parts();
-        let filtered = Self::from_parts(ctxt, filtered);
-
-        filtered.ctxt.close(scope);
-
-        filtered
+        Self::from_parts(ctxt, scope)
     }
 
     /**
@@ -297,21 +288,21 @@ mod tests {
 
     #[cfg(feature = "std")]
     #[test]
-    fn frame_filter() {
+    fn frame_filtered() {
         let ctxt = crate::platform::DefaultCtxt::new();
 
-        let mut frame = Frame::push(&ctxt, [("a", 1), ("b", 2)]);
+        let mut outer = Frame::push(&ctxt, [("a", 1), ("b", 2)]);
 
-        frame.with(|props| {
+        outer.with(|props| {
+            let mut inner = Frame::filtered(&ctxt, |k, _| k == "b");
+
             assert_eq!(1, props.pull::<i32, _>("a").unwrap());
             assert_eq!(2, props.pull::<i32, _>("b").unwrap());
-        });
 
-        let mut filtered = frame.filter(|k, _| k == "b");
-
-        filtered.with(|props| {
-            assert!(props.get("a").is_none());
-            assert_eq!(2, props.pull::<i32, _>("b").unwrap());
+            inner.with(|props| {
+                assert!(props.get("a").is_none());
+                assert_eq!(2, props.pull::<i32, _>("b").unwrap());
+            })
         });
     }
 
