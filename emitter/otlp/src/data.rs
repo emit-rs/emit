@@ -532,7 +532,6 @@ mod tests {
         let encoded_bytes = evt.payload.into_cursor().into_vec();
         let re_encoded_bytes = re_encoded.into_cursor().into_vec();
 
-        // TODO: Won't pass without a change to `sval_protobuf`
         assert_eq!(encoded_bytes, re_encoded_bytes);
     }
 }
