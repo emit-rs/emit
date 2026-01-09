@@ -128,7 +128,7 @@ mod tests {
 
     use crate::{
         data::{
-            generated::{trace::v1 as trace, util::*},
+            generated::{collector::trace::v1 as request, trace::v1 as trace, util::*},
             util::*,
         },
         util::*,
@@ -436,6 +436,44 @@ mod tests {
 
     #[test]
     fn encode_request_basic() {
-        todo!()
+        encode_request::<TracesEventEncoder, TracesRequestEncoder>(
+            emit::props! {
+                #[emit::key("service.name")]
+                service_name: "test",
+            },
+            emit::evt!(
+                extent: ts(1)..ts(13),
+                "span for {user}",
+                user: "test",
+                evt_kind: "span",
+                trace_id: "00000000000000000000000000000001",
+                span_id: "0000000000000001"
+            ),
+            |json| {
+                let de: serde_json::Value = serde_json::from_slice(&json.into_vec()).unwrap();
+
+                assert_eq!(
+                    serde_json::json!("test"),
+                    de["resourceSpans"][0]["resource"]["attributes"][0]["value"]["stringValue"]
+                );
+
+                assert_eq!(
+                    serde_json::json!("span for test"),
+                    de["resourceSpans"][0]["scopeSpans"][0]["spans"][0]["name"]
+                )
+            },
+            |proto| {
+                let de = request::ExportTraceServiceRequest::decode(proto).unwrap();
+
+                assert_eq!(
+                    Some(string_value("test")),
+                    de.resource_spans[0].resource.as_ref().unwrap().attributes[0].value
+                );
+                assert_eq!(
+                    "span for test",
+                    de.resource_spans[0].scope_spans[0].spans[0].name
+                );
+            },
+        );
     }
 }
