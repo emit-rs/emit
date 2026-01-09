@@ -110,10 +110,10 @@ features = ["std"]
 version = "1"
 
 [dev-dependencies.prost]
-version = "0.13"
+version = "0.14"
 
 [dev-dependencies.prost-types]
-version = "0.13"
+version = "0.14"
 
 [dev-dependencies.serde_json]
 version = "1"
