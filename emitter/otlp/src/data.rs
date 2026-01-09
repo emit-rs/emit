@@ -313,6 +313,17 @@ impl Buf for PreEncodedCursor {
     }
 }
 
+#[cfg(test)]
+impl PreEncodedCursor {
+    pub fn into_vec(self) -> Vec<u8> {
+        use std::io::Read;
+
+        let mut buf = Vec::new();
+        self.reader().read_to_end(&mut buf).unwrap();
+        buf
+    }
+}
+
 pub(crate) fn stream_field<'sval, S: sval::Stream<'sval> + ?Sized>(
     stream: &mut S,
     label: &sval::Label,
@@ -433,5 +444,95 @@ pub(crate) mod util {
                 .payload
                 .into_cursor(),
         );
+    }
+
+    pub(crate) fn encode_request<E: EventEncoder + Default, R: RequestEncoder + Default>(
+        resource: impl emit::Props,
+        evt: emit::Event<impl emit::Props>,
+        json: impl FnOnce(PreEncodedCursor),
+        proto: impl FnOnce(PreEncodedCursor),
+    ) {
+        encode_request_with(E::default(), R::default(), resource, evt, json, proto)
+    }
+
+    pub(crate) fn encode_request_with(
+        event_encoder: impl EventEncoder,
+        request_encoder: impl RequestEncoder,
+        resource: impl emit::Props,
+        evt: emit::Event<impl emit::Props>,
+        json: impl FnOnce(PreEncodedCursor),
+        proto: impl FnOnce(PreEncodedCursor),
+    ) {
+        json(
+            request_encoder
+                .encode_request::<Json>(
+                    Some(&Json::encode(&Resource {
+                        attributes: &PropsResourceAttributes(&resource),
+                    })),
+                    &{
+                        let mut items = EncodedScopeItems::new();
+                        items.push(event_encoder.encode_event::<Json>(&evt.by_ref()).unwrap());
+                        items
+                    },
+                )
+                .unwrap()
+                .into_cursor(),
+        );
+
+        proto(
+            request_encoder
+                .encode_request::<Proto>(
+                    Some(&Proto::encode(&Resource {
+                        attributes: &PropsResourceAttributes(&resource),
+                    })),
+                    &{
+                        let mut items = EncodedScopeItems::new();
+                        items.push(event_encoder.encode_event::<Proto>(&evt.by_ref()).unwrap());
+                        items
+                    },
+                )
+                .unwrap()
+                .into_cursor(),
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use logs::LogsEventEncoder;
+
+    #[test]
+    fn raw_encode_json() {
+        let evt = LogsEventEncoder::default()
+            .encode_event::<Json>(
+                &emit::evt!("event", trace_id: "4bf92f3577b34da6a3ce929d0e0e4736"),
+            )
+            .unwrap();
+
+        let re_encoded = Json::encode(&evt.payload);
+
+        let encoded_bytes = evt.payload.into_cursor().into_vec();
+        let re_encoded_bytes = re_encoded.into_cursor().into_vec();
+
+        assert_eq!(encoded_bytes, re_encoded_bytes);
+    }
+
+    #[test]
+    fn raw_encode_proto() {
+        let evt = LogsEventEncoder::default()
+            .encode_event::<Proto>(
+                &emit::evt!("event", trace_id: "4bf92f3577b34da6a3ce929d0e0e4736"),
+            )
+            .unwrap();
+
+        let re_encoded = Proto::encode(&evt.payload);
+
+        let encoded_bytes = evt.payload.into_cursor().into_vec();
+        let re_encoded_bytes = re_encoded.into_cursor().into_vec();
+
+        // TODO: Won't pass without a change to `sval_protobuf`
+        assert_eq!(encoded_bytes, re_encoded_bytes);
     }
 }

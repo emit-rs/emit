@@ -59,6 +59,8 @@ impl<C: Ctxt> Frame<C> {
     Get a disabled frame.
 
     The properties in `props` will not be visible when the frame is entered. This method should be used when `props` could have been pushed, but were filtered out.
+
+    Even though this frame isn't expected to have a visible impact on the current set of ambient properties it's still expected to be entered and exited as normal.
     */
     #[track_caller]
     #[must_use = "call `enter`, `call`, `in_fn`, or `in_future` to make the properties active"]

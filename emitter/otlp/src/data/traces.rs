@@ -433,4 +433,9 @@ mod tests {
             },
         );
     }
+
+    #[test]
+    fn encode_request_basic() {
+        todo!()
+    }
 }

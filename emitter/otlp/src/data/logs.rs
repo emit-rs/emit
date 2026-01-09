@@ -96,7 +96,7 @@ mod tests {
     use prost::Message;
 
     use crate::data::{
-        generated::{logs::v1 as logs, util::*},
+        generated::{collector::logs::v1 as request, logs::v1 as logs, util::*},
         util::*,
     };
 
@@ -234,5 +234,41 @@ mod tests {
                 de.attributes[0].value
             );
         });
+    }
+
+    #[test]
+    fn encode_request_basic() {
+        encode_request::<LogsEventEncoder, LogsRequestEncoder>(
+            emit::props! {
+                #[emit::key("service.name")]
+                service_name: "test",
+            },
+            emit::evt!("log for {user}", user: "test"),
+            |json| {
+                let de: serde_json::Value = serde_json::from_slice(&json.into_vec()).unwrap();
+
+                assert_eq!(
+                    serde_json::json!("test"),
+                    de["resourceLogs"][0]["resource"]["attributes"][0]["value"]["stringValue"]
+                );
+
+                assert_eq!(
+                    serde_json::json!("log for test"),
+                    de["resourceLogs"][0]["scopeLogs"][0]["logRecords"][0]["body"]["stringValue"]
+                )
+            },
+            |proto| {
+                let de = request::ExportLogsServiceRequest::decode(proto).unwrap();
+
+                assert_eq!(
+                    Some(string_value("test")),
+                    de.resource_logs[0].resource.as_ref().unwrap().attributes[0].value
+                );
+                assert_eq!(
+                    Some(string_value("log for test")),
+                    de.resource_logs[0].scope_logs[0].log_records[0].body
+                );
+            },
+        );
     }
 }

@@ -872,17 +872,77 @@ If the event contains a `span_links` property, then the resulting OTLP span will
     ],
 )]
 fn add(a: i32, b: i32) -> i32 {
-    let r = a + b;
-
-    emit::info!("Produced {r}", r);
-
-    r
+    a + b
 }
 
 add(1, 3);
 ```
 
 will produce the following HTTP+JSON export requests:
+
+```text
+http://localhost:4318/v1/traces
+```
+
+```json
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "my_app"
+            }
+          }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {
+            "name": "my_app"
+          },
+          "spans": [
+            {
+              "name": "Compute {a} + {b}",
+              "kind": 0,
+              "startTimeUnixNano": 1767960848098372000,
+              "endTimeUnixNano": 1767960848100910000,
+              "attributes": [
+                {
+                  "key": "a",
+                  "value": {
+                    "intValue": 1
+                  }
+                },
+                {
+                  "key": "b",
+                  "value": {
+                    "intValue": 3
+                  }
+                }
+              ],
+              "traceId": "23505f707eea9acf98fef2431289389c",
+              "spanId": "c4e3bd5e6c96d346",
+              "links": [
+                {
+                  "traceId": "0a85ccaf666e11aaca6bd5d469e2850d",
+                  "spanId": "2b9caa35eaefed3a"
+                }
+              ],
+              "status": {
+                "message": "info",
+                "code": 1
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
 
 ## Customizing span names
 
