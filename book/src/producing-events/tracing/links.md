@@ -6,34 +6,38 @@ Here's an example of a link between two spans in different traces:
 
 ```mermaid
 flowchart TB
-    subgraph trace:9e5c467e47d3008153d985c0358c179f
+    subgraph trace:0a85ccaf666e11aaca6bd5d469e2850d
         span:e58873f5ee2b697d
-        span:e58873f5ee2b697d --- span:98e49a8d797182c4
+        span:e58873f5ee2b697d --- span:2b9caa35eaefed3a
         span:e58873f5ee2b697d --- span:50bd7df705bda59e
         span:50bd7df705bda59e --- span:13872d1c5fd475b4
     end
 
     subgraph trace:7090fa7447c7c99f94c035fc5753acbf
         span:d0627f2451098bee
-        span:d0627f2451098bee -. link .- span:98e49a8d797182c4
+        span:d0627f2451098bee -. link .- span:2b9caa35eaefed3a
     end
 ```
 
-In this example, the link on span `d0627f2451098bee` is to the span `98e49a8d797182c4` in a different trace.
+In this example, the link on span `d0627f2451098bee` is to the span `2b9caa35eaefed3a` in a different trace.
 
 In `emit`, span links are expressed through the `span_links` [well-known property](https://docs.rs/emit/1.15.0/emit/well_known/index.html) as a sequence of formatted strings, or a sequence of the [`SpanLink`](https://docs.rs/emit/1.15.0/emit/span/struct.SpanLink.html) type:
 
 ```rust
 # extern crate emit;
 #[emit::span(
+    guard: span,
     "wait a bit",
     sleep_ms,
-    #[emit::as_serde]
-    span_links: [
-        "0a85ccaf666e11aaca6bd5d469e2850d-2b9caa35eaefed3a",
-    ],
 )]
 fn wait_a_bit(sleep_ms: u64) {
+    // Add span links to the guard rather than as props in the macro so they aren't
+    // also added to any child spans or events
+    let span_links = [
+        "0a85ccaf666e11aaca6bd5d469e2850d-2b9caa35eaefed3a",
+    ];
+    let _span = span.push_prop("span_links", emit::Value::capture_serde(&span_links));
+
     std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
 
     emit::emit!("waiting a bit longer");
@@ -48,34 +52,26 @@ In this example, the span link is a constant string. You can avoid allocating st
 
 ```rust
 # extern crate emit;
-#[emit::span("wait a bit", sleep_ms)]
+#[emit::span(
+    guard: span,
+    "wait a bit",
+    sleep_ms,
+)]
 fn wait_a_bit(sleep_ms: u64) {
+    // Add span links to the guard rather than as props in the macro so they aren't
+    // also added to any child spans or events
+    let span_links = [
+        emit::span::SpanLink::new(
+            emit::span::TraceId::from_u128(0x0a85ccaf666e11aaca6bd5d469e2850d).unwrap(),
+            emit::span::SpanId::from_u64(0x2b9caa35eaefed3a).unwrap(),
+        ),
+    ];
+    let _span = span.push_prop("span_links", emit::Value::capture_serde(&span_links));
+
     std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
 
     emit::emit!("waiting a bit longer");
 
     std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
 }
-
-// Create a span link, possibly from some incoming trace state on a messaging queue
-let link = emit::span::SpanLink::new(
-    emit::span::TraceId::from_u128(0x1).unwrap(),
-    emit::span::SpanId::from_u64(0x1).unwrap(),
-);
-
-// Push the link onto ambient context so it'll get picked up by the span
-// created by the `wait_a_bit` call
-let frame = emit::Frame::push(
-    emit::ctxt(),
-    emit::props! {
-        #[emit::as_serde]
-        span_links: [
-            link,
-        ]
-    },
-);
-
-frame.call(|| {
-    wait_a_bit(100);
-});
 ```
