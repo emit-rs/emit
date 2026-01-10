@@ -21,7 +21,7 @@ flowchart TB
 
 In this example, the link on span `d0627f2451098bee` is to the span `98e49a8d797182c4` in a different trace.
 
-In `emit`, span links are expressed through the `span_links` [well-known property](https://docs.rs/emit/1.14.0/emit/well_known/index.html) as a sequence of formatted strings, or a sequence of the [`SpanLink`](https://docs.rs/emit/1.14.0/emit/span/struct.SpanLink.html) type:
+In `emit`, span links are expressed through the `span_links` [well-known property](https://docs.rs/emit/1.15.0/emit/well_known/index.html) as a sequence of formatted strings, or a sequence of the [`SpanLink`](https://docs.rs/emit/1.15.0/emit/span/struct.SpanLink.html) type:
 
 ```rust
 # extern crate emit;
@@ -44,7 +44,7 @@ fn wait_a_bit(sleep_ms: u64) {
 
 Since the expected type of `span_links` is a sequence, you'll need to use either the [`#[as_serde]`](../../reference/property-attributes.md#as_serde) or [`#[as_sval]`](../../reference/property-attributes.md#as_sval) attributes to capture them.
 
-In this example, the span link is a constant string. You can avoid allocating strings at runtime for links by using the [`SpanLink`](https://docs.rs/emit/1.14.0/emit/span/struct.SpanLink.html) type instead:
+In this example, the span link is a constant string. You can avoid allocating strings at runtime for links by using the [`SpanLink`](https://docs.rs/emit/1.15.0/emit/span/struct.SpanLink.html) type instead:
 
 ```rust
 # extern crate emit;
