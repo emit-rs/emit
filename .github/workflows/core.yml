@@ -24,7 +24,7 @@ jobs:
 
       - name: Docs
         working-directory: ./core
-        run: cargo doc --all-features
+        run: cargo doc --all-features --no-deps
 
       - name: Build powerset
         working-directory: ./core

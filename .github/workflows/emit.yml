@@ -22,7 +22,7 @@ jobs:
         run: cargo test --all-features
 
       - name: Docs
-        run: cargo doc --all-features
+        run: cargo doc --all-features --no-deps
 
       - name: Build powerset
         run: cargo hack build --feature-powerset --lib

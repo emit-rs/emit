@@ -1,6 +1,6 @@
 [package]
 name = "emit_otlp"
-version = "1.14.0"
+version = "1.15.0"
 authors = ["emit contributors"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -18,7 +18,7 @@ tls-native = ["tls", "dep:tokio-native-tls"]
 web = ["emit/web", "emit_batcher/web", "wasm-bindgen", "wasm-bindgen-futures", "js-sys"]
 
 [dependencies.emit]
-version = "1.14.0"
+version = "1.15.0"
 path = "../../"
 features = ["std", "sval", "implicit_internal_rt"]
 default-features = false
@@ -77,12 +77,12 @@ version = "0.3"
 optional = true
 
 [target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dependencies.emit_batcher]
-version = "1.14.0"
+version = "1.15.0"
 path = "../../batcher"
 features = ["tokio"]
 
 [target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.emit_batcher]
-version = "1.14.0"
+version = "1.15.0"
 path = "../../batcher"
 
 [target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.wasm-bindgen]
@@ -123,7 +123,7 @@ version = "1"
 features = ["sync", "macros", "io-util", "rt", "time"]
 
 [dev-dependencies.emit]
-version = "1.14.0"
+version = "1.15.0"
 path = "../../"
 features = ["implicit_rt"]
 

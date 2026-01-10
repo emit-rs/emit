@@ -27,7 +27,7 @@ jobs:
 
       - name: Docs
         working-directory: ./emitter/otlp
-        run: cargo doc --all-features
+        run: cargo doc --all-features --no-deps
 
       - name: Build powerset
         working-directory: ./emitter/otlp
