@@ -9,7 +9,7 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
-use emit_core::{ctxt::Ctxt, props::Props};
+use emit_core::{ctxt::Ctxt, empty::Empty, props::Props, str::Str, value::Value};
 
 /**
 A set of ambient properties that are cleaned up automatically.
@@ -30,7 +30,7 @@ impl<C: Ctxt> Frame<C> {
     #[track_caller]
     #[must_use = "call `enter`, `call`, `in_fn` or `in_future` to make the pushed properties active"]
     pub fn current(ctxt: C) -> Self {
-        Self::push(ctxt, crate::empty::Empty)
+        Self::push(ctxt, Empty)
     }
 
     /**
@@ -59,11 +59,26 @@ impl<C: Ctxt> Frame<C> {
     Get a disabled frame.
 
     The properties in `props` will not be visible when the frame is entered. This method should be used when `props` could have been pushed, but were filtered out.
+
+    Even though this frame isn't expected to have a visible impact on the current set of ambient properties it's still expected to be entered and exited as normal.
     */
     #[track_caller]
     #[must_use = "call `enter`, `call`, `in_fn`, or `in_future` to make the properties active"]
     pub fn disabled(ctxt: C, props: impl Props) -> Self {
         let scope = ctxt.open_disabled(props);
+
+        Self::from_parts(ctxt, scope)
+    }
+
+    /**
+    Get a frame with the given filter applied.
+
+    The properties visible when the frame is entered will be the current set that matches `filter`.
+    */
+    #[track_caller]
+    #[must_use = "call `enter`, `call`, `in_fn`, or `in_future` to make unset property active"]
+    pub fn filtered(ctxt: C, filter: impl Fn(Str, Value) -> bool) -> Self {
+        let scope = ctxt.with_current(|current| ctxt.open_root(current.filter(filter)));
 
         Self::from_parts(ctxt, scope)
     }
@@ -271,6 +286,26 @@ mod tests {
         });
 
         drop(frame);
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn frame_filtered() {
+        let ctxt = crate::platform::DefaultCtxt::new();
+
+        let mut outer = Frame::push(&ctxt, [("a", 1), ("b", 2)]);
+
+        outer.with(|props| {
+            let mut inner = Frame::filtered(&ctxt, |k, _| k == "b");
+
+            assert_eq!(1, props.pull::<i32, _>("a").unwrap());
+            assert_eq!(2, props.pull::<i32, _>("b").unwrap());
+
+            inner.with(|props| {
+                assert!(props.get("a").is_none());
+                assert_eq!(2, props.pull::<i32, _>("b").unwrap());
+            })
+        });
     }
 
     #[cfg(feature = "std")]

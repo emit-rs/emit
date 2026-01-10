@@ -129,7 +129,9 @@ impl<
                         Ok(())
                     }
                     // Ignored
-                    emit::well_known::KEY_SPAN_KIND | emit::well_known::KEY_SPAN_NAME => Ok(()),
+                    emit::well_known::KEY_SPAN_KIND
+                    | emit::well_known::KEY_SPAN_NAME
+                    | emit::well_known::KEY_SPAN_LINKS => Ok(()),
                     // Regular attributes
                     _ => stream.stream_attribute(k, v),
                 })

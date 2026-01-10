@@ -109,7 +109,8 @@ impl EventEncoder for MetricsEventEncoder {
                 | emit::well_known::KEY_TRACE_ID
                 | emit::well_known::KEY_EVT_KIND
                 | emit::well_known::KEY_SPAN_NAME
-                | emit::well_known::KEY_SPAN_KIND => ControlFlow::Continue(()),
+                | emit::well_known::KEY_SPAN_KIND
+                | emit::well_known::KEY_SPAN_LINKS => ControlFlow::Continue(()),
                 // Regular attributes
                 _ => {
                     if let Ok(value) = sval_buffer::stream_to_value_owned(any_value::EmitValue(v)) {
@@ -563,7 +564,10 @@ mod tests {
 
     use prost::Message;
 
-    use crate::data::{generated::metrics::v1 as metrics, util::*};
+    use crate::data::{
+        generated::{collector::metrics::v1 as request, metrics::v1 as metrics, util::*},
+        util::*,
+    };
 
     fn double_point(v: impl Into<f64>) -> metrics::number_data_point::Value {
         metrics::number_data_point::Value::AsDouble(v.into())
@@ -860,6 +864,48 @@ mod tests {
                     }
                     other => panic!("unexpected {other:?}"),
                 }
+            },
+        );
+    }
+
+    #[test]
+    fn encode_request_basic() {
+        encode_request::<MetricsEventEncoder, MetricsRequestEncoder>(
+            emit::props! {
+                #[emit::key("service.name")]
+                service_name: "test",
+            },
+            emit::evt!(
+                "{metric_agg} of {metric_name} is {metric_value}",
+                evt_kind: "metric",
+                metric_name: "test",
+                metric_agg: "count",
+                metric_value: 43,
+            ),
+            |json| {
+                let de: serde_json::Value = serde_json::from_slice(&json.into_vec()).unwrap();
+
+                assert_eq!(
+                    serde_json::json!("test"),
+                    de["resourceMetrics"][0]["resource"]["attributes"][0]["value"]["stringValue"]
+                );
+
+                assert_eq!(
+                    serde_json::json!("test"),
+                    de["resourceMetrics"][0]["scopeMetrics"][0]["metrics"][0]["name"]
+                )
+            },
+            |proto| {
+                let de = request::ExportMetricsServiceRequest::decode(proto).unwrap();
+
+                assert_eq!(
+                    Some(string_value("test")),
+                    de.resource_metrics[0].resource.as_ref().unwrap().attributes[0].value
+                );
+                assert_eq!(
+                    "test",
+                    de.resource_metrics[0].scope_metrics[0].metrics[0].name
+                );
             },
         );
     }

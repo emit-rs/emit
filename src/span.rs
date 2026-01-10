@@ -993,6 +993,146 @@ impl<'v> FromValue<'v> for SpanKind {
 }
 
 /**
+A link between two spans in potentially different traces.
+
+A link belongs to a span, and contains the [`TraceId`] and [`SpanId`] of the span being linked to.
+Links are usually created on the downstream span.
+
+Links relate spans outside of the normal parent-child hierarchy.
+Links are largely informative and may not be understood by downstream consumers.
+In order to create a generic DAG out of span links, the spans would need to belong to separate traces, since the parent-child relationship is still required.
+*/
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SpanLink {
+    trace_id: TraceId,
+    span_id: SpanId,
+}
+
+impl SpanLink {
+    /**
+    Create a new link to the target span.
+    */
+    pub const fn new(trace_id: TraceId, span_id: SpanId) -> Self {
+        SpanLink { trace_id, span_id }
+    }
+
+    /**
+    Try parse a span link from a formatted representation.
+    */
+    pub fn try_from_str(s: &str) -> Result<Self, ParseLinkError> {
+        Self::try_from_slice(s.as_bytes())
+    }
+
+    fn try_from_slice(s: &[u8]) -> Result<Self, ParseLinkError> {
+        if s.len() != 49 {
+            return Err(ParseLinkError {});
+        }
+
+        if s[32] != b'-' {
+            return Err(ParseLinkError {});
+        }
+
+        let trace_id = TraceId::try_from_hex_slice(&s[0..32]).map_err(|_| ParseLinkError {})?;
+        let span_id = SpanId::try_from_hex_slice(&s[33..49]).map_err(|_| ParseLinkError {})?;
+
+        Ok(SpanLink::new(trace_id, span_id))
+    }
+
+    /**
+    Try parse a span link from a formatted representation.
+    */
+    pub fn parse(s: impl fmt::Display) -> Result<Self, ParseLinkError> {
+        let mut buf = Buffer::<49>::new();
+
+        Self::try_from_slice(buf.buffer(s).map_err(|_| ParseLinkError {})?)
+    }
+
+    /**
+    The [`TraceId`] of the linked span.
+    */
+    pub fn trace_id(&self) -> &TraceId {
+        &self.trace_id
+    }
+
+    /**
+    The [`SpanId`] of the linked span.
+    */
+    pub fn span_id(&self) -> &SpanId {
+        &self.span_id
+    }
+}
+
+impl FromStr for SpanLink {
+    type Err = ParseLinkError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::try_from_str(s)
+    }
+}
+
+impl fmt::Debug for SpanLink {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "\"{}\"", self)
+    }
+}
+
+impl fmt::Display for SpanLink {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut buf = [0; 49];
+
+        buf[0..32].copy_from_slice(&self.trace_id.to_hex());
+        buf[32] = b'-';
+        buf[33..49].copy_from_slice(&self.span_id.to_hex());
+
+        f.write_str(str::from_utf8(&buf).unwrap())
+    }
+}
+
+#[cfg(feature = "sval")]
+impl sval::Value for SpanLink {
+    fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(&'sval self, stream: &mut S) -> sval::Result {
+        sval::stream_display(stream, self)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for SpanLink {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+impl ToValue for SpanLink {
+    fn to_value(&self) -> Value<'_> {
+        Value::capture_display(self)
+    }
+}
+
+impl<'v> FromValue<'v> for SpanLink {
+    fn from_value(value: Value<'v>) -> Option<Self> {
+        value
+            .downcast_ref::<SpanLink>()
+            .copied()
+            .or_else(|| SpanLink::parse(value).ok())
+    }
+}
+
+/**
+An error encountered attempting to parse a [`TraceId`] or [`SpanId`].
+*/
+#[derive(Debug)]
+pub struct ParseLinkError {}
+
+impl fmt::Display for ParseLinkError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "the input was not a valid span link")
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for ParseLinkError {}
+
+/**
 An active span in a distributed trace.
 
 ## Creating active spans automatically
@@ -1974,6 +2114,132 @@ mod tests {
         serde_test::assert_ser_tokens(
             &TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
             &[serde_test::Token::Str("0123456789abcdef0123456789abcdef")],
+        );
+    }
+
+    #[test]
+    fn span_link_parse() {
+        for (case, expected) in [
+            (
+                "0123456789abcdef0123456789abcdef-0123456789abcdef",
+                Ok::<SpanLink, ParseLinkError>(SpanLink::new(
+                    TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                    SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                )),
+            ),
+            (
+                "00000000000000000000000000000001-0000000000000001",
+                Ok::<SpanLink, ParseLinkError>(SpanLink::new(
+                    TraceId::from_u128(0x1).unwrap(),
+                    SpanId::from_u64(0x1).unwrap(),
+                )),
+            ),
+            (
+                "00000000000000000000000000000000-0000000000000000",
+                Err(ParseLinkError {}),
+            ),
+            (
+                "0123456789abcdef0123456789abcde-0123456789abcdef",
+                Err(ParseLinkError {}),
+            ),
+            (
+                "0123456789abcdef0123456789abcdef-0123456789abcde",
+                Err(ParseLinkError {}),
+            ),
+            (
+                "0123456789abcdef0123456789abcdef 0123456789abcdef",
+                Err(ParseLinkError {}),
+            ),
+            (
+                "0123456789abcdef0123456789abcdef0123456789abcdef",
+                Err(ParseLinkError {}),
+            ),
+        ] {
+            match expected {
+                Ok(expected) => assert_eq!(expected, SpanLink::try_from_str(case).unwrap()),
+                Err(e) => assert_eq!(
+                    e.to_string(),
+                    SpanLink::try_from_str(case).unwrap_err().to_string()
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn span_link_fmt() {
+        let link = SpanLink::new(
+            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+        );
+
+        assert_eq!(
+            "0123456789abcdef0123456789abcdef-0123456789abcdef",
+            link.to_string()
+        );
+    }
+
+    #[test]
+    fn span_link_roundtrip() {
+        let link = SpanLink::new(
+            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+        );
+
+        assert_eq!(link, SpanLink::parse(link).unwrap());
+    }
+
+    #[test]
+    fn span_link_to_from_value() {
+        let link = SpanLink::new(
+            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+        );
+
+        assert_eq!(link, SpanLink::from_value(link.to_value()).unwrap());
+    }
+
+    #[test]
+    fn span_link_from_value_string() {
+        assert_eq!(
+            SpanLink::new(
+                TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                SpanId::from_u64(0x0123456789abcdef).unwrap(),
+            ),
+            Value::from("0123456789abcdef0123456789abcdef-0123456789abcdef")
+                .cast()
+                .unwrap()
+        );
+    }
+
+    #[cfg(feature = "sval")]
+    #[test]
+    fn span_link_stream() {
+        sval_test::assert_tokens(
+            &SpanLink::new(
+                TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                SpanId::from_u64(0x0123456789abcdef).unwrap(),
+            ),
+            &[
+                sval_test::Token::TextBegin(None),
+                sval_test::Token::TextFragmentComputed(
+                    "0123456789abcdef0123456789abcdef-0123456789abcdef".to_owned(),
+                ),
+                sval_test::Token::TextEnd,
+            ],
+        );
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn span_link_serialize() {
+        serde_test::assert_ser_tokens(
+            &SpanLink::new(
+                TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                SpanId::from_u64(0x0123456789abcdef).unwrap(),
+            ),
+            &[serde_test::Token::Str(
+                "0123456789abcdef0123456789abcdef-0123456789abcdef",
+            )],
         );
     }
 

@@ -128,6 +128,10 @@ name = "span_trace_filtering"
 path = "span_trace_filtering.rs"
 
 [[example]]
+name = "span_links"
+path = "span_links.rs"
+
+[[example]]
 name = "metric_counter"
 path = "metric_counter.rs"
 
