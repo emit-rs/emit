@@ -31,7 +31,7 @@ jobs:
 
       - name: Docs
         working-directory: ./emitter/file
-        run: cargo doc --all-features
+        run: cargo doc --all-features --no-deps
 
       - name: Build powerset
         working-directory: ./emitter/file
