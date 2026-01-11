@@ -2,9 +2,7 @@
 This example demonstrates how to add links to spans.
 
 Links relate spans outside of the normal parent-child hierarchy. In this example, we
-have a dummy messaging system where a message includes a set of text-based headers.
-One of these headers is a W3C traceparent, similar to how trace propagation works in
-web-based applications.
+have a dummy messaging system where a message includes the trace context of its producer.
 
 Instead of linking the span for the worker to the producer as a child, we link it
 using a span link instead.
@@ -14,7 +12,7 @@ is attached to the span created on the worker thread, which happens in the `work
 */
 
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::VecDeque,
     sync::{Arc, Mutex, Weak},
     thread,
     time::Duration,
@@ -22,9 +20,8 @@ use std::{
 
 type MessageQueue<T> = Mutex<VecDeque<Message<T>>>;
 
-#[derive(Default)]
 struct Message<T> {
-    headers: HashMap<String, String>,
+    producer_ctxt: emit::span::SpanCtxt,
     data: T,
 }
 
@@ -34,23 +31,7 @@ The producer of a span link.
 #[emit::span("produce")]
 fn produce(queue: Arc<MessageQueue<i32>>, data: i32) {
     let msg = Message {
-        headers: {
-            let mut headers = HashMap::new();
-
-            // 1. Get the currently executing span
-            let span_ctxt = emit::span::SpanCtxt::current(emit::ctxt());
-
-            // 2. Format the span as a traceparent header
-            let traceparent = emit_traceparent::Traceparent::new(
-                span_ctxt.trace_id().copied(),
-                span_ctxt.span_id().copied(),
-                emit_traceparent::TraceFlags::SAMPLED,
-            );
-
-            headers.insert("traceparent".to_owned(), traceparent.to_string());
-
-            headers
-        },
+        producer_ctxt: emit::span::SpanCtxt::current(emit::ctxt()),
         data,
     };
 
@@ -75,32 +56,21 @@ fn worker<T>(queue: Weak<MessageQueue<T>>, mut process: impl FnMut(T)) {
             continue;
         };
 
-        // 1. Pull the incoming traceparent from the message headers.
-        //    This could be done any number of ways depending on the messaging system.
-        //    In this example, we're parsing it from text like a HTTP header.
-        let span_links = msg
-            .headers
-            .get("traceparent")
-            // Parse the `traceparent` header
-            .and_then(|traceparent| emit_traceparent::Traceparent::try_from_str(traceparent).ok())
-            // Only consider `traceparent`s that are sampled
-            // We could also use this information to avoid creating
-            // a span altogether. That would involve integrating
-            // `emit_traceparent` into `emit::setup()`, and adding
-            // the trace flags from the incoming traceparent to
-            // the span created in the `new_span!` call below
-            .filter(|traceparent| traceparent.is_sampled())
-            // Convert the `traceparent` into a span link
-            .and_then(|traceparent| {
-                Some(emit::span::SpanLink::new(
-                    *traceparent.trace_id()?,
-                    *traceparent.span_id()?,
-                ))
-            })
-            // Wrap the link in a sequence, which is the expected type of `span_links`
-            .map(|span_link| [span_link]);
+        // 1. Convert the producer's span context into a span link
+        //    This could be done any number of ways depending on the system.
+        //    In this example, we're just converting an `emit::span::SpanCtxt` into
+        //    an `emit::span::SpanLink`.
+        let span_links = if let (Some(trace_id), Some(span_id)) =
+            (msg.producer_ctxt.trace_id(), msg.producer_ctxt.span_id())
+        {
+            Some([emit::span::SpanLink::new(*trace_id, *span_id)])
+        } else {
+            None
+        };
 
         // 2. Create a span for the worker that will include the span link
+        //    This is an inline alternative to creating a function with `#[emit::span]`
+        //    on it, which we could also use
         let (span, frame) = emit::new_span!("worker");
 
         frame.call(move || {
