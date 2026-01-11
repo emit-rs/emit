@@ -1,4 +1,4 @@
-See the [`SpanGuard::new`](https://docs.rs/emit/1.15.0/emit/span/struct.SpanGuard.html#method.new) for details on starting and completing the returned span.
+See the [`SpanGuard::new`](https://docs.rs/emit/1.16.0/emit/span/struct.SpanGuard.html#method.new) for details on starting and completing the returned span.
 
 Also see [the guide](https://emit-rs.io/producing-events/tracing/manual-span-creation.html) for more details on manual span construction.
 
