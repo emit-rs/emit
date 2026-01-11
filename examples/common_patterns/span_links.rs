@@ -19,7 +19,6 @@ fn outer() {
         emit::span::TraceId::from_u128(0x1).unwrap(),
         emit::span::SpanId::from_u64(0x1).unwrap(),
     )];
-
     let _span = span.push_prop("span_links", emit::Value::capture_serde(&links));
 
     inner();
