@@ -301,6 +301,30 @@ fn span_guard() {
 }
 
 #[test]
+fn span_guard_props() {
+    static CALLED: StaticCalled = StaticCalled::new();
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!(true, evt.props().pull::<bool, _>("extra").unwrap());
+
+            CALLED.record();
+        },
+        |_| true,
+    );
+
+    #[emit::span(rt: RT, guard: span, "test")]
+    fn exec() {
+        let span = span.push_prop("extra", true);
+
+        span.complete();
+    }
+
+    exec();
+
+    assert!(CALLED.was_called());
+}
+
+#[test]
 fn span_mdl() {
     static RT: StaticRuntime = static_runtime(
         |evt| {

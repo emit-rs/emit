@@ -26,6 +26,8 @@ fn main() {
                 let mut map = HashMap::new();
                 map.insert(
                     "traceparent".into(),
+                    // The trailing `01` means the trace is sampled, and will
+                    // be emitted
                     "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01".into(),
                 );
                 map
@@ -43,8 +45,8 @@ fn main() {
                 let mut map = HashMap::new();
                 map.insert(
                     "traceparent".into(),
-                    // Try changing the last digit to 0
-                    // This will cause the trace to be unsampled
+                    // The trailing `00` means the trace is unsampled, and shouldn't
+                    // be emitted
                     "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00".into(),
                 );
                 map

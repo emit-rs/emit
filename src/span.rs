@@ -11,6 +11,7 @@ Licensed under Apache 2.0
 */
 
 use emit_core::{
+    and::And,
     clock::Clock,
     ctxt::Ctxt,
     empty::Empty,
@@ -23,18 +24,14 @@ use emit_core::{
     str::{Str, ToStr},
     template::{self, Template},
     timestamp::Timestamp,
-    value::FromValue,
+    value::{FromValue, ToValue, Value},
     well_known::{
         KEY_EVT_KIND, KEY_SPAN_ID, KEY_SPAN_NAME, KEY_SPAN_PARENT, KEY_TRACE_ID, SPAN_KIND_CLIENT,
         SPAN_KIND_CONSUMER, SPAN_KIND_INTERNAL, SPAN_KIND_PRODUCER, SPAN_KIND_SERVER,
     },
 };
 
-use crate::{
-    kind::Kind,
-    value::{ToValue, Value},
-    Frame, Timer,
-};
+use crate::{kind::Kind, Frame, Timer};
 use core::{
     fmt, mem,
     num::{NonZeroU128, NonZeroU64},
@@ -1359,6 +1356,26 @@ impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
             data,
             completion: self.completion.take(),
         }
+    }
+
+    /**
+    Push a property onto the span.
+    */
+    #[must_use = "this method returns a new `SpanGuard` that will be immediately dropped unless used"]
+    pub fn push_prop<K: ToStr, V: ToValue>(
+        self,
+        key: K,
+        value: V,
+    ) -> SpanGuard<'a, T, And<(K, V), P>, F> {
+        self.push_props((key, value))
+    }
+
+    /**
+    Push a set of properties onto the span.
+    */
+    #[must_use = "this method returns a new `SpanGuard` that will be immediately dropped unless used"]
+    pub fn push_props<U: Props>(self, props: U) -> SpanGuard<'a, T, And<U, P>, F> {
+        self.map_props(|current| props.and_props(current))
     }
 
     /**

@@ -865,13 +865,16 @@ If the event contains a `span_links` property, then the resulting OTLP span will
 
 ```
 #[emit::span(
+    guard: span,
     "Compute {a} + {b}",
-    #[emit::as_sval]
-    span_links: [
-        "0a85ccaf666e11aaca6bd5d469e2850d-2b9caa35eaefed3a",
-    ],
 )]
 fn add(a: i32, b: i32) -> i32 {
+    let span_links = [
+        "0a85ccaf666e11aaca6bd5d469e2850d-2b9caa35eaefed3a",
+    ];
+
+    let _span = span.push_prop("span_links", emit::Value::capture_sval(&span_links));
+
     a + b
 }
 
