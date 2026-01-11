@@ -102,14 +102,11 @@ With a [`SpanGuard`](https://docs.rs/emit/1.15.0/emit/span/struct.SpanGuard.html
 
 ```rust
 # extern crate emit;
-# use emit::Props;
 # use std::collections::HashMap;
 #[emit::span(guard: span, "checking a value", i)]
 fn check(i: i32) {
     // This example uses a `HashMap` to store additional properties to include
-    let additional_props = HashMap::new();
-
-    let mut span = span.map_props(|props| additional_props.and_props(props));
+    let mut span = span.push_props(HashMap::new());
 
     if i > 4 {
         // The type of the span's properties are now `And<HashMap<_, _>, _>`
@@ -142,6 +139,28 @@ Event {
 ```
 
 Attaching additional properties to the span guard is preferrable to adding them through the span's completion. When they're on the guard they'll be used even if the function panics.
+
+## Visibility of properties on spans
+
+Properties added through the span macros are added to the ambient context for the duration of the span, meaning they're included on any events or child spans, unless they explicitly override them. This is a good place to add contextual properties that link those events together.
+
+Properties added to a [`SpanGuard`](https://docs.rs/emit/1.15.0/emit/span/struct.SpanGuard.html) are visible only on to the completed span itself. This is a good place to add properties that apply only to the span.
+
+```rust
+# extern crate emit;
+#[emit::span(
+    guard: span,
+    "checking a value",
+    // `public` is visible to all events and child spans produced in the body of `check`
+    public: i,
+)]
+fn check(i: i32) {
+    // `private` is visible only to this span itself
+    let _span = span.push_prop("private", i);
+
+    // Your code goes here
+}
+```
 
 Note that adding additional properties to the span guard itself _won't_ make those properties part of any child spans. They'll only appear on the parent span containing those properties when it completes. To make additional properties ambiently available, see [Context](../logging/context.md#manually).
 

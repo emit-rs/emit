@@ -373,9 +373,19 @@ impl Traceparent {
     }
 
     /**
+    Whether the sampled flag is set.
+    */
+    pub fn is_sampled(&self) -> bool {
+        self.trace_flags.is_sampled()
+    }
+
+    /**
     Get the current trace context.
 
     If no context has been set, this method will return a new traceparent with no trace id or span id, but with [`TraceFlags::SAMPLED`].
+
+    Note that unless a [`TraceparentCtxt`] is configured in [`emit::setup`], or if trace context is being managed through [`Traceparent::push`], this method will return a new traceparent.
+    It won't pick up values in [`emit::span::SpanCtxt`].
     */
     pub fn current() -> Self {
         get_active_traceparent()
