@@ -16,6 +16,6 @@ fn diagnostics_flush() {
 }
 ```
 
-Calling [`try_init()`](https://docs.rs/emit/1.16.0/emit/setup/struct.Setup.html#method.try_init) ensures you don't panic even if setup is called multiple times.
+Calling [`try_init()`](https://docs.rs/emit/1.16.1/emit/setup/struct.Setup.html#method.try_init) ensures you don't panic even if setup is called multiple times.
 
-`emit` doesn't automatically flush or de-initialize its runtime when [`Init`](https://docs.rs/emit/1.16.0/emit/setup/struct.Init.html) goes out of scope so it's safe to let it drop before your application exits. 
+`emit` doesn't automatically flush or de-initialize its runtime when [`Init`](https://docs.rs/emit/1.16.1/emit/setup/struct.Init.html) goes out of scope so it's safe to let it drop before your application exits. 
