@@ -1,6 +1,6 @@
 # Emitting via OTLP
 
-You can use [`emit_otlp`](https://docs.rs/emit_otlp/1.16.0/emit_otlp/index.html) to emit diagnostic events to remote OpenTelemetry-compatible services.
+You can use [`emit_otlp`](https://docs.rs/emit_otlp/1.16.1/emit_otlp/index.html) to emit diagnostic events to remote OpenTelemetry-compatible services.
 
 OpenTelemetry defines a wire protocol for exchanging diagnostic data called [OTLP](https://opentelemetry.io/docs/specs/otlp/). If you're using a modern telemetry backend then chances are it supports OTLP either directly or through [OpenTelemetry's Collector](https://opentelemetry.io/docs/collector/).
 
@@ -8,7 +8,7 @@ OpenTelemetry defines a wire protocol for exchanging diagnostic data called [OTL
 
 ```toml
 [dependencies.emit_otlp]
-version = "1.16.0"
+version = "1.16.1"
 ```
 
 ```rust
@@ -35,36 +35,36 @@ fn main() {
 }
 ```
 
-See [the crate docs](https://docs.rs/emit_otlp/1.16.0/emit_otlp/index.html) for more details.
+See [the crate docs](https://docs.rs/emit_otlp/1.16.1/emit_otlp/index.html) for more details.
 
 ## Logs
 
-Any event can be treated as a [log event](https://opentelemetry.io/docs/specs/otel/logs/). You need to configure a logs endpoint in your `emit_otlp` setup for this to happen. See [the crate docs](https://docs.rs/emit_otlp/1.16.0/emit_otlp/index.html#logs) for details.
+Any event can be treated as a [log event](https://opentelemetry.io/docs/specs/otel/logs/). You need to configure a logs endpoint in your `emit_otlp` setup for this to happen. See [the crate docs](https://docs.rs/emit_otlp/1.16.1/emit_otlp/index.html#logs) for details.
 
 ## Traces
 
-Events in `emit`'s [tracing data model](../producing-events/tracing/data-model.md) can be treated as a [trace span](https://opentelemetry.io/docs/specs/otel/trace/). You need to configure a traces endpoint in your `emit_otlp` setup for this to happen, otherwise they'll be treated as logs. See [the crate docs](https://docs.rs/emit_otlp/1.16.0/emit_otlp/index.html#traces) for details.
+Events in `emit`'s [tracing data model](../producing-events/tracing/data-model.md) can be treated as a [trace span](https://opentelemetry.io/docs/specs/otel/trace/). You need to configure a traces endpoint in your `emit_otlp` setup for this to happen, otherwise they'll be treated as logs. See [the crate docs](https://docs.rs/emit_otlp/1.16.1/emit_otlp/index.html#traces) for details.
 
 ## Metrics
 
-Events in `emit`'s [metrics data model](../producing-events/metrics/data-model.md) can be treated as a [metric](https://opentelemetry.io/docs/specs/otel/metrics/). You need to configure a metrics endpoint in your `emit_otlp` setup for this to happen, otherwise they'll be treated as logs. See [the crate docs](https://docs.rs/emit_otlp/1.16.0/emit_otlp/index.html#metrics) for details.
+Events in `emit`'s [metrics data model](../producing-events/metrics/data-model.md) can be treated as a [metric](https://opentelemetry.io/docs/specs/otel/metrics/). You need to configure a metrics endpoint in your `emit_otlp` setup for this to happen, otherwise they'll be treated as logs. See [the crate docs](https://docs.rs/emit_otlp/1.16.1/emit_otlp/index.html#metrics) for details.
 
 ## Supported protocols
 
-`emit_otlp` supports sending OTLP using [gRPC](https://docs.rs/emit_otlp/1.16.0/emit_otlp/index.html#configuring-for-grpcprotobuf), [HTTP+protobuf](https://docs.rs/emit_otlp/1.16.0/emit_otlp/index.html#configuring-for-httpprotobuf), and [HTTP+JSON](https://docs.rs/emit_otlp/1.16.0/emit_otlp/index.html#configuring-for-httpjson).
+`emit_otlp` supports sending OTLP using [gRPC](https://docs.rs/emit_otlp/1.16.1/emit_otlp/index.html#configuring-for-grpcprotobuf), [HTTP+protobuf](https://docs.rs/emit_otlp/1.16.1/emit_otlp/index.html#configuring-for-httpprotobuf), and [HTTP+JSON](https://docs.rs/emit_otlp/1.16.1/emit_otlp/index.html#configuring-for-httpjson).
 
 ## TLS
 
-`emit_otlp` supports TLS using the default Cargo features when your endpoint uses the `https` scheme. See [the crate docs](https://docs.rs/emit_otlp/1.16.0/emit_otlp/index.html#configuring-tls) for details.
+`emit_otlp` supports TLS using the default Cargo features when your endpoint uses the `https` scheme. See [the crate docs](https://docs.rs/emit_otlp/1.16.1/emit_otlp/index.html#configuring-tls) for details.
 
 ## Compression
 
-`emit_otlp` will compress payloads using gzip using the default Cargo features. See [the crate docs](https://docs.rs/emit_otlp/1.16.0/emit_otlp/index.html#configuring-compression) for details.
+`emit_otlp` will compress payloads using gzip using the default Cargo features. See [the crate docs](https://docs.rs/emit_otlp/1.16.1/emit_otlp/index.html#configuring-compression) for details.
 
 ## HTTP headers
 
-`emit_otlp` supports custom HTTP headers per endpoint. See [the crate docs](https://docs.rs/emit_otlp/1.16.0/emit_otlp/index.html#customizing-http-headers) for details.
+`emit_otlp` supports custom HTTP headers per endpoint. See [the crate docs](https://docs.rs/emit_otlp/1.16.1/emit_otlp/index.html#customizing-http-headers) for details.
 
 ## Environment variables
 
-`emit_otlp` supports configuration from some of OpenTelemetry's environment variables. See [the crate docs](https://docs.rs/emit_otlp/1.16.0/emit_otlp/index.html#configuring-from-environment-variables) for details.
+`emit_otlp` supports configuration from some of OpenTelemetry's environment variables. See [the crate docs](https://docs.rs/emit_otlp/1.16.1/emit_otlp/index.html#configuring-from-environment-variables) for details.
