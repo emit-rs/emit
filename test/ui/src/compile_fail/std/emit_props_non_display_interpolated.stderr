@@ -9,13 +9,13 @@ help: the trait `std::fmt::Display` is not implemented for `NotDisplay`
   |
 7 | struct NotDisplay;
   | ^^^^^^^^^^^^^^^^^
-help: the trait `CaptureWithDefault` is implemented for `str`
+help: the trait `emit::__private::CaptureWithDefault` is implemented for `str`
  --> $WORKSPACE/src/macro_hooks.rs
   |
   | impl CaptureWithDefault for str {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  = note: required for `NotDisplay` to implement `CaptureWithDefault`
-note: required by a bound in `__private_capture_as_default`
+  = note: required for `NotDisplay` to implement `emit::__private::CaptureWithDefault`
+note: required by a bound in `emit::__private::__PrivateCaptureHook::__private_capture_as_default`
  --> $WORKSPACE/src/macro_hooks.rs
   |
   |     fn __private_capture_as_default(&self) -> Option<Value<'_>>

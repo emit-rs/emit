@@ -2,9 +2,9 @@ error[E0277]: capturing an optional value requires `Option<&T>`. Try calling `.a
  --> src/compile_fail/std/emit_props_optional_non_ref.rs:2:29
   |
 2 |     emit::emit!("template", #[emit::optional] some: Some(1));
-  |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `Optional<'_>` is not implemented for `Option<{integer}>`
+  |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `emit::__private::Optional<'_>` is not implemented for `Option<{integer}>`
   |
-help: the trait `Optional<'_>` is not implemented for `Option<{integer}>`
+help: the trait `emit::__private::Optional<'_>` is not implemented for `Option<{integer}>`
       but it is implemented for `Option<&_>`
  --> $WORKSPACE/src/macro_hooks.rs
   |

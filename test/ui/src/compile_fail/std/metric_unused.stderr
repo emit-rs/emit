@@ -1,4 +1,4 @@
-error: unused return value of `__private_metric` that must be used
+error: unused return value of `emit::__private::__private_metric` that must be used
  --> src/compile_fail/std/metric_unused.rs:5:5
   |
 5 |     emit::metric!(value: my_metric);

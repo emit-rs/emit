@@ -1,4 +1,4 @@
-error: unused return value of `__private_evt` that must be used
+error: unused return value of `emit::__private::__private_evt` that must be used
  --> src/compile_fail/std/evt_unused.rs:4:5
   |
 4 |     emit::evt!("test");
