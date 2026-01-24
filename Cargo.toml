@@ -31,6 +31,7 @@ description = "Developer-first diagnostics for Rust applications."
 keywords = ["logging", "tracing", "metrics", "observability"]
 categories = ["development-tools::debugging"]
 edition = "2021"
+exclude = ["asset", "book"]
 
 [package.metadata.docs.rs]
 features = ["std", "rand", "sval", "serde", "implicit_rt", "implicit_internal_rt"]
