@@ -9,6 +9,7 @@ description = "Emit diagnostic events to an OpenTelemetry-compatible collector."
 keywords = ["logging", "tracing", "metrics", "observability"]
 categories = ["development-tools::debugging"]
 edition = "2021"
+exclude = ["test"]
 
 [features]
 default = ["tls", "gzip", "web"]

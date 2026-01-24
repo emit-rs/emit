@@ -1,4 +1,4 @@
-error: unused return value of `__private_begin_span` that must be used
+error: unused return value of `emit::__private::__private_begin_span` that must be used
  --> src/compile_fail/std/new_span_unused.rs:4:5
   |
 4 |     emit::new_span!("test");
