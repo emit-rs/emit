@@ -46,6 +46,8 @@ Event {
 }
 ```
 
+The traceparent you parse from an incoming request header is a _proxy_ for a span that's executing on another service. When you push it into the local context, spans you produce appear to be children of it, even though that remote span doesn't actually exist on that service.
+
 When making outbound requests, you can pull the traceparent from the current context and format it as a header:
 
 ```rust
@@ -107,7 +109,7 @@ Event {
 }
 ```
 
-This pattern of pushing the incoming trace and span ids onto the context and then immediately calling a span annotated function ensures the incoming `span_id` becomes the `span_parent` in the events emitted by your application, without emitting a span event for the calling service itself.
+This pattern of pushing the incoming trace and span ids onto the context and then immediately calling a span annotated function ensures the incoming `span_id` becomes the `span_parent` in the events emitted by your application, without emitting a span event for the calling service itself. This is the same process done by `emit_traceparent` in the earlier example.
 
 When making outbound requests, you can pull the trace and span ids from the current context and format them as needed:
 
