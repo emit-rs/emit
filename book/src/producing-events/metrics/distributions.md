@@ -236,9 +236,13 @@ emit::count_sample!(
 
 Exponential histograms internally use γ, a value close to `1`, as a log base for computing the bucket a sample belongs to.
 
-The [`midpoint`](https://docs.rs/emit/1.16.1/emit/metric/exp/fn.midpoint.html) function computes γ from `scale` and uses it to find the midpoint of the bucket a raw value belongs to. You can also compute these values yourself if you don't want to store midpoints, or can use a faster but possibly non-portable implementation.
+`emit` uses the same scheme as OpenTelemetry for computing γ from a parameter called `scale`, which is an integer typically between `0` and `20`. The [`midpoint`](https://docs.rs/emit/1.16.1/emit/metric/exp/fn.midpoint.html) function does this for you. Computing from `scale` has the benefit of _perfect subsetting_, where each decrement of the scale exactly halves the number of buckets. This makes it possible to resample or merge histograms with different scales without needing to interpolate any buckets.
+
+The sections below outline the equations involved in building and interpreting exponential histograms.
 
 #### Computing γ
+
+γ is a value close to `1` used as a log base for computing the bucket a sample belongs to. `emit` and OpenTelemetry compute γ from an integral `scale` parameter. DDSketch uses a parameter called α (also called `error`) to compute the same γ, but slightly differently.
 
 From `scale`:
 
@@ -247,8 +251,6 @@ From `scale`:
 From `error`:
 
 \\[ γ = \frac{1 + error}{1 - error} \\]
-
-`emit` uses the same scheme as OpenTelemetry for computing γ from `scale`. This form has the benefit of _perfect subsetting_, where each decrement of the scale exactly halves the number of buckets. This makes it possible to resample or merge histograms with different scales without needing to interpolate any buckets.
 
 #### Computing `index`
 
