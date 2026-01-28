@@ -456,21 +456,8 @@ impl<'a, T: ?Sized> Optional<'a> for Option<&'a T> {
     }
 }
 
-pub trait __PrivateOptionalMapHook<'a> {
-    fn __private_optional_map_some<
-        F: FnOnce(&'a <Self as Optional<'a>>::Value) -> Option<U>,
-        U: 'a,
-    >(
-        self,
-        map: F,
-    ) -> Option<U>
-    where
-        Self: Optional<'a>;
-
-    fn __private_optional_map_option_ref<
-        F: FnOnce(&'a <Self as Optional<'a>>::Value) -> Option<U>,
-        U: 'a,
-    >(
+pub trait __PrivateOptionalHook<'a> {
+    fn __private_optional<F: FnOnce(&'a <Self as Optional<'a>>::Value) -> Option<U>, U: 'a>(
         self,
         map: F,
     ) -> Option<U>
@@ -478,21 +465,8 @@ pub trait __PrivateOptionalMapHook<'a> {
         Self: Optional<'a>;
 }
 
-impl<'a, T> __PrivateOptionalMapHook<'a> for T {
-    fn __private_optional_map_some<F: FnOnce(&'a <Self as Optional<'a>>::Value) -> Option<U>, U>(
-        self,
-        map: F,
-    ) -> Option<U>
-    where
-        Self: Optional<'a>,
-    {
-        self.into_option().and_then(map)
-    }
-
-    fn __private_optional_map_option_ref<
-        F: FnOnce(&'a <Self as Optional<'a>>::Value) -> Option<U>,
-        U,
-    >(
+impl<'a, T> __PrivateOptionalHook<'a> for T {
+    fn __private_optional<F: FnOnce(&'a <Self as Optional<'a>>::Value) -> Option<U>, U>(
         self,
         map: F,
     ) -> Option<U>

@@ -97,8 +97,8 @@ pub(crate) fn value_with_hook(
     };
 
     quote_spanned!(expr.span()=> #[allow(unused_imports)] {
-        use emit::__private::{__PrivateCaptureHook as _, __PrivateOptionalCaptureHook as _, __PrivateOptionalMapHook as _, __PrivateInterpolatedHook as _, __PrivateKeyExternalHook as _};
-        (#expr).__private_optional_capture_some().__private_optional_map_some(|v| v.#fn_name()).__private_key_external() #interpolated_expr #captured_expr
+        use emit::__private::{__PrivateCaptureHook as _, __PrivateOptionalCaptureHook as _, __PrivateOptionalHook as _, __PrivateInterpolatedHook as _, __PrivateKeyExternalHook as _};
+        (#expr).#fn_name().__private_key_external() #interpolated_expr #captured_expr
     })
 }
 

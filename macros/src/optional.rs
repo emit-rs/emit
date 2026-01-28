@@ -26,19 +26,20 @@ pub fn rename_hook_tokens(opts: RenameHookTokens) -> Result<TokenStream, syn::Er
         args: opts.args,
         expr: opts.expr,
         predicate: |ident: &str| {
-            ident.starts_with("__private_optional") || ident.starts_with("__private_captured")
+            ident.starts_with("__private_capture") || ident.starts_with("__private_captured")
         },
         to: move |_: &Args, ident: &Ident, args: &Punctuated<Expr, Comma>| {
             if ident.to_string().starts_with("__private_captured") {
                 return None;
             }
 
-            let ident = Ident::new(
-                &ident.to_string().replace("some", "option_ref"),
-                ident.span(),
-            );
+            let mut optional_args = Punctuated::<Expr, Comma>::new();
 
-            Some((quote!(#ident), quote!(#args)))
+            optional_args.push(parse_quote_spanned!(ident.span()=> |v| v.#ident(#args)));
+
+            let optional_ident = Ident::new("__private_optional", ident.span());
+
+            Some((quote!(#optional_ident), quote!(#optional_args)))
         },
     })
 }

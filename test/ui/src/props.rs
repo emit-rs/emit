@@ -321,6 +321,17 @@ fn props_optional_ref() {
 }
 
 #[test]
+fn props_optional_multi_attr() {
+    let props = emit::props! {
+        #[emit::optional] #[emit::as_debug] some: Some(&1),
+        #[emit::as_debug] #[emit::optional] none: None::<&i32>,
+    };
+
+    assert!(props.get("some").is_some());
+    assert!(props.get("none").is_none());
+}
+
+#[test]
 fn props_as_debug() {
     #[derive(Debug)]
     struct Data;
