@@ -3,14 +3,3 @@ error[E0425]: cannot find value `x` in this scope
   |
 2 |     emit::emit!("template", x);
   |                             ^ not found in this scope
-
-error[E0282]: type annotations needed
- --> src/compile_fail/std/emit_props_missing.rs:2:29
-  |
-2 |     emit::emit!("template", x);
-  |                             ^
-  |
-help: consider giving this closure parameter an explicit type
-  |
-2 |     emit::emit!("template", x: /* Type */);
-  |                              ++++++++++++

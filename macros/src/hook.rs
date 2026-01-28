@@ -81,16 +81,23 @@ where
         self.scratch.clear();
         write!(&mut self.scratch, "{}", method).expect("infallible write to string");
 
+        let mut rewritten = false;
+
         if (self.predicate)(&self.scratch) {
             self.applied = true;
 
             if let Some((to_ident_tokens, to_arg_tokens)) = (self.to)(&self.args, &method, &args) {
+                rewritten = true;
+
                 *method = syn::parse2(to_ident_tokens).expect("invalid ident");
                 *args = parse_comma_separated2(to_arg_tokens).expect("invalid args");
             }
         }
 
-        visit_mut::visit_expr_method_call_mut(self, i)
+        // Prevent looping on hooks that expand to themselves
+        if !rewritten {
+            visit_mut::visit_expr_method_call_mut(self, i)
+        }
     }
 }
 
