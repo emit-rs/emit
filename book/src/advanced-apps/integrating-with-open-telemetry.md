@@ -10,7 +10,7 @@ flowchart
     tracing --> tracing_opentelemetry --> opentelemetry_sdk
     emit --> emit_opentelemetry --> opentelemetry_sdk
 
-    click emit href "https://docs.rs/emit/1.16.1/emit/macro.emit.html"
+    click emit href "https://docs.rs/emit/1.16.2/emit/macro.emit.html"
     click emit_opentelemetry href "https://docs.rs/emit_opentelemetry"
     click log href "https://docs.rs/log"
     click appender_log href "https://docs.rs/opentelemetry_appender_log"
