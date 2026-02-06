@@ -11,7 +11,7 @@ let user = "Rust";
 emit::emit!("Hello, {user}");
 ```
 
-The [`emit!`](https://docs.rs/emit/1.16.2/emit/macro.emit.html) and [`#[span]`](https://docs.rs/emit/1.16.2/emit/attr.span.html) macros use the same syntax.
+The [`emit!`](https://docs.rs/emit/1.17.0/emit/macro.emit.html) and [`#[span]`](https://docs.rs/emit/1.17.0/emit/attr.span.html) macros use the same syntax.
 
 ### Properties within templates
 
@@ -139,4 +139,4 @@ let rendered = template.render(emit::Empty).to_string();
 Hello, {user}
 ```
 
-You can control how properties are rendered within templates by implementing the [`template::Write`](https://docs.rs/emit/1.16.2/emit/template/trait.Write.html) trait. `emit_term` uses this for example to render different property types in different colors.
+You can control how properties are rendered within templates by implementing the [`template::Write`](https://docs.rs/emit/1.17.0/emit/template/trait.Write.html) trait. `emit_term` uses this for example to render different property types in different colors.
