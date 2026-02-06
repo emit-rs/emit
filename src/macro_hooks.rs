@@ -640,33 +640,73 @@ impl<'a> __PrivateFmtHook<'a> for Part<'a> {
     }
 }
 
-pub struct Key(pub &'static str);
-
 pub trait __PrivateKeyHook {
     fn __private_key_as_default(self) -> Str<'static>;
-    fn __private_key_as(self, key: &'static str) -> Str<'static>;
-}
-
-impl<'a> __PrivateKeyHook for Key {
-    fn __private_key_as_default(self) -> Str<'static> {
-        Str::new(self.0)
-    }
-
-    fn __private_key_as(self, key: &'static str) -> Str<'static> {
-        Str::new(key)
-    }
+    fn __private_key_as<'a>(self, key: Str<'a>) -> Str<'a>;
 }
 
 // Work-around for const-fn in traits
 // Mirrors trait fns in `macro_hooks`
+pub struct Key(pub &'static str);
+
+impl __PrivateKeyHook for Key {
+    fn __private_key_as_default(self) -> Str<'static> {
+        Str::new(self.0)
+    }
+
+    fn __private_key_as<'a>(self, key: Str<'a>) -> Str<'a> {
+        key
+    }
+}
+
+#[cfg_attr(
+    not(feature = "std"),
+    diagnostic::on_unimplemented(
+        message = "capturing a key requires an `&str` or `Str` value. To capture `String`s, enable the `std` feature of `emit`."
+    )
+)]
+#[cfg_attr(
+    feature = "std",
+    diagnostic::on_unimplemented(
+        message = "capturing a key requires a `str`, `Str`, or `String` value."
+    )
+)]
+pub trait CaptureKey<'a> {
+    fn capture(self) -> Str<'a>;
+}
+
+impl<'a> CaptureKey<'a> for Str<'a> {
+    fn capture(self) -> Str<'a> {
+        self
+    }
+}
+
+impl<'a> CaptureKey<'a> for &'a str {
+    fn capture(self) -> Str<'a> {
+        Str::new_ref(self)
+    }
+}
+
+#[cfg(feature = "std")]
+impl<'a> CaptureKey<'a> for String {
+    fn capture(self) -> Str<'a> {
+        Str::new_owned(self)
+    }
+}
+
+#[track_caller]
+pub fn __private_capture_key<'a>(s: impl CaptureKey<'a>) -> Str<'a> {
+    s.capture()
+}
+
 #[doc(hidden)]
 impl Key {
     pub const fn __private_key_as_default(self) -> Str<'static> {
         Str::new(self.0)
     }
 
-    pub const fn __private_key_as(self, key: &'static str) -> Str<'static> {
-        Str::new(key)
+    pub const fn __private_key_as<'a>(self, key: Str<'a>) -> Str<'a> {
+        key
     }
 }
 

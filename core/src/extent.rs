@@ -179,6 +179,20 @@ impl ToExtent for Range<Option<Timestamp>> {
     }
 }
 
+#[cfg(feature = "std")]
+impl ToExtent for std::time::SystemTime {
+    fn to_extent(&self) -> Option<Extent> {
+        Timestamp::from_system_time(*self).to_extent()
+    }
+}
+
+#[cfg(feature = "std")]
+impl ToExtent for Range<std::time::SystemTime> {
+    fn to_extent(&self) -> Option<Extent> {
+        (Timestamp::from_system_time(self.start)..Timestamp::from_system_time(self.end)).to_extent()
+    }
+}
+
 impl Props for Extent {
     fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
         &'kv self,
@@ -252,6 +266,45 @@ mod tests {
         assert_eq!(&Timestamp::MIN, ts.as_point());
 
         assert!(ts.len().is_none());
+    }
+
+    #[test]
+    #[cfg(all(
+        feature = "std",
+        not(all(
+            target_arch = "wasm32",
+            target_vendor = "unknown",
+            target_os = "unknown"
+        ))
+    ))]
+    fn point_system_time() {
+        let ts_sys = std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(30);
+
+        let ts = ts_sys.to_extent().unwrap();
+
+        assert_eq!(ts_sys, ts.as_point().to_system_time());
+    }
+
+    #[test]
+    #[cfg(all(
+        feature = "std",
+        not(all(
+            target_arch = "wasm32",
+            target_vendor = "unknown",
+            target_os = "unknown"
+        ))
+    ))]
+    fn range_system_time() {
+        let ts_sys_start = std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(0);
+        let ts_sys_end = std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(30);
+
+        let ts = (ts_sys_start..ts_sys_end).to_extent().unwrap();
+        let ts_range = ts.as_range().unwrap();
+
+        assert_eq!(
+            ts_sys_start..ts_sys_end,
+            ts_range.start.to_system_time()..ts_range.end.to_system_time()
+        );
     }
 
     #[test]

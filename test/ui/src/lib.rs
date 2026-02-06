@@ -28,18 +28,19 @@ mod tpl;
 #[cfg(feature = "std")]
 mod format;
 
-#[test]
-#[cfg(feature = "compile")]
 #[rustversion::nightly]
-fn compile_fail_std() {
-    let t = trybuild::TestCases::new();
-    t.compile_fail("src/compile_fail/std/*.rs");
-}
+mod compile {
+    #[test]
+    #[cfg(feature = "compile")]
+    fn compile_fail_std() {
+        let t = trybuild::TestCases::new();
+        t.compile_fail("src/compile_fail/std/*.rs");
+    }
 
-#[test]
-#[cfg(feature = "compile")]
-#[rustversion::nightly]
-fn compile_pass_std() {
-    let t = trybuild::TestCases::new();
-    t.pass("src/compile_pass/std/*.rs");
+    #[test]
+    #[cfg(feature = "compile")]
+    fn compile_pass_std() {
+        let t = trybuild::TestCases::new();
+        t.pass("src/compile_pass/std/*.rs");
+    }
 }
