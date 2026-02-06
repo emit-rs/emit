@@ -879,6 +879,16 @@ where
 
 - `key`: A string literal with the key to use. The key doesn't need to be a valid Rust identifier.
 
+This macro can also be called with an explicit `name` identifier:
+
+```text
+name: key
+```
+
+where
+
+- `key`: An expression that evaluates to a string value for the key to use. The key doesn't need to be a valid Rust identifier.
+
 # Applicable to
 
 This attribute can be applied to properties.
