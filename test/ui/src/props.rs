@@ -297,6 +297,27 @@ fn props_key() {
 }
 
 #[test]
+fn props_key_expr_str() {
+    let name = "not an identifier";
+
+    let props = emit::props! {
+        #[emit::key(name)] a: 1,
+    };
+
+    assert_eq!(1, props.pull::<i32, _>("not an identifier").unwrap());
+}
+
+#[test]
+#[cfg(feature = "std")]
+fn props_key_expr_string() {
+    let props = emit::props! {
+        #[emit::key(name: String::from("not an identifier"))] a: 1,
+    };
+
+    assert_eq!(1, props.pull::<i32, _>("not an identifier").unwrap());
+}
+
+#[test]
 fn props_optional() {
     let props = emit::props! {
         #[emit::optional] some: Some(&1),

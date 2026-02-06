@@ -1,0 +1,25 @@
+error[E0277]: capturing a key requires a `str`, `Str`, or `String` value.
+ --> src/compile_fail/std/emit_props_key_non_str.rs:2:47
+  |
+2 |     emit::emit!("template", #[emit::key(name: 42)] a: "some value");
+  |     ------------------------------------------^^-------------------
+  |     |                                         |
+  |     |                                         the trait `emit::__private::CaptureKey<'_>` is not implemented for `{integer}`
+  |     required by a bound introduced by this call
+  |
+help: the following other types implement trait `emit::__private::CaptureKey<'a>`
+ --> $WORKSPACE/src/macro_hooks.rs
+  |
+  | impl<'a> CaptureKey<'a> for Str<'a> {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `emit::Str<'a>`
+...
+  | impl<'a> CaptureKey<'a> for &'a str {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `&'a str`
+...
+  | impl<'a> CaptureKey<'a> for String {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `String`
+note: required by a bound in `emit::__private::__private_capture_key`
+ --> $WORKSPACE/src/macro_hooks.rs
+  |
+  | pub fn __private_capture_key<'a>(s: impl CaptureKey<'a>) -> Str<'a> {
+  |                                          ^^^^^^^^^^^^^^ required by this bound in `__private_capture_key`

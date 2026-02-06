@@ -102,8 +102,11 @@ pub fn rename_hook_tokens(opts: RenameHookTokens) -> Result<TokenStream, syn::Er
             }
 
             let (to_ident, to_arg) = match args.name {
-                Name::Str(ref name) => (quote!(__private_key_as), quote!(#name)),
-                Name::Any(ref name) => (quote!(__private_key_as), name.clone()),
+                Name::Str(ref name) => (quote!(__private_key_as), quote!(emit::Str::new(#name))),
+                Name::Any(ref name) => (
+                    quote!(__private_key_as),
+                    quote!(emit::__private::__private_capture_key(#name)),
+                ),
             };
 
             Some((to_ident, to_arg))

@@ -148,6 +148,16 @@ impl Timestamp {
     }
 
     /**
+    Convert a system timestamp into a timestamp.
+
+    If the `ts` is within [`Timestamp::MIN`]..=[`Timestamp::MAX`] then this method will return `Some`. Otherwise it will return `None`.
+    */
+    #[cfg(feature = "std")]
+    pub fn from_system_time(ts: std::time::SystemTime) -> Option<Self> {
+        Self::from_unix(ts.duration_since(std::time::SystemTime::UNIX_EPOCH).ok()?)
+    }
+
+    /**
     Convert the timestamp into a system timestamp.
 
     This method can be used for interoperability with code expecting a standard library timestamp.
@@ -713,6 +723,23 @@ mod tests {
         ] {
             assert_eq!(expected, case.checked_duration_since(earlier));
         }
+    }
+
+    #[test]
+    #[cfg(all(
+        feature = "std",
+        not(all(
+            target_arch = "wasm32",
+            target_vendor = "unknown",
+            target_os = "unknown"
+        ))
+    ))]
+    fn to_from_system_time() {
+        let ts_sys = std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(30);
+
+        let value = Timestamp::from_system_time(ts_sys).unwrap();
+
+        assert_eq!(ts_sys, value.to_system_time());
     }
 
     #[test]
