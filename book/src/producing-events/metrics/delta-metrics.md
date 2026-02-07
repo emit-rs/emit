@@ -30,7 +30,7 @@ Event {
 
 ## The `Delta` type
 
-You can use the [`Delta`](https://docs.rs/emit/1.17.0/emit/metric/struct.Delta.html) type to implement metric sources that track deltas instead of cumulative values. The `Delta` type tracks the range the value covers, automatically updating it when sampled.
+You can use the [`Delta`](https://docs.rs/emit/1.17.1/emit/metric/struct.Delta.html) type to implement metric sources that track deltas instead of cumulative values. The `Delta` type tracks the range the value covers, automatically updating it when sampled.
 
 ```rust
 # extern crate emit;
@@ -69,4 +69,4 @@ impl emit::metric::Source for BytesWritten {
 }
 ```
 
-See [Reporting sources](./reporting-sources.md) for details on how to sample a [`Source`](https://docs.rs/emit/1.17.0/emit/metric/source/trait.Source.html).
+See [Reporting sources](./reporting-sources.md) for details on how to sample a [`Source`](https://docs.rs/emit/1.17.1/emit/metric/source/trait.Source.html).
