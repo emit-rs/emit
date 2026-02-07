@@ -190,14 +190,14 @@ pub trait ToOptionTokens {
 impl ToOptionTokens for Option<TokenStream> {
     fn to_option_tokens(&self, none_ty_hint: TokenStream) -> TokenStream {
         match self {
-            Some(ref tokens) => quote!(Some(#tokens)),
-            None => quote!(None::<#none_ty_hint>),
+            Some(ref tokens) => quote!(emit::__private::core::option::Option::Some(#tokens)),
+            None => quote!(emit::__private::core::option::Option::None::<#none_ty_hint>),
         }
     }
 }
 
 impl ToOptionTokens for TokenStream {
     fn to_option_tokens(&self, _: TokenStream) -> TokenStream {
-        quote!(Some(#self))
+        quote!(emit::__private::core::option::Option::Some(#self))
     }
 }

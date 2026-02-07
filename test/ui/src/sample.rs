@@ -1,6 +1,9 @@
 use crate::util::{Called, simple_runtime};
 use emit::{Kind, Props, Str};
 
+#[allow(unused_imports)]
+use crate::shadow::*;
+
 #[test]
 fn sample_basic() {
     let called = Called::new();

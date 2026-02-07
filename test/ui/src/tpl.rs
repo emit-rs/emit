@@ -1,8 +1,11 @@
+#[allow(unused_imports)]
+use crate::shadow::*;
+
 #[test]
 fn tpl_basic() {
     let tpl = emit::tpl!("Hello, {user}");
 
-    let parts = tpl.parts().collect::<Vec<_>>();
+    let parts = tpl.parts().collect::<::std::vec::Vec<_>>();
 
     assert_eq!("Hello, ", parts[0].as_text().unwrap());
     assert_eq!("user", parts[1].label().unwrap());
@@ -30,7 +33,7 @@ fn tpl_fmt() {
         user
     );
 
-    let parts = tpl.parts().collect::<Vec<_>>();
+    let parts = tpl.parts().collect::<::std::vec::Vec<_>>();
 
     assert_eq!("Hello, ", parts[0].as_text().unwrap());
     assert_eq!("user", parts[1].label().unwrap());

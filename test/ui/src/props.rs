@@ -1,6 +1,9 @@
-use std::fmt;
+use ::std::fmt;
 
 use emit::Props;
+
+#[allow(unused_imports)]
+use crate::shadow::*;
 
 #[test]
 fn props_basic() {
@@ -66,7 +69,7 @@ fn props_cfg() {
 #[test]
 #[cfg(feature = "std")]
 fn props_capture_err() {
-    use std::{error, io};
+    use ::std::{error, io};
 
     let err = io::Error::new(io::ErrorKind::Other, "Some error");
 
@@ -97,7 +100,7 @@ fn props_capture_err_string() {
 #[test]
 #[cfg(feature = "std")]
 fn props_capture_err_anyhow() {
-    use std::error;
+    use ::std::error;
 
     let err = anyhow::Error::msg("Some error");
 
@@ -311,7 +314,7 @@ fn props_key_expr_str() {
 #[cfg(feature = "std")]
 fn props_key_expr_string() {
     let props = emit::props! {
-        #[emit::key(name: String::from("not an identifier"))] a: 1,
+        #[emit::key(name: ::std::string::String::from("not an identifier"))] a: 1,
     };
 
     assert_eq!(1, props.pull::<i32, _>("not an identifier").unwrap());
@@ -320,8 +323,8 @@ fn props_key_expr_string() {
 #[test]
 fn props_optional() {
     let props = emit::props! {
-        #[emit::optional] some: Some(&1),
-        #[emit::optional] none: None::<&i32>,
+        #[emit::optional] some: ::std::option::Option::Some(&1),
+        #[emit::optional] none: ::std::option::Option::None::<&i32>,
     };
 
     assert_eq!(1, props.pull::<i32, _>("some").unwrap());
@@ -330,9 +333,9 @@ fn props_optional() {
 
 #[test]
 fn props_optional_ref() {
-    let s = String::from("short lived");
+    let s = ::std::string::String::from("short lived");
 
-    let some: Option<&str> = Some(&s);
+    let some: Option<&str> = ::std::option::Option::Some(&s);
 
     let props = emit::props! {
         #[emit::optional] some,
@@ -344,8 +347,8 @@ fn props_optional_ref() {
 #[test]
 fn props_optional_multi_attr() {
     let props = emit::props! {
-        #[emit::optional] #[emit::as_debug] some: Some(&1),
-        #[emit::as_debug] #[emit::optional] none: None::<&i32>,
+        #[emit::optional] #[emit::as_debug] some: ::std::option::Option::Some(&1),
+        #[emit::as_debug] #[emit::optional] none: ::std::option::Option::None::<&i32>,
     };
 
     assert!(props.get("some").is_some());
@@ -384,7 +387,7 @@ fn props_as_display() {
 #[test]
 #[cfg(feature = "std")]
 fn props_ref() {
-    let a = String::from("short lived");
+    let a = ::std::string::String::from("short lived");
 
     // NOTE: `a` worked inline on 2021 edition, but doesn't anymore
     // We've fixed this for macros like `emit!()` that don't return values
@@ -402,7 +405,7 @@ fn props_ref() {
 #[test]
 #[cfg(feature = "std")]
 fn props_as_error() {
-    use std::{error, io};
+    use ::std::{error, io};
 
     let a = io::Error::new(io::ErrorKind::Other, "Some error");
 
@@ -429,8 +432,8 @@ fn props_as_value() {
 
     let props = emit::props! {
         #[emit::as_value] data: Data,
-        #[emit::as_value] some: Some(Data),
-        #[emit::as_value] none: None::<Data>,
+        #[emit::as_value] some: ::std::option::Option::Some(Data),
+        #[emit::as_value] none: ::std::option::Option::None::<Data>,
     };
 
     assert_eq!("Data", props.pull::<&str, _>("data").unwrap());

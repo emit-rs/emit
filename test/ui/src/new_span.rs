@@ -1,17 +1,20 @@
-use std::time::Duration;
+use ::std::time::Duration;
 
 use emit::{Emitter, Props};
 
 use crate::util::{Called, simple_runtime};
 
+#[allow(unused_imports)]
+use crate::shadow::*;
+
 #[test]
 fn new_span_basic() {
     for lvl in [
-        Some(emit::Level::Debug),
-        Some(emit::Level::Info),
-        Some(emit::Level::Warn),
-        Some(emit::Level::Error),
-        None,
+        ::std::option::Option::Some(emit::Level::Debug),
+        ::std::option::Option::Some(emit::Level::Info),
+        ::std::option::Option::Some(emit::Level::Warn),
+        ::std::option::Option::Some(emit::Level::Error),
+        ::std::option::Option::None,
     ] {
         let called = Called::new();
 
@@ -38,35 +41,35 @@ fn new_span_basic() {
         let user = "Rust";
 
         match lvl {
-            None => {
+            ::std::option::Option::None => {
                 let (mut guard, frame) = emit::new_span!(rt, "Hello, {user}");
 
                 frame.call(move || {
                     guard.start();
                 });
             }
-            Some(emit::Level::Debug) => {
+            ::std::option::Option::Some(emit::Level::Debug) => {
                 let (mut guard, frame) = emit::new_debug_span!(rt, "Hello, {user}");
 
                 frame.call(move || {
                     guard.start();
                 });
             }
-            Some(emit::Level::Info) => {
+            ::std::option::Option::Some(emit::Level::Info) => {
                 let (mut guard, frame) = emit::new_info_span!(rt, "Hello, {user}");
 
                 frame.call(move || {
                     guard.start();
                 });
             }
-            Some(emit::Level::Warn) => {
+            ::std::option::Option::Some(emit::Level::Warn) => {
                 let (mut guard, frame) = emit::new_warn_span!(rt, "Hello, {user}");
 
                 frame.call(move || {
                     guard.start();
                 });
             }
-            Some(emit::Level::Error) => {
+            ::std::option::Option::Some(emit::Level::Error) => {
                 let (mut guard, frame) = emit::new_error_span!(rt, "Hello, {user}");
 
                 frame.call(move || {
@@ -84,11 +87,11 @@ fn new_span_basic() {
 #[tokio::test]
 async fn new_span_basic_async() {
     for lvl in [
-        Some(emit::Level::Debug),
-        Some(emit::Level::Info),
-        Some(emit::Level::Warn),
-        Some(emit::Level::Error),
-        None,
+        ::std::option::Option::Some(emit::Level::Debug),
+        ::std::option::Option::Some(emit::Level::Info),
+        ::std::option::Option::Some(emit::Level::Warn),
+        ::std::option::Option::Some(emit::Level::Error),
+        ::std::option::Option::None,
     ] {
         let called = Called::new();
 
@@ -115,7 +118,7 @@ async fn new_span_basic_async() {
         let user = "Rust";
 
         match lvl {
-            None => {
+            ::std::option::Option::None => {
                 let (mut guard, frame) = emit::new_span!(rt, "Hello, {user}");
 
                 frame
@@ -128,7 +131,7 @@ async fn new_span_basic_async() {
                     })
                     .await;
             }
-            Some(emit::Level::Debug) => {
+            ::std::option::Option::Some(emit::Level::Debug) => {
                 let (mut guard, frame) = emit::new_debug_span!(rt, "Hello, {user}");
 
                 frame
@@ -141,7 +144,7 @@ async fn new_span_basic_async() {
                     })
                     .await;
             }
-            Some(emit::Level::Info) => {
+            ::std::option::Option::Some(emit::Level::Info) => {
                 let (mut guard, frame) = emit::new_info_span!(rt, "Hello, {user}");
 
                 frame
@@ -154,7 +157,7 @@ async fn new_span_basic_async() {
                     })
                     .await;
             }
-            Some(emit::Level::Warn) => {
+            ::std::option::Option::Some(emit::Level::Warn) => {
                 let (mut guard, frame) = emit::new_warn_span!(rt, "Hello, {user}");
 
                 frame
@@ -167,7 +170,7 @@ async fn new_span_basic_async() {
                     })
                     .await;
             }
-            Some(emit::Level::Error) => {
+            ::std::option::Option::Some(emit::Level::Error) => {
                 let (mut guard, frame) = emit::new_error_span!(rt, "Hello, {user}");
 
                 frame

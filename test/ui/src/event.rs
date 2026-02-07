@@ -1,5 +1,8 @@
 use emit::Props;
 
+#[allow(unused_imports)]
+use crate::shadow::*;
+
 #[test]
 fn event_basic() {
     let evt = emit::evt!(

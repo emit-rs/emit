@@ -1,8 +1,11 @@
-use std::time::Duration;
+use ::std::time::Duration;
 
 use emit::{Ctxt, Emitter, Kind, Props, Str};
 
 use crate::util::{StaticCalled, StaticRuntime, static_runtime};
+
+#[allow(unused_imports)]
+use crate::shadow::*;
 
 #[test]
 fn span_basic() {
@@ -148,7 +151,7 @@ fn span_basic() {
         let _ = user;
     }
 
-    #[emit::info_span(rt: INFO_RT, "greet {user}", user: String::from("Rust"))]
+    #[emit::info_span(rt: INFO_RT, "greet {user}", user: ::std::string::String::from("Rust"))]
     fn exec_info_temporary() {
         INFO_RT.ctxt().with_current(|props| {
             assert_eq!("Rust", props.pull::<&str, _>("user").unwrap());
@@ -216,7 +219,7 @@ async fn span_basic_async() {
         let _ = user;
     }
 
-    #[emit::span(rt: RT, "greet {user}", user: String::from("Rust"))]
+    #[emit::span(rt: RT, "greet {user}", user: ::std::string::String::from("Rust"))]
     async fn exec_temporary() {}
 
     exec("Rust").await;
@@ -251,10 +254,10 @@ fn span_rt_ref() {
 fn span_by_value_arg() {
     static RT: StaticRuntime = static_runtime(|_| {}, |_| true);
 
-    fn take_string(_: String) {}
+    fn take_string(_: ::std::string::String) {}
 
     #[emit::span(rt: &RT, "test")]
-    fn exec(arg: String) {
+    fn exec(arg: ::std::string::String) {
         take_string(arg);
     }
 
@@ -267,10 +270,10 @@ fn span_by_value_arg() {
 async fn async_span_by_value_arg() {
     static RT: StaticRuntime = static_runtime(|_| {}, |_| true);
 
-    fn take_string(_: String) {}
+    fn take_string(_: ::std::string::String) {}
 
     #[emit::span(rt: &RT, "test")]
-    async fn exec(arg: String) {
+    async fn exec(arg: ::std::string::String) {
         take_string(arg);
     }
 
@@ -499,7 +502,7 @@ fn span_explicit_ids_ctxt() {
 #[test]
 #[cfg(feature = "std")]
 fn span_ok_lvl() {
-    use std::io;
+    use ::std::io;
 
     static OK_RT: StaticRuntime = static_runtime(
         |evt| {
@@ -520,11 +523,14 @@ fn span_ok_lvl() {
             assert_eq!(
                 "failed",
                 evt.props()
-                    .pull::<&(dyn std::error::Error + 'static), _>("err")
+                    .pull::<&(dyn ::std::error::Error + 'static), _>("err")
                     .unwrap()
                     .to_string()
             );
-            assert_eq!(Some(emit::Level::Error), evt.props().pull("lvl"));
+            assert_eq!(
+                ::std::option::Option::Some(emit::Level::Error),
+                evt.props().pull("lvl")
+            );
         },
         |evt| {
             assert!(evt.props().get("lvl").is_none());
@@ -534,13 +540,13 @@ fn span_ok_lvl() {
     );
 
     #[emit::span(rt: OK_RT, ok_lvl: emit::Level::Info, "test")]
-    fn exec_ok() -> Result<bool, io::Error> {
-        Ok(true)
+    fn exec_ok() -> ::std::result::Result<bool, io::Error> {
+        ::std::result::Result::Ok(true)
     }
 
     #[emit::span(rt: ERR_RT, ok_lvl: emit::Level::Info, "test")]
-    fn exec_err() -> Result<bool, io::Error> {
-        Err(io::Error::new(io::ErrorKind::Other, "failed"))
+    fn exec_err() -> ::std::result::Result<bool, io::Error> {
+        ::std::result::Result::Err(io::Error::new(io::ErrorKind::Other, "failed"))
     }
 
     assert!(exec_ok().unwrap());
@@ -550,7 +556,7 @@ fn span_ok_lvl() {
 #[test]
 #[cfg(feature = "std")]
 fn span_err_lvl() {
-    use std::io;
+    use ::std::io;
 
     static OK_RT: StaticRuntime = static_runtime(
         |evt| {
@@ -564,7 +570,7 @@ fn span_err_lvl() {
             assert_eq!(
                 "failed",
                 evt.props()
-                    .pull::<&(dyn std::error::Error + 'static), _>("err")
+                    .pull::<&(dyn ::std::error::Error + 'static), _>("err")
                     .unwrap()
                     .to_string()
             );
@@ -577,13 +583,13 @@ fn span_err_lvl() {
     );
 
     #[emit::span(rt: OK_RT, err_lvl: emit::Level::Warn, "test")]
-    fn exec_ok() -> Result<(), io::Error> {
-        Ok(())
+    fn exec_ok() -> ::std::result::Result<(), io::Error> {
+        ::std::result::Result::Ok(())
     }
 
     #[emit::span(rt: ERR_RT, err_lvl: emit::Level::Warn, "test")]
-    fn exec_err() -> Result<(), io::Error> {
-        Err(io::Error::new(io::ErrorKind::Other, "failed"))
+    fn exec_err() -> ::std::result::Result<(), io::Error> {
+        ::std::result::Result::Err(io::Error::new(io::ErrorKind::Other, "failed"))
     }
 
     exec_ok().unwrap();
@@ -593,14 +599,14 @@ fn span_err_lvl() {
 #[test]
 #[cfg(feature = "std")]
 fn span_err_lvl_explicit_return() {
-    use std::io;
+    use ::std::io;
 
     static RT: StaticRuntime = static_runtime(
         |evt| {
             assert_eq!(
                 "failed",
                 evt.props()
-                    .pull::<&(dyn std::error::Error + 'static), _>("err")
+                    .pull::<&(dyn ::std::error::Error + 'static), _>("err")
                     .unwrap()
                     .to_string()
             );
@@ -613,12 +619,12 @@ fn span_err_lvl_explicit_return() {
     );
 
     #[emit::span(rt: RT, err_lvl: emit::Level::Warn, "test")]
-    fn exec(fail: bool) -> Result<bool, io::Error> {
+    fn exec(fail: bool) -> ::std::result::Result<bool, io::Error> {
         if fail {
-            return Err(io::Error::new(io::ErrorKind::Other, "failed"));
+            return ::std::result::Result::Err(io::Error::new(io::ErrorKind::Other, "failed"));
         }
 
-        Ok(true)
+        ::std::result::Result::Ok(true)
     }
 
     exec(true).unwrap_err();
@@ -627,14 +633,14 @@ fn span_err_lvl_explicit_return() {
 #[tokio::test]
 #[cfg(feature = "std")]
 async fn span_err_lvl_explicit_return_async() {
-    use std::io;
+    use ::std::io;
 
     static RT: StaticRuntime = static_runtime(
         |evt| {
             assert_eq!(
                 "failed",
                 evt.props()
-                    .pull::<&(dyn std::error::Error + 'static), _>("err")
+                    .pull::<&(dyn ::std::error::Error + 'static), _>("err")
                     .unwrap()
                     .to_string()
             );
@@ -647,12 +653,12 @@ async fn span_err_lvl_explicit_return_async() {
     );
 
     #[emit::span(rt: RT, err_lvl: emit::Level::Warn, "test")]
-    async fn exec(fail: bool) -> Result<bool, io::Error> {
+    async fn exec(fail: bool) -> ::std::result::Result<bool, io::Error> {
         if fail {
-            return Err(io::Error::new(io::ErrorKind::Other, "failed"));
+            return ::std::result::Result::Err(io::Error::new(io::ErrorKind::Other, "failed"));
         }
 
-        Ok(true)
+        ::std::result::Result::Ok(true)
     }
 
     exec(true).await.unwrap_err();
@@ -661,14 +667,14 @@ async fn span_err_lvl_explicit_return_async() {
 #[test]
 #[cfg(feature = "std")]
 fn span_err_lvl_impl_return() {
-    use std::io;
+    use ::std::io;
 
     static RT: StaticRuntime = static_runtime(
         |evt| {
             assert_eq!(
                 "failed",
                 evt.props()
-                    .pull::<&(dyn std::error::Error + 'static), _>("err")
+                    .pull::<&(dyn ::std::error::Error + 'static), _>("err")
                     .unwrap()
                     .to_string()
             );
@@ -681,12 +687,12 @@ fn span_err_lvl_impl_return() {
     );
 
     #[emit::span(rt: RT, err_lvl: emit::Level::Warn, "test")]
-    fn exec(fail: bool) -> Result<bool, impl std::error::Error + 'static> {
+    fn exec(fail: bool) -> ::std::result::Result<bool, impl ::std::error::Error + 'static> {
         if fail {
-            return Err(io::Error::new(io::ErrorKind::Other, "failed"));
+            return ::std::result::Result::Err(io::Error::new(io::ErrorKind::Other, "failed"));
         }
 
-        Ok(true)
+        ::std::result::Result::Ok(true)
     }
 
     exec(true).unwrap_err();
@@ -695,14 +701,14 @@ fn span_err_lvl_impl_return() {
 #[tokio::test]
 #[cfg(feature = "std")]
 async fn span_err_lvl_impl_return_async() {
-    use std::io;
+    use ::std::io;
 
     static RT: StaticRuntime = static_runtime(
         |evt| {
             assert_eq!(
                 "failed",
                 evt.props()
-                    .pull::<&(dyn std::error::Error + 'static), _>("err")
+                    .pull::<&(dyn ::std::error::Error + 'static), _>("err")
                     .unwrap()
                     .to_string()
             );
@@ -715,12 +721,12 @@ async fn span_err_lvl_impl_return_async() {
     );
 
     #[emit::span(rt: RT, err_lvl: emit::Level::Warn, "test")]
-    async fn exec(fail: bool) -> Result<bool, impl std::error::Error + 'static> {
+    async fn exec(fail: bool) -> ::std::result::Result<bool, impl ::std::error::Error + 'static> {
         if fail {
-            return Err(io::Error::new(io::ErrorKind::Other, "failed"));
+            return ::std::result::Result::Err(io::Error::new(io::ErrorKind::Other, "failed"));
         }
 
-        Ok(true)
+        ::std::result::Result::Ok(true)
     }
 
     exec(true).await.unwrap_err();
@@ -729,14 +735,14 @@ async fn span_err_lvl_impl_return_async() {
 #[test]
 #[cfg(feature = "std")]
 fn span_err() {
-    use std::io;
+    use ::std::io;
 
     static ERR_RT: StaticRuntime = static_runtime(
         |evt| {
             assert_eq!(
                 "failed",
                 evt.props()
-                    .pull::<&(dyn std::error::Error + 'static), _>("err")
+                    .pull::<&(dyn ::std::error::Error + 'static), _>("err")
                     .unwrap()
                     .to_string()
             );
@@ -748,13 +754,13 @@ fn span_err() {
         |_| true,
     );
 
-    fn as_err(err: &anyhow::Error) -> &(dyn std::error::Error + 'static) {
+    fn as_err(err: &anyhow::Error) -> &(dyn ::std::error::Error + 'static) {
         err.as_ref()
     }
 
     #[emit::span(rt: ERR_RT, err: as_err, "test")]
-    fn exec_err() -> Result<(), anyhow::Error> {
-        Err(anyhow::Error::from(io::Error::new(
+    fn exec_err() -> ::std::result::Result<(), anyhow::Error> {
+        ::std::result::Result::Err(anyhow::Error::from(io::Error::new(
             io::ErrorKind::Other,
             "failed",
         )))
@@ -768,13 +774,13 @@ fn span_err() {
 fn span_err_shadow() {
     static ERR_RT: StaticRuntime = static_runtime(|_| {}, |_| true);
 
-    fn err(err: &anyhow::Error) -> &(dyn std::error::Error + 'static) {
+    fn err(err: &anyhow::Error) -> &(dyn ::std::error::Error + 'static) {
         err.as_ref()
     }
 
     #[emit::span(rt: ERR_RT, err, "test")]
-    fn exec_err() -> Result<(), anyhow::Error> {
-        Err(anyhow::Error::msg("failed"))
+    fn exec_err() -> ::std::result::Result<(), anyhow::Error> {
+        ::std::result::Result::Err(anyhow::Error::msg("failed"))
     }
 
     exec_err().unwrap_err();
@@ -785,11 +791,11 @@ fn span_err_shadow() {
 fn span_err_inline() {
     static ERR_RT: StaticRuntime = static_runtime(|_| {}, |_| true);
 
-    type EmitError = dyn std::error::Error + 'static;
+    type EmitError = dyn ::std::error::Error + 'static;
 
     #[emit::span(rt: ERR_RT, err: (|err| AsRef::<EmitError>::as_ref(err)), "test")]
-    fn exec_err() -> Result<(), anyhow::Error> {
-        Err(anyhow::Error::msg("failed"))
+    fn exec_err() -> ::std::result::Result<(), anyhow::Error> {
+        ::std::result::Result::Err(anyhow::Error::msg("failed"))
     }
 
     exec_err().unwrap_err();
@@ -798,14 +804,14 @@ fn span_err_inline() {
 #[test]
 #[cfg(feature = "std")]
 fn span_err_err_lvl() {
-    use std::io;
+    use ::std::io;
 
     static ERR_RT: StaticRuntime = static_runtime(
         |evt| {
             assert_eq!(
                 "failed",
                 evt.props()
-                    .pull::<&(dyn std::error::Error + 'static), _>("err")
+                    .pull::<&(dyn ::std::error::Error + 'static), _>("err")
                     .unwrap()
                     .to_string()
             );
@@ -817,13 +823,13 @@ fn span_err_err_lvl() {
         |_| true,
     );
 
-    fn as_err(err: &anyhow::Error) -> &(dyn std::error::Error + 'static) {
+    fn as_err(err: &anyhow::Error) -> &(dyn ::std::error::Error + 'static) {
         err.as_ref()
     }
 
     #[emit::span(rt: ERR_RT, err_lvl: "warn", err: as_err, "test")]
-    fn exec_err() -> Result<(), anyhow::Error> {
-        Err(anyhow::Error::from(io::Error::new(
+    fn exec_err() -> ::std::result::Result<(), anyhow::Error> {
+        ::std::result::Result::Err(anyhow::Error::from(io::Error::new(
             io::ErrorKind::Other,
             "failed",
         )))
@@ -847,8 +853,8 @@ fn span_err_str() {
     );
 
     #[emit::span(rt: ERR_RT, err_lvl: "warn", err: (|_| "failed"), "test")]
-    fn exec_err() -> Result<(), ()> {
-        Err(())
+    fn exec_err() -> ::std::result::Result<(), ()> {
+        ::std::result::Result::Err(())
     }
 
     exec_err().unwrap_err();
@@ -869,8 +875,8 @@ fn span_err_anyhow_as_ref() {
     );
 
     #[emit::span(rt: ERR_RT, err_lvl: "warn", err: emit::err::as_ref, "test")]
-    fn exec_err() -> Result<(), anyhow::Error> {
-        Err(anyhow::Error::msg("failed"))
+    fn exec_err() -> ::std::result::Result<(), anyhow::Error> {
+        ::std::result::Result::Err(anyhow::Error::msg("failed"))
     }
 
     exec_err().unwrap_err();
@@ -879,7 +885,7 @@ fn span_err_anyhow_as_ref() {
 #[test]
 #[cfg(feature = "std")]
 fn info_span_ok_lvl() {
-    use std::io;
+    use ::std::io;
 
     static OK_RT: StaticRuntime = static_runtime(
         |evt| {
@@ -896,7 +902,7 @@ fn info_span_ok_lvl() {
             assert_eq!(
                 "failed",
                 evt.props()
-                    .pull::<&(dyn std::error::Error + 'static), _>("err")
+                    .pull::<&(dyn ::std::error::Error + 'static), _>("err")
                     .unwrap()
                     .to_string()
             );
@@ -909,13 +915,13 @@ fn info_span_ok_lvl() {
     );
 
     #[emit::info_span(rt: OK_RT, ok_lvl: emit::Level::Debug, "test")]
-    fn exec_ok() -> Result<(), io::Error> {
-        Ok(())
+    fn exec_ok() -> ::std::result::Result<(), io::Error> {
+        ::std::result::Result::Ok(())
     }
 
     #[emit::info_span(rt: ERR_RT, ok_lvl: emit::Level::Debug, "test")]
-    fn exec_err() -> Result<(), io::Error> {
-        Err(io::Error::new(io::ErrorKind::Other, "failed"))
+    fn exec_err() -> ::std::result::Result<(), io::Error> {
+        ::std::result::Result::Err(io::Error::new(io::ErrorKind::Other, "failed"))
     }
 
     exec_ok().unwrap();
@@ -925,7 +931,7 @@ fn info_span_ok_lvl() {
 #[test]
 #[cfg(feature = "std")]
 fn info_span_err_lvl() {
-    use std::io;
+    use ::std::io;
 
     static OK_RT: StaticRuntime = static_runtime(
         |evt| {
@@ -942,7 +948,7 @@ fn info_span_err_lvl() {
             assert_eq!(
                 "failed",
                 evt.props()
-                    .pull::<&(dyn std::error::Error + 'static), _>("err")
+                    .pull::<&(dyn ::std::error::Error + 'static), _>("err")
                     .unwrap()
                     .to_string()
             );
@@ -955,13 +961,13 @@ fn info_span_err_lvl() {
     );
 
     #[emit::info_span(rt: OK_RT, err_lvl: emit::Level::Error, "test")]
-    fn exec_ok() -> Result<(), io::Error> {
-        Ok(())
+    fn exec_ok() -> ::std::result::Result<(), io::Error> {
+        ::std::result::Result::Ok(())
     }
 
     #[emit::info_span(rt: ERR_RT, err_lvl: emit::Level::Error, "test")]
-    fn exec_err() -> Result<(), io::Error> {
-        Err(io::Error::new(io::ErrorKind::Other, "failed"))
+    fn exec_err() -> ::std::result::Result<(), io::Error> {
+        ::std::result::Result::Err(io::Error::new(io::ErrorKind::Other, "failed"))
     }
 
     exec_ok().unwrap();
@@ -971,7 +977,7 @@ fn info_span_err_lvl() {
 #[tokio::test]
 #[cfg(feature = "std")]
 async fn info_span_err_lvl_async() {
-    use std::io;
+    use ::std::io;
 
     static OK_RT: StaticRuntime = static_runtime(
         |evt| {
@@ -988,7 +994,7 @@ async fn info_span_err_lvl_async() {
             assert_eq!(
                 "failed",
                 evt.props()
-                    .pull::<&(dyn std::error::Error + 'static), _>("err")
+                    .pull::<&(dyn ::std::error::Error + 'static), _>("err")
                     .unwrap()
                     .to_string()
             );
@@ -1001,13 +1007,13 @@ async fn info_span_err_lvl_async() {
     );
 
     #[emit::info_span(rt: OK_RT, err_lvl: emit::Level::Error, "test")]
-    async fn exec_ok() -> Result<(), io::Error> {
-        Ok(())
+    async fn exec_ok() -> ::std::result::Result<(), io::Error> {
+        ::std::result::Result::Ok(())
     }
 
     #[emit::info_span(rt: ERR_RT, err_lvl: emit::Level::Error, "test")]
-    async fn exec_err() -> Result<(), io::Error> {
-        Err(io::Error::new(io::ErrorKind::Other, "failed"))
+    async fn exec_err() -> ::std::result::Result<(), io::Error> {
+        ::std::result::Result::Err(io::Error::new(io::ErrorKind::Other, "failed"))
     }
 
     exec_ok().await.unwrap();
@@ -1017,13 +1023,13 @@ async fn info_span_err_lvl_async() {
 #[test]
 #[cfg(feature = "std")]
 fn span_panic_default() {
-    use std::panic;
+    use ::std::panic;
 
     static CALLED: StaticCalled = StaticCalled::new();
     static RT: StaticRuntime = static_runtime(
         |evt| {
             // NOTE: We're panicking here, so can't assert
-            if evt.props().pull("lvl") == Some(emit::Level::Error) {
+            if evt.props().pull("lvl") == ::std::option::Option::Some(emit::Level::Error) {
                 CALLED.record();
             }
         },
@@ -1047,13 +1053,13 @@ fn span_panic_default() {
 #[tokio::test]
 #[cfg(feature = "std")]
 async fn span_panic_default_async() {
-    use std::panic;
+    use ::std::panic;
 
     static CALLED: StaticCalled = StaticCalled::new();
     static RT: StaticRuntime = static_runtime(
         |evt| {
             // NOTE: We're panicking here, so can't assert
-            if evt.props().pull("lvl") == Some(emit::Level::Error) {
+            if evt.props().pull("lvl") == ::std::option::Option::Some(emit::Level::Error) {
                 CALLED.record();
             }
         },
@@ -1080,13 +1086,13 @@ async fn span_panic_default_async() {
 #[test]
 #[cfg(feature = "std")]
 fn span_panic_lvl() {
-    use std::panic;
+    use ::std::panic;
 
     static CALLED: StaticCalled = StaticCalled::new();
     static RT: StaticRuntime = static_runtime(
         |evt| {
             // NOTE: We're panicking here, so can't assert
-            if evt.props().pull("lvl") == Some(emit::Level::Warn) {
+            if evt.props().pull("lvl") == ::std::option::Option::Some(emit::Level::Warn) {
                 CALLED.record();
             }
         },
@@ -1110,13 +1116,13 @@ fn span_panic_lvl() {
 #[test]
 #[cfg(feature = "std")]
 fn span_panic_lvl_guard() {
-    use std::panic;
+    use ::std::panic;
 
     static CALLED: StaticCalled = StaticCalled::new();
     static RT: StaticRuntime = static_runtime(
         |evt| {
             // NOTE: We're panicking here, so can't assert
-            if evt.props().pull("lvl") == Some(emit::Level::Warn) {
+            if evt.props().pull("lvl") == ::std::option::Option::Some(emit::Level::Warn) {
                 CALLED.record();
             }
         },
@@ -1142,13 +1148,13 @@ fn span_panic_lvl_guard() {
 #[tokio::test]
 #[cfg(feature = "std")]
 async fn span_panic_lvl_async() {
-    use std::panic;
+    use ::std::panic;
 
     static CALLED: StaticCalled = StaticCalled::new();
     static RT: StaticRuntime = static_runtime(
         |evt| {
             // NOTE: We're panicking here, so can't assert
-            if evt.props().pull("lvl") == Some(emit::Level::Warn) {
+            if evt.props().pull("lvl") == ::std::option::Option::Some(emit::Level::Warn) {
                 CALLED.record();
             }
         },
@@ -1264,7 +1270,7 @@ fn span_well_known_props_precedence() {
 #[test]
 #[cfg(feature = "std")]
 fn span_props_precedence() {
-    use std::io;
+    use ::std::io;
 
     static RT: StaticRuntime = static_runtime(
         |evt| {
@@ -1317,8 +1323,8 @@ fn span_props_precedence() {
         inner_ctxt: "inner_ctxt",
         lvl: "inner_ctxt",
     )]
-    fn exec() -> Result<(), io::Error> {
-        Ok(())
+    fn exec() -> ::std::result::Result<(), io::Error> {
+        ::std::result::Result::Ok(())
     }
 
     emit::Frame::push(
@@ -1345,7 +1351,7 @@ fn span_impl_trait_return() {
     );
 
     #[emit::span(rt: RT, "greet {user}")]
-    fn exec(user: &str) -> impl std::fmt::Display {
+    fn exec(user: &str) -> impl ::std::fmt::Display {
         let _ = user;
 
         "done"
@@ -1369,7 +1375,7 @@ async fn span_impl_trait_return_async() {
     );
 
     #[emit::span(rt: RT, "greet {user}")]
-    async fn exec(user: &str) -> impl std::fmt::Display {
+    async fn exec(user: &str) -> impl ::std::fmt::Display {
         let _ = user;
 
         "done"
