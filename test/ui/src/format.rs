@@ -1,3 +1,6 @@
+#[allow(unused_imports)]
+use crate::shadow::*;
+
 #[test]
 fn format_basic() {
     assert_eq!("Hello, Rust", emit::format!("Hello, {user}", user: "Rust"));

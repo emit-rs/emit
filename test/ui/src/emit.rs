@@ -1,17 +1,20 @@
-use std::time::Duration;
+use ::std::time::Duration;
 
 use emit::{Emitter, Props};
 
 use crate::util::{Called, simple_runtime};
 
+#[allow(unused_imports)]
+use crate::shadow::*;
+
 #[test]
 fn emit_basic() {
     for lvl in [
-        Some(emit::Level::Debug),
-        Some(emit::Level::Info),
-        Some(emit::Level::Warn),
-        Some(emit::Level::Error),
-        None,
+        ::std::option::Option::Some(emit::Level::Debug),
+        ::std::option::Option::Some(emit::Level::Info),
+        ::std::option::Option::Some(emit::Level::Warn),
+        ::std::option::Option::Some(emit::Level::Error),
+        ::std::option::Option::None,
     ] {
         let called = Called::new();
 
@@ -35,11 +38,11 @@ fn emit_basic() {
         let user = "Rust";
 
         match lvl {
-            None => emit::emit!(rt, "Hello, {user}"),
-            Some(emit::Level::Debug) => emit::debug!(rt, "Hello, {user}"),
-            Some(emit::Level::Info) => emit::info!(rt, "Hello, {user}"),
-            Some(emit::Level::Warn) => emit::warn!(rt, "Hello, {user}"),
-            Some(emit::Level::Error) => emit::error!(rt, "Hello, {user}"),
+            ::std::option::Option::None => emit::emit!(rt, "Hello, {user}"),
+            ::std::option::Option::Some(emit::Level::Debug) => emit::debug!(rt, "Hello, {user}"),
+            ::std::option::Option::Some(emit::Level::Info) => emit::info!(rt, "Hello, {user}"),
+            ::std::option::Option::Some(emit::Level::Warn) => emit::warn!(rt, "Hello, {user}"),
+            ::std::option::Option::Some(emit::Level::Error) => emit::error!(rt, "Hello, {user}"),
         }
 
         rt.emitter().blocking_flush(Duration::from_secs(1));
@@ -61,17 +64,17 @@ fn emit_interpolation() {
 
     emit::emit!(rt, "Hello, {user}");
     emit::emit!(rt, "Hello, {user}", user: "Rust");
-    emit::emit!(rt, "Hello, {user}", user: String::from("Rust"));
+    emit::emit!(rt, "Hello, {user}", user: ::std::string::String::from("Rust"));
     emit::emit!(rt, "Hello, {user}", user);
     emit::emit!(rt, "Hello, {user: \"Rust\"}");
-    emit::emit!(rt, "Hello, {user: String::from(\"Rust\")}");
+    emit::emit!(rt, "Hello, {user: ::std::string::String::from(\"Rust\")}");
 
     emit::emit!(rt, "Hello, {user: {user}}");
     emit::emit!(rt, "Hello, {user}", user: {"Rust"});
     emit::emit!(rt, "Hello, {user: {\"Rust\"}}");
-    emit::emit!(rt, "Hello, {user: {String::from(\"Rust\")}}");
+    emit::emit!(rt, "Hello, {user: {::std::string::String::from(\"Rust\")}}");
 
-    let user = String::from("Rust");
+    let user = ::std::string::String::from("Rust");
     emit::emit!(rt, "Hello, {user}");
     drop(user);
 }

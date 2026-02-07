@@ -28,6 +28,21 @@ mod tpl;
 #[cfg(feature = "std")]
 mod format;
 
+mod shadow {
+    // Shadow core imports
+    #![allow(dead_code)]
+
+    pub struct Result;
+    pub struct Ok;
+    pub struct Err;
+    pub struct Some;
+    pub struct None;
+    pub struct String;
+    pub struct Vec;
+    pub mod core {}
+    pub mod std {}
+}
+
 #[rustversion::nightly]
 mod compile {
     #[test]

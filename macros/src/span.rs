@@ -456,14 +456,14 @@ fn result_completion(
             .to_option_tokens(quote!(&emit::Level));
 
         quote!(
-            Ok(__ok) => {
+            emit::__private::core::result::Result::Ok(__ok) => {
                 #span_guard.complete_with(emit::__private::__private_complete_span_ok(
                     #rt_tokens,
                     #template_tokens,
                     #lvl_tokens,
                 ));
 
-                Ok(__ok)
+                emit::__private::core::result::Result::Ok(__ok)
             }
         )
     };
@@ -485,7 +485,7 @@ fn result_completion(
             .unwrap_or_else(|| quote!(&__err));
 
         quote!(
-            Err(__err) => {
+            emit::__private::core::result::Result::Err(__err) => {
                 #span_guard.complete_with(emit::__private::__private_complete_span_err(
                     #rt_tokens,
                     #template_tokens,
@@ -493,7 +493,7 @@ fn result_completion(
                     #err_tokens,
                 ));
 
-                Err(__err)
+                emit::__private::core::result::Result::Err(__err)
             }
         )
     };
