@@ -1,6 +1,6 @@
 # Reporting metric sources
 
-The [`Source`](https://docs.rs/emit/1.17.0/emit/metric/source/trait.Source.html) trait represents some underlying data source that can be sampled to provide [`Metric`](https://docs.rs/emit/1.17.0/emit/metric/struct.Metric.html)s. You can sample sources directly, or combine them into a [`Reporter`](https://docs.rs/emit/1.17.0/emit/metric/struct.Reporter.html) to sample all the sources of metrics in your application together:
+The [`Source`](https://docs.rs/emit/1.17.1/emit/metric/source/trait.Source.html) trait represents some underlying data source that can be sampled to provide [`Metric`](https://docs.rs/emit/1.17.1/emit/metric/struct.Metric.html)s. You can sample sources directly, or combine them into a [`Reporter`](https://docs.rs/emit/1.17.1/emit/metric/struct.Reporter.html) to sample all the sources of metrics in your application together:
 
 ```rust
 # extern crate emit;
@@ -46,12 +46,12 @@ std::thread::spawn(move || {
 
 ## Normalization of timestamps
 
-The [`Reporter`](https://docs.rs/emit/1.17.0/emit/metric/struct.Reporter.html) type will attempt to normalize the extents of any metrics sampled from its sources. Normalization will:
+The [`Reporter`](https://docs.rs/emit/1.17.1/emit/metric/struct.Reporter.html) type will attempt to normalize the extents of any metrics sampled from its sources. Normalization will:
 
 1. Take the current timestamp, `now`, when sampling metrics.
 2. If the metric sample has no extent, or has a point extent, it will be replaced with `now`.
 3. If the metric sample has a range extent, the end will be set to `now` and the start will be `now` minus the original length. If this would produce an invalid range then the original is kept.
 
-When the `std` Cargo feature is enabled this will be done automatically. In other cases, normalization won't happen unless it's configured by [`Reporter::normalize_with_clock`](https://docs.rs/emit/1.17.0/emit/metric/struct.Reporter.html#method.normalize_with_clock).
+When the `std` Cargo feature is enabled this will be done automatically. In other cases, normalization won't happen unless it's configured by [`Reporter::normalize_with_clock`](https://docs.rs/emit/1.17.1/emit/metric/struct.Reporter.html#method.normalize_with_clock).
 
-Normalization can be disabled by calling [`Reporter::without_normalization`](https://docs.rs/emit/1.17.0/emit/metric/struct.Reporter.html#method.without_normalization).
+Normalization can be disabled by calling [`Reporter::without_normalization`](https://docs.rs/emit/1.17.1/emit/metric/struct.Reporter.html#method.without_normalization).
