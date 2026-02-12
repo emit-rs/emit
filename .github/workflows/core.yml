@@ -96,17 +96,17 @@ jobs:
 
       - name: Install Miri
         run: |
-          rustup toolchain install nightly --component miri
-          cargo +nightly miri setup
+          rustup toolchain install nightly-2026-02-11 --component miri
+          cargo +nightly-2026-02-11 miri setup
 
       - name: Default features
         working-directory: ./core
-        run: cargo +nightly miri test --lib
+        run: cargo +nightly-2026-02-11 miri test --lib
 
       - name: All features
         working-directory: ./core
-        run: cargo +nightly miri test --lib --all-features
+        run: cargo +nightly-2026-02-11 miri test --lib --all-features
 
       - name: No features
         working-directory: ./core
-        run: cargo +nightly miri test --lib --no-default-features
+        run: cargo +nightly-2026-02-11 miri test --lib --no-default-features
