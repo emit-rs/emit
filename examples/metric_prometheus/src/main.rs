@@ -4,7 +4,7 @@ An example of emitting metrics to Prometheus.
 Prometheus has direct support for OTLP: https://prometheus.io/docs/guides/opentelemetry/
 */
 
-use rand::Rng;
+use rand::RngExt as _;
 
 fn main() {
     let rt = emit::setup()
