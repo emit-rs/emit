@@ -134,11 +134,11 @@ emit::count_sample!(
 `emit`'s exponential histograms are a pair of well-known properties:
 
 - `dist_exp_scale`: An integer with the scale of the histogram.
-- `dist_exp_buckets`: A 2-dimensional sequence of bucket midpoints and counts. The sequence may be constructed from an array of 2-element tuples, or a map where the keys are bucket midpoints and the values are counts. Buckets have a complex type, so need to be captured using either the [`as_serde`](https://docs.rs/emit/1.17.1/emit/attr.as_serde.html) or [`as_sval`](https://docs.rs/emit/1.17.1/emit/attr.as_sval.html) attributes. See [Property Capturing](../../reference/property-capturing.md) for more details.
+- `dist_exp_buckets`: A 2-dimensional sequence of bucket midpoints and counts. The sequence may be constructed from an array of 2-element tuples, or a map where the keys are bucket midpoints and the values are counts. Buckets have a complex type, so need to be captured using either the [`as_serde`](https://docs.rs/emit/1.17.2/emit/attr.as_serde.html) or [`as_sval`](https://docs.rs/emit/1.17.2/emit/attr.as_sval.html) attributes. See [Property Capturing](../../reference/property-capturing.md) for more details.
 
 ### Building exponential histograms
 
-`emit` doesn't directly define a type that builds an exponential histogram for you. What it does provide is the [`midpoint`](https://docs.rs/emit/1.17.1/emit/metric/exp/fn.midpoint.html) function, returning a [`Point`](https://docs.rs/emit/1.17.1/emit/metric/exp/struct.Point.html) that can be stored in a `BTreeMap` or `HashMap`.
+`emit` doesn't directly define a type that builds an exponential histogram for you. What it does provide is the [`midpoint`](https://docs.rs/emit/1.17.2/emit/metric/exp/fn.midpoint.html) function, returning a [`Point`](https://docs.rs/emit/1.17.2/emit/metric/exp/struct.Point.html) that can be stored in a `BTreeMap` or `HashMap`.
 
 Here's an example type that can collect an exponential histogram from raw values:
 
@@ -236,7 +236,7 @@ emit::count_sample!(
 
 Exponential histograms internally use γ, a value close to `1`, as a log base for computing the bucket a sample belongs to.
 
-`emit` uses the same scheme as OpenTelemetry for computing γ from a parameter called `scale`, which is an integer typically between `0` and `20`. The [`midpoint`](https://docs.rs/emit/1.17.1/emit/metric/exp/fn.midpoint.html) function does this for you. Computing from `scale` has the benefit of _perfect subsetting_, where each decrement of the scale exactly halves the number of buckets. This makes it possible to resample or merge histograms with different scales without needing to interpolate any buckets.
+`emit` uses the same scheme as OpenTelemetry for computing γ from a parameter called `scale`, which is an integer typically between `0` and `20`. The [`midpoint`](https://docs.rs/emit/1.17.2/emit/metric/exp/fn.midpoint.html) function does this for you. Computing from `scale` has the benefit of _perfect subsetting_, where each decrement of the scale exactly halves the number of buckets. This makes it possible to resample or merge histograms with different scales without needing to interpolate any buckets.
 
 The sections below outline the equations involved in building and interpreting exponential histograms.
 

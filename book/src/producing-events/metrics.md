@@ -17,7 +17,7 @@ Emitters that are metric-aware, like [`emit_otlp`](../emitting-events/otlp.md), 
 
 ## The `sample!` macro
 
-In `emit`, metric samples are events that represent an aggregation of their underlying source into a value at a particular point in time, or over a particular time range. These samples can be constructed and emitted using the [`sample!`](https://docs.rs/emit/1.17.1/emit/macro.sample.html) macro.
+In `emit`, metric samples are events that represent an aggregation of their underlying source into a value at a particular point in time, or over a particular time range. These samples can be constructed and emitted using the [`sample!`](https://docs.rs/emit/1.17.2/emit/macro.sample.html) macro.
 
 A standard kind of metric is a monotonic counter, which can be represented as an atomic integer. In this example, our counter is for the number of bytes written to a file, which we'll call `bytes_written`. We can report a sample of this counter:
 
@@ -52,11 +52,11 @@ Note that the type of a sample value isn't required to be an integer as in the p
 
 `emit` also defines macros for producing metric samples for specific aggregations:
 
-- [`count_sample!`](https://docs.rs/emit/1.17.1/emit/macro.count_sample.html) for samples of a monotonic counter.
-- [`sum_sample!`](https://docs.rs/emit/1.17.1/emit/macro.sum_sample.html) for samples of a non-monotonic sum.
-- [`min_sample!`](https://docs.rs/emit/1.17.1/emit/macro.min_sample.html) for samples of the minimum observed value.
-- [`max_sample!`](https://docs.rs/emit/1.17.1/emit/macro.max_sample.html) for samples of the maximum observed value.
-- [`last_sample!`](https://docs.rs/emit/1.17.1/emit/macro.last_sample.html) for samples of the latest value.
+- [`count_sample!`](https://docs.rs/emit/1.17.2/emit/macro.count_sample.html) for samples of a monotonic counter.
+- [`sum_sample!`](https://docs.rs/emit/1.17.2/emit/macro.sum_sample.html) for samples of a non-monotonic sum.
+- [`min_sample!`](https://docs.rs/emit/1.17.2/emit/macro.min_sample.html) for samples of the minimum observed value.
+- [`max_sample!`](https://docs.rs/emit/1.17.2/emit/macro.max_sample.html) for samples of the maximum observed value.
+- [`last_sample!`](https://docs.rs/emit/1.17.2/emit/macro.last_sample.html) for samples of the latest value.
 
 -----
 
