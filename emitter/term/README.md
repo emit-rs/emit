@@ -2,7 +2,7 @@
 
 [![term](https://github.com/emit-rs/emit/actions/workflows/term.yml/badge.svg)](https://github.com/emit-rs/emit/actions/workflows/term.yml)
 
-[Current docs](https://docs.rs/emit_term/1.17.1/emit_term/index.html)
+[Current docs](https://docs.rs/emit_term/1.17.2/emit_term/index.html)
 
 Emit diagnostic events to the console.
 
