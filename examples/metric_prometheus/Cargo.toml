@@ -13,4 +13,4 @@ version = "1.17.1"
 path = "../../emitter/otlp"
 
 [dependencies.rand]
-version = "0.9"
+version = "0.10"

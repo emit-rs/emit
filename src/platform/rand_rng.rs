@@ -3,7 +3,7 @@ The [`RandRng`] type.
 */
 
 use emit_core::{rng::Rng, runtime::InternalRng};
-use rand::{Rng as _, RngCore};
+use rand::{Rng as _, RngExt as _};
 
 /**
 An [`Rng`] based on the [`rand`] library.

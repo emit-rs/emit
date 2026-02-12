@@ -69,7 +69,7 @@ default-features = false
 # don't require `getrandom` build-time configuration
 
 [target.'cfg(any(target_os = "linux", target_os = "windows", target_os = "macos", target_os = "ios", target_os = "android", target_os = "wasi"))'.dependencies.rand]
-version = "0.9"
+version = "0.10"
 optional = true
 
 [target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies.wasm-bindgen]
