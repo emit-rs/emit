@@ -1366,6 +1366,30 @@ mod tests {
 
     #[test]
     #[cfg(not(target_os = "wasi"))]
+    fn traceparent_unsampled_across_threads() {
+        let rng = RandRng::new();
+
+        let traceparent = Traceparent::new(
+            TraceId::random(&rng),
+            SpanId::random(&rng),
+            TraceFlags::EMPTY,
+        );
+
+        let frame = traceparent.push();
+
+        std::thread::spawn(move || {
+            frame.call(|| {
+                let current = Traceparent::current();
+
+                assert_eq!(traceparent, current);
+            })
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
+    #[cfg(not(target_os = "wasi"))]
     fn traceparent_ctxt_across_threads() {
         let rng = RandRng::new();
         let ctxt = TraceparentCtxt::new(ThreadLocalCtxt::new());
@@ -1384,6 +1408,37 @@ mod tests {
         })
         .join()
         .unwrap();
+    }
+
+    #[test]
+    #[cfg(not(target_os = "wasi"))]
+    fn traceparent_unsampled_ctxt_across_threads() {
+        let rng = RandRng::new();
+        let ctxt = TraceparentCtxt::new(ThreadLocalCtxt::new());
+
+        let frame = Traceparent::new(
+            TraceId::random(&rng),
+            SpanId::random(&rng),
+            TraceFlags::EMPTY,
+        )
+        .push();
+
+        frame.call(|| {
+            let span_ctxt = SpanCtxt::current(&ctxt).new_child(&rng).push(ctxt.clone());
+
+            std::thread::spawn(move || {
+                span_ctxt.call(|| {
+                    let traceparent = Traceparent::current();
+                    let span_ctxt = SpanCtxt::current(&ctxt);
+
+                    assert_eq!(None, span_ctxt.trace_id());
+                    assert_eq!(None, span_ctxt.span_id());
+                    assert_eq!(TraceFlags::EMPTY, *traceparent.trace_flags());
+                })
+            })
+            .join()
+            .unwrap();
+        });
     }
 
     #[test]
