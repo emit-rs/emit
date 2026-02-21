@@ -11,14 +11,3 @@ help: the trait `emit::__private::Optional<'_>` is not implemented for `Option<{
   | impl<'a, T: ?Sized> Optional<'a> for Option<&'a T> {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   = help: for that trait implementation, expected `&_`, found `{integer}`
-
-error[E0282]: type annotations needed for `&_`
- --> src/compile_fail/std/emit_props_optional_non_ref.rs:2:29
-  |
-2 |     emit::emit!("template", #[emit::optional] some: Some(1));
-  |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  |
-help: consider giving this closure parameter an explicit type, where the placeholders `_` are specified
-  |
-2 |     emit::emit!("template", #[emit::optional] some: Some(1): &_);
-  |                                                            ++++
