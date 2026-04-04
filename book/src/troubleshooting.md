@@ -59,3 +59,37 @@ Resolve it by using a capturing attribute explicitly on that property so `emit` 
 ```rust,ignore
 emit::emit!("template {#[emit::as_display] x}");
 ```
+
+### `E0277` when capturing `Option`
+
+When capturing a property wrapped in an `Option` by default, you'll encounter this error:
+
+```rust,ignore
+let x = Some("some data");
+
+emit::emit!("template {x}");
+```
+
+```text
+error[E0277]: capturing requires `Option<&str>` implements `Display + Any` by default. If this value does implement `Display`, then dereference or annotate it with `#[emit::as_display]`. If it doesn't, then use one of the `#[emit::as_*]` attributes to capture this value using a trait it does implement.
+ --> src/compile_fail/std/emit_props_non_optional.rs:4:28
+  |
+4 |     emit::emit!("template {x}");
+  |                            ^ the trait `std::fmt::Display` is not implemented for `Option<&str>`
+```
+
+Resolve it by adding the `#[optional]` attribute on that property:
+
+```rust,ignore
+let x = Some("some data");
+
+emit::emit!("template {#[emit::optional] x}");
+```
+
+You may also need to add `.as_ref()`, to ensure the property is `Option<&T>`, not `&Option<T>`:
+
+```rust,ignore
+let x = Some(42);
+
+emit::emit!("template {#[emit::optional] x: x.as_ref()}");
+```
