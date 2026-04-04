@@ -25,3 +25,43 @@ fn main() {
     internal_rt.blocking_flush(std::time::Duration::from_secs(5));
 }
 ```
+
+## Common errors
+
+This section documents some common compile errors you might encounter when using `emit`.
+
+### `E0597` when capturing properties
+
+When capturing a property that doesn't satisfy `'static` (such as `std::panic::Location<'a>`), you'll encounter this error by default:
+
+```rust,no_run
+emit::emit!("template {x}");
+```
+
+```text
+error[E0597]: `short_lived` does not live long enough
+ --> src/compile_fail/std/emit_props_non_static.rs:5:25
+  |
+4 |     let short_lived = String::from("x");
+  |         ----------- binding `short_lived` declared here
+5 |     let x = InternalRef(&short_lived);
+  |                         ^^^^^^^^^^^^ borrowed value does not live long enough
+6 |
+7 |     emit::emit!("template {x}");
+  |                            - argument requires that `short_lived` is borrowed for `'static`
+8 | }
+  | - `short_lived` dropped here while still borrowed
+  |
+note: requirement that the value outlives `'static` introduced here
+ --> $WORKSPACE/src/macro_hooks.rs
+  |
+  |         Self: CaptureWithDefault,
+  |               ^^^^^^^^^^^^^^^^^^
+
+```
+
+Resolve it by using a capturing attribute explicitly on that property so `emit` won't try and downcast it:
+
+```rust,no_run
+emit::emit!("template {#[emit::as_display] x}");
+```
