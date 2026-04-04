@@ -2,8 +2,11 @@ use std::fmt;
 
 fn main() {
     let short_lived = String::from("x");
-    let x = InternalRef(&short_lived);
 
+    exec(&InternalRef(&short_lived));
+}
+
+pub fn exec(x: &InternalRef<'_>) {
     emit::emit!("template {x}");
 }
 

@@ -83,6 +83,8 @@ features = ["serde"]
 
 ```rust
 # extern crate emit;
+# extern crate serde;
+# use serde::Serialize;
 #[derive(Serialize)]
 struct User<'a> {
     id: &'a str,

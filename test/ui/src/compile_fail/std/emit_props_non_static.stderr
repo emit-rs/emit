@@ -1,18 +1,13 @@
-error[E0597]: `short_lived` does not live long enough
- --> src/compile_fail/std/emit_props_non_static.rs:5:25
-  |
-4 |     let short_lived = String::from("x");
-  |         ----------- binding `short_lived` declared here
-5 |     let x = InternalRef(&short_lived);
-  |                         ^^^^^^^^^^^^ borrowed value does not live long enough
-6 |
-7 |     emit::emit!("template {x}");
-  |                            - argument requires that `short_lived` is borrowed for `'static`
-8 | }
-  | - `short_lived` dropped here while still borrowed
-  |
-note: requirement that the value outlives `'static` introduced here
- --> $WORKSPACE/src/macro_hooks.rs
-  |
-  |         Self: CaptureWithDefault,
-  |               ^^^^^^^^^^^^^^^^^^
+error[E0521]: borrowed data escapes outside of function
+  --> src/compile_fail/std/emit_props_non_static.rs:10:28
+   |
+ 9 | pub fn exec(x: &InternalRef<'_>) {
+   |             -
+   |             |
+   |             `x` is a reference that is only valid in the function body
+   |             has type `&InternalRef<'1>`
+10 |     emit::emit!("template {x}");
+   |                            ^
+   |                            |
+   |                            `x` escapes the function body here
+   |                            argument requires that `'1` must outlive `'static`
