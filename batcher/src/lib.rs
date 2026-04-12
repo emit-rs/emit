@@ -31,9 +31,6 @@ use std::{
     time::Duration,
 };
 
-#[cfg(all(not(target_arch = "wasm32"), test))]
-use ::tokio::sync::Barrier;
-
 mod internal_metrics;
 
 /**
@@ -325,8 +322,8 @@ Test barriers for deterministic ordering in tests.
 #[cfg(all(not(target_arch = "wasm32"), test))]
 #[derive(Default, Clone)]
 pub struct TestBarriers {
-    post_take: Option<Arc<Barrier>>,
-    post_process: Option<Arc<Barrier>>,
+    post_take: Option<Arc<::tokio::sync::Barrier>>,
+    post_process: Option<Arc<::tokio::sync::Barrier>>,
 }
 
 #[cfg(all(not(target_arch = "wasm32"), test))]
