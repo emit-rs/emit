@@ -288,7 +288,6 @@ mod tests {
     use super::*;
 
     use std::sync::{Arc, Mutex};
-
     use wasm_bindgen_test::*;
 
     #[wasm_bindgen_test]
@@ -513,5 +512,68 @@ mod tests {
 
         drop(sender);
         handle.join().await;
+    }
+
+    #[wasm_bindgen_test]
+    /// **Property**: try_send returns an error when the channel is closed (WebAssembly variant).
+    ///
+    /// **Sequence of events**:
+    /// 1. Create a bounded channel
+    /// 2. Drop the receiver to close the channel from the receiver side
+    /// 3. Attempt try_send - should fail with a non-retryable error
+    fn try_send_on_closed_channel() {
+        let (sender, receiver) = crate::bounded::<Vec<i32>>(10);
+
+        // Drop the receiver to close the channel
+        drop(receiver);
+
+        // try_send should fail with a non-retryable error
+        let result = sender.try_send(1);
+        assert!(result.is_err());
+
+        // Verify the error is non-retryable (no messages to retry)
+        let err = result.err().unwrap();
+        assert!(err.into_retryable().is_none());
+    }
+
+    #[wasm_bindgen_test]
+    /// **Property**: Channel truncates oldest messages when capacity is exceeded (WebAssembly variant).
+    ///
+    /// **Sequence of events**:
+    /// 1. Create a bounded channel with capacity 5
+    /// 2. Send 10 messages (exceeding capacity, causing truncation of 0-4)
+    /// 3. Spawn receiver to process the remaining batch
+    /// 4. Drop sender and join handle
+    /// 5. Verify only messages 5-9 were received (first 5 truncated)
+    async fn truncation_keeps_most_recent() {
+        let (sender, receiver) = crate::bounded::<Vec<i32>>(5);
+
+        let received = Arc::new(Mutex::new(Vec::new()));
+
+        let handle = spawn(receiver, {
+            let received = received.clone();
+
+            move |batch| {
+                let received = received.clone();
+
+                async move {
+                    received.lock().unwrap().extend(batch);
+
+                    Ok(())
+                }
+            }
+        })
+        .unwrap();
+
+        // Send more messages than capacity
+        for i in 0..10 {
+            sender.send(i);
+        }
+
+        drop(sender);
+        handle.join().await;
+
+        // Only last 5 messages should remain (0-4 were truncated)
+        assert_eq!(vec![5, 6, 7, 8, 9], *received.lock().unwrap());
     }
 }
