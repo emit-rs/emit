@@ -157,7 +157,7 @@ mod tests {
     use super::*;
 
     use std::sync::{Arc, Mutex};
-    use tokio::sync::{Barrier, Semaphore};
+    use tokio::sync::{broadcast, Barrier, Semaphore};
 
     use crate::TestBarriers;
 
@@ -266,7 +266,7 @@ mod tests {
     #[tokio::test]
     async fn async_send_timeout() {
         // Channel to signal when receiver has taken a batch
-        let (receiver_ready_tx, mut receiver_ready_rx) = tokio::sync::broadcast::channel::<()>(100);
+        let (receiver_ready_tx, mut receiver_ready_rx) = broadcast::channel::<()>(100);
         // Semaphore with 0 permits - blocks forever (until cancelled)
         let blocker = Arc::new(Semaphore::new(0));
 
@@ -332,7 +332,7 @@ mod tests {
     async fn flush_active() {
         let batch_count = Arc::new(Mutex::new(0));
         // Channel to signal when receiver has taken first batch
-        let (receiver_ready_tx, mut receiver_ready_rx) = tokio::sync::broadcast::channel::<()>(100);
+        let (receiver_ready_tx, mut receiver_ready_rx) = broadcast::channel::<()>(100);
 
         let (sender, receiver) = crate::bounded::<Vec<i32>>(10);
 
@@ -375,6 +375,8 @@ mod tests {
 
     #[tokio::test]
     async fn retry_on_batch_failure() {
+        // Channel to signal when receiver has completed a batch
+        let (receiver_processed_tx, mut receiver_processed_rx) = broadcast::channel::<()>(100);
         let attempt_count = Arc::new(Mutex::new(0));
         let received = Arc::new(Mutex::new(false));
 
@@ -386,6 +388,8 @@ mod tests {
             move |batch| {
                 let attempt_count = attempt_count.clone();
                 let received = received.clone();
+                let receiver_processed_tx = receiver_processed_tx.clone();
+
                 async move {
                     let mut count = attempt_count.lock().unwrap();
                     *count += 1;
@@ -397,6 +401,7 @@ mod tests {
                             batch,
                         ))
                     } else {
+                        receiver_processed_tx.send(()).unwrap();
                         *received.lock().unwrap() = true;
                         Ok(())
                     }
@@ -407,20 +412,10 @@ mod tests {
 
         sender.send(42);
 
-        // Retry loop: return early when count == 2, panic after 3 seconds
-        let start = Instant::now();
-        loop {
-            let received = *received.lock().unwrap();
-            if received {
-                break;
-            }
+        // Wait for receiver to process the batch
+        receiver_processed_rx.recv().await.ok();
 
-            if start.elapsed() >= Duration::from_secs(3) {
-                panic!("Timeout waiting for retries");
-            }
-
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
+        assert!(*received.lock().unwrap());
     }
 
     #[tokio::test]
@@ -549,6 +544,8 @@ mod tests {
 
     #[tokio::test]
     async fn when_flushed_callback() {
+        // Channel to signal when receiver has completed a batch
+        let (when_flushed_tx, mut when_flushed_rx) = broadcast::channel::<()>(100);
         let callback_fired = Arc::new(Mutex::new(false));
         let post_process_barrier = Arc::new(Barrier::new(2));
 
@@ -569,6 +566,7 @@ mod tests {
 
         let callback_fired_clone = callback_fired.clone();
         sender.when_flushed(move || {
+            when_flushed_tx.send(()).unwrap();
             *callback_fired_clone.lock().unwrap() = true;
         });
 
@@ -577,6 +575,8 @@ mod tests {
 
         // Wait at barrier for batch to be processed
         post_process_barrier.wait().await;
+
+        when_flushed_rx.recv().await.ok();
 
         // Callback should have fired
         assert!(*callback_fired.lock().unwrap());
