@@ -31,7 +31,7 @@ use std::{
     time::Duration,
 };
 
-#[cfg(all(not(target_arch = "wasm32"), any(feature = "test_utils", test)))]
+#[cfg(all(not(target_arch = "wasm32"), test))]
 use ::tokio::sync::Barrier;
 
 mod internal_metrics;
@@ -157,7 +157,7 @@ pub fn bounded<T: Channel>(max_capacity: usize) -> (Sender<T>, Receiver<T>) {
             retry_delay: Delay::new(Duration::from_millis(700), Duration::from_secs(10)),
             capacity: Capacity::new(),
             shared,
-            #[cfg(all(not(target_arch = "wasm32"), any(feature = "test_utils", test)))]
+            #[cfg(all(not(target_arch = "wasm32"), test))]
             test_barriers: TestBarriers::new(),
         },
     )
@@ -325,7 +325,7 @@ Test barriers for deterministic ordering in tests.
 Use these barriers to force specific synchronization points between sender and receiver in tests,
 avoiding reliance on non-deterministic delays.
 */
-#[cfg(all(not(target_arch = "wasm32"), any(feature = "test_utils", test)))]
+#[cfg(all(not(target_arch = "wasm32"), test))]
 #[derive(Default, Clone)]
 pub struct TestBarriers {
     pre_fetch: Option<Arc<Barrier>>,
@@ -333,7 +333,7 @@ pub struct TestBarriers {
     post_process: Option<Arc<Barrier>>,
 }
 
-#[cfg(all(not(target_arch = "wasm32"), any(feature = "test_utils", test)))]
+#[cfg(all(not(target_arch = "wasm32"), test))]
 impl TestBarriers {
     /**
     Create a new empty TestBarriers instance.
@@ -411,7 +411,7 @@ pub struct Receiver<T> {
     retry_delay: Delay,
     capacity: Capacity,
     shared: Arc<Shared<T>>,
-    #[cfg(all(not(target_arch = "wasm32"), any(feature = "test_utils", test)))]
+    #[cfg(all(not(target_arch = "wasm32"), test))]
     test_barriers: TestBarriers,
 }
 
@@ -429,9 +429,9 @@ impl<T: Channel> Receiver<T> {
     /**
     Configure test barriers for deterministic ordering in tests.
 
-    This method is only available when building with tests or the `test_utils` feature.
+    This method is only available when building with tests.
     */
-    #[cfg(all(not(target_arch = "wasm32"), any(feature = "test_utils", test)))]
+    #[cfg(all(not(target_arch = "wasm32"), test))]
     pub fn with_test_barriers(mut self, barriers: TestBarriers) -> Self {
         self.test_barriers = barriers;
         self
@@ -459,7 +459,7 @@ impl<T: Channel> Receiver<T> {
 
         loop {
             // Pre-fetch barrier: wait here before checking for batches
-            #[cfg(all(not(target_arch = "wasm32"), any(feature = "test_utils", test)))]
+            #[cfg(all(not(target_arch = "wasm32"), test))]
             self.test_barriers.wait_pre_fetch().await;
 
             // Run inside the lock
@@ -500,7 +500,7 @@ impl<T: Channel> Receiver<T> {
             current_batch.watchers.notify_on_take();
 
             // Post-take barrier: wait here after batch is taken
-            #[cfg(all(not(target_arch = "wasm32"), any(feature = "test_utils", test)))]
+            #[cfg(all(not(target_arch = "wasm32"), test))]
             self.test_barriers.wait_post_take().await;
 
             if current_batch.channel.len() > 0 {
@@ -562,7 +562,7 @@ impl<T: Channel> Receiver<T> {
                 current_batch.watchers.notify_on_flush();
 
                 // Post-process barrier: wait here after batch is processed
-                #[cfg(all(not(target_arch = "wasm32"), any(feature = "test_utils", test)))]
+                #[cfg(all(not(target_arch = "wasm32"), test))]
                 self.test_barriers.wait_post_process().await;
             }
             // If the batch was empty then notify any watchers (there was nothing to flush)
@@ -571,7 +571,7 @@ impl<T: Channel> Receiver<T> {
                 current_batch.watchers.notify_on_flush();
 
                 // Post-process barrier: wait here after empty batch
-                #[cfg(all(not(target_arch = "wasm32"), any(feature = "test_utils", test)))]
+                #[cfg(all(not(target_arch = "wasm32"), test))]
                 self.test_barriers.wait_post_process().await;
 
                 // If the channel is closed then exit the loop and return; this will
