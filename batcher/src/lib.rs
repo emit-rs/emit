@@ -31,6 +31,9 @@ use std::{
     time::Duration,
 };
 
+#[cfg(all(not(target_arch = "wasm32"), any(feature = "test_utils", test)))]
+use ::tokio::sync::Barrier;
+
 mod internal_metrics;
 
 /**
@@ -154,6 +157,8 @@ pub fn bounded<T: Channel>(max_capacity: usize) -> (Sender<T>, Receiver<T>) {
             retry_delay: Delay::new(Duration::from_millis(700), Duration::from_secs(10)),
             capacity: Capacity::new(),
             shared,
+            #[cfg(all(not(target_arch = "wasm32"), any(feature = "test_utils", test)))]
+            test_barriers: TestBarriers::new(),
         },
     )
 }
@@ -315,6 +320,87 @@ impl<T: Channel> Sender<T> {
 }
 
 /**
+Test barriers for deterministic ordering in tests.
+
+Use these barriers to force specific synchronization points between sender and receiver in tests,
+avoiding reliance on non-deterministic delays.
+*/
+#[cfg(all(not(target_arch = "wasm32"), any(feature = "test_utils", test)))]
+#[derive(Default, Clone)]
+pub struct TestBarriers {
+    pre_fetch: Option<Arc<Barrier>>,
+    post_take: Option<Arc<Barrier>>,
+    post_process: Option<Arc<Barrier>>,
+}
+
+#[cfg(all(not(target_arch = "wasm32"), any(feature = "test_utils", test)))]
+impl TestBarriers {
+    /**
+    Create a new empty TestBarriers instance.
+    */
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /**
+    Configure the pre-fetch barrier.
+
+    This barrier is triggered before the receiver checks for the next batch.
+    */
+    pub fn with_pre_fetch(mut self, barrier: Arc<Barrier>) -> Self {
+        self.pre_fetch = Some(barrier);
+        self
+    }
+
+    /**
+    Configure the post-take barrier.
+
+    This barrier is triggered after the receiver takes a batch but before processing.
+    */
+    pub fn with_post_take(mut self, barrier: Arc<Barrier>) -> Self {
+        self.post_take = Some(barrier);
+        self
+    }
+
+    /**
+    Configure the post-process barrier.
+
+    This barrier is triggered after the receiver finishes processing a batch.
+    */
+    pub fn with_post_process(mut self, barrier: Arc<Barrier>) -> Self {
+        self.post_process = Some(barrier);
+        self
+    }
+
+    /**
+    Wait at the pre-fetch barrier if configured.
+    */
+    pub async fn wait_pre_fetch(&self) {
+        if let Some(ref barrier) = self.pre_fetch {
+            barrier.wait().await;
+        }
+    }
+
+    /**
+    Wait at the post-take barrier if configured.
+    */
+    pub async fn wait_post_take(&self) {
+        if let Some(ref barrier) = self.post_take {
+            barrier.wait().await;
+        }
+    }
+
+    /**
+    Wait at the post-process barrier if configured.
+    */
+    pub async fn wait_post_process(&self) {
+        if let Some(ref barrier) = self.post_process {
+            barrier.wait().await;
+        }
+    }
+}
+
+/**
 The receiving half of a channel.
 
 Use [`Receiver::exec`], [`crate::tokio::spawn`], or [`crate::sync::spawn`] to run the receiver as a background worker.
@@ -325,6 +411,8 @@ pub struct Receiver<T> {
     retry_delay: Delay,
     capacity: Capacity,
     shared: Arc<Shared<T>>,
+    #[cfg(all(not(target_arch = "wasm32"), any(feature = "test_utils", test)))]
+    test_barriers: TestBarriers,
 }
 
 impl<T> Drop for Receiver<T> {
@@ -338,6 +426,17 @@ impl<T> Drop for Receiver<T> {
 }
 
 impl<T: Channel> Receiver<T> {
+    /**
+    Configure test barriers for deterministic ordering in tests.
+
+    This method is only available when building with tests or the `test_utils` feature.
+    */
+    #[cfg(all(not(target_arch = "wasm32"), any(feature = "test_utils", test)))]
+    pub fn with_test_barriers(mut self, barriers: TestBarriers) -> Self {
+        self.test_barriers = barriers;
+        self
+    }
+
     /**
     Run the receiver asynchronously.
 
@@ -359,6 +458,10 @@ impl<T: Channel> Receiver<T> {
         let mut next_batch = Batch::new();
 
         loop {
+            // Pre-fetch barrier: wait here before checking for batches
+            #[cfg(all(not(target_arch = "wasm32"), any(feature = "test_utils", test)))]
+            self.test_barriers.wait_pre_fetch().await;
+
             // Run inside the lock
             let (mut current_batch, is_open) = {
                 let mut state = self.shared.state.lock().unwrap();
@@ -395,6 +498,10 @@ impl<T: Channel> Receiver<T> {
 
             // Run outside of the lock
             current_batch.watchers.notify_on_take();
+
+            // Post-take barrier: wait here after batch is taken
+            #[cfg(all(not(target_arch = "wasm32"), any(feature = "test_utils", test)))]
+            self.test_barriers.wait_post_take().await;
 
             if current_batch.channel.len() > 0 {
                 self.retry.reset();
@@ -453,11 +560,19 @@ impl<T: Channel> Receiver<T> {
 
                 // After the batch has been emitted, notify any watchers
                 current_batch.watchers.notify_on_flush();
+
+                // Post-process barrier: wait here after batch is processed
+                #[cfg(all(not(target_arch = "wasm32"), any(feature = "test_utils", test)))]
+                self.test_barriers.wait_post_process().await;
             }
             // If the batch was empty then notify any watchers (there was nothing to flush)
             // and wait before checking again
             else {
                 current_batch.watchers.notify_on_flush();
+
+                // Post-process barrier: wait here after empty batch
+                #[cfg(all(not(target_arch = "wasm32"), any(feature = "test_utils", test)))]
+                self.test_barriers.wait_post_process().await;
 
                 // If the channel is closed then exit the loop and return; this will
                 // drop the receiver

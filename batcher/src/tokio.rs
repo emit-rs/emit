@@ -157,6 +157,7 @@ mod tests {
     use super::*;
 
     use std::sync::{Arc, Mutex};
+    use ::tokio::sync::Barrier;
 
     #[tokio::test]
     async fn async_send_recv_flush() {
@@ -193,7 +194,11 @@ mod tests {
 
     #[tokio::test]
     async fn send_full_capacity() {
+        use crate::TestBarriers;
+        use std::sync::Arc;
+
         let received = Arc::new(Mutex::new(Vec::new()));
+        let post_process_barrier = Arc::new(Barrier::new(2));
 
         let (sender, receiver) = crate::bounded::<Vec<i32>>(5);
 
@@ -202,8 +207,10 @@ mod tests {
             sender.send(i);
         }
 
-        // Spawn receiver after sending
-        let _ = spawn("test_receiver", receiver, {
+        // Spawn receiver after sending, with barrier after processing
+        let _ = spawn("test_receiver", receiver.with_test_barriers(
+            TestBarriers::new().with_post_process(post_process_barrier.clone())
+        ), {
             let received = received.clone();
             move |batch| {
                 let received = received.clone();
@@ -215,8 +222,8 @@ mod tests {
         })
         .unwrap();
 
-        // Wait for processing
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        // Wait at barrier for receiver to finish processing
+        post_process_barrier.wait().await;
 
         // Only last 5 messages should remain (0-4 were truncated)
         assert_eq!(vec![5, 6, 7, 8, 9], *received.lock().unwrap());
@@ -247,8 +254,8 @@ mod tests {
                 .unwrap();
         }
 
-        // Wait for all to be processed
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        // Use flush to wait for all messages to be processed
+        flush(&sender, Duration::from_secs(1)).await;
 
         // All 10 messages should be processed
         assert_eq!(10, *received.lock().unwrap());
@@ -256,25 +263,33 @@ mod tests {
 
     #[tokio::test]
     async fn async_send_timeout() {
+        use std::sync::Arc;
+
         let received = Arc::new(Mutex::new(Vec::new()));
-        let (receiver_ready_tx, mut receiver_ready_rx) = tokio::sync::broadcast::channel(100);
+        // Channel to signal when receiver has taken a batch
+        let (receiver_ready_tx, mut receiver_ready_rx) = tokio::sync::broadcast::channel::<()>(100);
+        // Channel to signal receiver to continue processing
+        let (_continue_processing_tx, continue_processing_rx) = tokio::sync::broadcast::channel::<()>(100);
 
         let (sender, receiver) = crate::bounded::<Vec<i32>>(5);
 
-        // Spawn receiver task that blocks before processing
+        // Spawn receiver task that waits for signal before processing
         let received_clone = received.clone();
-        let receiver_ready_tx_clone = receiver_ready_tx.clone();
+        let continue_processing_rx_clone = continue_processing_rx.resubscribe();
         let receiver_task = tokio::task::spawn(async move {
             exec(receiver, {
                 let received = received_clone.clone();
+                let receiver_ready_tx = receiver_ready_tx.clone();
+                let continue_processing_rx = continue_processing_rx_clone;
                 move |batch| {
                     let received = received.clone();
-                    let receiver_ready_tx = receiver_ready_tx_clone.clone();
+                    let receiver_ready_tx = receiver_ready_tx.clone();
+                    let mut continue_processing_rx = continue_processing_rx.resubscribe();
                     async move {
-                        // Signal that we've received a batch and block before processing
+                        // Signal that we've received a batch
                         let _ = receiver_ready_tx.send(());
-                        // Wait for test to fill the channel again
-                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        // Wait for test to signal us to continue
+                        let _ = continue_processing_rx.recv().await;
                         received.lock().unwrap().extend(batch);
                         Ok(())
                     }
@@ -321,18 +336,24 @@ mod tests {
 
     #[tokio::test]
     async fn flush_active() {
+        use std::sync::Arc;
+
         let batch_count = Arc::new(Mutex::new(0));
+        // Channel to signal when receiver has taken first batch
+        let (receiver_ready_tx, mut receiver_ready_rx) = tokio::sync::broadcast::channel::<()>(100);
 
         let (sender, receiver) = crate::bounded::<Vec<i32>>(10);
 
         let _ = spawn("test_receiver", receiver, {
             let batch_count = batch_count.clone();
+            let receiver_ready_tx = receiver_ready_tx.clone();
             move |_batch| {
                 let batch_count = batch_count.clone();
+                let receiver_ready_tx = receiver_ready_tx.clone();
                 async move {
                     *batch_count.lock().unwrap() += 1;
-                    // Small delay to simulate processing
-                    tokio::time::sleep(Duration::from_millis(10)).await;
+                    // Signal that we've taken a batch
+                    let _ = receiver_ready_tx.send(());
                     Ok(())
                 }
             }
@@ -345,7 +366,7 @@ mod tests {
         }
 
         // Wait for receiver to pick up the batch
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        receiver_ready_rx.recv().await.ok();
 
         // Send more messages (second batch)
         for i in 3..6 {
@@ -405,11 +426,17 @@ mod tests {
 
     #[tokio::test]
     async fn processes_remaining_after_drop() {
+        use crate::TestBarriers;
+        use std::sync::Arc;
+
         let received = Arc::new(Mutex::new(Vec::new()));
+        let post_process_barrier = Arc::new(Barrier::new(2));
 
         let (sender, receiver) = crate::bounded::<Vec<i32>>(10);
 
-        let _ = spawn("test_receiver", receiver, {
+        let _ = spawn("test_receiver", receiver.with_test_barriers(
+            TestBarriers::new().with_post_process(post_process_barrier.clone())
+        ), {
             let received = received.clone();
             move |batch| {
                 let received = received.clone();
@@ -427,8 +454,8 @@ mod tests {
         }
         drop(sender);
 
-        // Wait for processing
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        // Wait at barrier for receiver to finish processing
+        post_process_barrier.wait().await;
 
         // All messages should still be processed
         assert_eq!(vec![0, 1, 2, 3, 4], *received.lock().unwrap());
@@ -436,8 +463,15 @@ mod tests {
 
     #[tokio::test]
     async fn try_send_behavior() {
+        use crate::TestBarriers;
+        use std::sync::Arc;
+
+        let post_process_barrier = Arc::new(Barrier::new(2));
+
         let (sender, receiver) = crate::bounded::<Vec<i32>>(3);
-        let _ = spawn("test_receiver", receiver, |batch| async move {
+        let _ = spawn("test_receiver", receiver.with_test_barriers(
+            TestBarriers::new().with_post_process(post_process_barrier.clone())
+        ), |batch| async move {
             let _ = batch;
             Ok(())
         })
@@ -452,8 +486,8 @@ mod tests {
         let result = sender.try_send(4);
         assert!(result.is_err());
 
-        // Wait for processing
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        // Wait at barrier for receiver to finish processing
+        post_process_barrier.wait().await;
 
         // Should succeed after processing
         assert!(sender.try_send(4).is_ok());
@@ -461,11 +495,17 @@ mod tests {
 
     #[tokio::test]
     async fn when_empty_callback() {
+        use crate::TestBarriers;
+        use std::sync::Arc;
+
         let callback_fired = Arc::new(Mutex::new(false));
+        let post_take_barrier = Arc::new(Barrier::new(2));
 
         let (sender, receiver) = crate::bounded::<Vec<i32>>(10);
 
-        let _ = spawn("test_receiver", receiver, |_batch| async move {
+        let _ = spawn("test_receiver", receiver.with_test_barriers(
+            TestBarriers::new().with_post_take(post_take_barrier.clone())
+        ), |_batch| async move {
             Ok(())
         })
         .unwrap();
@@ -481,8 +521,8 @@ mod tests {
         // Callback shouldn't fire yet (batch not taken)
         assert!(!*callback_fired.lock().unwrap());
 
-        // Wait for batch to be taken
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        // Wait at barrier for batch to be taken
+        post_take_barrier.wait().await;
 
         // Callback should have fired
         assert!(*callback_fired.lock().unwrap());
@@ -490,13 +530,17 @@ mod tests {
 
     #[tokio::test]
     async fn when_flushed_callback() {
+        use crate::TestBarriers;
+        use std::sync::Arc;
+
         let callback_fired = Arc::new(Mutex::new(false));
+        let post_process_barrier = Arc::new(Barrier::new(2));
 
         let (sender, receiver) = crate::bounded::<Vec<i32>>(10);
 
-        let _ = spawn("test_receiver", receiver, |_batch| async move {
-            // Simulate some processing time
-            tokio::time::sleep(Duration::from_millis(10)).await;
+        let _ = spawn("test_receiver", receiver.with_test_barriers(
+            TestBarriers::new().with_post_process(post_process_barrier.clone())
+        ), |_batch| async move {
             Ok(())
         })
         .unwrap();
@@ -512,8 +556,8 @@ mod tests {
         // Callback shouldn't fire yet (batch not processed)
         assert!(!*callback_fired.lock().unwrap());
 
-        // Wait for batch to be processed
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        // Wait at barrier for batch to be processed
+        post_process_barrier.wait().await;
 
         // Callback should have fired
         assert!(*callback_fired.lock().unwrap());
