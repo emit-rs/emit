@@ -292,13 +292,6 @@ mod tests {
     use wasm_bindgen_test::*;
 
     #[wasm_bindgen_test]
-    /// **Property**: Spawn handle resolves when sender is dropped (WebAssembly variant).
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel with capacity 1024
-    /// 2. Spawn receiver in a JavaScript promise
-    /// 3. Drop the sender (signals channel is closed)
-    /// 4. Join the handle - should complete when receiver exits
     async fn promise_resolves_on_sender_drop() {
         let (sender, receiver) = crate::bounded::<Vec<i32>>(1024);
 
@@ -316,14 +309,6 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    /// **Property**: Receiver processes all messages in batches (WebAssembly variant).
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel with capacity 1024
-    /// 2. Spawn receiver that records batch size
-    /// 3. Send 100 messages (JavaScript single-threaded, all processed together)
-    /// 4. Drop sender and join handle
-    /// 5. Verify all 100 messages were processed in a single batch
     async fn spawn_processes_batches() {
         let (sender, receiver) = crate::bounded::<Vec<i32>>(1024);
 
@@ -357,14 +342,6 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    /// **Property**: Async send waits for capacity and ensures messages are processed (WebAssembly variant).
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel with capacity 2
-    /// 2. Spawn receiver that counts processed messages
-    /// 3. Send 3 messages using async send (blocks when at capacity)
-    /// 4. After 3 sends with capacity 2, exactly 2 messages should be processed
-    /// 5. Drop sender and join handle
     async fn send_waits_for_processing() {
         let (sender, receiver) = crate::bounded::<Vec<()>>(2);
 
@@ -397,15 +374,6 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    /// **Property**: Flush waits for all messages to be processed (WebAssembly variant).
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel with capacity 1024
-    /// 2. Spawn receiver that counts processed messages
-    /// 3. Send 100 messages
-    /// 4. Verify no messages processed yet
-    /// 5. Call flush with 10ms timeout - should wait for all processing
-    /// 6. Verify flush succeeded and all 100 messages were processed
     async fn flush_waits_for_completion() {
         let (sender, receiver) = crate::bounded::<Vec<i32>>(1024);
 
@@ -443,15 +411,6 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    /// **Property**: Flush times out when processing takes longer than the timeout (WebAssembly variant).
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel with capacity 1024
-    /// 2. Spawn receiver that takes 50ms to process each batch
-    /// 3. Send 100 messages
-    /// 4. Verify no messages processed yet
-    /// 5. Call flush with 1ms timeout - should timeout before processing completes
-    /// 6. Verify flush returned false (timed out)
     async fn flush_times_out() {
         let (sender, receiver) = crate::bounded::<Vec<i32>>(1024);
 
@@ -489,14 +448,6 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    /// **Property**: Receiver errors are handled gracefully without crashing (WebAssembly variant).
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel with capacity 1024
-    /// 2. Spawn receiver that always returns an error (no_retry)
-    /// 3. Send a message
-    /// 4. Drop sender and join handle
-    /// 5. Verify the system doesn't crash despite the failing receiver
     async fn failing_receiver_does_not_cause_havoc() {
         let (sender, receiver) = crate::bounded::<Vec<()>>(1024);
 
@@ -516,12 +467,6 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    /// **Property**: try_send returns an error when the channel is closed (WebAssembly variant).
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel
-    /// 2. Drop the receiver to close the channel from the receiver side
-    /// 3. Attempt try_send - should fail with a non-retryable error
     fn try_send_on_closed_channel() {
         let (sender, receiver) = crate::bounded::<Vec<i32>>(10);
 
@@ -538,14 +483,6 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    /// **Property**: Channel truncates oldest messages when capacity is exceeded (WebAssembly variant).
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel with capacity 5
-    /// 2. Send 10 messages (exceeding capacity, causing truncation of 0-4)
-    /// 3. Spawn receiver to process the remaining batch
-    /// 4. Drop sender and join handle
-    /// 5. Verify only messages 5-9 were received (first 5 truncated)
     async fn truncation_keeps_most_recent() {
         let (sender, receiver) = crate::bounded::<Vec<i32>>(5);
 
@@ -579,14 +516,6 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    /// **Property**: Park future completes when timeout fires.
-    ///
-    /// This test verifies that Park properly wakes when the timeout expires.
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a Park future with a 10ms delay
-    /// 2. Await it (should complete in ~10ms)
-    /// 3. Verify the test completes (timeout fired and woke the future)
     async fn park_completes_on_timeout() {
         let start = js_sys::Date::new_0().get_time();
 
@@ -606,16 +535,6 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    /// **Property**: Park future doesn't hang when used with select and other future completes first.
-    ///
-    /// This test verifies that Park doesn't leak timeouts when dropped early.
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a oneshot channel and a Park future with 100ms delay
-    /// 2. Select between them
-    /// 3. Send on the oneshot (completes immediately)
-    /// 4. Verify select returns the oneshot result (not the timeout)
-    /// 5. Park is dropped, timeout should be cleared
     async fn park_does_not_hang_when_dropped_early() {
         let (tx, rx) = oneshot::channel::<()>();
 
@@ -632,14 +551,6 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    /// **Property**: Park with zero duration completes quickly.
-    ///
-    /// This test verifies that Park handles zero duration correctly (should use minimum 1ms).
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a Park future with zero duration
-    /// 2. Await it
-    /// 3. Verify it completes quickly (should be at least 1ms due to setTimeout minimum)
     async fn park_zero_duration() {
         let start = js_sys::Date::new_0().get_time();
 

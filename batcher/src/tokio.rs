@@ -162,14 +162,6 @@ mod tests {
     use crate::TestBarriers;
 
     #[tokio::test]
-    /// **Property**: Async send and flush work correctly for high-volume message processing.
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel with capacity 10
-    /// 2. Spawn receiver task that counts processed messages
-    /// 3. Send 100 messages using async send (blocks when at capacity)
-    /// 4. Call flush to wait for all messages to be processed
-    /// 5. Verify all 100 messages were received and counted
     async fn async_send_recv_flush() {
         let received = Arc::new(Mutex::new(0));
 
@@ -203,15 +195,6 @@ mod tests {
     }
 
     #[tokio::test]
-    /// **Property**: Channel truncates oldest messages when capacity is exceeded (tokio variant).
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel with capacity 5
-    /// 2. Send 10 messages (exceeding capacity, causing truncation of 0-4)
-    /// 3. Spawn receiver with post_process barrier for synchronization
-    /// 4. Receiver processes the remaining batch
-    /// 5. Wait at barrier for processing to complete
-    /// 6. Verify only messages 5-9 were received (first 5 truncated)
     async fn send_full_capacity() {
         let received = Arc::new(Mutex::new(Vec::new()));
         let post_process_barrier = Arc::new(Barrier::new(2));
@@ -226,9 +209,10 @@ mod tests {
         // Spawn receiver after sending, with barrier after processing
         let _ = spawn(
             "test_receiver",
-            receiver.with_test_barriers(
-                TestBarriers::new().with_post_process(post_process_barrier.clone()),
-            ),
+            receiver.with_test_barriers(TestBarriers {
+                post_process: Some(post_process_barrier.clone()),
+                ..Default::default()
+            }),
             {
                 let received = received.clone();
                 move |batch| {
@@ -250,14 +234,6 @@ mod tests {
     }
 
     #[tokio::test]
-    /// **Property**: Async send with blocking ensures all messages are processed even when exceeding capacity.
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel with capacity 5
-    /// 2. Spawn receiver task
-    /// 3. Send 10 messages using async send (blocks when full, waits for capacity)
-    /// 4. Call flush to wait for all processing to complete
-    /// 5. Verify all 10 messages were processed (no truncation because async_send waits)
     async fn async_send_full_capacity() {
         let received = Arc::new(Mutex::new(0));
 
@@ -288,16 +264,6 @@ mod tests {
     }
 
     #[tokio::test]
-    /// **Property**: Async send times out when channel remains at capacity.
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel with capacity 5
-    /// 2. Spawn receiver that takes first batch then blocks indefinitely (using Semaphore(0))
-    /// 3. Fill channel with 5 messages
-    /// 4. Wait for receiver to take the batch and block
-    /// 5. Fill channel again with 5 messages (now at capacity)
-    /// 6. Attempt async send with 10ms timeout - should fail (channel full, receiver blocked)
-    /// 7. Abort receiver task to clean up
     async fn async_send_timeout() {
         // Channel to signal when receiver has taken a batch
         let (receiver_ready_tx, mut receiver_ready_rx) = tokio::sync::broadcast::channel::<()>(100);
@@ -349,13 +315,6 @@ mod tests {
     }
 
     #[tokio::test]
-    /// **Property**: Flush on an empty channel with zero timeout succeeds immediately (tokio variant).
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel with capacity 10
-    /// 2. Spawn receiver task
-    /// 3. Call flush with zero timeout on empty channel
-    /// 4. Flush returns true immediately (nothing to wait for)
     async fn flush_empty() {
         let (sender, receiver) = crate::bounded::<Vec<()>>(10);
 
@@ -370,16 +329,6 @@ mod tests {
     }
 
     #[tokio::test]
-    /// **Property**: Flush waits for all active and in-flight batches to complete (tokio variant).
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel with capacity 10
-    /// 2. Spawn receiver that signals when it takes a batch
-    /// 3. Send 3 messages to start first batch
-    /// 4. Wait for receiver to pick up first batch
-    /// 5. Send 3 more messages (second batch, queued while first is processing)
-    /// 6. Call flush - should wait for both batches to complete
-    /// 7. Verify flush succeeded and at least one batch was processed
     async fn flush_active() {
         let batch_count = Arc::new(Mutex::new(0));
         // Channel to signal when receiver has taken first batch
@@ -425,14 +374,6 @@ mod tests {
     }
 
     #[tokio::test]
-    /// **Property**: Batch processing retries on temporary failures until success or max retries.
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel with capacity 10
-    /// 2. Spawn receiver that fails twice then succeeds on third attempt
-    /// 3. Send a single message
-    /// 4. Wait for retry logic to complete (3 attempts with 700ms backoff)
-    /// 5. Verify at least 2 attempts were made and message was eventually received
     async fn retry_on_batch_failure() {
         let attempt_count = Arc::new(Mutex::new(0));
         let received = Arc::new(Mutex::new(false));
@@ -476,15 +417,6 @@ mod tests {
     }
 
     #[tokio::test]
-    /// **Property**: Receiver processes all remaining messages after sender is dropped.
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel with capacity 10
-    /// 2. Spawn receiver with post_process barrier for synchronization
-    /// 3. Send 5 messages to the channel
-    /// 4. Drop the sender (signals channel is closed)
-    /// 5. Wait at barrier for receiver to finish processing
-    /// 6. Verify all 5 messages were processed despite sender being dropped
     async fn processes_remaining_after_drop() {
         let received = Arc::new(Mutex::new(Vec::new()));
         let post_process_barrier = Arc::new(Barrier::new(2));
@@ -493,9 +425,10 @@ mod tests {
 
         let _ = spawn(
             "test_receiver",
-            receiver.with_test_barriers(
-                TestBarriers::new().with_post_process(post_process_barrier.clone()),
-            ),
+            receiver.with_test_barriers(TestBarriers {
+                post_process: Some(post_process_barrier.clone()),
+                ..Default::default()
+            }),
             {
                 let received = received.clone();
                 move |batch| {
@@ -523,24 +456,16 @@ mod tests {
     }
 
     #[tokio::test]
-    /// **Property**: try_send succeeds when under capacity and fails immediately when at capacity.
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel with capacity 3
-    /// 2. Spawn receiver with post_process barrier for synchronization
-    /// 3. Send 3 messages using try_send (should all succeed)
-    /// 4. Attempt 4th try_send - should fail immediately (at capacity)
-    /// 5. Wait at barrier for receiver to process the batch
-    /// 6. Attempt try_send again - should succeed (capacity freed)
     async fn try_send_behavior() {
         let post_process_barrier = Arc::new(Barrier::new(2));
 
         let (sender, receiver) = crate::bounded::<Vec<i32>>(3);
         let _ = spawn(
             "test_receiver",
-            receiver.with_test_barriers(
-                TestBarriers::new().with_post_process(post_process_barrier.clone()),
-            ),
+            receiver.with_test_barriers(TestBarriers {
+                post_process: Some(post_process_barrier.clone()),
+                ..Default::default()
+            }),
             |batch| async move {
                 let _ = batch;
                 Ok(())
@@ -565,12 +490,6 @@ mod tests {
     }
 
     #[tokio::test]
-    /// **Property**: try_send returns an error when the channel is closed.
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel
-    /// 2. Drop the receiver to close the channel from the receiver side
-    /// 3. Attempt try_send - should fail with a non-retryable error
     async fn try_send_on_closed_channel() {
         let (sender, receiver) = crate::bounded::<Vec<i32>>(10);
 
@@ -587,16 +506,6 @@ mod tests {
     }
 
     #[tokio::test]
-    /// **Property**: when_empty callback fires when the channel becomes empty (batch is taken).
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel with capacity 10
-    /// 2. Spawn receiver with post_take barrier for synchronization
-    /// 3. Send a single message
-    /// 4. Register when_empty callback
-    /// 5. Verify callback hasn't fired yet (batch not taken)
-    /// 6. Wait at barrier for receiver to take the batch
-    /// 7. Verify callback fired after batch was taken (channel empty)
     async fn when_empty_callback() {
         let callback_fired = Arc::new(Mutex::new(false));
         let post_take_barrier = Arc::new(Barrier::new(2));
@@ -605,8 +514,10 @@ mod tests {
 
         let _ = spawn(
             "test_receiver",
-            receiver
-                .with_test_barriers(TestBarriers::new().with_post_take(post_take_barrier.clone())),
+            receiver.with_test_barriers(TestBarriers {
+                post_take: Some(post_take_barrier.clone()),
+                ..Default::default()
+            }),
             |_batch| async move { Ok(()) },
         )
         .unwrap();
@@ -630,16 +541,6 @@ mod tests {
     }
 
     #[tokio::test]
-    /// **Property**: when_flushed callback fires when a batch is fully processed.
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel with capacity 10
-    /// 2. Spawn receiver with post_process barrier for synchronization
-    /// 3. Send a single message
-    /// 4. Register when_flushed callback
-    /// 5. Verify callback hasn't fired yet (batch not processed)
-    /// 6. Wait at barrier for receiver to finish processing
-    /// 7. Verify callback fired after batch was flushed
     async fn when_flushed_callback() {
         let callback_fired = Arc::new(Mutex::new(false));
         let post_process_barrier = Arc::new(Barrier::new(2));
@@ -648,9 +549,10 @@ mod tests {
 
         let _ = spawn(
             "test_receiver",
-            receiver.with_test_barriers(
-                TestBarriers::new().with_post_process(post_process_barrier.clone()),
-            ),
+            receiver.with_test_barriers(TestBarriers {
+                post_process: Some(post_process_barrier.clone()),
+                ..Default::default()
+            }),
             |_batch| async move { Ok(()) },
         )
         .unwrap();

@@ -158,7 +158,7 @@ pub fn bounded<T: Channel>(max_capacity: usize) -> (Sender<T>, Receiver<T>) {
             capacity: Capacity::new(),
             shared,
             #[cfg(all(not(target_arch = "wasm32"), test))]
-            test_barriers: TestBarriers::new(),
+            test_barriers: TestBarriers::default(),
         },
     )
 }
@@ -321,78 +321,22 @@ impl<T: Channel> Sender<T> {
 
 /**
 Test barriers for deterministic ordering in tests.
-
-Use these barriers to force specific synchronization points between sender and receiver in tests,
-avoiding reliance on non-deterministic delays.
 */
 #[cfg(all(not(target_arch = "wasm32"), test))]
 #[derive(Default, Clone)]
-pub struct TestBarriers {
-    pre_fetch: Option<Arc<Barrier>>,
+struct TestBarriers {
     post_take: Option<Arc<Barrier>>,
     post_process: Option<Arc<Barrier>>,
 }
 
 #[cfg(all(not(target_arch = "wasm32"), test))]
 impl TestBarriers {
-    /**
-    Create a new empty TestBarriers instance.
-    */
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /**
-    Configure the pre-fetch barrier.
-
-    This barrier is triggered before the receiver checks for the next batch.
-    */
-    pub fn with_pre_fetch(mut self, barrier: Arc<Barrier>) -> Self {
-        self.pre_fetch = Some(barrier);
-        self
-    }
-
-    /**
-    Configure the post-take barrier.
-
-    This barrier is triggered after the receiver takes a batch but before processing.
-    */
-    pub fn with_post_take(mut self, barrier: Arc<Barrier>) -> Self {
-        self.post_take = Some(barrier);
-        self
-    }
-
-    /**
-    Configure the post-process barrier.
-
-    This barrier is triggered after the receiver finishes processing a batch.
-    */
-    pub fn with_post_process(mut self, barrier: Arc<Barrier>) -> Self {
-        self.post_process = Some(barrier);
-        self
-    }
-
-    /**
-    Wait at the pre-fetch barrier if configured.
-    */
-    pub async fn wait_pre_fetch(&self) {
-        if let Some(ref barrier) = self.pre_fetch {
-            barrier.wait().await;
-        }
-    }
-
-    /**
-    Wait at the post-take barrier if configured.
-    */
     pub async fn wait_post_take(&self) {
         if let Some(ref barrier) = self.post_take {
             barrier.wait().await;
         }
     }
 
-    /**
-    Wait at the post-process barrier if configured.
-    */
     pub async fn wait_post_process(&self) {
         if let Some(ref barrier) = self.post_process {
             barrier.wait().await;
@@ -432,7 +376,7 @@ impl<T: Channel> Receiver<T> {
     This method is only available when building with tests.
     */
     #[cfg(all(not(target_arch = "wasm32"), test))]
-    pub fn with_test_barriers(mut self, barriers: TestBarriers) -> Self {
+    fn with_test_barriers(mut self, barriers: TestBarriers) -> Self {
         self.test_barriers = barriers;
         self
     }
@@ -458,10 +402,6 @@ impl<T: Channel> Receiver<T> {
         let mut next_batch = Batch::new();
 
         loop {
-            // Pre-fetch barrier: wait here before checking for batches
-            #[cfg(all(not(target_arch = "wasm32"), test))]
-            self.test_barriers.wait_pre_fetch().await;
-
             // Run inside the lock
             let (mut current_batch, is_open) = {
                 let mut state = self.shared.state.lock().unwrap();

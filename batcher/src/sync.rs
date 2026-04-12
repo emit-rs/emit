@@ -292,15 +292,6 @@ mod tests {
     }
 
     #[test]
-    /// **Property**: Basic send and receive functionality works correctly.
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel with capacity 10
-    /// 2. Spawn a receiver thread that waits for processing commands
-    /// 3. Send 10 messages to the channel
-    /// 4. Allow receiver to process up to 2 batches (messages may be batched together)
-    /// 5. Wait until all 10 messages have been processed
-    /// 6. Drop sender and join receiver thread
     fn send_recv() {
         let received = Arc::new(Mutex::new(0));
 
@@ -338,14 +329,6 @@ mod tests {
     }
 
     #[test]
-    /// **Property**: Channel truncates oldest messages when capacity is exceeded.
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel with capacity 5
-    /// 2. Send 10 messages (exceeding capacity, causing truncation)
-    /// 3. Spawn receiver after all sends complete
-    /// 4. Process the single batch that remains
-    /// 5. Verify only the last 5 messages (5-9) were received, first 5 (0-4) were truncated
     fn send_full_capacity() {
         let received = Arc::new(Mutex::new(Vec::new()));
 
@@ -383,15 +366,6 @@ mod tests {
     }
 
     #[test]
-    /// **Property**: Blocking send waits for capacity and all messages are eventually processed.
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel with capacity 5
-    /// 2. Spawn sender thread and receiver thread
-    /// 3. Send 10 messages using blocking_send (blocks when at capacity)
-    /// 4. Receiver processes messages in up to 10 batches
-    /// 5. Wait until all 10 messages are processed
-    /// 6. All messages succeed because blocking_send waits for capacity
     fn blocking_send_full_capacity() {
         let received = Arc::new(Mutex::new(0));
 
@@ -432,15 +406,6 @@ mod tests {
     }
 
     #[test]
-    /// **Property**: Blocking send times out when channel remains at capacity.
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel with capacity 5
-    /// 2. Spawn sender thread and receiver thread
-    /// 3. Send 10 messages with 1ms timeout (will timeout when channel is full)
-    /// 4. Receiver processes only the first batch (5 messages)
-    /// 5. Remaining sends timeout because receiver doesn't process more batches
-    /// 6. Sender thread exits after timeout, receiver is abandoned
     fn blocking_send_full_capacity_timeout() {
         let received = Arc::new(Mutex::new(Vec::new()));
 
@@ -479,12 +444,6 @@ mod tests {
     }
 
     #[test]
-    /// **Property**: try_send returns an error when the channel is closed.
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel
-    /// 2. Drop the receiver to close the channel from the receiver side
-    /// 3. Attempt try_send - should fail with a non-retryable error
     fn try_send_on_closed_channel() {
         let (sender, receiver) = crate::bounded::<Vec<i32>>(10);
 
@@ -501,14 +460,6 @@ mod tests {
     }
 
     #[test]
-    /// **Property**: Flush on an empty channel with zero timeout succeeds immediately.
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel with capacity 10
-    /// 2. Spawn receiver thread
-    /// 3. Call blocking_flush with zero timeout on empty channel
-    /// 4. Flush returns true immediately (nothing to wait for)
-    /// 5. Drop sender and join receiver thread
     fn flush_empty() {
         let (sender, receiver) = crate::bounded(10);
 
@@ -523,17 +474,6 @@ mod tests {
     }
 
     #[test]
-    /// **Property**: Flush waits for all active batches to complete processing.
-    ///
-    /// **Sequence of events**:
-    /// 1. Create a bounded channel with capacity 10
-    /// 2. Spawn receiver thread
-    /// 3. Send 3 messages to start first batch
-    /// 4. Wait for receiver to pick up the batch (is_in_batch flag)
-    /// 5. Send 3 more messages (second batch, while first is being processed)
-    /// 6. Call blocking_flush in a scoped thread
-    /// 7. Process both batches in the receiver
-    /// 8. Flush completes when all batches are done and channel is empty
     fn flush_active() {
         let (sender, receiver) = crate::bounded(10);
 
