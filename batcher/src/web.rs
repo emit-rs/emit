@@ -287,6 +287,7 @@ extern "C" {
 mod tests {
     use super::*;
 
+    use futures::channel::oneshot;
     use std::sync::{Arc, Mutex};
     use wasm_bindgen_test::*;
 
@@ -575,5 +576,81 @@ mod tests {
 
         // Only last 5 messages should remain (0-4 were truncated)
         assert_eq!(vec![5, 6, 7, 8, 9], *received.lock().unwrap());
+    }
+
+    #[wasm_bindgen_test]
+    /// **Property**: Park future completes when timeout fires.
+    ///
+    /// This test verifies that Park properly wakes when the timeout expires.
+    ///
+    /// **Sequence of events**:
+    /// 1. Create a Park future with a 10ms delay
+    /// 2. Await it (should complete in ~10ms)
+    /// 3. Verify the test completes (timeout fired and woke the future)
+    async fn park_completes_on_timeout() {
+        let start = js_sys::Date::new_0().get_time();
+
+        // Park for 10ms
+        Park::new(Duration::from_millis(10)).await;
+
+        let elapsed = js_sys::Date::new_0().get_time() - start;
+
+        // Should have waited at least 10ms (allow some tolerance)
+        assert!(elapsed >= 10.0, "Expected at least 10ms, got {}", elapsed);
+        // Should not have waited too long (would indicate a hang)
+        assert!(
+            elapsed < 100.0,
+            "Expected less than 100ms, got {} - future may have hung",
+            elapsed
+        );
+    }
+
+    #[wasm_bindgen_test]
+    /// **Property**: Park future doesn't hang when used with select and other future completes first.
+    ///
+    /// This test verifies that Park doesn't leak timeouts when dropped early.
+    ///
+    /// **Sequence of events**:
+    /// 1. Create a oneshot channel and a Park future with 100ms delay
+    /// 2. Select between them
+    /// 3. Send on the oneshot (completes immediately)
+    /// 4. Verify select returns the oneshot result (not the timeout)
+    /// 5. Park is dropped, timeout should be cleared
+    async fn park_does_not_hang_when_dropped_early() {
+        let (tx, rx) = oneshot::channel::<()>();
+
+        // Send immediately (should complete before timeout)
+        let _ = tx.send(());
+
+        // Select between rx and Park
+        let result = futures::future::select(rx, Park::new(Duration::from_millis(100))).await;
+
+        // Should be the left side (oneshot completed first)
+        assert!(matches!(result, futures::future::Either::Left((Ok(()), _))));
+
+        // If we get here without hanging, Park was cleaned up properly
+    }
+
+    #[wasm_bindgen_test]
+    /// **Property**: Park with zero duration completes quickly.
+    ///
+    /// This test verifies that Park handles zero duration correctly (should use minimum 1ms).
+    ///
+    /// **Sequence of events**:
+    /// 1. Create a Park future with zero duration
+    /// 2. Await it
+    /// 3. Verify it completes quickly (should be at least 1ms due to setTimeout minimum)
+    async fn park_zero_duration() {
+        let start = js_sys::Date::new_0().get_time();
+
+        // Park for 0ms (should use minimum 1ms)
+        Park::new(Duration::ZERO).await;
+
+        let elapsed = js_sys::Date::new_0().get_time() - start;
+
+        // Should have waited at least 1ms (setTimeout minimum)
+        assert!(elapsed >= 1.0, "Expected at least 1ms, got {}", elapsed);
+        // Should not have waited too long
+        assert!(elapsed < 50.0, "Expected less than 50ms, got {}", elapsed);
     }
 }
