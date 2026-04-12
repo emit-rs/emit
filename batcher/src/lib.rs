@@ -324,20 +324,20 @@ Test barriers for deterministic ordering in tests.
 */
 #[cfg(all(not(target_arch = "wasm32"), test))]
 #[derive(Default, Clone)]
-struct TestBarriers {
+pub struct TestBarriers {
     post_take: Option<Arc<Barrier>>,
     post_process: Option<Arc<Barrier>>,
 }
 
 #[cfg(all(not(target_arch = "wasm32"), test))]
 impl TestBarriers {
-    pub async fn wait_post_take(&self) {
+    async fn wait_post_take(&self) {
         if let Some(ref barrier) = self.post_take {
             barrier.wait().await;
         }
     }
 
-    pub async fn wait_post_process(&self) {
+    async fn wait_post_process(&self) {
         if let Some(ref barrier) = self.post_process {
             barrier.wait().await;
         }
@@ -376,7 +376,7 @@ impl<T: Channel> Receiver<T> {
     This method is only available when building with tests.
     */
     #[cfg(all(not(target_arch = "wasm32"), test))]
-    fn with_test_barriers(mut self, barriers: TestBarriers) -> Self {
+    pub fn with_test_barriers(mut self, barriers: TestBarriers) -> Self {
         self.test_barriers = barriers;
         self
     }
