@@ -160,6 +160,14 @@ mod tests {
     use ::tokio::sync::Barrier;
 
     #[tokio::test]
+    /// **Property**: Async send and flush work correctly for high-volume message processing.
+    ///
+    /// **Sequence of events**:
+    /// 1. Create a bounded channel with capacity 10
+    /// 2. Spawn receiver task that counts processed messages
+    /// 3. Send 100 messages using async send (blocks when at capacity)
+    /// 4. Call flush to wait for all messages to be processed
+    /// 5. Verify all 100 messages were received and counted
     async fn async_send_recv_flush() {
         let received = Arc::new(Mutex::new(0));
 
@@ -193,6 +201,15 @@ mod tests {
     }
 
     #[tokio::test]
+    /// **Property**: Channel truncates oldest messages when capacity is exceeded (tokio variant).
+    ///
+    /// **Sequence of events**:
+    /// 1. Create a bounded channel with capacity 5
+    /// 2. Send 10 messages (exceeding capacity, causing truncation of 0-4)
+    /// 3. Spawn receiver with post_process barrier for synchronization
+    /// 4. Receiver processes the remaining batch
+    /// 5. Wait at barrier for processing to complete
+    /// 6. Verify only messages 5-9 were received (first 5 truncated)
     async fn send_full_capacity() {
         use crate::TestBarriers;
         use std::sync::Arc;
@@ -230,6 +247,14 @@ mod tests {
     }
 
     #[tokio::test]
+    /// **Property**: Async send with blocking ensures all messages are processed even when exceeding capacity.
+    ///
+    /// **Sequence of events**:
+    /// 1. Create a bounded channel with capacity 5
+    /// 2. Spawn receiver task
+    /// 3. Send 10 messages using async send (blocks when full, waits for capacity)
+    /// 4. Call flush to wait for all processing to complete
+    /// 5. Verify all 10 messages were processed (no truncation because async_send waits)
     async fn async_send_full_capacity() {
         let received = Arc::new(Mutex::new(0));
 
@@ -262,35 +287,39 @@ mod tests {
     }
 
     #[tokio::test]
+    /// **Property**: Async send times out when channel remains at capacity.
+    ///
+    /// **Sequence of events**:
+    /// 1. Create a bounded channel with capacity 5
+    /// 2. Spawn receiver that takes first batch then blocks indefinitely (using Semaphore(0))
+    /// 3. Fill channel with 5 messages
+    /// 4. Wait for receiver to take the batch and block
+    /// 5. Fill channel again with 5 messages (now at capacity)
+    /// 6. Attempt async send with 10ms timeout - should fail (channel full, receiver blocked)
+    /// 7. Abort receiver task to clean up
     async fn async_send_timeout() {
-        use std::sync::Arc;
+        use tokio::sync::Semaphore;
 
-        let received = Arc::new(Mutex::new(Vec::new()));
         // Channel to signal when receiver has taken a batch
         let (receiver_ready_tx, mut receiver_ready_rx) = tokio::sync::broadcast::channel::<()>(100);
-        // Channel to signal receiver to continue processing
-        let (_continue_processing_tx, continue_processing_rx) = tokio::sync::broadcast::channel::<()>(100);
+        // Semaphore with 0 permits - blocks forever (until cancelled)
+        let blocker = Arc::new(Semaphore::new(0));
 
         let (sender, receiver) = crate::bounded::<Vec<i32>>(5);
 
-        // Spawn receiver task that waits for signal before processing
-        let received_clone = received.clone();
-        let continue_processing_rx_clone = continue_processing_rx.resubscribe();
+        // Spawn receiver task that blocks after taking first batch
         let receiver_task = tokio::task::spawn(async move {
             exec(receiver, {
-                let received = received_clone.clone();
                 let receiver_ready_tx = receiver_ready_tx.clone();
-                let continue_processing_rx = continue_processing_rx_clone;
-                move |batch| {
-                    let received = received.clone();
+                let blocker = blocker.clone();
+                move |_batch| {
                     let receiver_ready_tx = receiver_ready_tx.clone();
-                    let mut continue_processing_rx = continue_processing_rx.resubscribe();
+                    let blocker = blocker.clone();
                     async move {
                         // Signal that we've received a batch
                         let _ = receiver_ready_tx.send(());
-                        // Wait for test to signal us to continue
-                        let _ = continue_processing_rx.recv().await;
-                        received.lock().unwrap().extend(batch);
+                        // Block forever - acquire will never complete (until task is cancelled)
+                        let _ = blocker.acquire().await;
                         Ok(())
                     }
                 }
@@ -321,6 +350,13 @@ mod tests {
     }
 
     #[tokio::test]
+    /// **Property**: Flush on an empty channel with zero timeout succeeds immediately (tokio variant).
+    ///
+    /// **Sequence of events**:
+    /// 1. Create a bounded channel with capacity 10
+    /// 2. Spawn receiver task
+    /// 3. Call flush with zero timeout on empty channel
+    /// 4. Flush returns true immediately (nothing to wait for)
     async fn flush_empty() {
         let (sender, receiver) = crate::bounded::<Vec<()>>(10);
 
@@ -335,6 +371,16 @@ mod tests {
     }
 
     #[tokio::test]
+    /// **Property**: Flush waits for all active and in-flight batches to complete (tokio variant).
+    ///
+    /// **Sequence of events**:
+    /// 1. Create a bounded channel with capacity 10
+    /// 2. Spawn receiver that signals when it takes a batch
+    /// 3. Send 3 messages to start first batch
+    /// 4. Wait for receiver to pick up first batch
+    /// 5. Send 3 more messages (second batch, queued while first is processing)
+    /// 6. Call flush - should wait for both batches to complete
+    /// 7. Verify flush succeeded and at least one batch was processed
     async fn flush_active() {
         use std::sync::Arc;
 
@@ -382,6 +428,14 @@ mod tests {
     }
 
     #[tokio::test]
+    /// **Property**: Batch processing retries on temporary failures until success or max retries.
+    ///
+    /// **Sequence of events**:
+    /// 1. Create a bounded channel with capacity 10
+    /// 2. Spawn receiver that fails twice then succeeds on third attempt
+    /// 3. Send a single message
+    /// 4. Wait for retry logic to complete (3 attempts with 700ms backoff)
+    /// 5. Verify at least 2 attempts were made and message was eventually received
     async fn retry_on_batch_failure() {
         let attempt_count = Arc::new(Mutex::new(0));
         let received = Arc::new(Mutex::new(false));
@@ -425,6 +479,15 @@ mod tests {
     }
 
     #[tokio::test]
+    /// **Property**: Receiver processes all remaining messages after sender is dropped.
+    ///
+    /// **Sequence of events**:
+    /// 1. Create a bounded channel with capacity 10
+    /// 2. Spawn receiver with post_process barrier for synchronization
+    /// 3. Send 5 messages to the channel
+    /// 4. Drop the sender (signals channel is closed)
+    /// 5. Wait at barrier for receiver to finish processing
+    /// 6. Verify all 5 messages were processed despite sender being dropped
     async fn processes_remaining_after_drop() {
         use crate::TestBarriers;
         use std::sync::Arc;
@@ -462,6 +525,15 @@ mod tests {
     }
 
     #[tokio::test]
+    /// **Property**: try_send succeeds when under capacity and fails immediately when at capacity.
+    ///
+    /// **Sequence of events**:
+    /// 1. Create a bounded channel with capacity 3
+    /// 2. Spawn receiver with post_process barrier for synchronization
+    /// 3. Send 3 messages using try_send (should all succeed)
+    /// 4. Attempt 4th try_send - should fail immediately (at capacity)
+    /// 5. Wait at barrier for receiver to process the batch
+    /// 6. Attempt try_send again - should succeed (capacity freed)
     async fn try_send_behavior() {
         use crate::TestBarriers;
         use std::sync::Arc;
@@ -494,6 +566,16 @@ mod tests {
     }
 
     #[tokio::test]
+    /// **Property**: when_empty callback fires when the channel becomes empty (batch is taken).
+    ///
+    /// **Sequence of events**:
+    /// 1. Create a bounded channel with capacity 10
+    /// 2. Spawn receiver with post_take barrier for synchronization
+    /// 3. Send a single message
+    /// 4. Register when_empty callback
+    /// 5. Verify callback hasn't fired yet (batch not taken)
+    /// 6. Wait at barrier for receiver to take the batch
+    /// 7. Verify callback fired after batch was taken (channel empty)
     async fn when_empty_callback() {
         use crate::TestBarriers;
         use std::sync::Arc;
@@ -529,6 +611,16 @@ mod tests {
     }
 
     #[tokio::test]
+    /// **Property**: when_flushed callback fires when a batch is fully processed.
+    ///
+    /// **Sequence of events**:
+    /// 1. Create a bounded channel with capacity 10
+    /// 2. Spawn receiver with post_process barrier for synchronization
+    /// 3. Send a single message
+    /// 4. Register when_flushed callback
+    /// 5. Verify callback hasn't fired yet (batch not processed)
+    /// 6. Wait at barrier for receiver to finish processing
+    /// 7. Verify callback fired after batch was flushed
     async fn when_flushed_callback() {
         use crate::TestBarriers;
         use std::sync::Arc;
@@ -573,6 +665,15 @@ mod quickcheck_tests {
     use std::sync::{Arc, Mutex};
     use tokio::time::{sleep, Duration};
 
+     /// **Property**: All sent messages are eventually received (property-based test).
+    ///
+    /// **Sequence of events**:
+    /// 1. Generate random vector of messages (1-1000 messages)
+    /// 2. Create a bounded channel with capacity 1024
+    /// 3. Spawn receiver that collects all received messages
+    /// 4. Send all messages to the channel
+    /// 5. Flush to wait for all processing to complete
+    /// 6. Verify all messages were received (sorted comparison, order may vary)
     #[quickcheck]
     fn prop_all_messages_received(messages: Vec<i32>) {
         if messages.is_empty() || messages.len() > 1000 {
@@ -618,6 +719,15 @@ mod quickcheck_tests {
         });
     }
 
+    /// **Property**: Channel truncation keeps only the most recent messages (property-based test).
+    ///
+    /// **Sequence of events**:
+    /// 1. Generate random capacity (1-50) and extra_messages (1-100)
+    /// 2. Create a bounded channel with the generated capacity
+    /// 3. Send (capacity + extra_messages) messages BEFORE spawning receiver
+    /// 4. Spawn receiver after truncation has occurred
+    /// 5. Wait for processing to complete
+    /// 6. Verify: received count <= capacity, all messages are the most recent ones
     #[quickcheck]
     fn prop_truncation_keeps_most_recent(capacity: usize, extra_messages: usize) {
         // Constrain to reasonable values - ensure we have meaningful test data
@@ -677,6 +787,15 @@ mod quickcheck_tests {
         });
     }
 
+    /// **Property**: Batch sizes are consistent - total processed equals sent, no batch exceeds capacity (property-based test).
+    ///
+    /// **Sequence of events**:
+    /// 1. Generate random capacity (1-100) and message_count (1-capacity)
+    /// 2. Create a bounded channel with the generated capacity
+    /// 3. Spawn receiver that records batch sizes
+    /// 4. Send message_count messages (within capacity, no truncation)
+    /// 5. Wait for processing to complete
+    /// 6. Verify: sum of batch sizes equals message_count, no batch exceeds capacity
     #[quickcheck]
     fn prop_batch_sizes_are_consistent(message_count: usize, capacity: usize) {
         // Constrain values - ensure message_count <= capacity to avoid truncation
@@ -723,6 +842,15 @@ mod quickcheck_tests {
         });
     }
 
+    /// **Property**: Flush guarantees all messages are processed before returning (property-based test).
+    ///
+    /// **Sequence of events**:
+    /// 1. Generate random capacity (1-100) and message_count (1-capacity)
+    /// 2. Create a bounded channel with the generated capacity
+    /// 3. Spawn receiver with variable processing delay
+    /// 4. Send message_count messages (within capacity, no truncation)
+    /// 5. Call flush with 5s timeout - should wait for all processing
+    /// 6. Verify: flush succeeded and all messages were processed
     #[quickcheck]
     fn prop_flush_guarantees_completion(message_count: usize, capacity: usize) {
         // Constrain values - ensure message_count <= capacity to avoid truncation
@@ -765,6 +893,16 @@ mod quickcheck_tests {
         });
     }
 
+    /// **Property**: Dropping sender doesn't lose messages - receiver still processes all buffered messages (property-based test).
+    ///
+    /// **Sequence of events**:
+    /// 1. Generate random capacity (1-100) and message_count (1-capacity)
+    /// 2. Create a bounded channel with the generated capacity
+    /// 3. Spawn receiver that collects all received messages
+    /// 4. Send message_count messages (within capacity, no truncation)
+    /// 5. Drop sender immediately (signals channel is closed)
+    /// 6. Wait for processing to complete
+    /// 7. Verify: all messages were processed despite sender being dropped
     #[quickcheck]
     fn prop_drop_sender_preserves_messages(message_count: usize, capacity: usize) {
         // Constrain values - ensure message_count <= capacity to avoid truncation

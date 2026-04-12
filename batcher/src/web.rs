@@ -292,6 +292,13 @@ mod tests {
     use wasm_bindgen_test::*;
 
     #[wasm_bindgen_test]
+    /// **Property**: Spawn handle resolves when sender is dropped (WebAssembly variant).
+    ///
+    /// **Sequence of events**:
+    /// 1. Create a bounded channel with capacity 1024
+    /// 2. Spawn receiver in a JavaScript promise
+    /// 3. Drop the sender (signals channel is closed)
+    /// 4. Join the handle - should complete when receiver exits
     async fn promise_resolves_on_sender_drop() {
         let (sender, receiver) = crate::bounded::<Vec<i32>>(1024);
 
@@ -309,6 +316,14 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
+    /// **Property**: Receiver processes all messages in batches (WebAssembly variant).
+    ///
+    /// **Sequence of events**:
+    /// 1. Create a bounded channel with capacity 1024
+    /// 2. Spawn receiver that records batch size
+    /// 3. Send 100 messages (JavaScript single-threaded, all processed together)
+    /// 4. Drop sender and join handle
+    /// 5. Verify all 100 messages were processed in a single batch
     async fn spawn_processes_batches() {
         let (sender, receiver) = crate::bounded::<Vec<i32>>(1024);
 
@@ -342,6 +357,14 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
+    /// **Property**: Async send waits for capacity and ensures messages are processed (WebAssembly variant).
+    ///
+    /// **Sequence of events**:
+    /// 1. Create a bounded channel with capacity 2
+    /// 2. Spawn receiver that counts processed messages
+    /// 3. Send 3 messages using async send (blocks when at capacity)
+    /// 4. After 3 sends with capacity 2, exactly 2 messages should be processed
+    /// 5. Drop sender and join handle
     async fn send_waits_for_processing() {
         let (sender, receiver) = crate::bounded::<Vec<()>>(2);
 
@@ -374,6 +397,15 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
+    /// **Property**: Flush waits for all messages to be processed (WebAssembly variant).
+    ///
+    /// **Sequence of events**:
+    /// 1. Create a bounded channel with capacity 1024
+    /// 2. Spawn receiver that counts processed messages
+    /// 3. Send 100 messages
+    /// 4. Verify no messages processed yet
+    /// 5. Call flush with 10ms timeout - should wait for all processing
+    /// 6. Verify flush succeeded and all 100 messages were processed
     async fn flush_waits_for_completion() {
         let (sender, receiver) = crate::bounded::<Vec<i32>>(1024);
 
@@ -411,6 +443,15 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
+    /// **Property**: Flush times out when processing takes longer than the timeout (WebAssembly variant).
+    ///
+    /// **Sequence of events**:
+    /// 1. Create a bounded channel with capacity 1024
+    /// 2. Spawn receiver that takes 50ms to process each batch
+    /// 3. Send 100 messages
+    /// 4. Verify no messages processed yet
+    /// 5. Call flush with 1ms timeout - should timeout before processing completes
+    /// 6. Verify flush returned false (timed out)
     async fn flush_times_out() {
         let (sender, receiver) = crate::bounded::<Vec<i32>>(1024);
 
@@ -448,6 +489,14 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
+    /// **Property**: Receiver errors are handled gracefully without crashing (WebAssembly variant).
+    ///
+    /// **Sequence of events**:
+    /// 1. Create a bounded channel with capacity 1024
+    /// 2. Spawn receiver that always returns an error (no_retry)
+    /// 3. Send a message
+    /// 4. Drop sender and join handle
+    /// 5. Verify the system doesn't crash despite the failing receiver
     async fn failing_receiver_does_not_cause_havoc() {
         let (sender, receiver) = crate::bounded::<Vec<()>>(1024);
 
