@@ -229,9 +229,9 @@ fn block_on<R>(fut: impl Future<Output = R>) -> R {
 mod tests {
     use super::*;
 
-    use crate::Receiver;
-
     use std::{sync::mpsc, thread};
+
+    use crate::Receiver;
 
     enum SenderCommand<T> {
         BlockingSend(T, Duration),

@@ -156,8 +156,10 @@ async fn wait(mut notified: tokio::sync::oneshot::Receiver<()>, timeout: Duratio
 mod tests {
     use super::*;
 
-    use ::tokio::sync::Barrier;
     use std::sync::{Arc, Mutex};
+    use tokio::sync::{Barrier, Semaphore};
+
+    use crate::TestBarriers;
 
     #[tokio::test]
     /// **Property**: Async send and flush work correctly for high-volume message processing.
@@ -211,9 +213,6 @@ mod tests {
     /// 5. Wait at barrier for processing to complete
     /// 6. Verify only messages 5-9 were received (first 5 truncated)
     async fn send_full_capacity() {
-        use crate::TestBarriers;
-        use std::sync::Arc;
-
         let received = Arc::new(Mutex::new(Vec::new()));
         let post_process_barrier = Arc::new(Barrier::new(2));
 
@@ -300,8 +299,6 @@ mod tests {
     /// 6. Attempt async send with 10ms timeout - should fail (channel full, receiver blocked)
     /// 7. Abort receiver task to clean up
     async fn async_send_timeout() {
-        use tokio::sync::Semaphore;
-
         // Channel to signal when receiver has taken a batch
         let (receiver_ready_tx, mut receiver_ready_rx) = tokio::sync::broadcast::channel::<()>(100);
         // Semaphore with 0 permits - blocks forever (until cancelled)
@@ -384,8 +381,6 @@ mod tests {
     /// 6. Call flush - should wait for both batches to complete
     /// 7. Verify flush succeeded and at least one batch was processed
     async fn flush_active() {
-        use std::sync::Arc;
-
         let batch_count = Arc::new(Mutex::new(0));
         // Channel to signal when receiver has taken first batch
         let (receiver_ready_tx, mut receiver_ready_rx) = tokio::sync::broadcast::channel::<()>(100);
@@ -491,9 +486,6 @@ mod tests {
     /// 5. Wait at barrier for receiver to finish processing
     /// 6. Verify all 5 messages were processed despite sender being dropped
     async fn processes_remaining_after_drop() {
-        use crate::TestBarriers;
-        use std::sync::Arc;
-
         let received = Arc::new(Mutex::new(Vec::new()));
         let post_process_barrier = Arc::new(Barrier::new(2));
 
@@ -541,9 +533,6 @@ mod tests {
     /// 5. Wait at barrier for receiver to process the batch
     /// 6. Attempt try_send again - should succeed (capacity freed)
     async fn try_send_behavior() {
-        use crate::TestBarriers;
-        use std::sync::Arc;
-
         let post_process_barrier = Arc::new(Barrier::new(2));
 
         let (sender, receiver) = crate::bounded::<Vec<i32>>(3);
@@ -609,9 +598,6 @@ mod tests {
     /// 6. Wait at barrier for receiver to take the batch
     /// 7. Verify callback fired after batch was taken (channel empty)
     async fn when_empty_callback() {
-        use crate::TestBarriers;
-        use std::sync::Arc;
-
         let callback_fired = Arc::new(Mutex::new(false));
         let post_take_barrier = Arc::new(Barrier::new(2));
 
@@ -655,9 +641,6 @@ mod tests {
     /// 6. Wait at barrier for receiver to finish processing
     /// 7. Verify callback fired after batch was flushed
     async fn when_flushed_callback() {
-        use crate::TestBarriers;
-        use std::sync::Arc;
-
         let callback_fired = Arc::new(Mutex::new(false));
         let post_process_barrier = Arc::new(Barrier::new(2));
 
