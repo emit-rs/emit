@@ -479,6 +479,28 @@ mod tests {
     }
 
     #[test]
+    /// **Property**: try_send returns an error when the channel is closed.
+    ///
+    /// **Sequence of events**:
+    /// 1. Create a bounded channel
+    /// 2. Drop the receiver to close the channel from the receiver side
+    /// 3. Attempt try_send - should fail with a non-retryable error
+    fn try_send_on_closed_channel() {
+        let (sender, receiver) = crate::bounded::<Vec<i32>>(10);
+
+        // Drop the receiver to close the channel
+        drop(receiver);
+
+        // try_send should fail with a non-retryable error
+        let result = sender.try_send(1);
+        assert!(result.is_err());
+
+        // Verify the error is non-retryable (no messages to retry)
+        let err = result.err().unwrap();
+        assert!(err.into_retryable().is_none());
+    }
+
+    #[test]
     /// **Property**: Flush on an empty channel with zero timeout succeeds immediately.
     ///
     /// **Sequence of events**:

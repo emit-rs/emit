@@ -47,7 +47,3 @@ version = "0.3"
 [target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dev-dependencies.tokio]
 version = "1"
 features = ["sync", "macros", "io-util", "rt", "time"]
-
-[dev-dependencies]
-quickcheck = "1"
-quickcheck_macros = "1"

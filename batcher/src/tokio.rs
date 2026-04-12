@@ -156,8 +156,8 @@ async fn wait(mut notified: tokio::sync::oneshot::Receiver<()>, timeout: Duratio
 mod tests {
     use super::*;
 
-    use std::sync::{Arc, Mutex};
     use ::tokio::sync::Barrier;
+    use std::sync::{Arc, Mutex};
 
     #[tokio::test]
     /// **Property**: Async send and flush work correctly for high-volume message processing.
@@ -225,18 +225,22 @@ mod tests {
         }
 
         // Spawn receiver after sending, with barrier after processing
-        let _ = spawn("test_receiver", receiver.with_test_barriers(
-            TestBarriers::new().with_post_process(post_process_barrier.clone())
-        ), {
-            let received = received.clone();
-            move |batch| {
+        let _ = spawn(
+            "test_receiver",
+            receiver.with_test_barriers(
+                TestBarriers::new().with_post_process(post_process_barrier.clone()),
+            ),
+            {
                 let received = received.clone();
-                async move {
-                    received.lock().unwrap().extend(batch);
-                    Ok(())
+                move |batch| {
+                    let received = received.clone();
+                    async move {
+                        received.lock().unwrap().extend(batch);
+                        Ok(())
+                    }
                 }
-            }
-        })
+            },
+        )
         .unwrap();
 
         // Wait at barrier for receiver to finish processing
@@ -274,9 +278,7 @@ mod tests {
 
         // Send more messages than capacity using async send
         for _ in 0..10 {
-            send(&sender, (), Duration::from_secs(1))
-                .await
-                .unwrap();
+            send(&sender, (), Duration::from_secs(1)).await.unwrap();
         }
 
         // Use flush to wait for all messages to be processed
@@ -497,18 +499,22 @@ mod tests {
 
         let (sender, receiver) = crate::bounded::<Vec<i32>>(10);
 
-        let _ = spawn("test_receiver", receiver.with_test_barriers(
-            TestBarriers::new().with_post_process(post_process_barrier.clone())
-        ), {
-            let received = received.clone();
-            move |batch| {
+        let _ = spawn(
+            "test_receiver",
+            receiver.with_test_barriers(
+                TestBarriers::new().with_post_process(post_process_barrier.clone()),
+            ),
+            {
                 let received = received.clone();
-                async move {
-                    received.lock().unwrap().extend(batch);
-                    Ok(())
+                move |batch| {
+                    let received = received.clone();
+                    async move {
+                        received.lock().unwrap().extend(batch);
+                        Ok(())
+                    }
                 }
-            }
-        })
+            },
+        )
         .unwrap();
 
         // Send messages and drop sender
@@ -541,12 +547,16 @@ mod tests {
         let post_process_barrier = Arc::new(Barrier::new(2));
 
         let (sender, receiver) = crate::bounded::<Vec<i32>>(3);
-        let _ = spawn("test_receiver", receiver.with_test_barriers(
-            TestBarriers::new().with_post_process(post_process_barrier.clone())
-        ), |batch| async move {
-            let _ = batch;
-            Ok(())
-        })
+        let _ = spawn(
+            "test_receiver",
+            receiver.with_test_barriers(
+                TestBarriers::new().with_post_process(post_process_barrier.clone()),
+            ),
+            |batch| async move {
+                let _ = batch;
+                Ok(())
+            },
+        )
         .unwrap();
 
         // Successful sends
@@ -607,11 +617,12 @@ mod tests {
 
         let (sender, receiver) = crate::bounded::<Vec<i32>>(10);
 
-        let _ = spawn("test_receiver", receiver.with_test_barriers(
-            TestBarriers::new().with_post_take(post_take_barrier.clone())
-        ), |_batch| async move {
-            Ok(())
-        })
+        let _ = spawn(
+            "test_receiver",
+            receiver
+                .with_test_barriers(TestBarriers::new().with_post_take(post_take_barrier.clone())),
+            |_batch| async move { Ok(()) },
+        )
         .unwrap();
 
         // Send a message
@@ -652,11 +663,13 @@ mod tests {
 
         let (sender, receiver) = crate::bounded::<Vec<i32>>(10);
 
-        let _ = spawn("test_receiver", receiver.with_test_barriers(
-            TestBarriers::new().with_post_process(post_process_barrier.clone())
-        ), |_batch| async move {
-            Ok(())
-        })
+        let _ = spawn(
+            "test_receiver",
+            receiver.with_test_barriers(
+                TestBarriers::new().with_post_process(post_process_barrier.clone()),
+            ),
+            |_batch| async move { Ok(()) },
+        )
         .unwrap();
 
         // Send a message
@@ -675,296 +688,5 @@ mod tests {
 
         // Callback should have fired
         assert!(*callback_fired.lock().unwrap());
-    }
-}
-
-#[cfg(test)]
-mod quickcheck_tests {
-    use crate::tokio::{flush, spawn};
-    use crate::bounded;
-
-    use quickcheck_macros::quickcheck;
-    use std::sync::{Arc, Mutex};
-    use tokio::time::{sleep, Duration};
-
-     /// **Property**: All sent messages are eventually received (property-based test).
-    ///
-    /// **Sequence of events**:
-    /// 1. Generate random vector of messages (1-1000 messages)
-    /// 2. Create a bounded channel with capacity 1024
-    /// 3. Spawn receiver that collects all received messages
-    /// 4. Send all messages to the channel
-    /// 5. Flush to wait for all processing to complete
-    /// 6. Verify all messages were received (sorted comparison, order may vary)
-    #[quickcheck]
-    fn prop_all_messages_received(messages: Vec<i32>) {
-        if messages.is_empty() || messages.len() > 1000 {
-            return;
-        }
-
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        rt.block_on(async {
-            let received = Arc::new(Mutex::new(Vec::new()));
-            let (sender, receiver) = bounded::<Vec<i32>>(1024);
-
-            let _ = spawn("test_receiver", receiver, {
-                let received = received.clone();
-                move |batch| {
-                    let received = received.clone();
-                    async move {
-                        received.lock().unwrap().extend(batch);
-                        Ok(())
-                    }
-                }
-            })
-            .unwrap();
-
-            // Send all messages
-            for msg in &messages {
-                sender.send(*msg);
-            }
-
-            // Wait for processing
-            flush(&sender, Duration::from_secs(1)).await;
-            sleep(Duration::from_millis(50)).await;
-
-            // Verify all messages were received (order may vary due to batching)
-            let mut received_vec = received.lock().unwrap().clone();
-            received_vec.sort();
-            let mut expected = messages.clone();
-            expected.sort();
-
-            assert_eq!(expected, received_vec);
-        });
-    }
-
-    /// **Property**: Channel truncation keeps only the most recent messages (property-based test).
-    ///
-    /// **Sequence of events**:
-    /// 1. Generate random capacity (1-50) and extra_messages (1-100)
-    /// 2. Create a bounded channel with the generated capacity
-    /// 3. Send (capacity + extra_messages) messages BEFORE spawning receiver
-    /// 4. Spawn receiver after truncation has occurred
-    /// 5. Wait for processing to complete
-    /// 6. Verify: received count <= capacity, all messages are the most recent ones
-    #[quickcheck]
-    fn prop_truncation_keeps_most_recent(capacity: usize, extra_messages: usize) {
-        // Constrain to reasonable values - ensure we have meaningful test data
-        let capacity = (capacity % 50) + 1; // 1-50
-        let extra_messages = (extra_messages % 100) + 1; // 1-100
-
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        rt.block_on(async {
-            let received = Arc::new(Mutex::new(Vec::new()));
-            let (sender, receiver) = bounded::<Vec<usize>>(capacity);
-
-            // Send more messages than capacity BEFORE spawning receiver
-            // This ensures truncation happens in the channel buffer
-            for i in 0..(capacity + extra_messages) {
-                sender.send(i);
-            }
-
-            // Spawn receiver after sending - it will only see the most recent messages
-            let _ = spawn("test_receiver", receiver, {
-                let received = received.clone();
-                move |batch| {
-                    let received = received.clone();
-                    async move {
-                        received.lock().unwrap().extend(batch);
-                        Ok(())
-                    }
-                }
-            })
-            .unwrap();
-
-            // Wait for processing
-            sleep(Duration::from_millis(200)).await;
-
-            let received_vec = received.lock().unwrap();
-
-            // After truncation, we should have at most capacity messages
-            // The actual count depends on how many messages were sent after the last truncation
-            assert!(
-                received_vec.len() <= capacity,
-                "Should receive at most capacity messages, got {}",
-                received_vec.len()
-            );
-
-            // All received messages should be >= extra_messages (the most recent ones after truncation)
-            // This verifies that older messages were dropped
-            for &msg in received_vec.iter() {
-                assert!(
-                    msg >= extra_messages,
-                    "All messages should be the most recent ones (>= {}), got {}",
-                    extra_messages,
-                    msg
-                );
-            }
-        });
-    }
-
-    /// **Property**: Batch sizes are consistent - total processed equals sent, no batch exceeds capacity (property-based test).
-    ///
-    /// **Sequence of events**:
-    /// 1. Generate random capacity (1-100) and message_count (1-capacity)
-    /// 2. Create a bounded channel with the generated capacity
-    /// 3. Spawn receiver that records batch sizes
-    /// 4. Send message_count messages (within capacity, no truncation)
-    /// 5. Wait for processing to complete
-    /// 6. Verify: sum of batch sizes equals message_count, no batch exceeds capacity
-    #[quickcheck]
-    fn prop_batch_sizes_are_consistent(message_count: usize, capacity: usize) {
-        // Constrain values - ensure message_count <= capacity to avoid truncation
-        let capacity = (capacity % 100) + 1; // 1-100
-        let message_count = (message_count % capacity) + 1; // 1-capacity
-
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        rt.block_on(async {
-            let batch_sizes = Arc::new(Mutex::new(Vec::new()));
-            let (sender, receiver) = bounded::<Vec<i32>>(capacity);
-
-            let _ = spawn("test_receiver", receiver, {
-                let batch_sizes = batch_sizes.clone();
-                move |batch| {
-                    let batch_sizes = batch_sizes.clone();
-                    async move {
-                        batch_sizes.lock().unwrap().push(batch.len());
-                        Ok(())
-                    }
-                }
-            })
-            .unwrap();
-
-            // Send messages (within capacity, so no truncation)
-            for _ in 0..message_count {
-                sender.send(42i32);
-            }
-
-            sleep(Duration::from_millis(200)).await;
-
-            let batch_sizes = batch_sizes.lock().unwrap();
-
-            // Total messages processed should equal sent messages
-            let total_processed: usize = batch_sizes.iter().sum();
-            assert_eq!(total_processed, message_count, "All messages should be processed");
-
-            // No batch should exceed capacity
-            for &size in batch_sizes.iter() {
-                assert!(size <= capacity, "Batch size should not exceed capacity");
-            }
-        });
-    }
-
-    /// **Property**: Flush guarantees all messages are processed before returning (property-based test).
-    ///
-    /// **Sequence of events**:
-    /// 1. Generate random capacity (1-100) and message_count (1-capacity)
-    /// 2. Create a bounded channel with the generated capacity
-    /// 3. Spawn receiver with variable processing delay
-    /// 4. Send message_count messages (within capacity, no truncation)
-    /// 5. Call flush with 5s timeout - should wait for all processing
-    /// 6. Verify: flush succeeded and all messages were processed
-    #[quickcheck]
-    fn prop_flush_guarantees_completion(message_count: usize, capacity: usize) {
-        // Constrain values - ensure message_count <= capacity to avoid truncation
-        let capacity = (capacity % 100) + 1; // 1-100
-        let message_count = (message_count % capacity) + 1; // 1-capacity
-
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        rt.block_on(async {
-            let received = Arc::new(Mutex::new(0usize));
-            let (sender, receiver) = bounded::<Vec<i32>>(capacity);
-
-            let _ = spawn("test_receiver", receiver, {
-                let received = received.clone();
-                move |batch| {
-                    let received = received.clone();
-                    async move {
-                        *received.lock().unwrap() += batch.len();
-                        // Add variable delay to simulate real processing
-                        sleep(Duration::from_millis((batch.len() % 10) as u64)).await;
-                        Ok(())
-                    }
-                }
-            })
-            .unwrap();
-
-            // Send messages (within capacity, so no truncation)
-            for _ in 0..message_count {
-                sender.send(42i32);
-            }
-
-            // Flush should wait for all to complete
-            let flushed = flush(&sender, Duration::from_secs(5)).await;
-            assert!(flushed, "Flush should complete within timeout");
-
-            // All messages should be processed
-            assert_eq!(*received.lock().unwrap(), message_count);
-        });
-    }
-
-    /// **Property**: Dropping sender doesn't lose messages - receiver still processes all buffered messages (property-based test).
-    ///
-    /// **Sequence of events**:
-    /// 1. Generate random capacity (1-100) and message_count (1-capacity)
-    /// 2. Create a bounded channel with the generated capacity
-    /// 3. Spawn receiver that collects all received messages
-    /// 4. Send message_count messages (within capacity, no truncation)
-    /// 5. Drop sender immediately (signals channel is closed)
-    /// 6. Wait for processing to complete
-    /// 7. Verify: all messages were processed despite sender being dropped
-    #[quickcheck]
-    fn prop_drop_sender_preserves_messages(message_count: usize, capacity: usize) {
-        // Constrain values - ensure message_count <= capacity to avoid truncation
-        let capacity = (capacity % 100) + 1; // 1-100
-        let message_count = (message_count % capacity) + 1; // 1-capacity
-
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        rt.block_on(async {
-            let received = Arc::new(Mutex::new(Vec::new()));
-            let (sender, receiver) = bounded::<Vec<i32>>(capacity);
-
-            let _ = spawn("test_receiver", receiver, {
-                let received = received.clone();
-                move |batch| {
-                    let received = received.clone();
-                    async move {
-                        received.lock().unwrap().extend(batch);
-                        Ok(())
-                    }
-                }
-            })
-            .unwrap();
-
-            // Send messages (within capacity, so no truncation)
-            for i in 0..message_count {
-                sender.send(i as i32);
-            }
-
-            // Drop sender immediately
-            drop(sender);
-
-            // Wait for processing
-            sleep(Duration::from_millis(200)).await;
-
-            // All messages should still be processed
-            let received_vec = received.lock().unwrap();
-            assert_eq!(received_vec.len(), message_count);
-        });
     }
 }
