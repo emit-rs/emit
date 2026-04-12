@@ -370,7 +370,7 @@ mod tests {
         assert!(flushed);
 
         // Both batches should have been processed
-        assert!(*batch_count.lock().unwrap() >= 1);
+        assert_eq!(2, *batch_count.lock().unwrap());
     }
 
     #[tokio::test]
@@ -407,13 +407,20 @@ mod tests {
 
         sender.send(42);
 
-        // Wait for retries to complete (700ms delay between retries, need 3 attempts)
-        tokio::time::sleep(Duration::from_secs(3)).await;
+        // Retry loop: return early when count == 2, panic after 3 seconds
+        let start = Instant::now();
+        loop {
+            let received = *received.lock().unwrap();
+            if received {
+                break;
+            }
 
-        // Should have 3 attempts: 1 initial + 2 retries
-        let count = *attempt_count.lock().unwrap();
-        assert!(count >= 2, "Should have at least 2 attempts, got {}", count);
-        assert!(*received.lock().unwrap());
+            if start.elapsed() >= Duration::from_secs(3) {
+                panic!("Timeout waiting for retries");
+            }
+
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
     }
 
     #[tokio::test]
