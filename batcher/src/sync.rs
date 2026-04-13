@@ -229,9 +229,9 @@ fn block_on<R>(fut: impl Future<Output = R>) -> R {
 mod tests {
     use super::*;
 
-    use crate::Receiver;
-
     use std::{sync::mpsc, thread};
+
+    use crate::Receiver;
 
     enum SenderCommand<T> {
         BlockingSend(T, Duration),
@@ -441,6 +441,22 @@ mod tests {
         // The blocking sends will time out
         sender.send(SenderCommand::stop()).unwrap();
         sender_handle.join().unwrap();
+    }
+
+    #[test]
+    fn try_send_on_closed_channel() {
+        let (sender, receiver) = crate::bounded::<Vec<i32>>(10);
+
+        // Drop the receiver to close the channel
+        drop(receiver);
+
+        // try_send should fail with a non-retryable error
+        let result = sender.try_send(1);
+        assert!(result.is_err());
+
+        // Verify the error is non-retryable (no messages to retry)
+        let err = result.err().unwrap();
+        assert!(err.into_retryable().is_none());
     }
 
     #[test]

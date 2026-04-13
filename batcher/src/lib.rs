@@ -154,6 +154,8 @@ pub fn bounded<T: Channel>(max_capacity: usize) -> (Sender<T>, Receiver<T>) {
             retry_delay: Delay::new(Duration::from_millis(700), Duration::from_secs(10)),
             capacity: Capacity::new(),
             shared,
+            #[cfg(all(not(target_arch = "wasm32"), test))]
+            test_barriers: TestBarriers::default(),
         },
     )
 }
@@ -315,6 +317,31 @@ impl<T: Channel> Sender<T> {
 }
 
 /**
+Test barriers for deterministic ordering in tests.
+*/
+#[cfg(all(not(target_arch = "wasm32"), test))]
+#[derive(Default, Clone)]
+pub struct TestBarriers {
+    post_take: Option<Arc<::tokio::sync::Barrier>>,
+    post_process: Option<Arc<::tokio::sync::Barrier>>,
+}
+
+#[cfg(all(not(target_arch = "wasm32"), test))]
+impl TestBarriers {
+    async fn wait_post_take(&self) {
+        if let Some(ref barrier) = self.post_take {
+            barrier.wait().await;
+        }
+    }
+
+    async fn wait_post_process(&self) {
+        if let Some(ref barrier) = self.post_process {
+            barrier.wait().await;
+        }
+    }
+}
+
+/**
 The receiving half of a channel.
 
 Use [`Receiver::exec`], [`crate::tokio::spawn`], or [`crate::sync::spawn`] to run the receiver as a background worker.
@@ -325,6 +352,8 @@ pub struct Receiver<T> {
     retry_delay: Delay,
     capacity: Capacity,
     shared: Arc<Shared<T>>,
+    #[cfg(all(not(target_arch = "wasm32"), test))]
+    test_barriers: TestBarriers,
 }
 
 impl<T> Drop for Receiver<T> {
@@ -338,6 +367,17 @@ impl<T> Drop for Receiver<T> {
 }
 
 impl<T: Channel> Receiver<T> {
+    /**
+    Configure test barriers for deterministic ordering in tests.
+
+    This method is only available when building with tests.
+    */
+    #[cfg(all(not(target_arch = "wasm32"), test))]
+    pub fn with_test_barriers(mut self, barriers: TestBarriers) -> Self {
+        self.test_barriers = barriers;
+        self
+    }
+
     /**
     Run the receiver asynchronously.
 
@@ -396,6 +436,10 @@ impl<T: Channel> Receiver<T> {
             // Run outside of the lock
             current_batch.watchers.notify_on_take();
 
+            // Post-take barrier: wait here after batch is taken
+            #[cfg(all(not(target_arch = "wasm32"), test))]
+            self.test_barriers.wait_post_take().await;
+
             if current_batch.channel.len() > 0 {
                 self.retry.reset();
                 self.retry_delay.reset();
@@ -453,11 +497,19 @@ impl<T: Channel> Receiver<T> {
 
                 // After the batch has been emitted, notify any watchers
                 current_batch.watchers.notify_on_flush();
+
+                // Post-process barrier: wait here after batch is processed
+                #[cfg(all(not(target_arch = "wasm32"), test))]
+                self.test_barriers.wait_post_process().await;
             }
             // If the batch was empty then notify any watchers (there was nothing to flush)
             // and wait before checking again
             else {
                 current_batch.watchers.notify_on_flush();
+
+                // Post-process barrier: wait here after empty batch
+                #[cfg(all(not(target_arch = "wasm32"), test))]
+                self.test_barriers.wait_post_process().await;
 
                 // If the channel is closed then exit the loop and return; this will
                 // drop the receiver

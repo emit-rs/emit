@@ -287,8 +287,8 @@ extern "C" {
 mod tests {
     use super::*;
 
+    use futures::channel::oneshot;
     use std::sync::{Arc, Mutex};
-
     use wasm_bindgen_test::*;
 
     #[wasm_bindgen_test]
@@ -464,5 +464,104 @@ mod tests {
 
         drop(sender);
         handle.join().await;
+    }
+
+    #[wasm_bindgen_test]
+    fn try_send_on_closed_channel() {
+        let (sender, receiver) = crate::bounded::<Vec<i32>>(10);
+
+        // Drop the receiver to close the channel
+        drop(receiver);
+
+        // try_send should fail with a non-retryable error
+        let result = sender.try_send(1);
+        assert!(result.is_err());
+
+        // Verify the error is non-retryable (no messages to retry)
+        let err = result.err().unwrap();
+        assert!(err.into_retryable().is_none());
+    }
+
+    #[wasm_bindgen_test]
+    async fn truncation_keeps_most_recent() {
+        let (sender, receiver) = crate::bounded::<Vec<i32>>(5);
+
+        let received = Arc::new(Mutex::new(Vec::new()));
+
+        let handle = spawn(receiver, {
+            let received = received.clone();
+
+            move |batch| {
+                let received = received.clone();
+
+                async move {
+                    received.lock().unwrap().extend(batch);
+
+                    Ok(())
+                }
+            }
+        })
+        .unwrap();
+
+        // Send more messages than capacity
+        for i in 0..10 {
+            sender.send(i);
+        }
+
+        drop(sender);
+        handle.join().await;
+
+        // Only last 5 messages should remain (0-4 were truncated)
+        assert_eq!(vec![5, 6, 7, 8, 9], *received.lock().unwrap());
+    }
+
+    #[wasm_bindgen_test]
+    async fn park_completes_on_timeout() {
+        let start = js_sys::Date::new_0().get_time();
+
+        // Park for 10ms
+        Park::new(Duration::from_millis(10)).await;
+
+        let elapsed = js_sys::Date::new_0().get_time() - start;
+
+        // Should have waited at least 10ms (allow some tolerance)
+        assert!(elapsed >= 10.0, "Expected at least 10ms, got {}", elapsed);
+        // Should not have waited too long (would indicate a hang)
+        assert!(
+            elapsed < 100.0,
+            "Expected less than 100ms, got {} - future may have hung",
+            elapsed
+        );
+    }
+
+    #[wasm_bindgen_test]
+    async fn park_does_not_hang_when_dropped_early() {
+        let (tx, rx) = oneshot::channel::<()>();
+
+        // Send immediately (should complete before timeout)
+        let _ = tx.send(());
+
+        // Select between rx and Park
+        let result = futures::future::select(rx, Park::new(Duration::from_millis(100))).await;
+
+        // Should be the left side (oneshot completed first)
+        assert!(matches!(result, futures::future::Either::Left((Ok(()), _))));
+
+        // If we get here without hanging, Park was cleaned up properly
+    }
+
+    #[wasm_bindgen_test]
+    async fn park_zero_duration() {
+        let start = js_sys::Date::new_0().get_time();
+
+        // Park for 0ms (should use minimum 1ms)
+        Park::new(Duration::ZERO).await;
+
+        let elapsed = js_sys::Date::new_0().get_time() - start;
+
+        // Should have waited at least 1ms (setTimeout minimum)
+        assert!(elapsed >= 1.0, "Expected at least 1ms, got {}", elapsed);
+        // Should not have waited too long
+        assert!(elapsed < 50.0, "Expected less than 50ms, got {}", elapsed);
     }
 }
