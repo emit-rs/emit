@@ -401,8 +401,9 @@ mod tests {
                             batch,
                         ))
                     } else {
-                        receiver_processed_tx.send(()).unwrap();
                         *received.lock().unwrap() = true;
+                        receiver_processed_tx.send(()).unwrap();
+
                         Ok(())
                     }
                 }
@@ -420,6 +421,8 @@ mod tests {
 
     #[tokio::test]
     async fn processes_remaining_after_drop() {
+        // Channel to signal when receiver has completed a batch
+        let (receiver_processed_tx, mut receiver_processed_rx) = broadcast::channel::<()>(100);
         let received = Arc::new(Mutex::new(Vec::new()));
         let post_process_barrier = Arc::new(Barrier::new(2));
 
@@ -433,10 +436,15 @@ mod tests {
             }),
             {
                 let received = received.clone();
+
                 move |batch| {
                     let received = received.clone();
+                    let receiver_processed_tx = receiver_processed_tx.clone();
+
                     async move {
                         received.lock().unwrap().extend(batch);
+                        receiver_processed_tx.send(()).unwrap();
+
                         Ok(())
                     }
                 }
@@ -452,6 +460,9 @@ mod tests {
 
         // Wait at barrier for receiver to finish processing
         post_process_barrier.wait().await;
+
+        // Wait for receiver to process the batch
+        receiver_processed_rx.recv().await.ok();
 
         // All messages should still be processed
         assert_eq!(vec![0, 1, 2, 3, 4], *received.lock().unwrap());
