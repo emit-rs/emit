@@ -16,7 +16,11 @@ Hello, Rust.
 `Template`s are conceptually similar to the standard library's `Arguments` type. The key difference between them is that templates are a runtime construct rather than a compile time one. You can construct a template programmatically, inspect its holes, and choose to render it in any way you like. The standard library's formatting APIs are optimized for producing strings. Templates are both a property capturing and a formatting tool.
 */
 
-use core::{cmp, fmt, slice};
+use core::{
+    cmp, fmt,
+    hash::{Hash, Hasher},
+    slice,
+};
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
@@ -273,6 +277,18 @@ impl<'a, 'b> PartialEq<Template<'b>> for Template<'a> {
 }
 
 impl<'a> Eq for Template<'a> {}
+
+impl<'a> Hash for Template<'a> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        /*
+        Must be equivalent to `partial_eq`
+        */
+
+        let _ = state;
+
+        todo!();
+    }
+}
 
 /**
 The result of calling [`Template::render`].
@@ -903,6 +919,12 @@ impl<'k, P: Props> serde::Serialize for Render<'k, P> {
 mod tests {
     use super::*;
 
+    use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
+
+    fn hash(h: &(impl Hash + ?Sized)) -> u64 {
+        BuildHasherDefault::<DefaultHasher>::default().hash_one(h)
+    }
+
     #[test]
     fn literal() {
         let tpl = Template::literal("text");
@@ -949,8 +971,16 @@ mod tests {
             let a = Template::new_ref(&a);
             let b = Template::new_ref(&b);
 
+            let ah = hash(&a);
+            let bh = hash(&b);
+
+            assert_eq!(a, a, "{a:?} == {a:?}");
+            assert_eq!(b, b, "{b:?} == {b:?}");
+
             assert_eq!(expected, a == b, "{a:?} == {b:?}");
             assert_eq!(expected, b == a, "{b:?} == {a:?}");
+
+            assert_eq!(expected, ah == bh, "{ah} == {bh}");
         }
     }
 
