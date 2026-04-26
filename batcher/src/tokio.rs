@@ -161,6 +161,10 @@ mod tests {
 
     use crate::TestBarriers;
 
+    fn barrier() -> Arc<Barrier> {
+        Arc::new(Barrier::new(2))
+    }
+
     #[tokio::test]
     async fn async_send_recv_flush() {
         let received = Arc::new(Mutex::new(0));
@@ -197,33 +201,31 @@ mod tests {
     #[tokio::test]
     async fn send_full_capacity() {
         let received = Arc::new(Mutex::new(Vec::new()));
-        let post_process_barrier = Arc::new(Barrier::new(2));
+        let post_process_barrier = barrier();
 
-        let (sender, receiver) = crate::bounded::<Vec<i32>>(5);
+        let (sender, mut receiver) = crate::bounded::<Vec<i32>>(5);
 
         // Send more messages than capacity
         for i in 0..10 {
             sender.send(i);
         }
 
+        receiver.test_barriers = TestBarriers {
+            post_process: Some(post_process_barrier.clone()),
+            ..Default::default()
+        };
+
         // Spawn receiver after sending, with barrier after processing
-        let _ = spawn(
-            "test_receiver",
-            receiver.with_test_barriers(TestBarriers {
-                post_process: Some(post_process_barrier.clone()),
-                ..Default::default()
-            }),
-            {
+        let _ = spawn("test_receiver", receiver, {
+            let received = received.clone();
+            move |batch| {
                 let received = received.clone();
-                move |batch| {
-                    let received = received.clone();
-                    async move {
-                        received.lock().unwrap().extend(batch);
-                        Ok(())
-                    }
+                async move {
+                    received.lock().unwrap().extend(batch);
+                    Ok(())
                 }
-            },
-        )
+            }
+        })
         .unwrap();
 
         // Wait at barrier for receiver to finish processing
@@ -424,32 +426,30 @@ mod tests {
         // Channel to signal when receiver has completed a batch
         let (receiver_processed_tx, mut receiver_processed_rx) = broadcast::channel::<()>(100);
         let received = Arc::new(Mutex::new(Vec::new()));
-        let post_process_barrier = Arc::new(Barrier::new(2));
+        let post_process_barrier = barrier();
 
-        let (sender, receiver) = crate::bounded::<Vec<i32>>(10);
+        let (sender, mut receiver) = crate::bounded::<Vec<i32>>(10);
 
-        let _ = spawn(
-            "test_receiver",
-            receiver.with_test_barriers(TestBarriers {
-                post_process: Some(post_process_barrier.clone()),
-                ..Default::default()
-            }),
-            {
+        receiver.test_barriers = TestBarriers {
+            post_process: Some(post_process_barrier.clone()),
+            ..Default::default()
+        };
+
+        let _ = spawn("test_receiver", receiver, {
+            let received = received.clone();
+
+            move |batch| {
                 let received = received.clone();
+                let receiver_processed_tx = receiver_processed_tx.clone();
 
-                move |batch| {
-                    let received = received.clone();
-                    let receiver_processed_tx = receiver_processed_tx.clone();
+                async move {
+                    received.lock().unwrap().extend(batch);
+                    receiver_processed_tx.send(()).unwrap();
 
-                    async move {
-                        received.lock().unwrap().extend(batch);
-                        receiver_processed_tx.send(()).unwrap();
-
-                        Ok(())
-                    }
+                    Ok(())
                 }
-            },
-        )
+            }
+        })
         .unwrap();
 
         // Send messages and drop sender
@@ -470,36 +470,38 @@ mod tests {
 
     #[tokio::test]
     async fn try_send_behavior() {
-        let post_process_barrier = Arc::new(Barrier::new(2));
+        let pre_take_barrier = barrier();
+        let post_process_barrier = barrier();
 
-        let (sender, receiver) = crate::bounded::<Vec<i32>>(3);
-        let _ = spawn(
-            "test_receiver",
-            receiver.with_test_barriers(TestBarriers {
-                post_process: Some(post_process_barrier.clone()),
-                ..Default::default()
-            }),
-            |batch| async move {
-                let _ = batch;
-                Ok(())
-            },
-        )
+        let (sender, mut receiver) = crate::bounded::<Vec<i32>>(3);
+
+        receiver.test_barriers = TestBarriers {
+            pre_take: Some(pre_take_barrier.clone()),
+            post_process: Some(post_process_barrier.clone()),
+            ..Default::default()
+        };
+
+        let _ = spawn("test_receiver", receiver, |batch| async move {
+            let _ = batch;
+            Ok(())
+        })
         .unwrap();
 
-        // Successful sends
-        assert!(sender.try_send(1).is_ok());
-        assert!(sender.try_send(2).is_ok());
-        assert!(sender.try_send(3).is_ok());
+        // Up to capacity should succeed
+        sender.try_send(1).unwrap();
+        sender.try_send(2).unwrap();
+        sender.try_send(3).unwrap();
 
         // Should fail when at capacity
         let result = sender.try_send(4);
         assert!(result.is_err());
 
         // Wait at barrier for receiver to finish processing
+        pre_take_barrier.wait().await;
         post_process_barrier.wait().await;
 
         // Should succeed after processing
-        assert!(sender.try_send(4).is_ok());
+        sender.try_send(4).unwrap();
     }
 
     #[tokio::test]
@@ -521,19 +523,16 @@ mod tests {
     #[tokio::test]
     async fn when_empty_callback() {
         let callback_fired = Arc::new(Mutex::new(false));
-        let post_take_barrier = Arc::new(Barrier::new(2));
+        let post_take_barrier = barrier();
 
-        let (sender, receiver) = crate::bounded::<Vec<i32>>(10);
+        let (sender, mut receiver) = crate::bounded::<Vec<i32>>(10);
 
-        let _ = spawn(
-            "test_receiver",
-            receiver.with_test_barriers(TestBarriers {
-                post_take: Some(post_take_barrier.clone()),
-                ..Default::default()
-            }),
-            |_batch| async move { Ok(()) },
-        )
-        .unwrap();
+        receiver.test_barriers = TestBarriers {
+            post_take: Some(post_take_barrier.clone()),
+            ..Default::default()
+        };
+
+        let _ = spawn("test_receiver", receiver, |_batch| async move { Ok(()) }).unwrap();
 
         // Send a message
         sender.send(1);
@@ -558,19 +557,16 @@ mod tests {
         // Channel to signal when receiver has completed a batch
         let (when_flushed_tx, mut when_flushed_rx) = broadcast::channel::<()>(100);
         let callback_fired = Arc::new(Mutex::new(false));
-        let post_process_barrier = Arc::new(Barrier::new(2));
+        let post_process_barrier = barrier();
 
-        let (sender, receiver) = crate::bounded::<Vec<i32>>(10);
+        let (sender, mut receiver) = crate::bounded::<Vec<i32>>(10);
 
-        let _ = spawn(
-            "test_receiver",
-            receiver.with_test_barriers(TestBarriers {
-                post_process: Some(post_process_barrier.clone()),
-                ..Default::default()
-            }),
-            |_batch| async move { Ok(()) },
-        )
-        .unwrap();
+        receiver.test_barriers = TestBarriers {
+            post_process: Some(post_process_barrier.clone()),
+            ..Default::default()
+        };
+
+        let _ = spawn("test_receiver", receiver, |_batch| async move { Ok(()) }).unwrap();
 
         // Send a message
         sender.send(1);

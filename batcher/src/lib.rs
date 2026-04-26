@@ -317,17 +317,26 @@ impl<T: Channel> Sender<T> {
 }
 
 /**
-Test barriers for deterministic ordering in tests.
+Deterministic ordering in tests via barriers.
 */
 #[cfg(all(not(target_arch = "wasm32"), test))]
 #[derive(Default, Clone)]
-pub struct TestBarriers {
+struct TestBarriers {
+    // NOTE: These use `tokio`'s barrier type since we always have `tokio` in tests
+    // but could be rewritten to some generic `futures` type
+    pre_take: Option<Arc<::tokio::sync::Barrier>>,
     post_take: Option<Arc<::tokio::sync::Barrier>>,
     post_process: Option<Arc<::tokio::sync::Barrier>>,
 }
 
 #[cfg(all(not(target_arch = "wasm32"), test))]
 impl TestBarriers {
+    async fn wait_pre_take(&self) {
+        if let Some(ref barrier) = self.pre_take {
+            barrier.wait().await;
+        }
+    }
+
     async fn wait_post_take(&self) {
         if let Some(ref barrier) = self.post_take {
             barrier.wait().await;
@@ -368,17 +377,6 @@ impl<T> Drop for Receiver<T> {
 
 impl<T: Channel> Receiver<T> {
     /**
-    Configure test barriers for deterministic ordering in tests.
-
-    This method is only available when building with tests.
-    */
-    #[cfg(all(not(target_arch = "wasm32"), test))]
-    pub fn with_test_barriers(mut self, barriers: TestBarriers) -> Self {
-        self.test_barriers = barriers;
-        self
-    }
-
-    /**
     Run the receiver asynchronously.
 
     The returned future will resolve once the [`Sender`] is dropped.
@@ -399,6 +397,10 @@ impl<T: Channel> Receiver<T> {
         let mut next_batch = Batch::new();
 
         loop {
+            // Post-take barrier: wait here after batch is taken
+            #[cfg(all(not(target_arch = "wasm32"), test))]
+            self.test_barriers.wait_pre_take().await;
+
             // Run inside the lock
             let (mut current_batch, is_open) = {
                 let mut state = self.shared.state.lock().unwrap();
