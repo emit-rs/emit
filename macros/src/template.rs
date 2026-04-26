@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt::Write as _};
 
 use proc_macro2::TokenStream;
 
@@ -171,10 +171,23 @@ impl<'a> fv_template::LiteralVisitor for TemplateVisitor<'a> {
         };
 
         let needs_escaping = text.needs_escaping();
-        let text = text.get();
 
-        self.literal.push_str(text);
+        let raw_text = text.get();
 
-        parts.push(quote!(emit::template::Part::text(#text).with_escaping(#needs_escaping)));
+        if needs_escaping {
+            // Roundtrip through `Part` to perform escaping
+            write!(
+                &mut self.literal,
+                "{}",
+                emit_core::template::Part::text_ref(text.get())
+            )
+            .expect("infallible write");
+        } else {
+            self.literal.push_str(&raw_text);
+        };
+
+        parts.push(
+            quote!(emit::template::Part::text(#raw_text).with_needs_escaping_raw(#needs_escaping)),
+        );
     }
 }

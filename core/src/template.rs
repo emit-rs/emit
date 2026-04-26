@@ -42,9 +42,11 @@ Template equality is based on the equality of their renderings.
 Two templates can be equal if they'd render to the same outputs. That means they must have the same holes in the same positions, but their text tokens may be split differently, so long as they produce the same text.
 */
 #[derive(Clone)]
-pub struct Template<'a>(TemplateKind<'a>);
+pub struct Template<'a> {
+    kind: TemplateKind<'a>,
+}
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum TemplateKind<'a> {
     Literal([Part<'a>; 1]),
     Parts(&'a [Part<'a>]),
@@ -86,14 +88,18 @@ impl Template<'static> {
     Create a template from a set of tokens.
     */
     pub const fn new(parts: &'static [Part<'static>]) -> Self {
-        Template(TemplateKind::Parts(parts))
+        Template {
+            kind: TemplateKind::Parts(parts),
+        }
     }
 
     /**
     Create a template from a string literal with no holes.
     */
     pub const fn literal(text: &'static str) -> Self {
-        Template(TemplateKind::Literal([Part::text(text)]))
+        Template {
+            kind: TemplateKind::Literal([Part::text(text)]),
+        }
     }
 }
 
@@ -104,7 +110,9 @@ impl<'a> Template<'a> {
     The [`Template::new`] method should be preferred where possible.
     */
     pub const fn new_ref(parts: &'a [Part<'a>]) -> Self {
-        Template(TemplateKind::Parts(parts))
+        Template {
+            kind: TemplateKind::Parts(parts),
+        }
     }
 
     /**
@@ -113,18 +121,26 @@ impl<'a> Template<'a> {
     The [`Template::literal`] method should be preferred where possible.
     */
     pub const fn literal_ref(text: &'a str) -> Self {
-        Template(TemplateKind::Literal([Part::text_ref(text)]))
+        Template {
+            kind: TemplateKind::Literal([Part::text_ref(text)]),
+        }
     }
 
     /**
     Get a new template, borrowing data from this one.
     */
     pub fn by_ref<'b>(&'b self) -> Template<'b> {
-        match self.0 {
-            TemplateKind::Literal([ref part]) => Template(TemplateKind::Literal([part.by_ref()])),
-            TemplateKind::Parts(parts) => Template(TemplateKind::Parts(parts)),
+        match self.kind {
+            TemplateKind::Literal([ref part]) => Template {
+                kind: TemplateKind::Literal([part.by_ref()]),
+            },
+            TemplateKind::Parts(parts) => Template {
+                kind: TemplateKind::Parts(parts),
+            },
             #[cfg(feature = "alloc")]
-            TemplateKind::Owned(ref parts) => Template(TemplateKind::Parts(parts)),
+            TemplateKind::Owned(ref parts) => Template {
+                kind: TemplateKind::Parts(parts),
+            },
         }
     }
 
@@ -134,7 +150,7 @@ impl<'a> Template<'a> {
     If the template only has a single token, and that token is text, then this method will return `Some`. Otherwise this method will return `None`.
     */
     pub fn as_literal(&'_ self) -> Option<&'_ Str<'a>> {
-        match self.0.parts() {
+        match self.kind.parts() {
             [part] => part.as_text(),
             _ => None,
         }
@@ -144,7 +160,7 @@ impl<'a> Template<'a> {
     Iterate over the parts of the template.
     */
     pub fn parts(&'_ self) -> Parts<'_, 'a> {
-        Parts(self.0.parts().iter())
+        Parts(self.kind.parts().iter())
     }
 
     /**
@@ -183,25 +199,36 @@ impl<'a> ToValue for Template<'a> {
 }
 
 impl<'a, 'b> PartialEq<Template<'b>> for Template<'a> {
+    /**
+    Compare two templates for equality.
+
+    Templates are considered equal if they'd produce the same value when
+    formatted by `Display`. Note that the presence of formatters on holes
+    does not affect equality.
+    */
     fn eq(&self, other: &Template<'b>) -> bool {
         // Optimize for the case where both templates are just text literals
         if let (Some(a), Some(b)) = (self.as_literal(), other.as_literal()) {
             return a == b;
         }
 
+        // Index into parts of `a` and `b`
         let mut ai = 0;
-        let mut ati = 0;
         let mut bi = 0;
+
+        // Index into the current text fragment of `a` and `b`
+        let mut ati = 0;
         let mut bti = 0;
 
-        let a = self.0.parts();
-        let b = other.0.parts();
+        let a = self.kind.parts();
+        let b = other.kind.parts();
 
         while ai < a.len() && bi < b.len() {
             let ap = &a[ai];
             let bp = &b[bi];
 
             match (&ap.0, &bp.0) {
+                // Compare text fragments
                 (
                     PartKind::Text {
                         value: ref a,
@@ -212,6 +239,13 @@ impl<'a, 'b> PartialEq<Template<'b>> for Template<'a> {
                         needs_escaping: _,
                     },
                 ) => {
+                    // Scan through the text fragments in `a` and `b`
+                    //
+                    // So long as the concatenated results are equal we consider
+                    // `a` and `b` to be equal. Usually, you'd expect two equal
+                    // templates to have the same exact text fragments, so this
+                    // will just compare them in their entirety in that case
+
                     let a = a.get();
                     let b = b.get();
 
@@ -242,7 +276,9 @@ impl<'a, 'b> PartialEq<Template<'b>> for Template<'a> {
 
                     continue;
                 }
+                // Compare hole fragments
                 (PartKind::Hole { label: ref a, .. }, PartKind::Hole { label: ref b, .. }) => {
+                    // Holes are not partial, so must be exactly equal
                     if a != b {
                         return false;
                     }
@@ -252,11 +288,27 @@ impl<'a, 'b> PartialEq<Template<'b>> for Template<'a> {
 
                     continue;
                 }
+                // Ignore empty fragments
+                (PartKind::Text { value: ref a, .. }, PartKind::Hole { .. })
+                    if a.get().is_empty() =>
+                {
+                    ai += 1;
+
+                    continue;
+                }
+                (PartKind::Hole { .. }, PartKind::Text { value: ref b, .. })
+                    if b.get().is_empty() =>
+                {
+                    bi += 1;
+
+                    continue;
+                }
+                // Any other mismatch means the templates aren't equal
                 _ => return false,
             }
         }
 
-        // If there's any data left then it would have to be empty text
+        // Any trailing parts after `a` or `b` is finished must be empty fragments
         for part in a[ai..].iter().chain(b[bi..].iter()) {
             let PartKind::Text {
                 ref value,
@@ -271,7 +323,7 @@ impl<'a, 'b> PartialEq<Template<'b>> for Template<'a> {
             }
         }
 
-        // If all data was processed then the templates are equal
+        // If we get this far then the templates are equal
         true
     }
 }
@@ -281,12 +333,90 @@ impl<'a> Eq for Template<'a> {}
 impl<'a> Hash for Template<'a> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         /*
-        Must be equivalent to `partial_eq`
+        The hash format used here emulates the same equality behavior as `partial_eq`.
+
+        Two templates hash to the same value if they format the same when escaping is applied.
+        That means hashing doesn't depend on the composition of text fragments if they have the
+        same concatenated value.
         */
 
-        let _ = state;
+        #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+        enum LastType {
+            Text,
+            Hole,
+        }
 
-        todo!();
+        fn hash_bytes(
+            state: &mut impl Hasher,
+            bytes_written_slot: &mut usize,
+            last_type_slot: &mut LastType,
+            bytes: &[u8],
+            last_type: LastType,
+        ) {
+            state.write(bytes);
+            *bytes_written_slot += bytes.len();
+            *last_type_slot = last_type;
+        }
+
+        fn hash_trailer(
+            state: &mut impl Hasher,
+            bytes_written_slot: &mut usize,
+            last_type: LastType,
+        ) {
+            last_type.hash(state);
+            bytes_written_slot.hash(state);
+            *bytes_written_slot = 0;
+        }
+
+        let mut last_type = LastType::Text;
+        let mut bytes_written = 0;
+
+        for part in self.kind.parts() {
+            match &part.0 {
+                // Text hashing defers writing the trailer until we hit the end of the template,
+                // or we hit a hole fragment
+                PartKind::Text {
+                    value,
+                    needs_escaping: _,
+                } => {
+                    let bytes = value.get().as_bytes();
+
+                    // Ignore empty fragments
+                    if bytes.len() > 0 {
+                        hash_bytes(
+                            state,
+                            &mut bytes_written,
+                            &mut last_type,
+                            bytes,
+                            LastType::Text,
+                        );
+                    }
+                }
+                // Hole fragments always write a trailer
+                PartKind::Hole {
+                    label,
+                    formatter: _,
+                } => {
+                    // NOTE: The redundant trailer here when templates start with a hole is fine
+                    if last_type == LastType::Text {
+                        hash_trailer(state, &mut bytes_written, last_type);
+                    }
+
+                    hash_bytes(
+                        state,
+                        &mut bytes_written,
+                        &mut last_type,
+                        label.get().as_bytes(),
+                        LastType::Hole,
+                    );
+                    hash_trailer(state, &mut bytes_written, last_type);
+                }
+            }
+        }
+
+        if last_type == LastType::Text {
+            hash_trailer(state, &mut bytes_written, last_type);
+        }
     }
 }
 
@@ -338,7 +468,7 @@ impl<'a, P: Props> Render<'a, P> {
     The [`Write`] is fed the tokens of the template along with properties matching the labels of its holes.
     */
     pub fn write(&self, mut writer: impl Write) -> fmt::Result {
-        for part in self.tpl.0.parts() {
+        for part in self.tpl.kind.parts() {
             part.write(self.escape, &mut writer, &self.props)?;
         }
 
@@ -467,8 +597,14 @@ impl<W: fmt::Write> fmt::Write for WriteEscaped<W> {
 /**
 An individual token in a [`Template`].
 */
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Part<'a>(PartKind<'a>);
+
+impl<'a> fmt::Display for Part<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.write(true, f, Empty)
+    }
+}
 
 impl Part<'static> {
     /**
@@ -610,17 +746,19 @@ impl<'a> Part<'a> {
     }
 
     /**
-    Mark whether the part should check for, and escape any `{` or `}` characters when formatting.
+    Mark whether the part should check for, and escape any `{` or `}` characters when formatting, without checking if escaping is actually necessary.
 
-    It is only valid call this function with `false` if the part is known not to contain any `{` or `}`.
+    It is only valid to call this method on a text part with `false` if the part does not contain any `{` or `}` characters.
+
+    This method is not unsafe. There are no memory safety properties tied to the validity of templates. Code that uses parts may panic or produce unexpected results if given an invalid template.
     */
-    pub const fn with_escaping(mut self, escape: bool) -> Self {
+    pub const fn with_needs_escaping_raw(mut self, needs_escaping: bool) -> Self {
         if let PartKind::Text {
             needs_escaping: ref mut slot,
             ..
         } = self.0
         {
-            *slot = escape;
+            *slot = needs_escaping;
         }
 
         self
@@ -724,6 +862,12 @@ pub struct Formatter {
     fmt: fn(Value, &mut fmt::Formatter) -> fmt::Result,
 }
 
+impl fmt::Debug for Formatter {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Formatter").finish_non_exhaustive()
+    }
+}
+
 impl Formatter {
     /**
     Create a formatter from the given function.
@@ -763,7 +907,7 @@ impl Formatter {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 enum PartKind<'a> {
     Text {
         value: Str<'a>,
@@ -788,7 +932,9 @@ mod alloc_support {
         pub fn new_owned(parts: impl Into<Box<[Part<'static>]>>) -> Self {
             let parts = parts.into();
 
-            Template(TemplateKind::Owned(parts))
+            Template {
+                kind: TemplateKind::Owned(parts),
+            }
         }
     }
 
@@ -799,7 +945,7 @@ mod alloc_support {
         If the template already contains owned data then this method will simply clone it.
         */
         pub fn to_owned(&self) -> Template<'static> {
-            match self.0 {
+            match self.kind {
                 TemplateKind::Owned(ref parts) => Template::new_owned(parts.clone()),
                 ref parts => {
                     let mut dst = Vec::new();
@@ -925,6 +1071,18 @@ mod tests {
         BuildHasherDefault::<DefaultHasher>::default().hash_one(h)
     }
 
+    fn parts_to_string(parts: &[Part]) -> String {
+        use std::fmt::Write as _;
+
+        let mut buf = String::new();
+
+        for part in parts {
+            write!(&mut buf, "{part}").unwrap();
+        }
+
+        buf
+    }
+
     #[test]
     fn literal() {
         let tpl = Template::literal("text");
@@ -936,6 +1094,7 @@ mod tests {
     fn eq() {
         for (a, b, expected) in [
             (&[Part::text("")] as &[_], &[Part::text("")] as &[_], true),
+            (&[Part::text("")] as &[_], &[] as &[_], true),
             (&[Part::text("a")], &[Part::text("a")], true),
             (
                 &[Part::text("a"), Part::text("b")],
@@ -950,6 +1109,10 @@ mod tests {
             ),
             (&[Part::text("a")], &[Part::text("b")], false),
             (&[Part::hole("a")], &[Part::hole("b")], false),
+            (&[Part::text("a")], &[Part::hole("a")], false),
+            (&[Part::text("{a}")], &[Part::hole("a")], false),
+            (&[Part::text(""), Part::hole("a")], &[Part::hole("a")], true),
+            (&[Part::hole("a"), Part::text("")], &[Part::hole("a")], true),
             (
                 &[
                     Part::text("a"),
@@ -974,13 +1137,36 @@ mod tests {
             let ah = hash(&a);
             let bh = hash(&b);
 
-            assert_eq!(a, a, "{a:?} == {a:?}");
-            assert_eq!(b, b, "{b:?} == {b:?}");
+            assert_eq!(a, a, "{:?} == {:?}", a.kind, a.kind);
+            assert_eq!(b, b, "{:?} == {:?}", b.kind, b.kind);
 
-            assert_eq!(expected, a == b, "{a:?} == {b:?}");
-            assert_eq!(expected, b == a, "{b:?} == {a:?}");
+            assert_eq!(expected, a == b, "{:?} == {:?}", a.kind, b.kind);
+            assert_eq!(expected, b == a, "{:?} == {:?}", b.kind, a.kind);
 
-            assert_eq!(expected, ah == bh, "{ah} == {bh}");
+            assert_eq!(expected, ah == bh, "h({:?}) == h({:?})", a.kind, b.kind);
+
+            assert_eq!(
+                expected,
+                a.to_string() == b.to_string(),
+                "{:?}.to_string() == {:?}.to_string()",
+                a.kind,
+                b.kind
+            );
+
+            assert_eq!(
+                a.to_string(),
+                parts_to_string(a.kind.parts()),
+                "{:?}.parts() == {:?}.parts()",
+                a.kind,
+                a.kind
+            );
+            assert_eq!(
+                b.to_string(),
+                parts_to_string(b.kind.parts()),
+                "{:?}.parts() == {:?}.parts()",
+                b.kind,
+                b.kind
+            );
         }
     }
 
@@ -1012,7 +1198,7 @@ mod tests {
             (
                 Template::new({
                     const PARTS: &'static [Part<'static>] =
-                        &[Part::text("{}").with_escaping(false)];
+                        &[Part::text("{}").with_needs_escaping_raw(false)];
 
                     PARTS
                 }),

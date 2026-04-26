@@ -39,3 +39,14 @@ fn tpl_fmt() {
     assert_eq!("user", parts[1].label().unwrap());
     assert!(parts[1].formatter().is_some());
 }
+
+#[test]
+fn tpl_escape() {
+    let tpl = emit::tpl!("Hello, {{user}}");
+
+    assert_eq!("Hello, {{user}}", tpl.to_string());
+
+    let parts = tpl.parts().collect::<::std::vec::Vec<_>>();
+
+    assert_eq!("Hello, {user}", parts[0].as_text().unwrap());
+}
