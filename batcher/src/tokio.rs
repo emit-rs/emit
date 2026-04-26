@@ -523,11 +523,13 @@ mod tests {
     #[tokio::test]
     async fn when_empty_callback() {
         let callback_fired = Arc::new(Mutex::new(false));
+        let pre_take_barrier = barrier();
         let post_take_barrier = barrier();
 
         let (sender, mut receiver) = crate::bounded::<Vec<i32>>(10);
 
         receiver.test_barriers = TestBarriers {
+            pre_take: Some(pre_take_barrier.clone()),
             post_take: Some(post_take_barrier.clone()),
             ..Default::default()
         };
@@ -537,15 +539,19 @@ mod tests {
         // Send a message
         sender.send(1);
 
-        let callback_fired_clone = callback_fired.clone();
-        sender.when_empty(move || {
-            *callback_fired_clone.lock().unwrap() = true;
+        sender.when_empty({
+            let callback_fired = callback_fired.clone();
+
+            move || {
+                *callback_fired.lock().unwrap() = true;
+            }
         });
 
         // Callback shouldn't fire yet (batch not taken)
         assert!(!*callback_fired.lock().unwrap());
 
-        // Wait at barrier for batch to be taken
+        // Wait at barrier for batch to be taken and processed
+        pre_take_barrier.wait().await;
         post_take_barrier.wait().await;
 
         // Callback should have fired
