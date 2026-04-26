@@ -397,7 +397,7 @@ impl<T: Channel> Receiver<T> {
         let mut next_batch = Batch::new();
 
         loop {
-            // Post-take barrier: wait here after batch is taken
+            // Pre-take barrier: wait here before batch is taken
             #[cfg(all(not(target_arch = "wasm32"), test))]
             self.test_barriers.wait_pre_take().await;
 

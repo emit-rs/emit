@@ -171,20 +171,15 @@ impl<'a> fv_template::LiteralVisitor for TemplateVisitor<'a> {
         };
 
         let needs_escaping = text.needs_escaping();
-
         let raw_text = text.get();
 
-        if needs_escaping {
-            // Roundtrip through `Part` to perform escaping
-            write!(
-                &mut self.literal,
-                "{}",
-                emit_core::template::Part::text_ref(text.get())
-            )
-            .expect("infallible write");
-        } else {
-            self.literal.push_str(&raw_text);
-        };
+        // Roundtrip through `Part` to perform escaping
+        write!(
+            &mut self.literal,
+            "{}",
+            emit_core::template::Part::text_ref(raw_text).with_needs_escaping_raw(needs_escaping)
+        )
+        .expect("infallible write");
 
         parts.push(
             quote!(emit::template::Part::text(#raw_text).with_needs_escaping_raw(#needs_escaping)),

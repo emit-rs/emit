@@ -748,7 +748,9 @@ impl<'a> Part<'a> {
     /**
     Mark whether the part should check for, and escape any `{` or `}` characters when formatting, without checking if escaping is actually necessary.
 
-    It is only valid to call this method on a text part with `false` if the part does not contain any `{` or `}` characters.
+    This method only applies to [`Part::text`]s. It's a no-op in other cases.
+
+    It is only valid to call this method on a text part with `false` if the text part does not contain any `{` or `}` characters.
 
     This method is not unsafe. There are no memory safety properties tied to the validity of templates. Code that uses parts may panic or produce unexpected results if given an invalid template.
     */
@@ -764,6 +766,11 @@ impl<'a> Part<'a> {
         self
     }
 
+    /**
+    Format the part into the given `writer`, filling any holes with values from `props`.
+
+    If `escape` is `true` then any text parts with `{` or `}` characters will be escaped as `{{` and `}}`.
+    */
     fn write(&self, escape: bool, mut writer: impl Write, props: impl Props) -> fmt::Result {
         match self.0 {
             PartKind::Text {
