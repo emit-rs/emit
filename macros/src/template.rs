@@ -135,14 +135,14 @@ struct TemplateVisitor<'a> {
 }
 
 impl<'a> fv_template::LiteralVisitor for TemplateVisitor<'a> {
-    fn visit_hole(&mut self, hole: &FieldValue) {
+    fn visit_hole(&mut self, hole: fv_template::Hole) {
         let Ok(ref mut parts) = self.parts else {
             return;
         };
 
         if let Err(e) = (|| {
-            let label = hole.key_name()?;
-            let hole = hole.key_expr()?;
+            let label = hole.get().key_name()?;
+            let hole = hole.get().key_expr()?;
 
             let field = self.props.get(&label).expect("missing prop");
 
@@ -165,13 +165,16 @@ impl<'a> fv_template::LiteralVisitor for TemplateVisitor<'a> {
         }
     }
 
-    fn visit_text(&mut self, text: &str) {
+    fn visit_text(&mut self, text: fv_template::Text) {
         let Ok(ref mut parts) = self.parts else {
             return;
         };
 
+        let needs_escaping = text.needs_escaping();
+        let text = text.get();
+
         self.literal.push_str(text);
 
-        parts.push(quote!(emit::template::Part::text(#text)));
+        parts.push(quote!(emit::template::Part::text(#text).with_escaping(#needs_escaping)));
     }
 }

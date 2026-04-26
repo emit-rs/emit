@@ -61,13 +61,13 @@ impl<'a> TemplateKind<'a> {
 
 impl<'a> fmt::Debug for Template<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(&self.render(Empty), f)
+        fmt::Debug::fmt(&self.render(Empty).with_escaping(true), f)
     }
 }
 
 impl<'a> fmt::Display for Template<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&self.render(Empty), f)
+        fmt::Display::fmt(&self.render(Empty).with_escaping(true), f)
     }
 }
 
@@ -149,6 +149,7 @@ impl<'a> Template<'a> {
     pub fn render<'b, P>(&'b self, props: P) -> Render<'b, P> {
         Render {
             tpl: self.by_ref(),
+            escape: false,
             props,
         }
     }
@@ -197,7 +198,16 @@ impl<'a, 'b> PartialEq<Template<'b>> for Template<'a> {
             let bp = &b[bi];
 
             match (&ap.0, &bp.0) {
-                (PartKind::Text { value: ref a }, PartKind::Text { value: ref b }) => {
+                (
+                    PartKind::Text {
+                        value: ref a,
+                        needs_escaping: _,
+                    },
+                    PartKind::Text {
+                        value: ref b,
+                        needs_escaping: _,
+                    },
+                ) => {
                     let a = a.get();
                     let b = b.get();
 
@@ -244,7 +254,11 @@ impl<'a, 'b> PartialEq<Template<'b>> for Template<'a> {
 
         // If there's any data left then it would have to be empty text
         for part in a[ai..].iter().chain(b[bi..].iter()) {
-            let PartKind::Text { ref value } = part.0 else {
+            let PartKind::Text {
+                ref value,
+                needs_escaping: _,
+            } = part.0
+            else {
                 return false;
             };
 
@@ -267,6 +281,7 @@ The template can be converted to text either using the [`fmt::Display`] implemen
 */
 pub struct Render<'a, P> {
     tpl: Template<'a>,
+    escape: bool,
     props: P,
 }
 
@@ -277,8 +292,19 @@ impl<'a, P> Render<'a, P> {
     pub fn with_props<U>(self, props: U) -> Render<'a, U> {
         Render {
             tpl: self.tpl,
+            escape: self.escape,
             props,
         }
+    }
+
+    /**
+    Whether to escape `{` and `}` in text fragments as `{{` and `}}`.
+
+    Rendering will not escape by default.
+    */
+    pub fn with_escaping(mut self, escape: bool) -> Self {
+        self.escape = escape;
+        self
     }
 
     /**
@@ -297,7 +323,7 @@ impl<'a, P: Props> Render<'a, P> {
     */
     pub fn write(&self, mut writer: impl Write) -> fmt::Result {
         for part in self.tpl.0.parts() {
-            part.write(&mut writer, &self.props)?;
+            part.write(self.escape, &mut writer, &self.props)?;
         }
 
         Ok(())
@@ -469,7 +495,11 @@ impl<'a> Part<'a> {
     This method allows creating parts from potentially owned or borrowed string values.
     */
     pub const fn text_str(text: Str<'a>) -> Self {
-        Part(PartKind::Text { value: text })
+        Part(PartKind::Text {
+            // Assume the input needs to be escaped when formatting
+            needs_escaping: true,
+            value: text,
+        })
     }
 
     /**
@@ -489,7 +519,10 @@ impl<'a> Part<'a> {
     */
     pub const fn as_text(&'_ self) -> Option<&'_ Str<'a>> {
         match self.0 {
-            PartKind::Text { ref value, .. } => Some(value),
+            PartKind::Text {
+                ref value,
+                needs_escaping: _,
+            } => Some(value),
             _ => None,
         }
     }
@@ -501,7 +534,10 @@ impl<'a> Part<'a> {
     */
     pub const fn label(&'_ self) -> Option<&'_ Str<'a>> {
         match self.0 {
-            PartKind::Hole { ref label, .. } => Some(label),
+            PartKind::Hole {
+                ref label,
+                formatter: _,
+            } => Some(label),
             _ => None,
         }
     }
@@ -523,8 +559,12 @@ impl<'a> Part<'a> {
     */
     pub fn by_ref<'b>(&'b self) -> Part<'b> {
         match self.0 {
-            PartKind::Text { ref value } => Part(PartKind::Text {
+            PartKind::Text {
+                ref value,
+                needs_escaping,
+            } => Part(PartKind::Text {
                 value: value.by_ref(),
+                needs_escaping,
             }),
             PartKind::Hole {
                 ref label,
@@ -553,9 +593,35 @@ impl<'a> Part<'a> {
         self
     }
 
-    fn write(&self, mut writer: impl Write, props: impl Props) -> fmt::Result {
+    /**
+    Mark whether the part should check for, and escape any `{` or `}` characters when formatting.
+
+    It is only valid call this function with `false` if the part is known not to contain any `{` or `}`.
+    */
+    pub const fn with_escaping(mut self, escape: bool) -> Self {
+        if let PartKind::Text {
+            needs_escaping: ref mut slot,
+            ..
+        } = self.0
+        {
+            *slot = escape;
+        }
+
+        self
+    }
+
+    fn write(&self, escape: bool, mut writer: impl Write, props: impl Props) -> fmt::Result {
         match self.0 {
-            PartKind::Text { ref value, .. } => writer.write_text(value.get()),
+            PartKind::Text {
+                ref value,
+                needs_escaping,
+            } => {
+                if escape && needs_escaping {
+                    escape_text(writer, value.get())
+                } else {
+                    writer.write_text(value.get())
+                }
+            }
             PartKind::Hole {
                 ref label,
                 ref formatter,
@@ -575,6 +641,32 @@ impl<'a> Part<'a> {
             }
         }
     }
+}
+
+/**
+Write `text` to `writer`, escaping any `{` or `}` characters.
+*/
+fn escape_text(mut writer: impl Write, text: &str) -> fmt::Result {
+    let mut from = 0;
+    let mut to = 0;
+
+    let raw = text.as_bytes();
+
+    while to < text.len() {
+        let b = raw[to];
+
+        if let b'{' | b'}' = b {
+            writer.write_text(&text[from..to])?;
+            writer.write_text(&text[to..to + 1])?;
+            from = to;
+        }
+
+        to += 1;
+    }
+
+    writer.write_text(&text[from..])?;
+
+    Ok(())
 }
 
 // Work-around for const-fn in traits
@@ -659,6 +751,7 @@ impl Formatter {
 enum PartKind<'a> {
     Text {
         value: Str<'a>,
+        needs_escaping: bool,
     },
     Hole {
         label: Str<'a>,
@@ -712,6 +805,7 @@ mod alloc_support {
         pub fn text_owned(text: impl Into<Box<str>>) -> Self {
             Part(PartKind::Text {
                 value: Str::new_owned(text),
+                needs_escaping: true,
             })
         }
 
@@ -729,8 +823,12 @@ mod alloc_support {
     impl<'a> Part<'a> {
         fn to_owned(&self) -> Part<'static> {
             match self.0 {
-                PartKind::Text { ref value, .. } => Part(PartKind::Text {
+                PartKind::Text {
+                    ref value,
+                    needs_escaping,
+                } => Part(PartKind::Text {
                     value: value.to_owned(),
+                    needs_escaping,
                 }),
                 PartKind::Hole {
                     ref label,
@@ -760,6 +858,7 @@ impl<'k> sval_ref::ValueRef<'k> for Template<'k> {
         if let Some(v) = self.as_literal() {
             sval_ref::stream_ref(stream, v)
         } else {
+            // NOTE: This could borrow
             sval::stream_display(stream, self)
         }
     }
@@ -787,6 +886,7 @@ impl<'k, P: Props> sval_ref::ValueRef<'k> for Render<'k, P> {
         if let Some(v) = self.as_literal() {
             sval_ref::stream_ref(stream, v)
         } else {
+            // NOTE: These could be improved to borrow in more cases
             sval::stream_display(stream, self)
         }
     }
@@ -812,31 +912,52 @@ mod tests {
 
     #[test]
     fn eq() {
-        let a = [
-            Part::text("a"),
-            Part::text("b"),
-            Part::hole("c"),
-            Part::text(""),
-            Part::text("de"),
-        ];
-        let a = Template::new_ref(&a);
+        for (a, b, expected) in [
+            (&[Part::text("")] as &[_], &[Part::text("")] as &[_], true),
+            (&[Part::text("a")], &[Part::text("a")], true),
+            (
+                &[Part::text("a"), Part::text("b")],
+                &[Part::text("ab")],
+                true,
+            ),
+            (&[Part::hole("a")], &[Part::hole("a")], true),
+            (
+                &[Part::hole("a"), Part::hole("b")],
+                &[Part::hole("ab")],
+                false,
+            ),
+            (&[Part::text("a")], &[Part::text("b")], false),
+            (&[Part::hole("a")], &[Part::hole("b")], false),
+            (
+                &[
+                    Part::text("a"),
+                    Part::text("b"),
+                    Part::hole("c"),
+                    Part::text(""),
+                    Part::text("de"),
+                ],
+                &[
+                    Part::text(""),
+                    Part::text("ab"),
+                    Part::hole("c"),
+                    Part::text("de"),
+                    Part::text(""),
+                ],
+                true,
+            ),
+        ] {
+            let a = Template::new_ref(&a);
+            let b = Template::new_ref(&b);
 
-        let b = [
-            Part::text(""),
-            Part::text("ab"),
-            Part::hole("c"),
-            Part::text("de"),
-            Part::text(""),
-        ];
-        let b = Template::new_ref(&b);
-
-        assert_eq!(a, b);
+            assert_eq!(expected, a == b, "{a:?} == {b:?}");
+            assert_eq!(expected, b == a, "{b:?} == {a:?}");
+        }
     }
 
     #[test]
     fn render() {
-        for (case, raw, interpolated) in [
-            (Template::literal("text"), "text", "text"),
+        for (case, display, render_empty, render_interpolated) in [
+            (Template::literal("text"), "text", "text", "text"),
             (
                 Template::new({
                     const PARTS: &'static [Part<'static>] = &[Part::hole("greet")];
@@ -844,7 +965,30 @@ mod tests {
                     PARTS
                 }),
                 "{greet}",
+                "{greet}",
                 "user",
+            ),
+            (
+                Template::new({
+                    const PARTS: &'static [Part<'static>] =
+                        &[Part::text("{user:"), Part::hole("greet"), Part::text("}")];
+
+                    PARTS
+                }),
+                "{{user:{greet}}}",
+                "{user:{greet}}",
+                "{user:user}",
+            ),
+            (
+                Template::new({
+                    const PARTS: &'static [Part<'static>] =
+                        &[Part::text("{}").with_escaping(false)];
+
+                    PARTS
+                }),
+                "{}",
+                "{}",
+                "{}",
             ),
             (
                 Template::new({
@@ -853,6 +997,7 @@ mod tests {
 
                     PARTS
                 }),
+                "Hello, {greet}!",
                 "Hello, {greet}!",
                 "Hello, user!",
             ),
@@ -865,36 +1010,42 @@ mod tests {
                 }),
                 "Hello{}!",
                 "Hello{}!",
+                "Hello{}!",
             ),
         ] {
-            assert_eq!(raw, case.render(Empty).to_string());
-            assert_eq!(interpolated, case.render([("greet", "user")]).to_string());
+            assert_eq!(display, case.to_string(), "{case:?}");
+            assert_eq!(render_empty, case.render(Empty).to_string(), "{case:?}");
+            assert_eq!(
+                render_interpolated,
+                case.render([("greet", "user")]).to_string(),
+                "{case:?}"
+            );
         }
     }
 
     #[test]
     fn to_value() {
-        let tpl = Template::literal("text");
+        for (case, expected_display, expected_str) in [
+            (Template::literal("text"), "text", Some("text")),
+            (
+                Template::new({
+                    const PARTS: &'static [Part<'static>] =
+                        &[Part::text("Hello, "), Part::hole("greet"), Part::text("!")];
 
-        let value = Value::from_any(&tpl);
+                    PARTS
+                }),
+                "Hello, {greet}!",
+                None,
+            ),
+        ] {
+            let value = Value::from_any(&case);
 
-        assert_eq!("text", value.to_string());
+            assert_eq!(expected_display, value.to_string());
 
-        let s = value.cast::<Str>().unwrap();
+            let s = value.cast::<Str>().map(|s| s.to_string());
 
-        assert_eq!("text", s);
-
-        let tpl = Template::new({
-            const PARTS: &'static [Part<'static>] =
-                &[Part::text("Hello, "), Part::hole("greet"), Part::text("!")];
-
-            PARTS
-        });
-
-        let value = Value::from_any(&tpl);
-
-        assert_eq!("Hello, {greet}!", value.to_string());
-        assert!(value.cast::<Str>().is_none());
+            assert_eq!(expected_str, s.as_deref());
+        }
     }
 
     #[cfg(feature = "sval")]
