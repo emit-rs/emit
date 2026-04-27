@@ -570,27 +570,21 @@ impl<'a, P: Props> fmt::Debug for Render<'a, P> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use fmt::Write as _;
 
-        f.write_char('"')?;
-        write!(WriteEscaped(&mut *f), "{}", self)?;
-        f.write_char('"')
-    }
-}
+        struct EscapeDebug<W>(W);
 
-struct WriteEscaped<W>(W);
+        impl<W: fmt::Write> fmt::Write for EscapeDebug<W> {
+            fn write_str(&mut self, s: &str) -> fmt::Result {
+                for c in s.escape_debug() {
+                    self.0.write_char(c)?;
+                }
 
-impl<W: fmt::Write> WriteEscaped<W> {
-    pub fn write_fmt(&mut self, args: fmt::Arguments) -> fmt::Result {
-        self.0.write_fmt(args)
-    }
-}
-
-impl<W: fmt::Write> fmt::Write for WriteEscaped<W> {
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        for c in s.escape_debug() {
-            self.0.write_char(c)?;
+                Ok(())
+            }
         }
 
-        Ok(())
+        f.write_char('"')?;
+        write!(EscapeDebug(&mut *f), "{}", self)?;
+        f.write_char('"')
     }
 }
 
@@ -1179,14 +1173,21 @@ mod tests {
 
     #[test]
     fn render() {
-        for (case, display, render_empty, render_interpolated) in [
-            (Template::literal("text"), "text", "text", "text"),
+        for (case, debug, display, render_empty, render_interpolated) in [
+            (
+                Template::literal("text"),
+                "\"text\"",
+                "text",
+                "text",
+                "text",
+            ),
             (
                 Template::new({
                     const PARTS: &'static [Part<'static>] = &[Part::hole("greet")];
 
                     PARTS
                 }),
+                "\"{greet}\"",
                 "{greet}",
                 "{greet}",
                 "user",
@@ -1198,9 +1199,25 @@ mod tests {
 
                     PARTS
                 }),
+                "\"{{user:{greet}}}\"",
                 "{{user:{greet}}}",
                 "{user:{greet}}",
                 "{user:user}",
+            ),
+            (
+                Template::new({
+                    const PARTS: &'static [Part<'static>] = &[
+                        Part::text("user is \""),
+                        Part::hole("greet"),
+                        Part::text("\""),
+                    ];
+
+                    PARTS
+                }),
+                "\"user is \\\"{greet}\\\"\"",
+                "user is \"{greet}\"",
+                "user is \"{greet}\"",
+                "user is \"user\"",
             ),
             (
                 Template::new({
@@ -1209,6 +1226,7 @@ mod tests {
 
                     PARTS
                 }),
+                "\"{}\"",
                 "{}",
                 "{}",
                 "{}",
@@ -1220,6 +1238,7 @@ mod tests {
 
                     PARTS
                 }),
+                "\"Hello, {greet}!\"",
                 "Hello, {greet}!",
                 "Hello, {greet}!",
                 "Hello, user!",
@@ -1231,11 +1250,14 @@ mod tests {
 
                     PARTS
                 }),
+                "\"Hello{}!\"",
                 "Hello{}!",
                 "Hello{}!",
                 "Hello{}!",
             ),
         ] {
+            assert_eq!(debug, format!("{case:?}"), "{case:?}");
+            assert_eq!(debug, format!("{:?}", case.to_string()), "{case:?}");
             assert_eq!(display, case.to_string(), "{case:?}");
             assert_eq!(render_empty, case.render(Empty).to_string(), "{case:?}");
             assert_eq!(
