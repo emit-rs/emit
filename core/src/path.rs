@@ -59,6 +59,8 @@ impl Path<'static> {
     /**
     Create a path from a raw value without checking its validity.
 
+    It is only valid to call this method with a `path` that constitutes a valid path. That is, a path where [`is_valid_path`] returns `true`.
+
     This method is not unsafe. There are no memory safety properties tied to the validity of paths. Code that uses path segments may panic or produce unexpected results if given an invalid path.
     */
     pub const fn new_raw(path: &'static str) -> Self {
@@ -83,6 +85,8 @@ impl<'a> Path<'a> {
 
     The [`Path::new_raw`] method should be preferred where possible.
 
+    It is only valid to call this method with a `path` that constitutes a valid path. That is, a path where [`is_valid_path`] returns `true`.
+
     This method is not unsafe. There are no memory safety properties tied to the validity of paths. Code that uses path segments may panic or produce unexpected results if given an invalid path.
     */
     pub const fn new_ref_raw(path: &'a str) -> Self {
@@ -104,6 +108,8 @@ impl<'a> Path<'a> {
 
     /**
     Create a path from a raw [`Str`] value without checking its validity.
+
+    It is only valid to call this method with a `path` that constitutes a valid path. That is, a path where [`is_valid_path`] returns `true`.
 
     This method is not unsafe. There are no memory safety properties tied to the validity of paths. Code that uses path segments may panic or produce unexpected results if given an invalid path.
     */
@@ -373,6 +379,8 @@ mod alloc_support {
         /**
         Create a path from an owned raw value without checking its validity.
 
+        It is only valid to call this method with a `path` that constitutes a valid path. That is, a path where [`is_valid_path`] returns `true`.
+
         This method is not unsafe. There are no memory safety properties tied to the validity of paths. Code that uses path segments may panic or produce unexpected results if given an invalid path.
         */
         pub fn new_owned_raw(path: impl Into<Box<str>>) -> Self {
@@ -396,6 +404,8 @@ mod alloc_support {
         Create a path from a potentially owned raw value without checking its validity.
 
         If the value is `Cow::Borrowed` then this method will defer to [`Path::new_ref_raw`]. If the value is `Cow::Owned` then this method will defer to [`Path::new_owned_raw`].
+
+        It is only valid to call this method with a `path` that constitutes a valid path. That is, a path where [`is_valid_path`] returns `true`.
 
         This method is not unsafe. There are no memory safety properties tied to the validity of paths. Code that uses path segments may panic or produce unexpected results if given an invalid path.
         */

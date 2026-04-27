@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt::Write as _};
 
 use proc_macro2::TokenStream;
 
@@ -135,14 +135,14 @@ struct TemplateVisitor<'a> {
 }
 
 impl<'a> fv_template::LiteralVisitor for TemplateVisitor<'a> {
-    fn visit_hole(&mut self, hole: &FieldValue) {
+    fn visit_hole(&mut self, hole: fv_template::Hole) {
         let Ok(ref mut parts) = self.parts else {
             return;
         };
 
         if let Err(e) = (|| {
-            let label = hole.key_name()?;
-            let hole = hole.key_expr()?;
+            let label = hole.get().key_name()?;
+            let hole = hole.get().key_expr()?;
 
             let field = self.props.get(&label).expect("missing prop");
 
@@ -165,13 +165,24 @@ impl<'a> fv_template::LiteralVisitor for TemplateVisitor<'a> {
         }
     }
 
-    fn visit_text(&mut self, text: &str) {
+    fn visit_text(&mut self, text: fv_template::Text) {
         let Ok(ref mut parts) = self.parts else {
             return;
         };
 
-        self.literal.push_str(text);
+        let needs_escaping = text.needs_escaping();
+        let raw_text = text.get();
 
-        parts.push(quote!(emit::template::Part::text(#text)));
+        // Roundtrip through `Part` to perform escaping
+        write!(
+            &mut self.literal,
+            "{}",
+            emit_core::template::Part::text_ref(raw_text).with_needs_escaping_raw(needs_escaping)
+        )
+        .expect("infallible write");
+
+        parts.push(
+            quote!(emit::template::Part::text(#raw_text).with_needs_escaping_raw(#needs_escaping)),
+        );
     }
 }
