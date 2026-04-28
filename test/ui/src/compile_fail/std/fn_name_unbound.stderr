@@ -1,0 +1,11 @@
+error: unused variable: `fn_name`
+ --> src/compile_fail/std/fn_name_unbound.rs:3:14
+  |
+3 | #[emit::span(fn_name, "main function")]
+  |              ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_fn_name`
+  |
+note: the lint level is defined here
+ --> src/compile_fail/std/fn_name_unbound.rs:1:9
+  |
+1 | #![deny(unused_variables)]
+  |         ^^^^^^^^^^^^^^^^
