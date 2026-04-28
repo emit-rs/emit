@@ -26,6 +26,7 @@ struct Args {
     mdl: args::MdlArg,
     when: args::WhenArg,
     guard: Option<Ident>,
+    fn_name: Option<Ident>,
     setup: Option<TokenStream>,
     ok_lvl: Option<TokenStream>,
     err_lvl: Option<TokenStream>,
@@ -77,11 +78,14 @@ impl Parse for Args {
         });
         let mut guard = Arg::ident("guard");
 
+        let mut fn_name = Arg::ident("fn_name");
+
         args::set_from_field_values(
             input.parse_terminated(FieldValue::parse, Token![,])?.iter(),
             [
                 &mut mdl,
                 &mut guard,
+                &mut fn_name,
                 &mut rt,
                 &mut when,
                 &mut ok_lvl,
@@ -108,6 +112,7 @@ impl Parse for Args {
             err: err.take_if_std()?,
             setup: setup.take(),
             guard: guard.take(),
+            fn_name: fn_name.take(),
         })
     }
 }
@@ -147,19 +152,25 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         // A synchronous function
         Stmt::Item(Item::Fn(ItemFn {
             block,
-            sig: Signature {
-                asyncness: None, ..
-            },
+            sig:
+                Signature {
+                    asyncness: None,
+                    ident,
+                    ..
+                },
             ..
         })) => {
+            let fn_name_tokens = fn_name_tokens(args.fn_name.as_ref(), Some(ident))?;
+
             **block = syn::parse2::<Block>(inject_sync(
                 &rt_tokens,
                 &mdl_tokens,
                 &when_tokens,
                 &template,
                 &ctxt_props,
-                &span_guard,
+                fn_name_tokens,
                 setup_tokens,
+                &span_guard,
                 quote!(#block),
                 default_lvl_tokens,
                 panic_lvl_tokens,
@@ -170,14 +181,17 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         }
         // A synchronous block
         Stmt::Expr(Expr::Block(ExprBlock { block, .. }), _) => {
+            let fn_name_tokens = fn_name_tokens(args.fn_name.as_ref(), None)?;
+
             *block = syn::parse2::<Block>(inject_sync(
                 &rt_tokens,
                 &mdl_tokens,
                 &when_tokens,
                 &template,
                 &ctxt_props,
-                &span_guard,
+                fn_name_tokens,
                 setup_tokens,
+                &span_guard,
                 quote!(#block),
                 default_lvl_tokens,
                 panic_lvl_tokens,
@@ -189,19 +203,25 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         // An asynchronous function
         Stmt::Item(Item::Fn(ItemFn {
             block,
-            sig: Signature {
-                asyncness: Some(_), ..
-            },
+            sig:
+                Signature {
+                    asyncness: Some(_),
+                    ident,
+                    ..
+                },
             ..
         })) => {
+            let fn_name_tokens = fn_name_tokens(args.fn_name.as_ref(), Some(ident))?;
+
             **block = syn::parse2::<Block>(inject_async(
                 &rt_tokens,
                 &mdl_tokens,
                 &when_tokens,
                 &template,
                 &ctxt_props,
-                &span_guard,
+                fn_name_tokens,
                 setup_tokens,
+                &span_guard,
                 quote!(#block),
                 default_lvl_tokens,
                 panic_lvl_tokens,
@@ -212,14 +232,17 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         }
         // An asynchronous block
         Stmt::Expr(Expr::Async(ExprAsync { block, .. }), _) => {
+            let fn_name_tokens = fn_name_tokens(args.fn_name.as_ref(), None)?;
+
             *block = syn::parse2::<Block>(inject_async(
                 &rt_tokens,
                 &mdl_tokens,
                 &when_tokens,
                 &template,
                 &ctxt_props,
-                &span_guard,
+                fn_name_tokens,
                 setup_tokens,
+                &span_guard,
                 quote!(#block),
                 default_lvl_tokens,
                 panic_lvl_tokens,
@@ -240,8 +263,9 @@ fn inject_sync(
     when_tokens: &TokenStream,
     template: &Template,
     ctxt_props: &Props,
-    span_guard: &Ident,
+    fn_name_tokens: Option<TokenStream>,
     setup_tokens: Option<TokenStream>,
+    span_guard: &Ident,
     body_tokens: TokenStream,
     default_lvl_tokens: Option<TokenStream>,
     panic_lvl_tokens: Option<TokenStream>,
@@ -302,6 +326,7 @@ fn inject_sync(
     );
 
     Ok(quote!({
+        #fn_name_tokens
         #setup_tokens
 
         let (mut __span_guard, __ctxt) = #span_guard_tokens;
@@ -322,8 +347,9 @@ fn inject_async(
     when_tokens: &TokenStream,
     template: &Template,
     ctxt_props: &Props,
-    span_guard: &Ident,
+    fn_name_tokens: Option<TokenStream>,
     setup_tokens: Option<TokenStream>,
+    span_guard: &Ident,
     body_tokens: TokenStream,
     default_lvl_tokens: Option<TokenStream>,
     panic_lvl_tokens: Option<TokenStream>,
@@ -380,6 +406,7 @@ fn inject_async(
     );
 
     Ok(quote!({
+        #fn_name_tokens
         #setup_tokens
 
         let (mut __span_guard, __ctxt) = #span_guard_tokens;
@@ -419,6 +446,24 @@ fn span_guard_tokens(
             )
         }
     })
+}
+
+fn fn_name_tokens(
+    binding: Option<&Ident>,
+    name: Option<&Ident>,
+) -> Result<Option<TokenStream>, syn::Error> {
+    match (binding, name) {
+        (Some(binding), Some(name)) => {
+            let name = name.to_string();
+
+            Ok(Some(quote!(let #binding = #name;)))
+        }
+        (None, _) => Ok(None),
+        (Some(binding), None) => Err(syn::Error::new(
+            binding.span(),
+            "cannot bind the name of an anonymous function",
+        )),
+    }
 }
 
 struct Completion {
@@ -566,6 +611,7 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
         when,
         guard,
         setup,
+        fn_name,
         ok_lvl,
         err_lvl,
         panic_lvl,
@@ -577,6 +623,7 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
     args::ensure_missing("ok_lvl", ok_lvl.map(|arg| arg.span()))?;
     args::ensure_missing("err_lvl", err_lvl.map(|arg| arg.span()))?;
     args::ensure_missing("err", err.map(|arg| arg.span()))?;
+    args::ensure_missing("fn_name", fn_name.map(|arg| arg.span()))?;
 
     let default_lvl_tokens = opts.level;
     let panic_lvl_tokens = panic_lvl;

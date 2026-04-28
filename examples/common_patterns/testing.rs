@@ -29,13 +29,13 @@ fn setup() -> Option<impl Drop> {
 }
 
 #[test]
-#[emit::span(setup, panic_lvl: "error", "add_1_1")]
+#[emit::span(setup, fn_name, panic_lvl: "error", "test {fn_name}")]
 fn add_1_1() {
     assert_eq!(2, add(1, 1));
 }
 
 #[test]
-#[emit::span(setup, panic_lvl: "error", "add_1_0")]
+#[emit::span(setup, fn_name, panic_lvl: "error", "test {fn_name}")]
 fn add_1_0() {
     assert_eq!(2, add(1, 0));
 }
