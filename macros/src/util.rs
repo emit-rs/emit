@@ -6,8 +6,8 @@ use syn::{
     parse::{self, Parse, ParseStream},
     punctuated::Punctuated,
     spanned::Spanned,
-    Attribute, Expr, ExprField, ExprLit, ExprParen, FieldValue, Ident, Lit, LitStr, MacroDelimiter,
-    Member, Meta, MetaList,
+    Attribute, Expr, ExprField, ExprLit, ExprParen, FieldValue, Ident, Item, ItemFn, Lit, LitStr,
+    MacroDelimiter, Member, Meta, MetaList, Signature, Stmt,
 };
 
 pub trait FieldValueKey {
@@ -113,6 +113,22 @@ pub fn maybe_cfg(cfg_attr: Option<&Attribute>, span: Span, wrap: TokenStream) ->
             }
         ),
         None => wrap,
+    }
+}
+
+pub trait StmtFnName {
+    fn fn_name(&self) -> Option<Ident>;
+}
+
+impl StmtFnName for Stmt {
+    fn fn_name(&self) -> Option<Ident> {
+        match self {
+            Stmt::Item(Item::Fn(ItemFn {
+                sig: Signature { ident, .. },
+                ..
+            })) => Some(ident.clone()),
+            _ => None,
+        }
     }
 }
 

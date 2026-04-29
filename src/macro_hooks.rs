@@ -2,6 +2,7 @@
 
 use core::{any::Any, fmt, ops::ControlFlow};
 
+use emit_core::event::Event;
 use emit_core::{
     and::And,
     clock::Clock,
@@ -19,8 +20,6 @@ use emit_core::{
     value::{ToValue, Value},
     well_known::{KEY_ERR, KEY_LVL},
 };
-
-use emit_core::{empty::Empty, event::Event};
 
 use crate::{frame::Frame, span::Span, Metric};
 
@@ -852,6 +851,7 @@ pub fn __private_begin_span<
     T: Clock,
     R: Rng,
     S: Completion,
+    P: Props,
 >(
     rt: &'a Runtime<E, F, C, T, R>,
     mdl: impl Into<Path<'static>>,
@@ -859,8 +859,9 @@ pub fn __private_begin_span<
     lvl: Option<&'b (impl CaptureLevel + ?Sized)>,
     when: Option<&'b (impl Filter + ?Sized)>,
     span_ctxt_props: &'b (impl Props + ?Sized),
+    span_evt_props: P,
     default_complete: S,
-) -> (SpanGuard<'static, &'a T, Empty, S>, Frame<&'a C>) {
+) -> (SpanGuard<'static, &'a T, P, S>, Frame<&'a C>) {
     let mdl = mdl.into();
     let name = name.into();
 
@@ -873,7 +874,7 @@ pub fn __private_begin_span<
         span_ctxt_props,
         mdl,
         name,
-        Empty,
+        span_evt_props,
     )
 }
 
@@ -895,7 +896,7 @@ impl<'a, 'b, E, F: Filter, C, T, R, W: Filter + ?Sized, CL: CaptureLevel + ?Size
             .map(|lvl| (KEY_LVL, lvl));
 
         FirstDefined(self.when, self.rt.filter())
-            .matches(evt.map_props(|props| props.and_props(&lvl_prop)))
+            .matches(evt.map_props(|props| lvl_prop.and_props(props)))
     }
 }
 
@@ -1133,3 +1134,42 @@ impl<'a, const N: usize> Props for __PrivateMacroProps<'a, N> {
         Some(self.0.len())
     }
 }
+
+#[repr(transparent)]
+pub struct __PrivateTupleMacroProps<T>(T);
+
+macro_rules! impl_private_tuple_macro_props {
+    (
+        $(($($idx:tt $T:tt)+),)+
+    ) => {
+        $(
+            impl<$($T: Props),*> Props for __PrivateTupleMacroProps<($($T),*)> {
+                fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(&'kv self, mut for_each: F) -> ControlFlow<()> {
+                    $(
+                        self.0.$idx.for_each(&mut for_each)?;
+                    )*
+
+                    ControlFlow::Continue(())
+                }
+            }
+        )+
+    };
+}
+
+impl_private_tuple_macro_props!(
+    (0 P0 1 P1),
+    (0 P0 1 P1 2 P2),
+    (0 P0 1 P1 2 P2 3 P3),
+    (0 P0 1 P1 2 P2 3 P3 4 P4),
+    (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5),
+    (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5 6 P6),
+    (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5 6 P6 7 P7),
+    (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5 6 P6 7 P7 8 P8),
+    (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5 6 P6 7 P7 8 P8 9 P9),
+    (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5 6 P6 7 P7 8 P8 9 P9 10 P10),
+    (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5 6 P6 7 P7 8 P8 9 P9 10 P10 11 P11),
+    (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5 6 P6 7 P7 8 P8 9 P9 10 P10 11 P11 12 P12),
+    (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5 6 P6 7 P7 8 P8 9 P9 10 P10 11 P11 12 P12 13 P13),
+    (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5 6 P6 7 P7 8 P8 9 P9 10 P10 11 P11 12 P12 13 P13 14 P14),
+    (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5 6 P6 7 P7 8 P8 9 P9 10 P10 11 P11 12 P12 13 P13 14 P14 15 P15),
+);

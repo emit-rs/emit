@@ -396,8 +396,14 @@ fn span_fn_name() {
         },
     );
 
-    #[emit::span(rt: RT, fn_name, "test {fn_name}", other_fn_name: fn_name)]
-    fn exec() {}
+    #[emit::span(rt: RT, fn_name, "test", other_fn_name: fn_name)]
+    fn exec() {
+        let _: &'static str = fn_name;
+        
+        RT.ctxt().with_current(|props| {
+            assert!(props.get("fn_name").is_none());
+        })
+    }
 
     exec();
 

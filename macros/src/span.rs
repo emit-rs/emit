@@ -1,9 +1,10 @@
 use proc_macro2::{Ident, Span, TokenStream};
 use syn::{
     parse::Parse, spanned::Spanned, Block, Expr, ExprAsync, ExprBlock, FieldValue, Item, ItemFn,
-    Signature, Stmt,
+    Member, Signature, Stmt,
 };
 
+use crate::util::StmtFnName;
 use crate::{
     args::{self, Arg},
     capture,
@@ -128,6 +129,8 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
 
     check_evt_props(&ctxt_props)?;
 
+    let mut evt_props = Props::new();
+
     let span_guard = args
         .guard
         .unwrap_or_else(|| Ident::new("__span", Span::call_site()));
@@ -148,26 +151,41 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         .to_option_tokens(quote!(&emit::Empty));
 
     let mut item = syn::parse2::<Stmt>(opts.item)?;
+
+    let fn_name_tokens =
+        if let Some(fn_name) = fn_name(args.fn_name.as_ref(), item.fn_name().as_ref())? {
+            let fn_name_prop = fn_name.to_prop();
+
+            evt_props.push(
+                &fn_name_prop,
+                capture::default_fn_name(&fn_name_prop),
+                false,
+                true,
+            )?;
+
+            Some(fn_name.binding_tokens())
+        } else {
+            None
+        };
+
+    check_evt_props(&evt_props)?;
+
     match &mut item {
         // A synchronous function
         Stmt::Item(Item::Fn(ItemFn {
             block,
-            sig:
-                Signature {
-                    asyncness: None,
-                    ident,
-                    ..
-                },
+            sig: Signature {
+                asyncness: None, ..
+            },
             ..
         })) => {
-            let fn_name_tokens = fn_name_tokens(args.fn_name.as_ref(), Some(ident))?;
-
             **block = syn::parse2::<Block>(inject_sync(
                 &rt_tokens,
                 &mdl_tokens,
                 &when_tokens,
                 &template,
                 &ctxt_props,
+                &evt_props,
                 fn_name_tokens,
                 setup_tokens,
                 &span_guard,
@@ -181,14 +199,13 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         }
         // A synchronous block
         Stmt::Expr(Expr::Block(ExprBlock { block, .. }), _) => {
-            let fn_name_tokens = fn_name_tokens(args.fn_name.as_ref(), None)?;
-
             *block = syn::parse2::<Block>(inject_sync(
                 &rt_tokens,
                 &mdl_tokens,
                 &when_tokens,
                 &template,
                 &ctxt_props,
+                &evt_props,
                 fn_name_tokens,
                 setup_tokens,
                 &span_guard,
@@ -203,22 +220,18 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         // An asynchronous function
         Stmt::Item(Item::Fn(ItemFn {
             block,
-            sig:
-                Signature {
-                    asyncness: Some(_),
-                    ident,
-                    ..
-                },
+            sig: Signature {
+                asyncness: Some(_), ..
+            },
             ..
         })) => {
-            let fn_name_tokens = fn_name_tokens(args.fn_name.as_ref(), Some(ident))?;
-
             **block = syn::parse2::<Block>(inject_async(
                 &rt_tokens,
                 &mdl_tokens,
                 &when_tokens,
                 &template,
                 &ctxt_props,
+                &evt_props,
                 fn_name_tokens,
                 setup_tokens,
                 &span_guard,
@@ -232,14 +245,13 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         }
         // An asynchronous block
         Stmt::Expr(Expr::Async(ExprAsync { block, .. }), _) => {
-            let fn_name_tokens = fn_name_tokens(args.fn_name.as_ref(), None)?;
-
             *block = syn::parse2::<Block>(inject_async(
                 &rt_tokens,
                 &mdl_tokens,
                 &when_tokens,
                 &template,
                 &ctxt_props,
+                &evt_props,
                 fn_name_tokens,
                 setup_tokens,
                 &span_guard,
@@ -263,6 +275,7 @@ fn inject_sync(
     when_tokens: &TokenStream,
     template: &Template,
     ctxt_props: &Props,
+    evt_props: &Props,
     fn_name_tokens: Option<TokenStream>,
     setup_tokens: Option<TokenStream>,
     span_guard: &Ident,
@@ -320,6 +333,7 @@ fn inject_sync(
         mdl_tokens,
         when_tokens,
         ctxt_props,
+        evt_props,
         &span_name_tokens,
         &default_completion_tokens,
         &default_lvl_tokens,
@@ -347,6 +361,7 @@ fn inject_async(
     when_tokens: &TokenStream,
     template: &Template,
     ctxt_props: &Props,
+    evt_props: &Props,
     fn_name_tokens: Option<TokenStream>,
     setup_tokens: Option<TokenStream>,
     span_guard: &Ident,
@@ -400,6 +415,7 @@ fn inject_async(
         mdl_tokens,
         when_tokens,
         ctxt_props,
+        evt_props,
         &span_name_tokens,
         &default_completion_tokens,
         &default_lvl_tokens,
@@ -425,6 +441,7 @@ fn span_guard_tokens(
     mdl_tokens: &TokenStream,
     when_tokens: &TokenStream,
     ctxt_props: &Props,
+    evt_props: &Props,
     span_name_tokens: &TokenStream,
     default_completion_tokens: &TokenStream,
     default_lvl_tokens: &TokenStream,
@@ -432,6 +449,9 @@ fn span_guard_tokens(
     let ctxt_props_match_input_tokens = ctxt_props.match_input_tokens();
     let ctxt_props_match_binding_tokens = ctxt_props.match_binding_tokens();
     let ctxt_props_tokens = ctxt_props.match_bound_tokens().to_ref_tokens();
+
+    // We use type-preserving props here because they may span across await points
+    let evt_props_tokens = evt_props.raw_props_tokens();
 
     quote!(match (#(#ctxt_props_match_input_tokens),*) {
         (#(#ctxt_props_match_binding_tokens),*) => {
@@ -442,22 +462,47 @@ fn span_guard_tokens(
                 #default_lvl_tokens,
                 #when_tokens,
                 #ctxt_props_tokens,
+                #evt_props_tokens,
                 #default_completion_tokens,
             )
         }
     })
 }
 
-fn fn_name_tokens(
-    binding: Option<&Ident>,
-    name: Option<&Ident>,
-) -> Result<Option<TokenStream>, syn::Error> {
-    match (binding, name) {
-        (Some(binding), Some(name)) => {
-            let name = name.to_string();
+struct FnName {
+    ident: Ident,
+    value: String,
+}
 
-            Ok(Some(quote!(let #binding = #name;)))
+impl FnName {
+    fn binding_tokens(&self) -> TokenStream {
+        let binding = &self.ident;
+        let name = &self.value;
+
+        quote!(let #binding = #name;)
+    }
+
+    fn to_prop(&self) -> FieldValue {
+        let ident = &self.ident;
+        let span = self.ident.span();
+
+        FieldValue {
+            attrs: vec![],
+            // Bind as `x: x` instead of `x: "name"` so `x` doesn't trigger
+            // unused warnings. The binding is assigned within the body of the span
+            member: Member::Named(self.ident.clone()),
+            colon_token: None,
+            expr: parse_quote_spanned!(span=> #ident),
         }
+    }
+}
+
+fn fn_name(binding: Option<&Ident>, name: Option<&Ident>) -> Result<Option<FnName>, syn::Error> {
+    match (binding, name) {
+        (Some(binding), Some(name)) => Ok(Some(FnName {
+            ident: binding.clone(),
+            value: name.to_string(),
+        })),
         (None, _) => Ok(None),
         (Some(binding), None) => Err(syn::Error::new(
             binding.span(),
@@ -639,6 +684,8 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
     let template_tokens = template.template_tokens();
     let span_name_tokens = template.template_literal_tokens();
 
+    let evt_props_tokens = quote!(emit::Empty);
+
     let lvl_tokens = default_lvl_tokens
         .map(|lvl| lvl.to_ref_tokens())
         .to_option_tokens(quote!(&emit::Level));
@@ -655,6 +702,7 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
             #lvl_tokens,
             #when_tokens,
             #ctxt_props_tokens,
+            #evt_props_tokens,
             emit::__private::__private_complete_span(
                 #rt_tokens,
                 #template_tokens,
