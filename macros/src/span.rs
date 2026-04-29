@@ -337,7 +337,7 @@ fn inject_sync(
         &span_name_tokens,
         &default_completion_tokens,
         &default_lvl_tokens,
-    );
+    )?;
 
     Ok(quote!({
         #fn_name_tokens
@@ -419,7 +419,7 @@ fn inject_async(
         &span_name_tokens,
         &default_completion_tokens,
         &default_lvl_tokens,
-    );
+    )?;
 
     Ok(quote!({
         #fn_name_tokens
@@ -445,15 +445,15 @@ fn span_guard_tokens(
     span_name_tokens: &TokenStream,
     default_completion_tokens: &TokenStream,
     default_lvl_tokens: &TokenStream,
-) -> TokenStream {
+) -> Result<TokenStream, syn::Error> {
     let ctxt_props_match_input_tokens = ctxt_props.match_input_tokens();
     let ctxt_props_match_binding_tokens = ctxt_props.match_binding_tokens();
     let ctxt_props_tokens = ctxt_props.match_bound_tokens().to_ref_tokens();
 
     // We use type-preserving props here because they may span across await points
-    let evt_props_tokens = evt_props.raw_props_tokens();
+    let evt_props_tokens = evt_props.raw_props_tokens()?;
 
-    quote!(match (#(#ctxt_props_match_input_tokens),*) {
+    Ok(quote!(match (#(#ctxt_props_match_input_tokens),*) {
         (#(#ctxt_props_match_binding_tokens),*) => {
             emit::__private::__private_begin_span(
                 #rt_tokens,
@@ -466,7 +466,7 @@ fn span_guard_tokens(
                 #default_completion_tokens,
             )
         }
-    })
+    }))
 }
 
 struct FnName {
@@ -491,7 +491,7 @@ impl FnName {
             // Bind as `x: x` instead of `x: "name"` so `x` doesn't trigger
             // unused warnings. The binding is assigned within the body of the span
             member: Member::Named(self.ident.clone()),
-            colon_token: None,
+            colon_token: Some(Token![:](span)),
             expr: parse_quote_spanned!(span=> #ident),
         }
     }

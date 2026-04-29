@@ -82,8 +82,20 @@ impl Props {
         Self::sorted_props_tokens(self.key_values.values().map(|kv| &kv.direct_bound_tokens))
     }
 
-    pub fn raw_props_tokens(&self) -> TokenStream {
-        match self.key_values.len() {
+    pub fn raw_props_tokens(&self) -> Result<TokenStream, syn::Error> {
+        // Make sure no key-values carry attributes
+        // This is a limitation imposed while this code is only used internally
+        // If we expose some way for users to produce raw props we'll need to rethink this
+        for (k, v) in &self.key_values {
+            if v.attrs.len() != 0 {
+                return Err(syn::Error::new(
+                    v.span,
+                    format!("attributes on {k} are not supported when capturing directly"),
+                ));
+            }
+        }
+
+        Ok(match self.key_values.len() {
             0 => quote!(emit::Empty),
             1 => self
                 .key_values
@@ -97,7 +109,7 @@ impl Props {
 
                 quote!(emit::__private::__PrivateTupleMacroProps::new((#(#key_values),*)))
             }
-        }
+        })
     }
 
     fn sorted_props_tokens<'a>(
