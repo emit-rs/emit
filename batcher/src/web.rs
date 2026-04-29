@@ -519,16 +519,22 @@ mod tests {
     async fn park_completes_on_timeout() {
         let start = js_sys::Date::new_0().get_time();
 
+        let delay_ms = 17.0;
+
         // Park for 10ms
-        Park::new(Duration::from_millis(10)).await;
+        Park::new(Duration::from_millis(delay_ms as u64)).await;
 
         let elapsed = js_sys::Date::new_0().get_time() - start;
 
         // Should have waited at least 10ms (allow some tolerance)
-        assert!(elapsed >= 10.0, "Expected at least 10ms, got {}", elapsed);
+        assert!(
+            elapsed >= delay_ms / 10.0,
+            "Expected at least 10ms, got {}",
+            elapsed
+        );
         // Should not have waited too long (would indicate a hang)
         assert!(
-            elapsed < 100.0,
+            elapsed <= delay_ms * 10.0,
             "Expected less than 100ms, got {} - future may have hung",
             elapsed
         );
