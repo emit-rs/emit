@@ -98,7 +98,7 @@ impl Parse for Args {
 
             Ok(args::PropsArg::new(quote_spanned!(expr.span()=> #expr)))
         });
-        let mut value = Arg::new("value", |fv| Ok(MetricValueArg::new(fv.clone())));
+        let mut value = Arg::value("value", |fv| Ok(MetricValueArg::new(fv.clone())));
         let mut name = Arg::token_stream("name", |fv| {
             let expr = &fv.expr;
 

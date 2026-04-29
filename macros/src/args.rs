@@ -91,6 +91,22 @@ impl Arg<TokenStream> {
 impl<T> Arg<T> {
     pub fn new(
         key: &'static str,
+        mut to_custom: impl FnMut(&FieldValue) -> Result<T, syn::Error> + 'static,
+    ) -> Self {
+        Arg::value(key, move |fv| {
+            if fv.attrs.len() > 0 {
+                return Err(syn::Error::new(
+                    fv.span(),
+                    format!("attributes on the {key} parameter are not supported"),
+                ));
+            }
+
+            to_custom(fv)
+        })
+    }
+
+    pub fn value(
+        key: &'static str,
         to_custom: impl FnMut(&FieldValue) -> Result<T, syn::Error> + 'static,
     ) -> Self {
         Arg {

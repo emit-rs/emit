@@ -376,6 +376,41 @@ fn span_mdl() {
 }
 
 #[test]
+fn span_fn_name() {
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!("exec", evt.props().pull::<&str, _>("fn_name").unwrap());
+            assert_eq!(
+                "exec",
+                evt.props().pull::<&str, _>("other_fn_name").unwrap()
+            );
+        },
+        |evt| {
+            assert_eq!("exec", evt.props().pull::<&str, _>("fn_name").unwrap());
+            assert_eq!(
+                "exec",
+                evt.props().pull::<&str, _>("other_fn_name").unwrap()
+            );
+
+            true
+        },
+    );
+
+    #[emit::span(rt: RT, fn_name, "test", other_fn_name: fn_name)]
+    fn exec() {
+        let _: &'static str = fn_name;
+
+        RT.ctxt().with_current(|props| {
+            assert!(props.get("fn_name").is_none());
+        })
+    }
+
+    exec();
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+}
+
+#[test]
 fn span_filter() {
     static CALLED: StaticCalled = StaticCalled::new();
     static RT: StaticRuntime = static_runtime(|_| CALLED.record(), |evt| evt.mdl() == "true");

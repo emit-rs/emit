@@ -1,0 +1,5 @@
+error: attributes on the mdl parameter are not supported
+ --> src/compile_fail/std/emit_control_param_attrs.rs:2:17
+  |
+2 |     emit::emit!(#[cfg(enabled)] mdl: emit::path!("mdl"), "template");
+  |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

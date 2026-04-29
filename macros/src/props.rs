@@ -34,6 +34,7 @@ impl Parse for Props {
 pub struct KeyValue {
     match_bound_tokens: TokenStream,
     direct_bound_tokens: TokenStream,
+    raw_bound_tokens: TokenStream,
     label: Ident,
     span: Span,
     pub interpolated: bool,
@@ -79,6 +80,36 @@ impl Props {
 
     pub fn props_tokens(&self) -> TokenStream {
         Self::sorted_props_tokens(self.key_values.values().map(|kv| &kv.direct_bound_tokens))
+    }
+
+    pub fn raw_props_tokens(&self) -> Result<TokenStream, syn::Error> {
+        // Make sure no key-values carry attributes
+        // This is a limitation imposed while this code is only used internally
+        // If we expose some way for users to produce raw props we'll need to rethink this
+        for (k, v) in &self.key_values {
+            if v.attrs.len() != 0 {
+                return Err(syn::Error::new(
+                    v.span,
+                    format!("attributes on {k} are not supported when capturing directly"),
+                ));
+            }
+        }
+
+        Ok(match self.key_values.len() {
+            0 => quote!(emit::Empty),
+            1 => self
+                .key_values
+                .first_key_value()
+                .unwrap()
+                .1
+                .raw_bound_tokens
+                .clone(),
+            _ => {
+                let key_values = self.key_values.values().map(|kv| &kv.raw_bound_tokens);
+
+                quote!(emit::__private::__PrivateTupleMacroProps::new((#(#key_values),*)))
+            }
+        })
     }
 
     fn sorted_props_tokens<'a>(
@@ -136,6 +167,8 @@ impl Props {
         );
 
         let direct_bound_tokens = quote_spanned!(fv.span()=> #key_value_tokens);
+
+        let raw_bound_tokens = capture::raw_key_value(fv)?;
 
         // This is one of the few places we end up looking at the shape of an expression and deciding how to emit code for it.
         //
@@ -210,6 +243,7 @@ impl Props {
             KeyValue {
                 match_bound_tokens,
                 direct_bound_tokens,
+                raw_bound_tokens,
                 span: fv.span(),
                 label: fv.key_ident()?,
                 cfg_attr,

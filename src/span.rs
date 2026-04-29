@@ -1193,7 +1193,7 @@ impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
     This method constructs a span based on the input properties and current context as follows:
 
     - A [`SpanCtxt`] for the span is generated using [`SpanCtxt::new_child`].
-    - The filter is checked to see if the span should be enabled or disabled. The event passed to the filter is a [`Span`] carrying the generated span context, but without an extent.
+    - The filter is checked to see if the span should be enabled or disabled. The event passed to the filter is a [`Span`] carrying the generated span context, as well as `ctxt_props` and `span_props`, but without an extent.
 
     This method returns a tuple of a `SpanGuard` for starting and completing the span, and a [`Frame`] carrying the generated [`SpanCtxt`] and `ctxt_props`.
 

@@ -1,9 +1,10 @@
 use proc_macro2::{Ident, Span, TokenStream};
 use syn::{
     parse::Parse, spanned::Spanned, Block, Expr, ExprAsync, ExprBlock, FieldValue, Item, ItemFn,
-    Signature, Stmt,
+    Member, Signature, Stmt,
 };
 
+use crate::util::StmtFnName;
 use crate::{
     args::{self, Arg},
     capture,
@@ -26,6 +27,7 @@ struct Args {
     mdl: args::MdlArg,
     when: args::WhenArg,
     guard: Option<Ident>,
+    fn_name: Option<Ident>,
     setup: Option<TokenStream>,
     ok_lvl: Option<TokenStream>,
     err_lvl: Option<TokenStream>,
@@ -77,11 +79,14 @@ impl Parse for Args {
         });
         let mut guard = Arg::ident("guard");
 
+        let mut fn_name = Arg::ident("fn_name");
+
         args::set_from_field_values(
             input.parse_terminated(FieldValue::parse, Token![,])?.iter(),
             [
                 &mut mdl,
                 &mut guard,
+                &mut fn_name,
                 &mut rt,
                 &mut when,
                 &mut ok_lvl,
@@ -108,6 +113,7 @@ impl Parse for Args {
             err: err.take_if_std()?,
             setup: setup.take(),
             guard: guard.take(),
+            fn_name: fn_name.take(),
         })
     }
 }
@@ -122,6 +128,8 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;
 
     check_evt_props(&ctxt_props)?;
+
+    let mut evt_props = Props::new();
 
     let span_guard = args
         .guard
@@ -143,6 +151,25 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         .to_option_tokens(quote!(&emit::Empty));
 
     let mut item = syn::parse2::<Stmt>(opts.item)?;
+
+    let fn_name_tokens =
+        if let Some(fn_name) = fn_name(args.fn_name.as_ref(), item.fn_name().as_ref())? {
+            let fn_name_prop = fn_name.to_prop();
+
+            evt_props.push(
+                &fn_name_prop,
+                capture::default_fn_name(&fn_name_prop),
+                false,
+                true,
+            )?;
+
+            Some(fn_name.binding_tokens())
+        } else {
+            None
+        };
+
+    check_evt_props(&evt_props)?;
+
     match &mut item {
         // A synchronous function
         Stmt::Item(Item::Fn(ItemFn {
@@ -158,8 +185,10 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &when_tokens,
                 &template,
                 &ctxt_props,
-                &span_guard,
+                &evt_props,
+                fn_name_tokens,
                 setup_tokens,
+                &span_guard,
                 quote!(#block),
                 default_lvl_tokens,
                 panic_lvl_tokens,
@@ -176,8 +205,10 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &when_tokens,
                 &template,
                 &ctxt_props,
-                &span_guard,
+                &evt_props,
+                fn_name_tokens,
                 setup_tokens,
+                &span_guard,
                 quote!(#block),
                 default_lvl_tokens,
                 panic_lvl_tokens,
@@ -200,8 +231,10 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &when_tokens,
                 &template,
                 &ctxt_props,
-                &span_guard,
+                &evt_props,
+                fn_name_tokens,
                 setup_tokens,
+                &span_guard,
                 quote!(#block),
                 default_lvl_tokens,
                 panic_lvl_tokens,
@@ -218,8 +251,10 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &when_tokens,
                 &template,
                 &ctxt_props,
-                &span_guard,
+                &evt_props,
+                fn_name_tokens,
                 setup_tokens,
+                &span_guard,
                 quote!(#block),
                 default_lvl_tokens,
                 panic_lvl_tokens,
@@ -240,8 +275,10 @@ fn inject_sync(
     when_tokens: &TokenStream,
     template: &Template,
     ctxt_props: &Props,
-    span_guard: &Ident,
+    evt_props: &Props,
+    fn_name_tokens: Option<TokenStream>,
     setup_tokens: Option<TokenStream>,
+    span_guard: &Ident,
     body_tokens: TokenStream,
     default_lvl_tokens: Option<TokenStream>,
     panic_lvl_tokens: Option<TokenStream>,
@@ -296,12 +333,14 @@ fn inject_sync(
         mdl_tokens,
         when_tokens,
         ctxt_props,
+        evt_props,
         &span_name_tokens,
         &default_completion_tokens,
         &default_lvl_tokens,
-    );
+    )?;
 
     Ok(quote!({
+        #fn_name_tokens
         #setup_tokens
 
         let (mut __span_guard, __ctxt) = #span_guard_tokens;
@@ -322,8 +361,10 @@ fn inject_async(
     when_tokens: &TokenStream,
     template: &Template,
     ctxt_props: &Props,
-    span_guard: &Ident,
+    evt_props: &Props,
+    fn_name_tokens: Option<TokenStream>,
     setup_tokens: Option<TokenStream>,
+    span_guard: &Ident,
     body_tokens: TokenStream,
     default_lvl_tokens: Option<TokenStream>,
     panic_lvl_tokens: Option<TokenStream>,
@@ -374,12 +415,14 @@ fn inject_async(
         mdl_tokens,
         when_tokens,
         ctxt_props,
+        evt_props,
         &span_name_tokens,
         &default_completion_tokens,
         &default_lvl_tokens,
-    );
+    )?;
 
     Ok(quote!({
+        #fn_name_tokens
         #setup_tokens
 
         let (mut __span_guard, __ctxt) = #span_guard_tokens;
@@ -398,15 +441,19 @@ fn span_guard_tokens(
     mdl_tokens: &TokenStream,
     when_tokens: &TokenStream,
     ctxt_props: &Props,
+    evt_props: &Props,
     span_name_tokens: &TokenStream,
     default_completion_tokens: &TokenStream,
     default_lvl_tokens: &TokenStream,
-) -> TokenStream {
+) -> Result<TokenStream, syn::Error> {
     let ctxt_props_match_input_tokens = ctxt_props.match_input_tokens();
     let ctxt_props_match_binding_tokens = ctxt_props.match_binding_tokens();
     let ctxt_props_tokens = ctxt_props.match_bound_tokens().to_ref_tokens();
 
-    quote!(match (#(#ctxt_props_match_input_tokens),*) {
+    // We use type-preserving props here because they may span across await points
+    let evt_props_tokens = evt_props.raw_props_tokens()?;
+
+    Ok(quote!(match (#(#ctxt_props_match_input_tokens),*) {
         (#(#ctxt_props_match_binding_tokens),*) => {
             emit::__private::__private_begin_span(
                 #rt_tokens,
@@ -415,10 +462,53 @@ fn span_guard_tokens(
                 #default_lvl_tokens,
                 #when_tokens,
                 #ctxt_props_tokens,
+                #evt_props_tokens,
                 #default_completion_tokens,
             )
         }
-    })
+    }))
+}
+
+struct FnName {
+    ident: Ident,
+    value: String,
+}
+
+impl FnName {
+    fn binding_tokens(&self) -> TokenStream {
+        let binding = &self.ident;
+        let name = &self.value;
+
+        quote!(let #binding = #name;)
+    }
+
+    fn to_prop(&self) -> FieldValue {
+        let ident = &self.ident;
+        let span = self.ident.span();
+
+        FieldValue {
+            attrs: vec![],
+            // Bind as `x: x` instead of `x: "name"` so `x` doesn't trigger
+            // unused warnings. The binding is assigned within the body of the span
+            member: Member::Named(self.ident.clone()),
+            colon_token: Some(Token![:](span)),
+            expr: parse_quote_spanned!(span=> #ident),
+        }
+    }
+}
+
+fn fn_name(binding: Option<&Ident>, name: Option<&Ident>) -> Result<Option<FnName>, syn::Error> {
+    match (binding, name) {
+        (Some(binding), Some(name)) => Ok(Some(FnName {
+            ident: binding.clone(),
+            value: name.to_string(),
+        })),
+        (None, _) => Ok(None),
+        (Some(binding), None) => Err(syn::Error::new(
+            binding.span(),
+            "cannot bind the name of an anonymous function",
+        )),
+    }
 }
 
 struct Completion {
@@ -566,6 +656,7 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
         when,
         guard,
         setup,
+        fn_name,
         ok_lvl,
         err_lvl,
         panic_lvl,
@@ -577,6 +668,7 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
     args::ensure_missing("ok_lvl", ok_lvl.map(|arg| arg.span()))?;
     args::ensure_missing("err_lvl", err_lvl.map(|arg| arg.span()))?;
     args::ensure_missing("err", err.map(|arg| arg.span()))?;
+    args::ensure_missing("fn_name", fn_name.map(|arg| arg.span()))?;
 
     let default_lvl_tokens = opts.level;
     let panic_lvl_tokens = panic_lvl;
@@ -591,6 +683,8 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
     let ctxt_props_tokens = ctxt_props.props_tokens().to_ref_tokens();
     let template_tokens = template.template_tokens();
     let span_name_tokens = template.template_literal_tokens();
+
+    let evt_props_tokens = quote!(emit::Empty);
 
     let lvl_tokens = default_lvl_tokens
         .map(|lvl| lvl.to_ref_tokens())
@@ -608,6 +702,7 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
             #lvl_tokens,
             #when_tokens,
             #ctxt_props_tokens,
+            #evt_props_tokens,
             emit::__private::__private_complete_span(
                 #rt_tokens,
                 #template_tokens,
