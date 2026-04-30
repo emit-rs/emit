@@ -1488,36 +1488,6 @@ pub mod completion {
 
     impl<'a, E: Emitter, C: Ctxt, L: ToValue> Completion for Default<'a, E, C, L> {
         fn complete<P: Props>(&self, span: Span<P>) {
-            struct PanicError;
-
-            impl fmt::Debug for PanicError {
-                fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                    fmt::Display::fmt(self, f)
-                }
-            }
-
-            impl fmt::Display for PanicError {
-                fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                    write!(f, "panicked")
-                }
-            }
-
-            #[cfg(feature = "std")]
-            impl std::error::Error for PanicError {}
-
-            impl ToValue for PanicError {
-                fn to_value(&self) -> Value<'_> {
-                    #[cfg(feature = "std")]
-                    {
-                        Value::capture_error(self)
-                    }
-                    #[cfg(not(feature = "std"))]
-                    {
-                        Value::capture_display(self)
-                    }
-                }
-            }
-
             fn is_panicking() -> bool {
                 #[cfg(feature = "std")]
                 {
@@ -1536,7 +1506,7 @@ pub mod completion {
                         .map(|lvl| Value::from_any(lvl))
                         .or_else(|| Some(Value::from_any(&Level::Error)))
                         .map(|lvl| (KEY_LVL, lvl)),
-                    Some((KEY_ERR, Value::from_any(&PanicError))),
+                    Some((KEY_ERR, Value::from_any(&PanicError::UNKNOWN))),
                 ]
             } else {
                 [
@@ -1624,6 +1594,70 @@ pub mod completion {
     */
     pub const fn default<'a, E: Emitter, C: Ctxt>(emitter: E, ctxt: C) -> Default<'a, E, C> {
         Default::new(emitter, ctxt)
+    }
+
+    pub(crate) struct PanicError {
+        #[cfg(feature = "std")]
+        payload: Option<std::borrow::Cow<'static, str>>,
+        #[cfg(not(feature = "std"))]
+        payload: Option<&'static str>,
+    }
+
+    impl PanicError {
+        const UNKNOWN: Self = PanicError { payload: None };
+
+        #[cfg(feature = "std")]
+        pub(crate) fn extract(payload: &Box<dyn std::any::Any + Send>) -> Self {
+            if let Some(payload) = payload.downcast_ref::<&str>() {
+                return PanicError {
+                    payload: Some(std::borrow::Cow::Borrowed(payload)),
+                };
+            }
+
+            if let Some(payload) = payload.downcast_ref::<std::string::String>() {
+                return PanicError {
+                    payload: Some(std::borrow::Cow::Owned(payload.clone())),
+                };
+            }
+
+            PanicError { payload: None }
+        }
+
+        pub(crate) fn get(&self) -> &str {
+            let Some(ref payload) = self.payload else {
+                return "panicked";
+            };
+
+            payload
+        }
+    }
+
+    impl fmt::Debug for PanicError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            fmt::Debug::fmt(self.get(), f)
+        }
+    }
+
+    impl fmt::Display for PanicError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            fmt::Display::fmt(self.get(), f)
+        }
+    }
+
+    #[cfg(feature = "std")]
+    impl std::error::Error for PanicError {}
+
+    impl ToValue for PanicError {
+        fn to_value(&self) -> Value<'_> {
+            #[cfg(feature = "std")]
+            {
+                Value::capture_error(self)
+            }
+            #[cfg(not(feature = "std"))]
+            {
+                Value::capture_display(self)
+            }
+        }
     }
 
     /**

@@ -23,19 +23,16 @@ pub struct Arg<T> {
 
 impl Arg<bool> {
     pub fn bool(key: &'static str) -> Self {
-        Arg::new(key, move |fv| {
-            if let Expr::Lit(ExprLit {
+        Arg::new(key, move |fv| match fv.expr {
+            Expr::Lit(ExprLit {
                 lit: Lit::Bool(ref l),
                 ..
-            }) = fv.expr
-            {
-                Ok(l.value)
-            } else {
-                Err(syn::Error::new(
-                    fv.expr.span(),
-                    format_args!("`{}` requires a boolean value", key),
-                ))
-            }
+            }) => Ok(l.value),
+            Expr::Path(ExprPath { ref path, .. }) if path.is_ident(key) => Ok(true),
+            _ => Err(syn::Error::new(
+                fv.expr.span(),
+                format_args!("`{}` requires a boolean value", key),
+            )),
         })
     }
 }

@@ -200,6 +200,7 @@ impl Future for Park {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<()> {
+        // SAFETY: `self` does not use interior pinning
         let unpinned = unsafe { self.get_unchecked_mut() };
 
         if unpinned.state.borrow_mut().done {

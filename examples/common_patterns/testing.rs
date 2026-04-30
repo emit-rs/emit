@@ -29,13 +29,13 @@ fn setup() -> Option<impl Drop> {
 }
 
 #[test]
-#[emit::span(setup, fn_name, "test {fn_name}")]
+#[emit::span(setup, fn_name, catch_unwind, "test {fn_name}")]
 fn add_1_1() {
     assert_eq!(2, add(1, 1));
 }
 
 #[test]
-#[emit::span(setup, fn_name, "test {fn_name}")]
+#[emit::span(setup, fn_name, catch_unwind, "test {fn_name}")]
 fn add_1_0() {
     assert_eq!(2, add(1, 0));
 }
