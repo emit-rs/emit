@@ -1071,6 +1071,7 @@ pub async fn __private_catch_unwind_async<R>(
         type Output = Result<F::Output, Box<dyn Any + Send>>;
 
         fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+            // SAFETY: The inner future inherits pinning from `CatchUnwind`
             let inner = unsafe { self.map_unchecked_mut(|f| &mut f.0) };
 
             match catch_unwind(AssertUnwindSafe(|| inner.poll(cx))) {
