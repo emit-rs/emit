@@ -23,58 +23,47 @@ pub struct Arg<T> {
 
 impl Arg<bool> {
     pub fn bool(key: &'static str) -> Self {
-        Arg::new(key, move |fv| {
-            if let Expr::Lit(ExprLit {
+        Arg::new(key, move |fv| match fv.expr {
+            Expr::Lit(ExprLit {
                 lit: Lit::Bool(ref l),
                 ..
-            }) = fv.expr
-            {
-                Ok(l.value)
-            } else {
-                Err(syn::Error::new(
-                    fv.expr.span(),
-                    format_args!("`{}` requires a boolean value", key),
-                ))
-            }
+            }) => Ok(l.value),
+            _ => Err(syn::Error::new(
+                fv.expr.span(),
+                format_args!("`{}` requires a boolean value", key),
+            )),
         })
     }
 }
 
 impl Arg<String> {
     pub fn str(key: &'static str) -> Self {
-        Arg::new(key, move |fv| {
-            if let Expr::Lit(ExprLit {
+        Arg::new(key, move |fv| match fv.expr {
+            Expr::Lit(ExprLit {
                 lit: Lit::Str(ref l),
                 ..
-            }) = fv.expr
-            {
-                Ok(l.value())
-            } else {
-                Err(syn::Error::new(
-                    fv.expr.span(),
-                    format_args!("`{}` requires a string value", key),
-                ))
-            }
+            }) => Ok(l.value()),
+            _ => Err(syn::Error::new(
+                fv.expr.span(),
+                format_args!("`{}` requires a string value", key),
+            )),
         })
     }
 }
 
 impl Arg<Ident> {
     pub fn ident(key: &'static str) -> Self {
-        Arg::new(key, move |fv| {
-            if let Expr::Path(ExprPath { ref path, .. }) = fv.expr {
-                path.get_ident().cloned().ok_or_else(|| {
-                    syn::Error::new(
-                        fv.expr.span(),
-                        format_args!("`{}` requires an identifier value", key),
-                    )
-                })
-            } else {
-                Err(syn::Error::new(
+        Arg::new(key, move |fv| match fv.expr {
+            Expr::Path(ExprPath { ref path, .. }) => path.get_ident().cloned().ok_or_else(|| {
+                syn::Error::new(
                     fv.expr.span(),
-                    format_args!("`{}` requires a string value", key),
-                ))
-            }
+                    format_args!("`{}` requires an identifier value", key),
+                )
+            }),
+            _ => Err(syn::Error::new(
+                fv.expr.span(),
+                format_args!("`{}` requires a string value", key),
+            )),
         })
     }
 }

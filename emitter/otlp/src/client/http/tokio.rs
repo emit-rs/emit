@@ -8,7 +8,7 @@ use std::{
     future::Future,
     pin::Pin,
     sync::{Arc, LazyLock, Mutex},
-    task::{self, Context, Poll},
+    task::{Context, Poll},
     time::Duration,
 };
 
@@ -400,7 +400,7 @@ impl HttpResponse {
         impl<'a, T: FnMut(&str, &str)> Future for BufNext<'a, T> {
             type Output = Result<bool, Error>;
 
-            fn poll(self: Pin<&mut Self>, ctx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
+            fn poll(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
                 // SAFETY: `self` does not use interior pinning
                 let BufNext(incoming, trailer) = unsafe { Pin::get_unchecked_mut(self) };
 

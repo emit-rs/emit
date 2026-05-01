@@ -28,6 +28,7 @@ struct Args {
     when: args::WhenArg,
     guard: Option<Ident>,
     fn_name: Option<Ident>,
+    catch_unwind: Option<bool>,
     setup: Option<TokenStream>,
     ok_lvl: Option<TokenStream>,
     err_lvl: Option<TokenStream>,
@@ -78,8 +79,8 @@ impl Parse for Args {
             Ok(quote_spanned!(expr.span()=> #expr))
         });
         let mut guard = Arg::ident("guard");
-
         let mut fn_name = Arg::ident("fn_name");
+        let mut catch_unwind = Arg::bool("catch_unwind");
 
         args::set_from_field_values(
             input.parse_terminated(FieldValue::parse, Token![,])?.iter(),
@@ -92,14 +93,19 @@ impl Parse for Args {
                 &mut ok_lvl,
                 &mut err_lvl,
                 &mut panic_lvl,
+                &mut catch_unwind,
                 &mut setup,
                 &mut err,
             ],
         )?;
 
         if let Some(guard) = guard.peek() {
-            if ok_lvl.peek().is_some() || err_lvl.peek().is_some() || err.peek().is_some() {
-                return Err(syn::Error::new(guard.span(), "the `guard` control parameter is incompatible with `ok_lvl`, `err_lvl`, `panic_lvl`, or `err`"));
+            if ok_lvl.peek().is_some()
+                || err_lvl.peek().is_some()
+                || err.peek().is_some()
+                || catch_unwind.peek().is_some()
+            {
+                return Err(syn::Error::new(guard.span(), "the `guard` control parameter is incompatible with `catch_unwind`, `ok_lvl`, `err_lvl`, `panic_lvl`, or `err`"));
             }
         }
 
@@ -110,6 +116,7 @@ impl Parse for Args {
             ok_lvl: ok_lvl.take_if_std()?,
             err_lvl: err_lvl.take_if_std()?,
             panic_lvl: panic_lvl.take_if_std()?,
+            catch_unwind: catch_unwind.take(),
             err: err.take_if_std()?,
             setup: setup.take(),
             guard: guard.take(),
@@ -140,6 +147,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     let ok_lvl_tokens = args.ok_lvl;
     let err_lvl_tokens = args.err_lvl;
     let err_tokens = args.err;
+    let catch_unwind = args.catch_unwind.unwrap_or_default();
     let setup_tokens = args.setup;
 
     let rt_tokens = args.rt.to_tokens()?.to_ref_tokens();
@@ -195,6 +203,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 ok_lvl_tokens,
                 err_lvl_tokens,
                 err_tokens,
+                catch_unwind,
             )?)?;
         }
         // A synchronous block
@@ -215,6 +224,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 ok_lvl_tokens,
                 err_lvl_tokens,
                 err_tokens,
+                catch_unwind,
             )?)?;
         }
         // An asynchronous function
@@ -241,6 +251,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 ok_lvl_tokens,
                 err_lvl_tokens,
                 err_tokens,
+                catch_unwind,
             )?)?;
         }
         // An asynchronous block
@@ -261,6 +272,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 ok_lvl_tokens,
                 err_lvl_tokens,
                 err_tokens,
+                catch_unwind,
             )?)?;
         }
         _ => return Err(syn::Error::new(item.span(), "unrecognized item type")),
@@ -285,9 +297,16 @@ fn inject_sync(
     ok_lvl_tokens: Option<TokenStream>,
     err_lvl_tokens: Option<TokenStream>,
     err_tokens: Option<TokenStream>,
+    catch_unwind: bool,
 ) -> Result<TokenStream, syn::Error> {
     let template_tokens = template.template_tokens();
     let span_name_tokens = template.template_literal_tokens();
+
+    let body_tokens = if catch_unwind {
+        quote!(emit::__private::__private_catch_unwind(move || { #body_tokens }))
+    } else {
+        body_tokens
+    };
 
     let Completion {
         body_tokens,
@@ -298,12 +317,15 @@ fn inject_sync(
         // without control flow statements like `return` getting in the way
         //
         // We can't use a drop guard here because we need to match on the result
-        //
-        // We also need to specify the return type, otherwise inference seems to fail.
-        // We might be able to avoid this in the future
-        let body_tokens = quote!((move || {
-            #body_tokens
-        })());
+        let body_tokens = if catch_unwind {
+            // We've already wrapped the body in a closure so don't
+            // need to do it again
+            body_tokens
+        } else {
+            quote!((move || {
+                #body_tokens
+            })())
+        };
 
         result_completion(
             body_tokens,
@@ -315,14 +337,17 @@ fn inject_sync(
             ok_lvl_tokens,
             err_lvl_tokens,
             err_tokens,
+            catch_unwind,
         )?
     } else {
         completion(
             body_tokens,
             rt_tokens,
             &template_tokens,
+            span_guard,
             default_lvl_tokens,
             panic_lvl_tokens,
+            catch_unwind,
         )?
     };
 
@@ -371,9 +396,18 @@ fn inject_async(
     ok_lvl_tokens: Option<TokenStream>,
     err_lvl_tokens: Option<TokenStream>,
     err_tokens: Option<TokenStream>,
+    catch_unwind: bool,
 ) -> Result<TokenStream, syn::Error> {
     let template_tokens = template.template_tokens();
     let span_name_tokens = template.template_literal_tokens();
+
+    let body_tokens = if catch_unwind {
+        quote!(emit::__private::__private_catch_unwind_async(async move {
+            #body_tokens
+        }).await)
+    } else {
+        body_tokens
+    };
 
     let Completion {
         body_tokens,
@@ -381,11 +415,16 @@ fn inject_async(
         default_completion_tokens,
     } = if use_result_completion(&ok_lvl_tokens, &err_lvl_tokens, &err_tokens) {
         // Like the sync case, ensure control flow doesn't interrupt
-        // our matching of the result, and provide a concrete type
-        // for inference
-        let body_tokens = quote!(async move {
-            #body_tokens
-        }.await);
+        // our matching of the result
+        let body_tokens = if catch_unwind {
+            // We've already wrapped the body in an async block so don't need
+            // to do it again
+            body_tokens
+        } else {
+            quote!(async move {
+                #body_tokens
+            }.await)
+        };
 
         result_completion(
             body_tokens,
@@ -397,14 +436,17 @@ fn inject_async(
             ok_lvl_tokens,
             err_lvl_tokens,
             err_tokens,
+            catch_unwind,
         )?
     } else {
         completion(
             body_tokens,
             rt_tokens,
             &template_tokens,
+            span_guard,
             default_lvl_tokens,
             panic_lvl_tokens,
+            catch_unwind,
         )?
     };
 
@@ -535,87 +577,80 @@ fn result_completion(
     ok_lvl_tokens: Option<TokenStream>,
     err_lvl_tokens: Option<TokenStream>,
     err_tokens: Option<TokenStream>,
+    catch_unwind: bool,
 ) -> Result<Completion, syn::Error> {
     // If the span is applied to a Result-returning function then wrap the body
     // We'll attach the error to the span if the call fails and set the appropriate level
 
     let ok_branch = {
-        let lvl_tokens = ok_lvl_tokens
-            .map(|lvl| lvl.to_ref_tokens())
-            .or_else(|| default_lvl_tokens.as_ref().map(|lvl| lvl.to_ref_tokens()))
-            .to_option_tokens(quote!(&emit::Level));
+        let lvl_tokens = optional_lvl_tokens(ok_lvl_tokens.as_ref(), default_lvl_tokens.as_ref());
 
-        quote!(
-            emit::__private::core::result::Result::Ok(__ok) => {
-                #span_guard.complete_with(emit::__private::__private_complete_span_ok(
-                    #rt_tokens,
-                    #template_tokens,
-                    #lvl_tokens,
-                ));
+        quote!({
+            #span_guard.complete_with(emit::__private::__private_complete_span_ok(
+                #rt_tokens,
+                #template_tokens,
+                #lvl_tokens,
+            ));
 
-                emit::__private::core::result::Result::Ok(__ok)
-            }
-        )
+            emit::__private::core::result::Result::Ok(__ok)
+        })
     };
 
     let err_branch = {
         // In the error case, we don't just defer to the default level
         // If none is set then we'll mark it as an error
-        let lvl_tokens = err_lvl_tokens
-            .map(|lvl| lvl.to_ref_tokens())
-            .or_else(|| default_lvl_tokens.as_ref().map(|lvl| lvl.to_ref_tokens()))
-            .unwrap_or_else(|| {
-                let err_lvl = emit_core::well_known::LVL_ERROR;
-
-                quote!(#err_lvl)
-            });
+        let lvl_tokens = lvl_tokens(
+            err_lvl_tokens.as_ref(),
+            default_lvl_tokens.as_ref(),
+            emit_core::well_known::LVL_ERROR,
+        );
 
         let err_tokens = err_tokens
             .map(|mapper| quote!((#mapper)(&__err)))
             .unwrap_or_else(|| quote!(&__err));
 
-        quote!(
-            emit::__private::core::result::Result::Err(__err) => {
-                #span_guard.complete_with(emit::__private::__private_complete_span_err(
-                    #rt_tokens,
-                    #template_tokens,
-                    #lvl_tokens,
-                    #err_tokens,
-                ));
+        quote!({
+            #span_guard.complete_with(emit::__private::__private_complete_span_err(
+                #rt_tokens,
+                #template_tokens,
+                #lvl_tokens,
+                #err_tokens,
+            ));
 
-                emit::__private::core::result::Result::Err(__err)
-            }
-        )
+            emit::__private::core::result::Result::Err(__err)
+        })
     };
 
-    let body_tokens = quote!(match #body_tokens {
-        #ok_branch,
-        #err_branch,
-    });
+    let panic_lvl_tokens = lvl_tokens(
+        panic_lvl_tokens.as_ref(),
+        default_lvl_tokens.as_ref(),
+        emit_core::well_known::LVL_ERROR,
+    );
 
-    completion(
-        body_tokens,
-        rt_tokens,
-        template_tokens,
-        default_lvl_tokens,
-        panic_lvl_tokens,
-    )
-}
+    let body_tokens = if catch_unwind {
+        quote!(match #body_tokens {
+            emit::__private::core::result::Result::Ok(emit::__private::core::result::Result::Ok(__ok)) => #ok_branch,
+            emit::__private::core::result::Result::Ok(emit::__private::core::result::Result::Err(__err)) => #err_branch,
+            emit::__private::core::result::Result::Err(__panic) => {
+                #span_guard.complete_with(emit::__private::__private_complete_span_panic(
+                    #rt_tokens,
+                    #template_tokens,
+                    #panic_lvl_tokens,
+                    &__panic,
+                ));
 
-fn completion(
-    body_tokens: TokenStream,
-    rt_tokens: &TokenStream,
-    template_tokens: &TokenStream,
-    default_lvl_tokens: Option<TokenStream>,
-    panic_lvl_tokens: Option<TokenStream>,
-) -> Result<Completion, syn::Error> {
-    let lvl_tokens = default_lvl_tokens
-        .map(|lvl| lvl.to_ref_tokens())
-        .to_option_tokens(quote!(&emit::Level));
+                emit::__private::__private_resume_unwind(__panic)
+            },
+        })
+    } else {
+        quote!(match #body_tokens {
+            emit::__private::core::result::Result::Ok(__ok) => #ok_branch,
+            emit::__private::core::result::Result::Err(__err) => #err_branch,
+        })
+    };
 
-    let panic_lvl_tokens = panic_lvl_tokens
-        .map(|lvl| lvl.to_ref_tokens())
-        .to_option_tokens(quote!(&emit::Level));
+    // Similar to the non-result `completion` variant
+    let lvl_tokens = optional_lvl_tokens(default_lvl_tokens.as_ref(), default_lvl_tokens.as_ref());
 
     let default_completion_tokens = quote!(emit::__private::__private_complete_span(
         #rt_tokens,
@@ -629,6 +664,75 @@ fn completion(
         default_lvl_tokens: lvl_tokens,
         default_completion_tokens,
     })
+}
+
+fn completion(
+    body_tokens: TokenStream,
+    rt_tokens: &TokenStream,
+    template_tokens: &TokenStream,
+    span_guard: &Ident,
+    default_lvl_tokens: Option<TokenStream>,
+    panic_lvl_tokens: Option<TokenStream>,
+    catch_unwind: bool,
+) -> Result<Completion, syn::Error> {
+    let panic_lvl_tokens = lvl_tokens(
+        panic_lvl_tokens.as_ref(),
+        default_lvl_tokens.as_ref(),
+        emit_core::well_known::LVL_ERROR,
+    );
+    let lvl_tokens = optional_lvl_tokens(default_lvl_tokens.as_ref(), default_lvl_tokens.as_ref());
+
+    let default_completion_tokens = quote!(emit::__private::__private_complete_span(
+        #rt_tokens,
+        #template_tokens,
+        #lvl_tokens,
+        #panic_lvl_tokens,
+    ));
+
+    let body_tokens = if catch_unwind {
+        quote!(match #body_tokens {
+            emit::__private::core::result::Result::Ok(__r) => __r,
+            emit::__private::core::result::Result::Err(__panic) => {
+                #span_guard.complete_with(emit::__private::__private_complete_span_panic(
+                    #rt_tokens,
+                    #template_tokens,
+                    #panic_lvl_tokens,
+                    &__panic,
+                ));
+
+                emit::__private::__private_resume_unwind(__panic)
+            },
+        })
+    } else {
+        body_tokens
+    };
+
+    Ok(Completion {
+        body_tokens,
+        default_lvl_tokens: lvl_tokens,
+        default_completion_tokens,
+    })
+}
+
+fn optional_lvl_tokens(
+    lvl_tokens: Option<&TokenStream>,
+    default_lvl_tokens: Option<&TokenStream>,
+) -> TokenStream {
+    lvl_tokens
+        .map(|lvl| lvl.to_ref_tokens())
+        .or_else(|| default_lvl_tokens.as_ref().map(|lvl| lvl.to_ref_tokens()))
+        .to_option_tokens(quote!(&emit::Level))
+}
+
+fn lvl_tokens(
+    lvl_tokens: Option<&TokenStream>,
+    default_lvl_tokens: Option<&TokenStream>,
+    fallback_value: &str,
+) -> TokenStream {
+    lvl_tokens
+        .map(|lvl| lvl.to_ref_tokens())
+        .or_else(|| default_lvl_tokens.as_ref().map(|lvl| lvl.to_ref_tokens()))
+        .unwrap_or_else(|| quote!(#fallback_value))
 }
 
 pub struct ExpandNewTokens {
@@ -660,6 +764,7 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
         ok_lvl,
         err_lvl,
         panic_lvl,
+        catch_unwind,
         err,
     } = args;
 
@@ -667,6 +772,7 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
     args::ensure_missing("setup", setup.map(|arg| arg.span()))?;
     args::ensure_missing("ok_lvl", ok_lvl.map(|arg| arg.span()))?;
     args::ensure_missing("err_lvl", err_lvl.map(|arg| arg.span()))?;
+    args::ensure_missing("catch_unwind", catch_unwind.map(|arg| arg.span()))?;
     args::ensure_missing("err", err.map(|arg| arg.span()))?;
     args::ensure_missing("fn_name", fn_name.map(|arg| arg.span()))?;
 
@@ -686,13 +792,12 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
 
     let evt_props_tokens = quote!(emit::Empty);
 
-    let lvl_tokens = default_lvl_tokens
-        .map(|lvl| lvl.to_ref_tokens())
-        .to_option_tokens(quote!(&emit::Level));
-
-    let panic_lvl_tokens = panic_lvl_tokens
-        .map(|lvl| lvl.to_ref_tokens())
-        .to_option_tokens(quote!(&emit::Level));
+    let panic_lvl_tokens = lvl_tokens(
+        panic_lvl_tokens.as_ref(),
+        default_lvl_tokens.as_ref(),
+        emit_core::well_known::LVL_ERROR,
+    );
+    let lvl_tokens = optional_lvl_tokens(default_lvl_tokens.as_ref(), default_lvl_tokens.as_ref());
 
     Ok(quote!(
         emit::__private::__private_begin_span(

@@ -2,6 +2,9 @@ use ::std::time::Duration;
 
 use emit::{Ctxt, Emitter, Kind, Props, Str};
 
+#[cfg(feature = "std")]
+use futures::FutureExt;
+
 use crate::util::{StaticCalled, StaticRuntime, static_runtime};
 
 #[allow(unused_imports)]
@@ -1112,6 +1115,74 @@ fn span_panic_default() {
     assert!(CALLED.was_called());
 }
 
+#[test]
+#[cfg(feature = "std")]
+fn span_catch_unwind() {
+    use ::std::panic;
+
+    static CALLED: StaticCalled = StaticCalled::new();
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!(
+                emit::Level::Error,
+                evt.props().pull::<emit::Level, _>("lvl").unwrap()
+            );
+            assert_eq!(
+                "explicit panic",
+                evt.props().get("err").unwrap().to_string()
+            );
+
+            CALLED.record();
+        },
+        |_| true,
+    );
+
+    #[emit::span(rt: RT, catch_unwind: true, "greet {user}")]
+    fn exec(user: &str) {
+        panic!("explicit panic")
+    }
+
+    let _ = panic::catch_unwind(panic::AssertUnwindSafe(|| exec("Rust")));
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+
+    assert!(CALLED.was_called());
+}
+
+#[test]
+#[cfg(feature = "std")]
+fn span_catch_unwind_result() {
+    use ::std::{io, panic};
+
+    static CALLED: StaticCalled = StaticCalled::new();
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!(
+                emit::Level::Error,
+                evt.props().pull::<emit::Level, _>("lvl").unwrap()
+            );
+            assert_eq!(
+                "explicit panic",
+                evt.props().get("err").unwrap().to_string()
+            );
+
+            CALLED.record();
+        },
+        |_| true,
+    );
+
+    #[emit::span(rt: RT, catch_unwind: true, err_lvl: "warn", "greet {user}")]
+    fn exec(user: &str) -> ::std::result::Result<(), io::Error> {
+        panic!("explicit panic")
+    }
+
+    let _ = panic::catch_unwind(panic::AssertUnwindSafe(|| exec("Rust")));
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+
+    assert!(CALLED.was_called());
+}
+
 #[tokio::test]
 #[cfg(feature = "std")]
 async fn span_panic_default_async() {
@@ -1236,6 +1307,72 @@ async fn span_panic_lvl_async() {
         exec().await;
     })
     .await;
+
+    assert!(CALLED.was_called());
+}
+
+#[tokio::test]
+#[cfg(feature = "std")]
+async fn span_catch_unwind_async() {
+    static CALLED: StaticCalled = StaticCalled::new();
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!(
+                emit::Level::Error,
+                evt.props().pull::<emit::Level, _>("lvl").unwrap()
+            );
+            assert_eq!(
+                "explicit panic",
+                evt.props().get("err").unwrap().to_string()
+            );
+
+            CALLED.record();
+        },
+        |_| true,
+    );
+
+    #[emit::span(rt: RT, catch_unwind: true, "greet {user}")]
+    async fn exec(user: &str) {
+        panic!("explicit panic")
+    }
+
+    let _ = exec("Rust").catch_unwind().await;
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+
+    assert!(CALLED.was_called());
+}
+
+#[tokio::test]
+#[cfg(feature = "std")]
+async fn span_catch_unwind_result_async() {
+    use ::std::io;
+
+    static CALLED: StaticCalled = StaticCalled::new();
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!(
+                emit::Level::Error,
+                evt.props().pull::<emit::Level, _>("lvl").unwrap()
+            );
+            assert_eq!(
+                "explicit panic",
+                evt.props().get("err").unwrap().to_string()
+            );
+
+            CALLED.record();
+        },
+        |_| true,
+    );
+
+    #[emit::span(rt: RT, catch_unwind: true, err_lvl: "warn", "greet {user}")]
+    async fn exec(user: &str) -> ::std::result::Result<(), io::Error> {
+        panic!("explicit panic")
+    }
+
+    let _ = exec("Rust").catch_unwind().await;
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
 
     assert!(CALLED.was_called());
 }

@@ -24,7 +24,14 @@ use emit_core::{
 use crate::{frame::Frame, span::Span, Metric};
 
 #[cfg(feature = "std")]
-use std::error::Error;
+use std::{
+    boxed::Box,
+    error::Error,
+    future::Future,
+    panic::{catch_unwind, resume_unwind, AssertUnwindSafe},
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 use crate::metric::{sampler, Sampler};
 use crate::{
@@ -904,7 +911,7 @@ pub fn __private_complete_span<'a, 'b, E, F, C, T, R, CL: ?Sized, CLP: ?Sized>(
     rt: &'a Runtime<E, F, C, T, R>,
     tpl: impl Into<Template<'b>>,
     lvl: Option<&'b CL>,
-    panic_lvl: Option<&'b CLP>,
+    panic_lvl: &'b CLP,
 ) -> __PrivateCompleteSpan<'a, 'b, E, F, C, T, R, CL, CLP> {
     __PrivateCompleteSpan {
         rt,
@@ -918,7 +925,7 @@ pub struct __PrivateCompleteSpan<'a, 'b, E, F, C, T, R, CL: ?Sized, CLP: ?Sized>
     rt: &'a Runtime<E, F, C, T, R>,
     tpl: Template<'b>,
     lvl: Option<&'b CL>,
-    panic_lvl: Option<&'b CLP>,
+    panic_lvl: &'b CLP,
 }
 
 impl<'a, 'b, E, F, C, T, R, CL, CLP> crate::span::completion::Completion
@@ -941,7 +948,7 @@ where
             completion = completion.with_lvl(lvl);
         }
 
-        if let Some(lvl) = self.panic_lvl.and_then(|lvl| lvl.capture()) {
+        if let Some(lvl) = self.panic_lvl.capture() {
             completion = completion.with_panic_lvl(lvl);
         }
 
@@ -1032,6 +1039,98 @@ where
     fn complete<P: Props>(&self, span: Span<P>) {
         let lvl_prop = self.lvl.capture().map(|lvl| (KEY_LVL, lvl));
         let err_prop = self.err.capture().map(|err| (KEY_ERR, err));
+
+        emit_core::emit(
+            self.rt.emitter(),
+            crate::Empty,
+            self.rt.ctxt(),
+            self.rt.clock(),
+            span.to_event()
+                .with_tpl(self.tpl.by_ref())
+                .map_props(|span_props| [lvl_prop, err_prop].and_props(span_props)),
+        );
+    }
+}
+
+#[track_caller]
+#[cfg(feature = "std")]
+pub fn __private_catch_unwind<R>(f: impl FnOnce() -> R) -> Result<R, Box<dyn Any + Send>> {
+    catch_unwind(AssertUnwindSafe(f))
+}
+
+#[cfg(feature = "std")]
+pub async fn __private_catch_unwind_async<R>(
+    f: impl Future<Output = R>,
+) -> Result<R, Box<dyn Any + Send>> {
+    struct CatchUnwind<F>(F);
+
+    impl<F> Future for CatchUnwind<F>
+    where
+        F: Future,
+    {
+        type Output = Result<F::Output, Box<dyn Any + Send>>;
+
+        fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+            // SAFETY: The inner future inherits pinning from `CatchUnwind`
+            let inner = unsafe { self.map_unchecked_mut(|f| &mut f.0) };
+
+            match catch_unwind(AssertUnwindSafe(|| inner.poll(cx))) {
+                Ok(Poll::Ready(r)) => Poll::Ready(Ok(r)),
+                Ok(Poll::Pending) => Poll::Pending,
+                Err(panic) => Poll::Ready(Err(panic)),
+            }
+        }
+    }
+
+    CatchUnwind(f).await
+}
+
+#[track_caller]
+#[cfg(feature = "std")]
+pub fn __private_resume_unwind(payload: Box<dyn Any + Send>) -> ! {
+    resume_unwind(payload)
+}
+
+#[cfg(feature = "std")]
+pub fn __private_complete_span_panic<'a, 'b, E, F, C, T, R, CL: ?Sized>(
+    rt: &'a Runtime<E, F, C, T, R>,
+    tpl: impl Into<Template<'b>>,
+    lvl: &'b CL,
+    payload: &'b Box<dyn Any + Send>,
+) -> __PrivateCompleteSpanPanic<'a, 'b, E, F, C, T, R, CL> {
+    __PrivateCompleteSpanPanic {
+        rt,
+        tpl: tpl.into(),
+        lvl,
+        payload,
+    }
+}
+
+#[cfg(feature = "std")]
+pub struct __PrivateCompleteSpanPanic<'a, 'b, E, F, C, T, R, CL: ?Sized> {
+    rt: &'a Runtime<E, F, C, T, R>,
+    tpl: Template<'b>,
+    lvl: &'b CL,
+    payload: &'b Box<dyn Any + Send>,
+}
+
+#[cfg(feature = "std")]
+impl<'a, 'b, E, F, C, T, R, CL> crate::span::completion::Completion
+    for __PrivateCompleteSpanPanic<'a, 'b, E, F, C, T, R, CL>
+where
+    E: Emitter,
+    F: Filter,
+    C: Ctxt,
+    T: Clock,
+    R: Rng,
+    CL: CaptureLevel + ?Sized,
+{
+    #[track_caller]
+    fn complete<P: Props>(&self, span: Span<P>) {
+        let payload = span::completion::PanicError::extract(self.payload);
+
+        let lvl_prop = self.lvl.capture().map(|lvl| (KEY_LVL, lvl));
+        let err_prop = Some((KEY_ERR, payload.to_value()));
 
         emit_core::emit(
             self.rt.emitter(),
