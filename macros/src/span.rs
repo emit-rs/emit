@@ -621,6 +621,12 @@ fn result_completion(
         })
     };
 
+    let panic_lvl_tokens = lvl_tokens(
+        panic_lvl_tokens.as_ref(),
+        default_lvl_tokens.as_ref(),
+        emit_core::well_known::LVL_ERROR,
+    );
+
     let body_tokens = if catch_unwind {
         quote!(match #body_tokens {
             emit::__private::core::result::Result::Ok(emit::__private::core::result::Result::Ok(__ok)) => #ok_branch,
@@ -644,11 +650,6 @@ fn result_completion(
     };
 
     // Similar to the non-result `completion` variant
-    let panic_lvl_tokens = lvl_tokens(
-        panic_lvl_tokens.as_ref(),
-        default_lvl_tokens.as_ref(),
-        emit_core::well_known::LVL_ERROR,
-    );
     let lvl_tokens = optional_lvl_tokens(default_lvl_tokens.as_ref(), default_lvl_tokens.as_ref());
 
     let default_completion_tokens = quote!(emit::__private::__private_complete_span(

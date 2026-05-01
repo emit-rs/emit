@@ -1,5 +1,5 @@
 error: the `guard` control parameter is incompatible with `catch_unwind`, `ok_lvl`, `err_lvl`, `panic_lvl`, or `err`
- --> src/compile_fail/std/span_guard_err_lvl.rs:1:29
+ --> src/compile_fail/std/span_guard_catch_unwind.rs:1:29
   |
-1 | #[emit::span(rt: RT, guard: span, err_lvl: emit::Level::Warn, "test")]
+1 | #[emit::span(rt: RT, guard: span, catch_unwind: true, "test")]
   |                             ^^^^
