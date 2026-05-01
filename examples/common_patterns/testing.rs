@@ -22,20 +22,30 @@ pub fn add(a: i32, b: i32) -> i32 {
 // at the end of the annotated function
 #[cfg(test)]
 fn setup() -> Option<impl Drop> {
-    emit::setup()
+    let rt = emit::setup()
         .emit_to(emit_term::stdout())
         .try_init()
-        .map(|init| init.flush_on_drop(std::time::Duration::from_secs(1)))
+        .map(|init| init.flush_on_drop(std::time::Duration::from_secs(1)));
+
+    // Set a panic hook so the location of the panic will also be captured
+    // We only need to do this once
+    if rt.is_some() {
+        std::panic::set_hook(Box::new(|payload| {
+            emit::error!("panic detected", #[emit::as_display] err: payload);
+        }));
+    }
+
+    rt
 }
 
 #[test]
-#[emit::span(setup, fn_name, catch_unwind: true, "test {fn_name}")]
+#[emit::span(setup, fn_name, "test {fn_name}")]
 fn add_1_1() {
     assert_eq!(2, add(1, 1));
 }
 
 #[test]
-#[emit::span(setup, fn_name, catch_unwind: true, "test {fn_name}")]
+#[emit::span(setup, fn_name, "test {fn_name}")]
 fn add_1_0() {
     assert_eq!(2, add(1, 0));
 }
