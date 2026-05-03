@@ -1516,6 +1516,251 @@ pub mod exp {
         Point::new(sign * lower.midpoint(upper))
     }
 
+    #[cfg(feature = "alloc")]
+    mod alloc_support {
+        use super::*;
+
+        use emit_core::{
+            props::Props,
+            str::{Str, ToStr},
+            well_known::{
+                KEY_DIST_COUNT, KEY_DIST_EXP_BUCKETS, KEY_DIST_EXP_SCALE, KEY_DIST_MAX,
+                KEY_DIST_MIN, KEY_DIST_SUM,
+            },
+        };
+
+        use crate::{
+            alloc::collections::{btree_map, BTreeMap},
+            core::{cmp, ops::ControlFlow},
+        };
+
+        /**
+        A collection for buckets in an exponential histogram.
+
+        The set tracks the number of occurrences of each unique point.
+        */
+        pub struct BucketSet(BTreeMap<Point, u64>);
+
+        impl BucketSet {
+            pub fn new() -> Self {
+                BucketSet(BTreeMap::new())
+            }
+
+            pub fn observe(&mut self, value: Point) {
+                *self.0.entry(value).or_default() += 1;
+            }
+
+            pub fn rescale(&mut self, scale: i32) {
+                let mut resampled = BTreeMap::new();
+
+                for (value, count) in &self.0 {
+                    *resampled.entry(midpoint(value.get(), scale)).or_default() += *count;
+                }
+
+                self.0 = resampled;
+            }
+
+            pub fn clear(&mut self) {
+                self.0.clear();
+            }
+
+            pub fn iter(&self) -> BucketSetIter<'_> {
+                BucketSetIter(self.0.iter())
+            }
+        }
+
+        impl<'a> IntoIterator for &'a BucketSet {
+            type IntoIter = BucketSetIter<'a>;
+            type Item = (Point, u64);
+
+            fn into_iter(self) -> Self::IntoIter {
+                self.iter()
+            }
+        }
+
+        // TODO: Better name for this type; `bucket_set::Iter`
+        pub struct BucketSetIter<'a>(btree_map::Iter<'a, Point, u64>);
+
+        impl<'a> Iterator for BucketSetIter<'a> {
+            type Item = (Point, u64);
+
+            fn next(&mut self) -> Option<Self::Item> {
+                self.0.next().map(|(k, v)| (*k, *v))
+            }
+        }
+
+        impl fmt::Debug for BucketSet {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                fmt::Debug::fmt(&self.0, f)
+            }
+        }
+
+        #[cfg(feature = "sval")]
+        impl sval::Value for BucketSet {
+            fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(
+                &'sval self,
+                stream: &mut S,
+            ) -> sval::Result {
+                stream.value(&self.0)
+            }
+        }
+
+        #[cfg(feature = "serde")]
+        impl serde::Serialize for BucketSet {
+            fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                self.0.serialize(serializer)
+            }
+        }
+
+        impl ToValue for BucketSet {
+            fn to_value(&self) -> Value<'_> {
+                #[cfg(feature = "sval")]
+                {
+                    Value::capture_sval(&self.0)
+                }
+                #[cfg(all(feature = "serde", not(feature = "sval")))]
+                {
+                    Value::capure_serde(&self.0)
+                }
+                #[cfg(all(not(feature = "serde"), not(feature = "sval")))]
+                {
+                    Value::capture_debug(&self.0)
+                }
+            }
+        }
+
+        // TODO: `FromValue` when `sval` or `serde` is available
+
+        /**
+        A container for approximating the distribution of a streaming data source.
+
+        It collects:
+        - min
+        - max
+        - sum
+        - count
+        - exponential histogram
+        */
+        pub struct Distribution {
+            max_buckets: usize,
+            scale: i32,
+            total: u64,
+            sum: Option<f64>,
+            min: Option<f64>,
+            max: Option<f64>,
+            buckets: BucketSet,
+        }
+
+        impl Distribution {
+            const MAX_INITIAL_SCALE: i32 = 10;
+
+            pub fn new(max_buckets: usize) -> Self {
+                Distribution {
+                    max_buckets,
+                    scale: Self::MAX_INITIAL_SCALE,
+                    total: 0,
+                    min: None,
+                    max: None,
+                    sum: None,
+                    buckets: BucketSet::new(),
+                }
+            }
+
+            pub fn observe(&mut self, raw_value: f64) {
+                self.buckets.observe(midpoint(raw_value, self.scale));
+                self.total += 1;
+
+                // Track the extrema
+                self.min = self
+                    .min
+                    .map(|min| cmp::min_by(min, raw_value, |a, b| a.total_cmp(b)))
+                    .or(Some(raw_value));
+                self.max = self
+                    .max
+                    .map(|max| cmp::max_by(max, raw_value, |a, b| a.total_cmp(b)))
+                    .or(Some(raw_value));
+                self.sum = self.sum.map(|sum| sum + raw_value).or(Some(raw_value));
+
+                // If we've overflowed then reduce our scale and resample
+                // Each time `scale` is decremented, our number of buckets will be halved
+                if self.buckets.0.len() >= self.max_buckets {
+                    self.scale -= 1;
+                    self.buckets.rescale(self.scale);
+                }
+            }
+
+            pub fn reset(&mut self) {
+                let Distribution {
+                    max_buckets: _,
+                    scale,
+                    total,
+                    min,
+                    max,
+                    sum,
+                    buckets,
+                } = self;
+
+                buckets.clear();
+                *total = 0;
+                *min = None;
+                *max = None;
+                *sum = None;
+                *scale = Self::MAX_INITIAL_SCALE;
+            }
+
+            pub fn count(&self) -> u64 {
+                self.total
+            }
+
+            pub fn min(&self) -> Option<f64> {
+                self.min
+            }
+
+            pub fn max(&self) -> Option<f64> {
+                self.max
+            }
+
+            pub fn sum(&self) -> Option<f64> {
+                self.sum
+            }
+
+            pub fn scale(&self) -> i32 {
+                self.scale
+            }
+
+            pub fn buckets(&self) -> &BucketSet {
+                &self.buckets
+            }
+        }
+
+        impl Props for Distribution {
+            fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
+                &'kv self,
+                mut for_each: F,
+            ) -> ControlFlow<()> {
+                for_each(KEY_DIST_EXP_SCALE.to_str(), self.scale.into())?;
+                for_each(KEY_DIST_EXP_BUCKETS.to_str(), self.buckets.to_value())?;
+
+                for_each(KEY_DIST_COUNT.to_str(), self.total.into())?;
+
+                if let Some(sum) = self.sum {
+                    for_each(KEY_DIST_SUM.to_str(), sum.into())?;
+                }
+                if let Some(min) = self.min {
+                    for_each(KEY_DIST_MIN.to_str(), min.into())?;
+                }
+                if let Some(max) = self.max {
+                    for_each(KEY_DIST_MAX.to_str(), max.into())?;
+                }
+
+                ControlFlow::Continue(())
+            }
+        }
+    }
+
+    #[cfg(feature = "alloc")]
+    pub use self::alloc_support::*;
+
     #[cfg(test)]
     mod tests {
         use core::f64::consts::PI;
