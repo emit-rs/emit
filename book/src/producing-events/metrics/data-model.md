@@ -25,7 +25,7 @@ Metric samples can optionally carry additional properties that describe the dist
 - `dist_count`: the count of values, like `metric_value` when `metric_agg` is `"count"`.
 - `dist_sum`: the sum of values, like `metric_value` when `metric_agg` is `"sum"`.
 - `dist_min`: the minimum value, like `metric_value` when `metric_agg` is `"min"`.
-- `dist_count`: the maximum value, like `metric_value` when `metric_agg` is `"max"`.
+- `dist_max`: the maximum value, like `metric_value` when `metric_agg` is `"max"`.
 - Exponential histograms as described in [Distributions](./distributions.md#exponential-histograms), using _both_ of the following properties:
     - `dist_exp_scale`: the scale of the histogram. The value is expected to be an integer.
     - `dist_exp_buckets`: the bucket midpoints and counts as a `[(f64, u64)]` sequence.

@@ -1530,106 +1530,132 @@ pub mod exp {
         };
 
         use crate::{
-            alloc::collections::{btree_map, BTreeMap},
             core::{cmp, ops::ControlFlow},
         };
 
-        /**
-        A collection for buckets in an exponential histogram.
+        pub mod bucket_set {
+            use emit_core::{
+                value::{Value, ToValue},
+            };
 
-        The set tracks the number of occurrences of each unique point.
-        */
-        pub struct BucketSet(BTreeMap<Point, u64>);
+            use crate::{
+                core::fmt,
+                alloc::collections::{btree_map, BTreeMap},
+                metric::exp::{midpoint, Point},
+            };
 
-        impl BucketSet {
-            pub fn new() -> Self {
-                BucketSet(BTreeMap::new())
-            }
+            /**
+            A collection for buckets in an exponential histogram.
 
-            pub fn observe(&mut self, value: Point) {
-                *self.0.entry(value).or_default() += 1;
-            }
+            The set tracks the number of occurrences of each unique point.
+            */
+            pub struct BucketSet(BTreeMap<Point, u64>);
 
-            pub fn rescale(&mut self, scale: i32) {
-                let mut resampled = BTreeMap::new();
-
-                for (value, count) in &self.0 {
-                    *resampled.entry(midpoint(value.get(), scale)).or_default() += *count;
+            impl BucketSet {
+                pub fn new() -> Self {
+                    BucketSet(BTreeMap::new())
                 }
 
-                self.0 = resampled;
-            }
-
-            pub fn clear(&mut self) {
-                self.0.clear();
-            }
-
-            pub fn iter(&self) -> BucketSetIter<'_> {
-                BucketSetIter(self.0.iter())
-            }
-        }
-
-        impl<'a> IntoIterator for &'a BucketSet {
-            type IntoIter = BucketSetIter<'a>;
-            type Item = (Point, u64);
-
-            fn into_iter(self) -> Self::IntoIter {
-                self.iter()
-            }
-        }
-
-        // TODO: Better name for this type; `bucket_set::Iter`
-        pub struct BucketSetIter<'a>(btree_map::Iter<'a, Point, u64>);
-
-        impl<'a> Iterator for BucketSetIter<'a> {
-            type Item = (Point, u64);
-
-            fn next(&mut self) -> Option<Self::Item> {
-                self.0.next().map(|(k, v)| (*k, *v))
-            }
-        }
-
-        impl fmt::Debug for BucketSet {
-            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                fmt::Debug::fmt(&self.0, f)
-            }
-        }
-
-        #[cfg(feature = "sval")]
-        impl sval::Value for BucketSet {
-            fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(
-                &'sval self,
-                stream: &mut S,
-            ) -> sval::Result {
-                stream.value(&self.0)
-            }
-        }
-
-        #[cfg(feature = "serde")]
-        impl serde::Serialize for BucketSet {
-            fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-                self.0.serialize(serializer)
-            }
-        }
-
-        impl ToValue for BucketSet {
-            fn to_value(&self) -> Value<'_> {
-                #[cfg(feature = "sval")]
-                {
-                    Value::capture_sval(&self.0)
+                pub fn observe(&mut self, value: Point) {
+                    *self.0.entry(value).or_default() += 1;
                 }
-                #[cfg(all(feature = "serde", not(feature = "sval")))]
-                {
-                    Value::capure_serde(&self.0)
+
+                pub fn rescale(&mut self, scale: i32) {
+                    let mut resampled = BTreeMap::new();
+
+                    for (value, count) in &self.0 {
+                        *resampled.entry(midpoint(value.get(), scale)).or_default() += *count;
+                    }
+
+                    self.0 = resampled;
                 }
-                #[cfg(all(not(feature = "serde"), not(feature = "sval")))]
-                {
-                    Value::capture_debug(&self.0)
+
+                pub fn len(&self) -> usize {
+                    self.0.len()
+                }
+
+                pub fn clear(&mut self) {
+                    self.0.clear();
+                }
+
+                pub fn iter(&self) -> Iter<'_> {
+                    Iter(self.0.iter())
                 }
             }
+
+            impl<'a> IntoIterator for &'a BucketSet {
+                type IntoIter = Iter<'a>;
+                type Item = (Point, u64);
+
+                fn into_iter(self) -> Self::IntoIter {
+                    self.iter()
+                }
+            }
+
+            pub struct Iter<'a>(btree_map::Iter<'a, Point, u64>);
+
+            impl<'a> Iterator for Iter<'a> {
+                type Item = (Point, u64);
+
+                fn next(&mut self) -> Option<Self::Item> {
+                    self.0.next().map(|(k, v)| (*k, *v))
+                }
+            }
+
+            impl fmt::Debug for BucketSet {
+                fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                    fmt::Debug::fmt(&self.0, f)
+                }
+            }
+
+            #[cfg(feature = "sval")]
+            impl sval::Value for BucketSet {
+                fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(
+                    &'sval self,
+                    stream: &mut S,
+                ) -> sval::Result {
+                    stream.value(&self.0)
+                }
+            }
+
+            #[cfg(feature = "serde")]
+            impl serde::Serialize for BucketSet {
+                fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                    self.0.serialize(serializer)
+                }
+            }
+
+            impl ToValue for BucketSet {
+                fn to_value(&self) -> Value<'_> {
+                    #[cfg(feature = "sval")]
+                    {
+                        Value::capture_sval(&self.0)
+                    }
+                    #[cfg(all(feature = "serde", not(feature = "sval")))]
+                    {
+                        Value::capure_serde(&self.0)
+                    }
+                    #[cfg(all(not(feature = "serde"), not(feature = "sval")))]
+                    {
+                        Value::capture_debug(&self.0)
+                    }
+                }
+            }
+
+            // TODO: `FromValue` when `sval` or `serde` is available
+
+            #[cfg(test)]
+            mod tests {
+                use super::*;
+
+                #[test]
+                fn it_works() {
+                    todo!()
+                }
+            }
         }
 
-        // TODO: `FromValue` when `sval` or `serde` is available
+        pub use self::bucket_set::BucketSet;
 
         /**
         A container for approximating the distribution of a streaming data source.
@@ -1683,7 +1709,7 @@ pub mod exp {
 
                 // If we've overflowed then reduce our scale and resample
                 // Each time `scale` is decremented, our number of buckets will be halved
-                if self.buckets.0.len() >= self.max_buckets {
+                if self.buckets.len() >= self.max_buckets {
                     self.scale -= 1;
                     self.buckets.rescale(self.scale);
                 }
@@ -1754,6 +1780,16 @@ pub mod exp {
                 }
 
                 ControlFlow::Continue(())
+            }
+        }
+
+        #[cfg(test)]
+        mod tests {
+            use super::*;
+
+            #[test]
+            fn it_works() {
+                todo!();
             }
         }
     }
