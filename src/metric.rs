@@ -1529,37 +1529,54 @@ pub mod exp {
             },
         };
 
-        use crate::{
-            core::{cmp, ops::ControlFlow},
-        };
+        use crate::core::{cmp, ops::ControlFlow};
 
         pub mod bucket_set {
-            use emit_core::{
-                value::{Value, ToValue},
-            };
+            /*!
+            The [`BucketSet`] type.
+            */
+
+            use emit_core::value::{ToValue, Value};
 
             use crate::{
-                core::fmt,
                 alloc::collections::{btree_map, BTreeMap},
+                core::fmt,
                 metric::exp::{midpoint, Point},
             };
 
             /**
             A collection for buckets in an exponential histogram.
 
-            The set tracks the number of occurrences of each unique point.
+            The set stores sparse, sorted buckets as a tuple of their midpoint ([`Point`]), and count of occurrences.
             */
             pub struct BucketSet(BTreeMap<Point, u64>);
 
             impl BucketSet {
+                /**
+                Create a new empty `BucketSet`.
+
+                This method does not allocate.
+                */
                 pub fn new() -> Self {
                     BucketSet(BTreeMap::new())
                 }
 
+                /**
+                Observe a [`Point`] computed from a raw value.
+
+                The count for this point will be incremented by `1`.
+
+                All points should be computed from the same scale.
+                */
                 pub fn observe(&mut self, value: Point) {
                     *self.0.entry(value).or_default() += 1;
                 }
 
+                /**
+                Rescale all buckets.
+
+                This method only has sensible behavior when the new scale is a smaller value (coarser-grained buckets). When the scale decreases, adjacent buckets are merged.
+                */
                 pub fn rescale(&mut self, scale: i32) {
                     let mut resampled = BTreeMap::new();
 
@@ -1570,14 +1587,23 @@ pub mod exp {
                     self.0 = resampled;
                 }
 
+                /**
+                Get the number of buckets currently in the set.
+                */
                 pub fn len(&self) -> usize {
                     self.0.len()
                 }
 
+                /**
+                Clear all buckets, allowing the allocation to be re-used.
+                */
                 pub fn clear(&mut self) {
                     self.0.clear();
                 }
 
+                /**
+                Iterate over buckets in order.
+                */
                 pub fn iter(&self) -> Iter<'_> {
                     Iter(self.0.iter())
                 }
@@ -1592,6 +1618,11 @@ pub mod exp {
                 }
             }
 
+            /**
+            An iterator over sorted buckets from a [`BucketSet`].
+
+            This method is the result of calling [`BucketSet::iter`].
+            */
             pub struct Iter<'a>(btree_map::Iter<'a, Point, u64>);
 
             impl<'a> Iterator for Iter<'a> {
@@ -1620,7 +1651,10 @@ pub mod exp {
 
             #[cfg(feature = "serde")]
             impl serde::Serialize for BucketSet {
-                fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                fn serialize<S: serde::Serializer>(
+                    &self,
+                    serializer: S,
+                ) -> Result<S::Ok, S::Error> {
                     self.0.serialize(serializer)
                 }
             }
@@ -1680,6 +1714,11 @@ pub mod exp {
         impl Distribution {
             const MAX_INITIAL_SCALE: i32 = 10;
 
+            /**
+            Create a new `Distribution` that can store up to `max_buckets` sparse buckets.
+
+            The distribution uses a large scale initially. Whenever the number of buckets would overflow `max_buckets`, the scale is decremented and the buckets are rescaled. This reduces the number of buckets by half while also decreasing precision.
+            */
             pub fn new(max_buckets: usize) -> Self {
                 Distribution {
                     max_buckets,
@@ -1692,6 +1731,11 @@ pub mod exp {
                 }
             }
 
+            /**
+            Observe a raw value.
+
+            The value will be converted into a bucket midpoint at the current internal scale. The count for the resulting bucket will be incremented by `1`.
+            */
             pub fn observe(&mut self, raw_value: f64) {
                 self.buckets.observe(midpoint(raw_value, self.scale));
                 self.total += 1;
@@ -1715,6 +1759,11 @@ pub mod exp {
                 }
             }
 
+            /**
+            Clear the distribution of any data so it can be re-used.
+
+            This method will also reset the internal scale back to its initial value.
+            */
             pub fn reset(&mut self) {
                 let Distribution {
                     max_buckets: _,
@@ -1734,26 +1783,52 @@ pub mod exp {
                 *scale = Self::MAX_INITIAL_SCALE;
             }
 
+            /**
+            Get the total count of observed values across all buckets.
+
+            This method returns `0` if no values have been seen.
+            */
             pub fn count(&self) -> u64 {
                 self.total
             }
 
+            /**
+            Get the minimum observed value.
+
+            This method returns `None` if no values have been seen.
+            */
             pub fn min(&self) -> Option<f64> {
                 self.min
             }
 
+            /**
+            Get the maximum observed value.
+
+            This method returns `None` if no values have been seen.
+            */
             pub fn max(&self) -> Option<f64> {
                 self.max
             }
 
+            /**
+            Get the sum of all observed values.
+
+            This method returns `None` if no values have been seen.
+            */
             pub fn sum(&self) -> Option<f64> {
                 self.sum
             }
 
+            /**
+            Get the current scale used to bucket values.
+            */
             pub fn scale(&self) -> i32 {
                 self.scale
             }
 
+            /**
+            Get the bucket values.
+            */
             pub fn buckets(&self) -> &BucketSet {
                 &self.buckets
             }

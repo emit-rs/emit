@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -21,7 +21,7 @@ fn main() {
                     guard
                         .current_value_mut()
                         .entry(key)
-                        .or_insert_with(|| emit::metric::exp::Histogram::new(160))
+                        .or_insert_with(|| emit::metric::exp::Distribution::new(160))
                         .observe(elapsed.as_secs_f64());
                 }
 
