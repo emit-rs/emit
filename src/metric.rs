@@ -1295,7 +1295,7 @@ pub mod exp {
     use core::{cmp, fmt, hash, str::FromStr};
 
     /**
-    An error encountered attempting to parse a [`BucketSet`].
+    An error encountered attempting to parse a [`Point`].
     */
     #[derive(Debug)]
     pub struct ParsePointError {}
