@@ -144,12 +144,12 @@ name = "metric_distribution"
 path = "metric_distribution.rs"
 
 [[example]]
-name = "metric_distribution_resampling"
-path = "metric_distribution_resampling.rs"
+name = "metric_distribution_manual"
+path = "metric_distribution_manual.rs"
 
 [[example]]
-name = "metric_distribution_resampling_delta_shared"
-path = "metric_distribution_resampling_delta_shared.rs"
+name = "metric_distribution_delta_shared"
+path = "metric_distribution_delta_shared.rs"
 
 [[example]]
 name = "metric_source"
