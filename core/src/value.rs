@@ -304,6 +304,8 @@ pub trait ToValue {
 Convert from a [`Value`].
 
 This trait is the basis for the [`Value::cast`] method.
+
+This may involve downcasting, serializing, or parsing. Implementations should attempt to downcast first with [`Value::downcast_ref`].
 */
 pub trait FromValue<'v> {
     /**

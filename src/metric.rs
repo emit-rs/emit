@@ -1292,7 +1292,22 @@ pub mod exp {
         value::{FromValue, ToValue, Value},
     };
 
-    use core::{cmp, fmt, hash};
+    use core::{cmp, fmt, hash, str::FromStr};
+
+    /**
+    An error encountered attempting to parse a [`BucketSet`].
+    */
+    #[derive(Debug)]
+    pub struct ParsePointError {}
+
+    impl fmt::Display for ParsePointError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "the input was not a valid point")
+        }
+    }
+
+    #[cfg(feature = "std")]
+    impl std::error::Error for ParsePointError {}
 
     /**
     A totally ordered value, representing a point within an exponential bucket.
@@ -1311,6 +1326,13 @@ pub mod exp {
         */
         pub const fn new(value: f64) -> Self {
             Point(value)
+        }
+
+        /**
+        Parse a `Point` from its textual representation.
+        */
+        pub fn try_from_str(s: &str) -> Result<Self, ParsePointError> {
+            Ok(Point::new(s.parse().map_err(|_| ParsePointError {})?))
         }
 
         /**
@@ -1426,6 +1448,14 @@ pub mod exp {
         }
     }
 
+    impl FromStr for Point {
+        type Err = ParsePointError;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            Self::try_from_str(s)
+        }
+    }
+
     #[cfg(feature = "sval")]
     impl sval::Value for Point {
         fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(
@@ -1536,20 +1566,67 @@ pub mod exp {
             The [`BucketSet`] type.
             */
 
-            use emit_core::value::{ToValue, Value};
+            use emit_core::value::{FromValue, ToValue, Value};
 
             use crate::{
                 alloc::collections::{btree_map, BTreeMap},
-                core::fmt,
+                core::{
+                    fmt::{self, Write as _},
+                    str::FromStr,
+                },
                 metric::exp::{midpoint, Point},
             };
+
+            /**
+            An error encountered attempting to parse a [`BucketSet`].
+            */
+            #[derive(Debug)]
+            pub struct ParseBucketSetError {}
+
+            impl fmt::Display for ParseBucketSetError {
+                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    write!(f, "the input was not a valid bucket set")
+                }
+            }
+
+            #[cfg(feature = "std")]
+            impl std::error::Error for ParseBucketSetError {}
 
             /**
             A collection for buckets in an exponential histogram.
 
             The set stores sparse, sorted buckets as a tuple of their midpoint ([`Point`]), and count of occurrences.
             */
+            #[derive(Clone, PartialEq, Eq)]
             pub struct BucketSet(BTreeMap<Point, u64>);
+
+            impl fmt::Debug for BucketSet {
+                fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                    fmt::Display::fmt(self, f)
+                }
+            }
+
+            impl fmt::Display for BucketSet {
+                fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                    f.write_char('[')?;
+
+                    let mut first = true;
+                    for (k, v) in &self.0 {
+                        if !first {
+                            f.write_char(',')?;
+                        }
+                        first = false;
+
+                        f.write_char('[')?;
+                        fmt::Display::fmt(k, f)?;
+                        f.write_char(',')?;
+                        fmt::Display::fmt(v, f)?;
+                        f.write_char(']')?;
+                    }
+
+                    f.write_char(']')
+                }
+            }
 
             impl BucketSet {
                 /**
@@ -1559,6 +1636,77 @@ pub mod exp {
                 */
                 pub fn new() -> Self {
                     BucketSet(BTreeMap::new())
+                }
+
+                /**
+                Parse a `BucketSet` from its raw textual representation.
+                */
+                pub fn try_from_str(mut s: &str) -> Result<Self, ParseBucketSetError> {
+                    let mut set = BucketSet::new();
+
+                    if s.len() < 2 {
+                        // Truncated
+                        return Err(ParseBucketSetError {});
+                    }
+
+                    if &s[0..1] != "[" || &s[s.len() - 1..s.len()] != "]" {
+                        // Must be enclosed by `[]`
+                        return Err(ParseBucketSetError {});
+                    }
+
+                    s = &s[1..s.len() - 1];
+
+                    let mut first = true;
+                    while s.len() > 0 {
+                        // Parse each bucket
+
+                        if !first {
+                            if s.len() < 2 {
+                                // Unexpected EOF parsing bucket: not enough chars for `,[`
+                                return Err(ParseBucketSetError {});
+                            }
+
+                            if &s[0..1] != "," {
+                                // Invalid bucket: expected `,`
+                                return Err(ParseBucketSetError {});
+                            }
+                            s = &s[1..];
+                        }
+                        first = false;
+
+                        if &s[0..1] != "[" {
+                            // Invalid bucket: expected `[`
+                            return Err(ParseBucketSetError {});
+                        }
+                        s = &s[1..];
+
+                        let Some(key_end) = s.find(',') else {
+                            // Unexpected EOF parsing key: expected `,`
+                            return Err(ParseBucketSetError {});
+                        };
+
+                        let key = &s[..key_end];
+                        s = &s[key_end + 1..];
+
+                        let Some(value_end) = s.find(']') else {
+                            // Unexpected EOF parsing value: expected `]`
+                            return Err(ParseBucketSetError {});
+                        };
+
+                        let value = &s[..value_end];
+                        s = &s[value_end + 1..];
+
+                        let key = key.parse().map_err(|_| ParseBucketSetError {})?;
+                        let value = value.parse().map_err(|_| ParseBucketSetError {})?;
+
+                        let existing = set.0.insert(key, value);
+                        if existing.is_some() {
+                            // Duplicate key
+                            return Err(ParseBucketSetError {});
+                        }
+                    }
+
+                    Ok(set)
                 }
 
                 /**
@@ -1633,12 +1781,6 @@ pub mod exp {
                 }
             }
 
-            impl fmt::Debug for BucketSet {
-                fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                    fmt::Debug::fmt(&self.0, f)
-                }
-            }
-
             #[cfg(feature = "sval")]
             impl sval::Value for BucketSet {
                 fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(
@@ -1659,6 +1801,14 @@ pub mod exp {
                 }
             }
 
+            impl FromStr for BucketSet {
+                type Err = ParseBucketSetError;
+
+                fn from_str(s: &str) -> Result<Self, Self::Err> {
+                    Self::try_from_str(s)
+                }
+            }
+
             impl ToValue for BucketSet {
                 fn to_value(&self) -> Value<'_> {
                     #[cfg(feature = "sval")]
@@ -1671,19 +1821,63 @@ pub mod exp {
                     }
                     #[cfg(all(not(feature = "serde"), not(feature = "sval")))]
                     {
-                        Value::capture_debug(&self.0)
+                        Value::capture_display(&self.0)
                     }
                 }
             }
 
-            // TODO: `FromValue` when `sval` or `serde` is available
+            impl<'a> FromValue<'a> for BucketSet {
+                fn from_value(v: Value<'a>) -> Option<Self> {
+                    /*
+                    - downcast
+                    - sval
+                    - serde
+                    - parse
+                    */
+                    todo!()
+                }
+            }
 
             #[cfg(test)]
             mod tests {
                 use super::*;
 
                 #[test]
-                fn it_works() {
+                fn observe_increments_counts() {
+                    todo!()
+                }
+
+                #[test]
+                fn bucket_set_roundtrip() {
+                    for case in [
+                        BucketSet::new(),
+                        {
+                            let mut set = BucketSet::new();
+                            set.observe(Point::new(0.0));
+                            set
+                        },
+                        {
+                            let mut set = BucketSet::new();
+                            set.observe(Point::new(0.0));
+                            set.observe(Point::new(1.0));
+                            set
+                        },
+                    ] {
+                        let fmt = case.to_string();
+                        assert_eq!(Some(case), BucketSet::try_from_str(&fmt).ok(), "{fmt}");
+                    }
+                }
+
+                #[test]
+                fn err_bucket_set_invalid() {
+                    /*
+                    - Truncated
+                    - Non-numeric
+                    - Empty bucket
+                    - 3-valued bucket
+                    - Whitespace
+                    - Duplicate key
+                    */
                     todo!()
                 }
             }
@@ -1694,12 +1888,17 @@ pub mod exp {
         /**
         A container for approximating the distribution of a streaming data source.
 
-        It collects:
-        - min
-        - max
-        - sum
-        - count
-        - exponential histogram
+        `Distribution`s aggregate statistics from raw samples that pass through them. They include:
+
+        - `total`: The total number of observed values.
+        - `sum`: The sum of all observed values.
+        - `min`: The smallest observed value.
+        - `max`: The largest observed value.
+        - `buckets`: An exponential histogram backed by a [`BucketSet`].
+
+        Call the [`Distribution::observe`] method on each raw value.
+
+        Use the [`Props`] implementation on `Distribution` to include it on a metric sample.
         */
         pub struct Distribution {
             max_buckets: usize,
@@ -1904,6 +2103,11 @@ pub mod exp {
                 ],
                 &*values
             );
+        }
+
+        #[test]
+        fn point_roundtrip() {
+            todo!()
         }
 
         #[test]
