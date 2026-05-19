@@ -82,4 +82,37 @@ emit::emit! {
 }
 ```
 
+`emit` also defines a [`Span`](https://docs.rs/emit/1.18.0/emit/span/struct.Span.html) type, which are a kind of [`Event`](https://docs.rs/emit/1.18.0/emit/struct.Event.html) specialized for spans in a distributed trace. You can construct a `Span` event manually:
+
+```rust
+# extern crate emit;
+let timer = emit::Timer::start(emit::clock());
+
+// Your code goes here
+let sleep_ms = 1200;
+std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
+
+// Construct a `Span` manually
+let span = emit::Span::new(
+    // The module that created the span
+    emit::mdl!(),
+    // The name of the span
+    "wait a bit",
+    // The extent of the span
+    timer,
+    // Additional properties for the span
+    // In this case, we're just attaching the generic span context
+    emit::SpanCtxt::new(
+        // The id of the trace this span belongs to
+        emit::TraceId::from_u128(0x4bf92f3577b34da6a3ce929d0e0e4736),
+        // The id of the parent of this span
+        None,
+        // The id of this span
+        emit::SpanId::from_u64(0x00f067aa0ba902b7),
+    ),
+);
+
+emit::emit! { evt: span };
+```
+
 Note that when emitting spans as regular events that you still thread the trace context around somehow, otherwise other events emitted within its execution won't be correlated with it.

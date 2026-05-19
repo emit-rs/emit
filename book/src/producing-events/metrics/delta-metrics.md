@@ -34,39 +34,24 @@ You can use the [`Delta`](https://docs.rs/emit/1.18.0/emit/metric/struct.Delta.h
 
 ```rust
 # extern crate emit;
-use std::sync::Mutex;
+// Wrap a value in a delta
+// The delta accepts a timestamp for the start of its initial time interval
+let mut delta = emit::metric::Delta<usize>::new_default(emit::clock().now());
 
-// This example synchronizes with a `Mutex`. Other strategies are also possible,
-// like `RwLock` with `AtomicUsize`, depending on the underlying value type.
-pub struct BytesWritten(Mutex<emit::metric::Delta<usize>>);
+// Update the value for the current time period
+delta.current_value_mut() += 1;
+delta.current_value_mut() += 1;
 
-impl BytesWritten {
-    // Accumulate into the metric
-    pub fn extend(&self, value: usize) {
-        *self.0.lock().unwrap().current_value_mut() += value;
-    }
-}
+// At some regular interval, pull the built up value and emit it
+// Advancing the delta returns a tuple of:
+//   1. The extent covering the time since it was last advanced. In this example, that's the two calls to `emit::clock().now()`
+//   2. The value that was built up over the interval
+let (extent, my_metric) = delta.advance_default(emit::clock().now());
 
-impl emit::metric::Source for BytesWritten {
-    fn sample_metrics<S: emit::metric::Sampler>(&self, sampler: S) {
-        let mut guard = self.0.lock().unwrap();
-
-        // Get the value for the current time period and an extent covering it
-        let (extent, value) = guard.advance(sampler.sampled_at().or_else(|| emit::clock().now()));
-        let bytes_written = *value;
-        
-        // Reset the delta for the new time period
-        *value = 0;
-
-        drop(guard);
-
-        // Report the delta
-        sampler.metric(emit::count_metric!(
-            extent,
-            value: bytes_written,
-        ));
-    }
-}
+// Emit the metric sample as an event
+emit::sample(extent, value: my_metric);
 ```
 
-See [Reporting sources](./reporting-sources.md) for details on how to sample a [`Source`](https://docs.rs/emit/1.18.0/emit/metric/source/trait.Source.html).
+Internally, [`Delta`](https://docs.rs/emit/1.18.0/emit/metric/struct.Delta.html) just tracks the last [`Timestamp`](https://docs.rs/emit/1.18.0/emit/struct.Timestamp.html) passed to `advance` (which is the start of the current interval) and the value for the current interval. `Delta` relies on external mutability, so you'll need to wrap it in a mutex to share it, but can be used for arbitrarily complex metric sources, like [`Distribution`](https://docs.rs/emit/1.18.0/emit/metric/exp/struct.Distribution.html)s.
+
+See [Reporting sources](./reporting-sources.md) for details on how to sample a [`Source`](https://docs.rs/emit/1.18.0/emit/metric/source/trait.Source.html) containing a `Delta`.

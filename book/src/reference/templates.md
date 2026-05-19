@@ -71,6 +71,20 @@ emit::emit!(
 );
 ```
 
+Since properties use field-value syntax, you can also treat them as a plain identifier to capture a value that's in-scope:
+
+```rust
+# extern crate emit;
+# let user = "Rust";
+let lang = "en";
+
+emit::emit!(
+    "Hello, {user}",
+    // Equivalent to `lang: lang`
+    lang,
+);
+```
+
 ### Properties before templates
 
 Properties declared before the template aren't captured. They're called _control parameters_ and are used to change the way events are constructed or emitted:
@@ -82,6 +96,30 @@ emit::emit!(
     mdl: emit::path!("a::b::c"),
     "Hello, {user}",
 )
+```
+
+Control parameters also use field-value syntax, so support the same shorthand for treating a plain identifier as its value:
+
+```rust
+# extern crate emit;
+# let user = "Rust";
+let mdl = emit::path!("a::b::c");
+
+emit::emit!(
+    // Equivalent to `mdl: mdl`
+    mdl,
+    "Hello, {user}",
+)
+```
+
+Some control parameters expect an identifier to bind a value to. In these cases, the initialization shorthand will use the parameter name as the identifier:
+
+```rust
+// Equivalent to `guard: guard`
+#[emit::span(guard, "exec")]
+fn exec() {
+    let _ = guard;
+}
 ```
 
 The names and values of control parameters are different between `emit!` and `#[span]`. See [Control parameters](./control-parameters.md) for details.
