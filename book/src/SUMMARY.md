@@ -23,6 +23,7 @@
         - [Limitations](./producing-events/tracing/limitations.md)
     - [Metrics](./producing-events/metrics.md)
         - [Data model](./producing-events/metrics/data-model.md)
+        - [Metric sample creation](./producing-events/metrics/creation.md)
         - [Attaching properties](./producing-events/metrics/properties.md)
         - [Creating samples](./producing-events/metrics/creation.md)
         - [Cumulative metrics](./producing-events/metrics/cumulative-metrics.md)

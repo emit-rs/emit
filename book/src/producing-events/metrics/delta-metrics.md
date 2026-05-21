@@ -6,9 +6,11 @@ The following metric reports that the number of bytes written changed by 17 over
 
 ```rust
 # extern crate emit;
+// Compute a time range that the sample covers
 let now = emit::clock().now();
 let last_sample = now.map(|now| now - std::time::Duration::from_secs(30));
 
+// Passing the time range as the sample's extent creates a delta
 emit::count_sample!(extent: last_sample..now, name: "bytes_written", value: 17);
 ```
 

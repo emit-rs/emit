@@ -30,7 +30,7 @@ Braces may be escaped by doubling them:
 emit::emit!("Hello, {{user}}");
 ```
 
-Properties use Rust's field value syntax, like you'd write when initializing struct fields. Usually they're a standalone identifier that will capture a property in scope with that name. Properties can also be given a value inline as an expression:
+Properties use Rust's field value syntax, like you'd write when initializing struct fields. Usually they're a standalone identifier that will capture a matching value in scope. Properties can also be given a value inline as an expression:
 
 ```rust
 # extern crate emit;
@@ -49,7 +49,7 @@ See [Property attributes](./property-attributes.md) for details on attributes yo
 
 ### Properties after templates
 
-Complex property expressions are distracting within templates. Attributes and values for properties declared in the template can be written after it using the same field-value syntax:
+Complex property expressions are distracting within templates. Attributes and values for properties declared in the template can be expanded after the template using the same field value syntax:
 
 ```rust
 # extern crate emit;
@@ -60,7 +60,7 @@ emit::emit!(
 );
 ```
 
-Properties outside of the template don't need a corresponding hole to be captured:
+Properties after the template don't need a corresponding hole within it to be captured:
 
 ```rust
 # extern crate emit;
@@ -71,11 +71,11 @@ emit::emit!(
 );
 ```
 
-Since properties use field-value syntax, you can also treat them as a plain identifier to capture a value that's in-scope:
+Since properties after the template also use field value syntax, you can treat them as a plain identifier to capture a value that's in-scope:
 
 ```rust
 # extern crate emit;
-# let user = "Rust";
+let user = "Rust";
 let lang = "en";
 
 emit::emit!(
@@ -87,7 +87,7 @@ emit::emit!(
 
 ### Properties before templates
 
-Properties declared before the template aren't captured. They're called _control parameters_ and are used to change the way events are constructed or emitted:
+Properties that appear before the template aren't captured. They're called _control parameters_ and are used to change the way events are constructed or emitted:
 
 ```rust
 # extern crate emit;
@@ -98,7 +98,7 @@ emit::emit!(
 )
 ```
 
-Control parameters also use field-value syntax, so support the same shorthand for treating a plain identifier as its value:
+Control parameters use the same field value syntax as everywhere else. You can use the same shorthand for treating a plain identifier as its value:
 
 ```rust
 # extern crate emit;
@@ -112,7 +112,7 @@ emit::emit!(
 )
 ```
 
-Some control parameters expect an identifier to bind a value to. In these cases, the initialization shorthand will use the parameter name as the identifier:
+Some control parameters produce a value for you to use instead of accepting one as input. In these cases, the initialization shorthand will use the parameter name as the identifier to bind the output to:
 
 ```rust
 // Equivalent to `guard: guard`
