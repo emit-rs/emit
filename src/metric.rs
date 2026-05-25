@@ -1642,25 +1642,37 @@ pub mod exp {
                 Parse a `BucketSet` from its raw textual representation.
                 */
                 pub fn try_from_str(mut s: &str) -> Result<Self, ParseBucketSetError> {
+                    fn find(haystack: &str, needle: &[(char, u8)]) -> Option<(usize, usize)> {
+                        needle
+                            .iter()
+                            .filter_map(|(c, cs)| haystack.find(*c).map(|c| (c, *cs as usize)))
+                            .next()
+                    }
+
                     let mut set = BucketSet::new();
+
+                    s = s.trim();
 
                     if s.len() < 2 {
                         // Truncated
                         return Err(ParseBucketSetError {});
                     }
 
-                    if &s[0..1] != "[" || &s[s.len() - 1..s.len()] != "]" {
-                        // Must be enclosed by `[]`
-                        return Err(ParseBucketSetError {});
-                    }
-
-                    s = &s[1..s.len() - 1];
+                    // Must be enclosed by `[]`, `()`, or `{}`
+                    let container_end = match (&s[0..1], &s[s.len() - 1..]) {
+                        ("[", "]") => ']',
+                        ("(", ")") => ')',
+                        ("{", "}") => '}',
+                        _ => return Err(ParseBucketSetError {}),
+                    };
+                    s = &s[1..];
 
                     let mut first = true;
-                    while s.len() > 0 {
+                    while s.len() > 1 {
                         // Parse each bucket
-
                         if !first {
+                            s = s.trim_start();
+
                             if s.len() < 2 {
                                 // Unexpected EOF parsing bucket: not enough chars for `,[`
                                 return Err(ParseBucketSetError {});
@@ -1674,36 +1686,69 @@ pub mod exp {
                         }
                         first = false;
 
-                        if &s[0..1] != "[" {
-                            // Invalid bucket: expected `[`
-                            return Err(ParseBucketSetError {});
-                        }
-                        s = &s[1..];
+                        // Determine the kind of bucket we're parsing
+                        s = s.trim_start();
+                        let (key_start_skip, key_end, value_end) = match &s[0..1] {
+                            // `[k, v]`, `[k: v]`, or `[k = v]`
+                            "[" => (
+                                1,
+                                &[(',', 1u8), (':', 1u8), ('=', 1u8)] as &[(char, u8)],
+                                &[(']', 1u8)] as &[(char, u8)],
+                            ),
+                            // `(k, v)`, `(k: v)`, or `(k = v)`
+                            "(" => (
+                                1,
+                                &[(',', 1u8), (':', 1u8), ('=', 1u8)] as &[(char, u8)],
+                                &[(')', 1u8)] as &[(char, u8)],
+                            ),
+                            // `{k, v}`, `{k: v}`, or `{k = v}`
+                            "{" => (
+                                1,
+                                &[(',', 1u8), (':', 1u8), ('=', 1u8)] as &[(char, u8)],
+                                &[('}', 1u8)] as &[(char, u8)],
+                            ),
+                            // `k: v`, or `k = v`
+                            _ => (
+                                0,
+                                &[(':', 1u8), ('=', 1u8)] as &[(char, u8)],
+                                &[(',', 0u8), (container_end, 0u8)] as &[(char, u8)],
+                            ),
+                        };
+                        s = &s[key_start_skip..];
 
-                        let Some(key_end) = s.find(',') else {
-                            // Unexpected EOF parsing key: expected `,`
+                        // Find the bounds of the key
+                        s = s.trim_start();
+                        let Some((key_end, key_end_skip)) = find(s, key_end) else {
+                            // Unexpected EOF parsing key: expected `$key_end`
                             return Err(ParseBucketSetError {});
                         };
 
                         let key = &s[..key_end];
-                        s = &s[key_end + 1..];
+                        s = &s[key_end + key_end_skip..];
 
-                        let Some(value_end) = s.find(']') else {
-                            // Unexpected EOF parsing value: expected `]`
+                        // Find the bounds of the value
+                        s = s.trim_start();
+                        let Some((value_end, value_end_skip)) = find(s, value_end) else {
+                            // Unexpected EOF parsing value: expected `$value_end`
                             return Err(ParseBucketSetError {});
                         };
 
                         let value = &s[..value_end];
-                        s = &s[value_end + 1..];
+                        s = &s[value_end + value_end_skip..];
 
+                        // Parse the key and value
                         let key = key.parse().map_err(|_| ParseBucketSetError {})?;
                         let value = value.parse().map_err(|_| ParseBucketSetError {})?;
 
-                        let existing = set.0.insert(key, value);
-                        if existing.is_some() {
+                        if set.0.insert(key, value).is_some() {
                             // Duplicate key
                             return Err(ParseBucketSetError {});
                         }
+                    }
+
+                    if s.len() != 1 {
+                        // Unexpected EOF
+                        return Err(ParseBucketSetError {});
                     }
 
                     Ok(set)
@@ -1717,7 +1762,18 @@ pub mod exp {
                 All points should be computed from the same scale.
                 */
                 pub fn observe(&mut self, value: Point) {
-                    *self.0.entry(value).or_default() += 1;
+                    self.observe_all(value, 1)
+                }
+
+                /**
+                Observe `count` instances of a [`Point`] computed from a raw value.
+
+                The count for this point will be incremented by `count`.
+
+                All points should be computed from the same scale.
+                */
+                pub fn observe_all(&mut self, value: Point, count: u64) {
+                    *self.0.entry(value).or_default() += count;
                 }
 
                 /**
@@ -1787,7 +1843,13 @@ pub mod exp {
                     &'sval self,
                     stream: &mut S,
                 ) -> sval::Result {
-                    stream.value(&self.0)
+                    stream.seq_begin(Some(self.0.len()))?;
+
+                    for bucket in &self.0 {
+                        stream.value_computed(&bucket)?;
+                    }
+
+                    stream.seq_end()
                 }
             }
 
@@ -1797,7 +1859,15 @@ pub mod exp {
                     &self,
                     serializer: S,
                 ) -> Result<S::Ok, S::Error> {
-                    self.0.serialize(serializer)
+                    use serde::ser::SerializeSeq as _;
+
+                    let mut seq = serializer.serialize_seq(Some(self.0.len()))?;
+
+                    for bucket in &self.0 {
+                        seq.serialize_element(&bucket)?;
+                    }
+
+                    seq.end()
                 }
             }
 
@@ -1828,69 +1898,116 @@ pub mod exp {
 
             impl<'a> FromValue<'a> for BucketSet {
                 fn from_value(v: Value<'a>) -> Option<Self> {
-                    /*
-                    - downcast
-                    - sval
-                    - serde
-                    - parse
-                    */
-                    todo!()
+                    if let Some(buckets) = v.downcast_ref::<Self>() {
+                        return Some(buckets.clone());
+                    }
+
+                    #[cfg(feature = "sval")]
+                    {
+                        if let Some(buckets) = from_sval(v.by_ref()) {
+                            return Some(buckets);
+                        }
+                    }
+
+                    #[cfg(all(not(feature = "sval"), feature = "serde"))]
+                    {
+                        if let Some(buckets) = from_serde(v.by_ref()) {
+                            return Some(buckets);
+                        }
+                    }
+
+                    v.parse()
+                }
+            }
+
+            #[cfg(any(feature = "sval", feature = "serde"))]
+            #[derive(Default)]
+            struct Extract {
+                depth: usize,
+                buckets: BTreeMap<Point, u64>,
+                count: u64,
+                next_midpoint: Option<f64>,
+                next_count: Option<u64>,
+            }
+
+            #[derive(Debug)]
+            #[cfg(any(feature = "sval", feature = "serde"))]
+            struct Incompatible;
+
+            #[cfg(any(feature = "sval", feature = "serde"))]
+            impl Extract {
+                fn push(
+                    &mut self,
+                    midpoint: impl FnOnce() -> Option<f64>,
+                    count: impl FnOnce() -> Option<u64>,
+                ) -> Result<(), Incompatible> {
+                    if self.depth == 2 {
+                        if self.next_midpoint.is_none() {
+                            self.next_midpoint = midpoint();
+
+                            return Ok(());
+                        }
+
+                        if self.next_count.is_none() {
+                            self.next_count = count();
+
+                            return Ok(());
+                        }
+                    }
+
+                    Err(Incompatible)
+                }
+
+                fn apply(&mut self) -> Result<(), Incompatible> {
+                    if self.depth == 2 {
+                        let midpoint = self.next_midpoint.take().ok_or(Incompatible)?;
+                        let count = self.next_count.take().ok_or(Incompatible)?;
+
+                        *self.buckets.entry(Point::new(midpoint)).or_default() += count;
+                        self.count += count;
+
+                        Ok(())
+                    } else {
+                        Ok(())
+                    }
+                }
+
+                fn down(&mut self) -> Result<(), Incompatible> {
+                    self.depth += 1;
+
+                    if self.depth > 2 {
+                        Err(Incompatible)
+                    } else {
+                        Ok(())
+                    }
+                }
+
+                fn up(&mut self) -> Result<(), Incompatible> {
+                    self.apply()?;
+                    self.depth -= 1;
+
+                    Ok(())
+                }
+
+                fn end(self) -> Option<BucketSet> {
+                    if self.buckets.len() == 0 {
+                        None
+                    } else {
+                        Some(BucketSet(self.buckets))
+                    }
                 }
             }
 
             #[cfg(feature = "sval")]
             fn from_sval(value: Value) -> Option<BucketSet> {
-                #[derive(Default)]
-                struct Extract {
-                    depth: usize,
-                    buckets: BTreeMap<Point, u64>,
-                    count: u64,
-                    next_midpoint: Option<f64>,
-                    next_count: Option<u64>,
-                }
-
-                impl Extract {
-                    fn push(
-                        &mut self,
-                        midpoint: impl FnOnce() -> Option<f64>,
-                        count: impl FnOnce() -> Option<u64>,
-                    ) -> sval::Result {
-                        if self.depth == 2 {
-                            if self.next_midpoint.is_none() {
-                                self.next_midpoint = midpoint();
-
-                                return Ok(());
-                            }
-
-                            if self.next_count.is_none() {
-                                self.next_count = count();
-
-                                return Ok(());
-                            }
-                        }
-
-                        sval::error()
-                    }
-
-                    fn apply(&mut self) -> sval::Result {
-                        if self.depth == 2 {
-                            let midpoint = self
-                                .next_midpoint
-                                .take()
-                                .ok_or_else(|| sval::Error::new())?;
-                            let count = self.next_count.take().ok_or_else(|| sval::Error::new())?;
-
-                            *self.buckets.entry(Point::new(midpoint)).or_default() += count;
-                            self.count += count;
-
-                            Ok(())
-                        } else {
-                            Ok(())
-                        }
+                #[allow(non_local_definitions)]
+                impl From<Incompatible> for sval::Error {
+                    fn from(_: Incompatible) -> sval::Error {
+                        sval::Error::new()
                     }
                 }
 
-                // TODO: Make sure this is compatible with `serde`
+                #[allow(non_local_definitions)]
                 impl<'sval> sval::Stream<'sval> for Extract {
                     fn null(&mut self) -> sval::Result {
                         sval::error()
@@ -1913,25 +2030,27 @@ pub mod exp {
                     }
 
                     fn i64(&mut self, value: i64) -> sval::Result {
-                        self.push(|| Some(value as f64), || value.try_into().ok())
+                        Ok(self.push(|| Some(value as f64), || value.try_into().ok())?)
                     }
 
                     fn u64(&mut self, value: u64) -> sval::Result {
-                        self.push(|| Some(value as f64), || Some(value))
+                        Ok(self.push(|| Some(value as f64), || Some(value))?)
+                    }
+
+                    fn i128(&mut self, value: i128) -> sval::Result {
+                        Ok(self.push(|| Some(value as f64), || value.try_into().ok())?)
+                    }
+
+                    fn u128(&mut self, value: u128) -> sval::Result {
+                        Ok(self.push(|| Some(value as f64), || value.try_into().ok())?)
                     }
 
                     fn f64(&mut self, value: f64) -> sval::Result {
-                        self.push(|| Some(value), || Some(value as u64))
+                        Ok(self.push(|| Some(value), || Some(value as u64))?)
                     }
 
                     fn seq_begin(&mut self, _: Option<usize>) -> sval::Result {
-                        self.depth += 1;
-
-                        if self.depth > 2 {
-                            sval::error()
-                        } else {
-                            Ok(())
-                        }
+                        Ok(self.down()?)
                     }
 
                     fn seq_value_begin(&mut self) -> sval::Result {
@@ -1943,47 +2062,30 @@ pub mod exp {
                     }
 
                     fn seq_end(&mut self) -> sval::Result {
-                        self.apply()?;
-                        self.depth -= 1;
-
-                        Ok(())
+                        Ok(self.up()?)
                     }
                 }
 
                 let mut extract = Extract::default();
                 sval::stream(&mut extract, &value).ok()?;
-
-                if extract.buckets.len() == 0 {
-                    return None;
-                }
-
-                Some(BucketSet(extract.buckets))
+                extract.end()
             }
 
-            #[cfg(feature = "serde")]
+            #[cfg(any(test, all(not(feature = "sval"), feature = "serde")))]
             fn from_serde(value: Value) -> Option<BucketSet> {
                 use serde::Serialize as _;
 
-                #[derive(Default)]
-                struct Extract {
-                    depth: usize,
-                    buckets: BTreeMap<Point, u64>,
-                    count: u64,
-                    next_midpoint: Option<f64>,
-                    next_count: Option<u64>,
-                }
-
-                #[derive(Debug)]
-                struct Incompatible;
-
+                #[allow(non_local_definitions)]
                 impl fmt::Display for Incompatible {
                     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
                         f.write_str("incompatible")
                     }
                 }
 
+                #[allow(non_local_definitions)]
                 impl serde::ser::StdError for Incompatible {}
 
+                #[allow(non_local_definitions)]
                 impl serde::ser::Error for Incompatible {
                     fn custom<T>(_: T) -> Self
                     where
@@ -1993,7 +2095,8 @@ pub mod exp {
                     }
                 }
 
-                impl serde::Serializer for Extract {
+                #[allow(non_local_definitions)]
+                impl<'a> serde::Serializer for &'a mut Extract {
                     type Ok = ();
                     type Error = Incompatible;
                     type SerializeSeq = Self;
@@ -2004,67 +2107,67 @@ pub mod exp {
                     type SerializeStruct = Self;
                     type SerializeStructVariant = Self;
 
-                    fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
+                    fn serialize_bool(self, _: bool) -> Result<Self::Ok, Self::Error> {
                         Err(Incompatible)
                     }
 
-                    fn serialize_i8(self, v: i8) -> Result<Self::Ok, Self::Error> {
+                    fn serialize_i8(self, value: i8) -> Result<Self::Ok, Self::Error> {
+                        self.push(|| Some(value as f64), || value.try_into().ok())
+                    }
+
+                    fn serialize_i16(self, value: i16) -> Result<Self::Ok, Self::Error> {
+                        self.push(|| Some(value as f64), || value.try_into().ok())
+                    }
+
+                    fn serialize_i32(self, value: i32) -> Result<Self::Ok, Self::Error> {
+                        self.push(|| Some(value as f64), || value.try_into().ok())
+                    }
+
+                    fn serialize_i64(self, value: i64) -> Result<Self::Ok, Self::Error> {
+                        self.push(|| Some(value as f64), || value.try_into().ok())
+                    }
+
+                    fn serialize_u8(self, value: u8) -> Result<Self::Ok, Self::Error> {
+                        self.push(|| Some(value as f64), || value.try_into().ok())
+                    }
+
+                    fn serialize_u16(self, value: u16) -> Result<Self::Ok, Self::Error> {
+                        self.push(|| Some(value as f64), || value.try_into().ok())
+                    }
+
+                    fn serialize_u32(self, value: u32) -> Result<Self::Ok, Self::Error> {
+                        self.push(|| Some(value as f64), || value.try_into().ok())
+                    }
+
+                    fn serialize_u64(self, value: u64) -> Result<Self::Ok, Self::Error> {
+                        self.push(|| Some(value as f64), || value.try_into().ok())
+                    }
+
+                    fn serialize_u128(self, value: u128) -> Result<Self::Ok, Self::Error> {
+                        self.push(|| Some(value as f64), || value.try_into().ok())
+                    }
+
+                    fn serialize_i128(self, value: i128) -> Result<Self::Ok, Self::Error> {
+                        self.push(|| Some(value as f64), || value.try_into().ok())
+                    }
+
+                    fn serialize_f32(self, value: f32) -> Result<Self::Ok, Self::Error> {
+                        self.push(|| Some(value as f64), || Some(value as u64))
+                    }
+
+                    fn serialize_f64(self, value: f64) -> Result<Self::Ok, Self::Error> {
+                        self.push(|| Some(value as f64), || Some(value as u64))
+                    }
+
+                    fn serialize_char(self, _: char) -> Result<Self::Ok, Self::Error> {
                         Err(Incompatible)
                     }
 
-                    fn serialize_i16(self, v: i16) -> Result<Self::Ok, Self::Error> {
+                    fn serialize_str(self, _: &str) -> Result<Self::Ok, Self::Error> {
                         Err(Incompatible)
                     }
 
-                    fn serialize_i32(self, v: i32) -> Result<Self::Ok, Self::Error> {
-                        Err(Incompatible)
-                    }
-
-                    fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
-                        Err(Incompatible)
-                    }
-
-                    fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
-                        Err(Incompatible)
-                    }
-
-                    fn serialize_u16(self, v: u16) -> Result<Self::Ok, Self::Error> {
-                        Err(Incompatible)
-                    }
-
-                    fn serialize_u32(self, v: u32) -> Result<Self::Ok, Self::Error> {
-                        Err(Incompatible)
-                    }
-
-                    fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
-                        Err(Incompatible)
-                    }
-
-                    fn serialize_u128(self, v: u128) -> Result<Self::Ok, Self::Error> {
-                        Err(Incompatible)
-                    }
-
-                    fn serialize_i128(self, v: i128) -> Result<Self::Ok, Self::Error> {
-                        Err(Incompatible)
-                    }
-
-                    fn serialize_f32(self, v: f32) -> Result<Self::Ok, Self::Error> {
-                        Err(Incompatible)
-                    }
-
-                    fn serialize_f64(self, v: f64) -> Result<Self::Ok, Self::Error> {
-                        Err(Incompatible)
-                    }
-
-                    fn serialize_char(self, v: char) -> Result<Self::Ok, Self::Error> {
-                        Err(Incompatible)
-                    }
-
-                    fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
-                        Err(Incompatible)
-                    }
-
-                    fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
+                    fn serialize_bytes(self, _: &[u8]) -> Result<Self::Ok, Self::Error> {
                         Err(Incompatible)
                     }
 
@@ -2083,70 +2186,120 @@ pub mod exp {
                         Err(Incompatible)
                     }
 
-                    fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
+                    fn serialize_unit_struct(
+                        self,
+                        name: &'static str,
+                    ) -> Result<Self::Ok, Self::Error> {
                         name.serialize(self)
                     }
 
-                    fn serialize_unit_variant(self, _: &'static str, _: u32, variant: &'static str) -> Result<Self::Ok, Self::Error> {
+                    fn serialize_unit_variant(
+                        self,
+                        _: &'static str,
+                        _: u32,
+                        variant: &'static str,
+                    ) -> Result<Self::Ok, Self::Error> {
                         variant.serialize(self)
                     }
 
-                    fn serialize_newtype_struct<T>(self, _: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
+                    fn serialize_newtype_struct<T>(
+                        self,
+                        _: &'static str,
+                        value: &T,
+                    ) -> Result<Self::Ok, Self::Error>
                     where
                         T: ?Sized + serde::Serialize,
                     {
                         value.serialize(self)
                     }
 
-                    fn serialize_newtype_variant<T>(self, _: &'static str, _: u32, variant: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
+                    fn serialize_newtype_variant<T>(
+                        self,
+                        _: &'static str,
+                        _: u32,
+                        _: &'static str,
+                        value: &T,
+                    ) -> Result<Self::Ok, Self::Error>
                     where
                         T: ?Sized + serde::Serialize,
                     {
-                        Err(Incompatible)
+                        value.serialize(self)
                     }
 
-                    fn serialize_seq(self, _: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-                        Err(Incompatible)
+                    fn serialize_seq(
+                        self,
+                        _: Option<usize>,
+                    ) -> Result<Self::SerializeSeq, Self::Error> {
+                        self.down()?;
+
+                        Ok(self)
                     }
 
-                    fn serialize_tuple(self, _: usize) -> Result<Self::SerializeTuple, Self::Error> {
-                        Err(Incompatible)
+                    fn serialize_tuple(
+                        self,
+                        _: usize,
+                    ) -> Result<Self::SerializeTuple, Self::Error> {
+                        self.down()?;
+
+                        Ok(self)
                     }
 
-                    fn serialize_tuple_struct(self, _: &'static str, _: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
-                        Err(Incompatible)
+                    fn serialize_tuple_struct(
+                        self,
+                        _: &'static str,
+                        _: usize,
+                    ) -> Result<Self::SerializeTupleStruct, Self::Error> {
+                        self.down()?;
+
+                        Ok(self)
                     }
 
                     fn serialize_tuple_variant(
                         self,
                         _: &'static str,
                         _: u32,
-                        variant: &'static str,
+                        _: &'static str,
                         _: usize,
                     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-                        Err(Incompatible)
+                        self.down()?;
+
+                        Ok(self)
                     }
 
-                    fn serialize_map(self, _: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-                        Err(Incompatible)
+                    fn serialize_map(
+                        self,
+                        _: Option<usize>,
+                    ) -> Result<Self::SerializeMap, Self::Error> {
+                        self.down()?;
+
+                        Ok(self)
                     }
 
-                    fn serialize_struct(self, _: &'static str, _: usize) -> Result<Self::SerializeStruct, Self::Error> {
-                        Err(Incompatible)
+                    fn serialize_struct(
+                        self,
+                        _: &'static str,
+                        _: usize,
+                    ) -> Result<Self::SerializeStruct, Self::Error> {
+                        self.down()?;
+
+                        Ok(self)
                     }
 
                     fn serialize_struct_variant(
                         self,
                         _: &'static str,
                         _: u32,
-                        variant: &'static str,
+                        _: &'static str,
                         _: usize,
                     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-                        Err(Incompatible)
+                        self.down()?;
+
+                        Ok(self)
                     }
                 }
 
-                impl serde::ser::SerializeSeq for Extract {
+                #[allow(non_local_definitions)]
+                impl<'a> serde::ser::SerializeSeq for &'a mut Extract {
                     type Ok = ();
                     type Error = Incompatible;
 
@@ -2154,15 +2307,16 @@ pub mod exp {
                     where
                         T: ?Sized + serde::Serialize,
                     {
-                        Err(Incompatible)
+                        value.serialize(&mut **self)
                     }
 
                     fn end(self) -> Result<Self::Ok, Self::Error> {
-                        Err(Incompatible)
+                        self.up()
                     }
                 }
 
-                impl serde::ser::SerializeTuple for Extract {
+                #[allow(non_local_definitions)]
+                impl<'a> serde::ser::SerializeTuple for &'a mut Extract {
                     type Ok = ();
                     type Error = Incompatible;
 
@@ -2170,15 +2324,16 @@ pub mod exp {
                     where
                         T: ?Sized + serde::Serialize,
                     {
-                        Err(Incompatible)
+                        value.serialize(&mut **self)
                     }
 
                     fn end(self) -> Result<Self::Ok, Self::Error> {
-                        Err(Incompatible)
+                        self.up()
                     }
                 }
 
-                impl serde::ser::SerializeTupleStruct for Extract {
+                #[allow(non_local_definitions)]
+                impl<'a> serde::ser::SerializeTupleStruct for &'a mut Extract {
                     type Ok = ();
                     type Error = Incompatible;
 
@@ -2186,15 +2341,16 @@ pub mod exp {
                     where
                         T: ?Sized + serde::Serialize,
                     {
-                        Err(Incompatible)
+                        value.serialize(&mut **self)
                     }
 
                     fn end(self) -> Result<Self::Ok, Self::Error> {
-                        Err(Incompatible)
+                        self.up()
                     }
                 }
 
-                impl serde::ser::SerializeTupleVariant for Extract {
+                #[allow(non_local_definitions)]
+                impl<'a> serde::ser::SerializeTupleVariant for &'a mut Extract {
                     type Ok = ();
                     type Error = Incompatible;
 
@@ -2202,15 +2358,16 @@ pub mod exp {
                     where
                         T: ?Sized + serde::Serialize,
                     {
-                        Err(Incompatible)
+                        value.serialize(&mut **self)
                     }
 
                     fn end(self) -> Result<Self::Ok, Self::Error> {
-                        Err(Incompatible)
+                        self.up()
                     }
                 }
 
-                impl serde::ser::SerializeMap for Extract {
+                #[allow(non_local_definitions)]
+                impl<'a> serde::ser::SerializeMap for &'a mut Extract {
                     type Ok = ();
                     type Error = Incompatible;
 
@@ -2218,59 +2375,81 @@ pub mod exp {
                     where
                         T: ?Sized + serde::Serialize,
                     {
-                        Err(Incompatible)
+                        self.down()?;
+                        key.serialize(&mut **self)
                     }
 
                     fn serialize_value<T>(&mut self, value: &T) -> Result<(), Self::Error>
                     where
                         T: ?Sized + serde::Serialize,
                     {
-                        Err(Incompatible)
+                        value.serialize(&mut **self)?;
+                        self.up()
                     }
 
                     fn end(self) -> Result<Self::Ok, Self::Error> {
-                        Err(Incompatible)
+                        self.up()
                     }
                 }
 
-                impl serde::ser::SerializeStruct for Extract {
+                #[allow(non_local_definitions)]
+                impl<'a> serde::ser::SerializeStruct for &'a mut Extract {
                     type Ok = ();
                     type Error = Incompatible;
 
-                    fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
+                    fn serialize_field<T>(
+                        &mut self,
+                        key: &'static str,
+                        value: &T,
+                    ) -> Result<(), Self::Error>
                     where
                         T: ?Sized + serde::Serialize,
                     {
-                        Err(Incompatible)
+                        self.down()?;
+                        key.serialize(&mut **self)?;
+                        value.serialize(&mut **self)?;
+                        self.up()
                     }
 
                     fn end(self) -> Result<Self::Ok, Self::Error> {
-                        Err(Incompatible)
+                        self.up()
                     }
                 }
 
-                impl serde::ser::SerializeStructVariant for Extract {
+                #[allow(non_local_definitions)]
+                impl<'a> serde::ser::SerializeStructVariant for &'a mut Extract {
                     type Ok = ();
                     type Error = Incompatible;
 
-                    fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
+                    fn serialize_field<T>(
+                        &mut self,
+                        key: &'static str,
+                        value: &T,
+                    ) -> Result<(), Self::Error>
                     where
                         T: ?Sized + serde::Serialize,
                     {
-                        Err(Incompatible)
+                        self.down()?;
+                        key.serialize(&mut **self)?;
+                        value.serialize(&mut **self)?;
+                        self.up()
                     }
 
                     fn end(self) -> Result<Self::Ok, Self::Error> {
-                        Err(Incompatible)
+                        self.up()
                     }
                 }
 
-                todo!()
+                let mut extract = Extract::default();
+                value.serialize(&mut extract).ok()?;
+                extract.end()
             }
 
             #[cfg(test)]
             mod tests {
                 use super::*;
+
+                use std::collections::{BTreeMap, BTreeSet};
 
                 #[test]
                 fn observe_increments_counts() {
@@ -2296,6 +2475,64 @@ pub mod exp {
                         let fmt = case.to_string();
                         assert_eq!(Some(case), BucketSet::try_from_str(&fmt).ok(), "{fmt}");
                     }
+                }
+
+                #[test]
+                fn bucket_set_parse() {
+                    for (case, expected) in [
+                        (format!("{:?}", ([[1, 1], [2, 2]])), {
+                            let mut set = BucketSet::new();
+                            set.observe_all(Point::new(1.0), 1);
+                            set.observe_all(Point::new(2.0), 2);
+                            set
+                        }),
+                        (format!("{:?}", ([(1.0, 1), (2.0, 2)])), {
+                            let mut set = BucketSet::new();
+                            set.observe_all(Point::new(1.0), 1);
+                            set.observe_all(Point::new(2.0), 2);
+                            set
+                        }),
+                        (
+                            format!("{:?}", {
+                                let mut set = BTreeSet::new();
+                                set.insert((1, 1));
+                                set.insert((2, 2));
+                                set
+                            }),
+                            {
+                                let mut set = BucketSet::new();
+                                set.observe_all(Point::new(1.0), 1);
+                                set.observe_all(Point::new(2.0), 2);
+                                set
+                            },
+                        ),
+                        (
+                            format!("{:?}", {
+                                let mut set = BTreeMap::new();
+                                set.insert(1, 1);
+                                set.insert(2, 2);
+                                set
+                            }),
+                            {
+                                let mut set = BucketSet::new();
+                                set.observe_all(Point::new(1.0), 1);
+                                set.observe_all(Point::new(2.0), 2);
+                                set
+                            },
+                        ),
+                    ] {
+                        assert_eq!(
+                            Some(expected),
+                            BucketSet::try_from_str(&case).ok(),
+                            "{case}"
+                        );
+                    }
+                }
+
+                #[test]
+                #[cfg(all(feature = "sval", feature = "serde"))]
+                fn bucket_set_sval_serde_compatibility() {
+                    todo!()
                 }
 
                 #[test]
