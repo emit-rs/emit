@@ -1813,15 +1813,15 @@ pub mod exp {
                 fn to_value(&self) -> Value<'_> {
                     #[cfg(feature = "sval")]
                     {
-                        Value::capture_sval(&self.0)
+                        Value::capture_sval(self)
                     }
                     #[cfg(all(feature = "serde", not(feature = "sval")))]
                     {
-                        Value::capure_serde(&self.0)
+                        Value::capture_serde(self)
                     }
                     #[cfg(all(not(feature = "serde"), not(feature = "sval")))]
                     {
-                        Value::capture_display(&self.0)
+                        Value::capture_display(self)
                     }
                 }
             }
@@ -1836,6 +1836,436 @@ pub mod exp {
                     */
                     todo!()
                 }
+            }
+
+            #[cfg(feature = "sval")]
+            fn from_sval(value: Value) -> Option<BucketSet> {
+                #[derive(Default)]
+                struct Extract {
+                    depth: usize,
+                    buckets: BTreeMap<Point, u64>,
+                    count: u64,
+                    next_midpoint: Option<f64>,
+                    next_count: Option<u64>,
+                }
+
+                impl Extract {
+                    fn push(
+                        &mut self,
+                        midpoint: impl FnOnce() -> Option<f64>,
+                        count: impl FnOnce() -> Option<u64>,
+                    ) -> sval::Result {
+                        if self.depth == 2 {
+                            if self.next_midpoint.is_none() {
+                                self.next_midpoint = midpoint();
+
+                                return Ok(());
+                            }
+
+                            if self.next_count.is_none() {
+                                self.next_count = count();
+
+                                return Ok(());
+                            }
+                        }
+
+                        sval::error()
+                    }
+
+                    fn apply(&mut self) -> sval::Result {
+                        if self.depth == 2 {
+                            let midpoint = self
+                                .next_midpoint
+                                .take()
+                                .ok_or_else(|| sval::Error::new())?;
+                            let count = self.next_count.take().ok_or_else(|| sval::Error::new())?;
+
+                            *self.buckets.entry(Point::new(midpoint)).or_default() += count;
+                            self.count += count;
+
+                            Ok(())
+                        } else {
+                            Ok(())
+                        }
+                    }
+                }
+
+                // TODO: Make sure this is compatible with `serde`
+                impl<'sval> sval::Stream<'sval> for Extract {
+                    fn null(&mut self) -> sval::Result {
+                        sval::error()
+                    }
+
+                    fn bool(&mut self, _: bool) -> sval::Result {
+                        sval::error()
+                    }
+
+                    fn text_begin(&mut self, _: Option<usize>) -> sval::Result {
+                        sval::error()
+                    }
+
+                    fn text_fragment_computed(&mut self, _: &str) -> sval::Result {
+                        sval::error()
+                    }
+
+                    fn text_end(&mut self) -> sval::Result {
+                        sval::error()
+                    }
+
+                    fn i64(&mut self, value: i64) -> sval::Result {
+                        self.push(|| Some(value as f64), || value.try_into().ok())
+                    }
+
+                    fn u64(&mut self, value: u64) -> sval::Result {
+                        self.push(|| Some(value as f64), || Some(value))
+                    }
+
+                    fn f64(&mut self, value: f64) -> sval::Result {
+                        self.push(|| Some(value), || Some(value as u64))
+                    }
+
+                    fn seq_begin(&mut self, _: Option<usize>) -> sval::Result {
+                        self.depth += 1;
+
+                        if self.depth > 2 {
+                            sval::error()
+                        } else {
+                            Ok(())
+                        }
+                    }
+
+                    fn seq_value_begin(&mut self) -> sval::Result {
+                        Ok(())
+                    }
+
+                    fn seq_value_end(&mut self) -> sval::Result {
+                        Ok(())
+                    }
+
+                    fn seq_end(&mut self) -> sval::Result {
+                        self.apply()?;
+                        self.depth -= 1;
+
+                        Ok(())
+                    }
+                }
+
+                let mut extract = Extract::default();
+                sval::stream(&mut extract, &value).ok()?;
+
+                if extract.buckets.len() == 0 {
+                    return None;
+                }
+
+                Some(BucketSet(extract.buckets))
+            }
+
+            #[cfg(feature = "serde")]
+            fn from_serde(value: Value) -> Option<BucketSet> {
+                use serde::Serialize as _;
+
+                #[derive(Default)]
+                struct Extract {
+                    depth: usize,
+                    buckets: BTreeMap<Point, u64>,
+                    count: u64,
+                    next_midpoint: Option<f64>,
+                    next_count: Option<u64>,
+                }
+
+                #[derive(Debug)]
+                struct Incompatible;
+
+                impl fmt::Display for Incompatible {
+                    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                        f.write_str("incompatible")
+                    }
+                }
+
+                impl serde::ser::StdError for Incompatible {}
+
+                impl serde::ser::Error for Incompatible {
+                    fn custom<T>(_: T) -> Self
+                    where
+                        T: fmt::Display,
+                    {
+                        Incompatible
+                    }
+                }
+
+                impl serde::Serializer for Extract {
+                    type Ok = ();
+                    type Error = Incompatible;
+                    type SerializeSeq = Self;
+                    type SerializeTuple = Self;
+                    type SerializeTupleStruct = Self;
+                    type SerializeTupleVariant = Self;
+                    type SerializeMap = Self;
+                    type SerializeStruct = Self;
+                    type SerializeStructVariant = Self;
+
+                    fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_i8(self, v: i8) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_i16(self, v: i16) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_i32(self, v: i32) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_u16(self, v: u16) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_u32(self, v: u32) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_u128(self, v: u128) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_i128(self, v: i128) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_f32(self, v: f32) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_f64(self, v: f64) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_char(self, v: char) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_some<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
+                    where
+                        T: ?Sized + serde::Serialize,
+                    {
+                        value.serialize(self)
+                    }
+
+                    fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
+                        name.serialize(self)
+                    }
+
+                    fn serialize_unit_variant(self, _: &'static str, _: u32, variant: &'static str) -> Result<Self::Ok, Self::Error> {
+                        variant.serialize(self)
+                    }
+
+                    fn serialize_newtype_struct<T>(self, _: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
+                    where
+                        T: ?Sized + serde::Serialize,
+                    {
+                        value.serialize(self)
+                    }
+
+                    fn serialize_newtype_variant<T>(self, _: &'static str, _: u32, variant: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
+                    where
+                        T: ?Sized + serde::Serialize,
+                    {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_seq(self, _: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_tuple(self, _: usize) -> Result<Self::SerializeTuple, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_tuple_struct(self, _: &'static str, _: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_tuple_variant(
+                        self,
+                        _: &'static str,
+                        _: u32,
+                        variant: &'static str,
+                        _: usize,
+                    ) -> Result<Self::SerializeTupleVariant, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_map(self, _: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_struct(self, _: &'static str, _: usize) -> Result<Self::SerializeStruct, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_struct_variant(
+                        self,
+                        _: &'static str,
+                        _: u32,
+                        variant: &'static str,
+                        _: usize,
+                    ) -> Result<Self::SerializeStructVariant, Self::Error> {
+                        Err(Incompatible)
+                    }
+                }
+
+                impl serde::ser::SerializeSeq for Extract {
+                    type Ok = ();
+                    type Error = Incompatible;
+
+                    fn serialize_element<T>(&mut self, value: &T) -> Result<(), Self::Error>
+                    where
+                        T: ?Sized + serde::Serialize,
+                    {
+                        Err(Incompatible)
+                    }
+
+                    fn end(self) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+                }
+
+                impl serde::ser::SerializeTuple for Extract {
+                    type Ok = ();
+                    type Error = Incompatible;
+
+                    fn serialize_element<T>(&mut self, value: &T) -> Result<(), Self::Error>
+                    where
+                        T: ?Sized + serde::Serialize,
+                    {
+                        Err(Incompatible)
+                    }
+
+                    fn end(self) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+                }
+
+                impl serde::ser::SerializeTupleStruct for Extract {
+                    type Ok = ();
+                    type Error = Incompatible;
+
+                    fn serialize_field<T>(&mut self, value: &T) -> Result<(), Self::Error>
+                    where
+                        T: ?Sized + serde::Serialize,
+                    {
+                        Err(Incompatible)
+                    }
+
+                    fn end(self) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+                }
+
+                impl serde::ser::SerializeTupleVariant for Extract {
+                    type Ok = ();
+                    type Error = Incompatible;
+
+                    fn serialize_field<T>(&mut self, value: &T) -> Result<(), Self::Error>
+                    where
+                        T: ?Sized + serde::Serialize,
+                    {
+                        Err(Incompatible)
+                    }
+
+                    fn end(self) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+                }
+
+                impl serde::ser::SerializeMap for Extract {
+                    type Ok = ();
+                    type Error = Incompatible;
+
+                    fn serialize_key<T>(&mut self, key: &T) -> Result<(), Self::Error>
+                    where
+                        T: ?Sized + serde::Serialize,
+                    {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_value<T>(&mut self, value: &T) -> Result<(), Self::Error>
+                    where
+                        T: ?Sized + serde::Serialize,
+                    {
+                        Err(Incompatible)
+                    }
+
+                    fn end(self) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+                }
+
+                impl serde::ser::SerializeStruct for Extract {
+                    type Ok = ();
+                    type Error = Incompatible;
+
+                    fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
+                    where
+                        T: ?Sized + serde::Serialize,
+                    {
+                        Err(Incompatible)
+                    }
+
+                    fn end(self) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+                }
+
+                impl serde::ser::SerializeStructVariant for Extract {
+                    type Ok = ();
+                    type Error = Incompatible;
+
+                    fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
+                    where
+                        T: ?Sized + serde::Serialize,
+                    {
+                        Err(Incompatible)
+                    }
+
+                    fn end(self) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+                }
+
+                todo!()
             }
 
             #[cfg(test)]
