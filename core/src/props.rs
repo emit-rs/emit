@@ -450,13 +450,17 @@ impl<P: Props, F: Fn(Str, Value) -> bool> Props for Filter<P, F> {
 
 /**
 A type that can be constructed from [`Props`].
+
+This trait is like the standard library's `FromIterator`, but for `Props` instead of `Iterator`.
 */
 pub trait FromProps<'kv> {
     /**
     Convert from `P`.
 
-    Implementors of this method may re-order or deduplicate key-values in `P`.
+    Implementors of this method may re-order or deduplicate key-values in `props`.
     If any deduplication occurs, it must take _the first_ value seen for a given key.
+
+    If `props` is empty, this method should return a default, empty `Self`.
     */
     fn from_props<P: Props + ?Sized>(props: &'kv P) -> Self;
 }

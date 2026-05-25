@@ -306,6 +306,10 @@ Convert from a [`Value`].
 This trait is the basis for the [`Value::cast`] method.
 
 This may involve downcasting, serializing, or parsing. Implementations should attempt to downcast first with [`Value::downcast_ref`].
+
+## Relationship with `From<Value>`
+
+This trait is similar to the standard `From` trait, but serves a different purpose. The `From` trait is infallible, and since `Value` could be anything only a handful of types implement it. `FromValue` is fallible, so more types can implement it, returning `None` when the contained value is incompatible.
 */
 pub trait FromValue<'v> {
     /**
