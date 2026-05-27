@@ -1292,7 +1292,22 @@ pub mod exp {
         value::{FromValue, ToValue, Value},
     };
 
-    use core::{cmp, fmt, hash};
+    use core::{cmp, fmt, hash, str::FromStr};
+
+    /**
+    An error encountered attempting to parse a [`Point`].
+    */
+    #[derive(Debug)]
+    pub struct ParsePointError {}
+
+    impl fmt::Display for ParsePointError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "the input was not a valid point")
+        }
+    }
+
+    #[cfg(feature = "std")]
+    impl std::error::Error for ParsePointError {}
 
     /**
     A totally ordered value, representing a point within an exponential bucket.
@@ -1311,6 +1326,13 @@ pub mod exp {
         */
         pub const fn new(value: f64) -> Self {
             Point(value)
+        }
+
+        /**
+        Parse a `Point` from its textual representation.
+        */
+        pub fn try_from_str(s: &str) -> Result<Self, ParsePointError> {
+            Ok(Point::new(s.parse().map_err(|_| ParsePointError {})?))
         }
 
         /**
@@ -1426,6 +1448,14 @@ pub mod exp {
         }
     }
 
+    impl FromStr for Point {
+        type Err = ParsePointError;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            Self::try_from_str(s)
+        }
+    }
+
     #[cfg(feature = "sval")]
     impl sval::Value for Point {
         fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(
@@ -1516,6 +1546,1447 @@ pub mod exp {
         Point::new(sign * lower.midpoint(upper))
     }
 
+    #[cfg(feature = "alloc")]
+    mod alloc_support {
+        use super::*;
+
+        use emit_core::{
+            props::Props,
+            str::{Str, ToStr},
+            well_known::{
+                KEY_DIST_COUNT, KEY_DIST_EXP_BUCKETS, KEY_DIST_EXP_SCALE, KEY_DIST_MAX,
+                KEY_DIST_MIN, KEY_DIST_SUM,
+            },
+        };
+
+        use crate::core::{cmp, ops::ControlFlow};
+
+        pub mod bucket_set {
+            /*!
+            The [`BucketSet`] type.
+            */
+
+            use emit_core::value::{FromValue, ToValue, Value};
+
+            use crate::{
+                alloc::collections::{btree_map, BTreeMap},
+                core::{
+                    fmt::{self, Write as _},
+                    str::FromStr,
+                },
+                metric::exp::Point,
+            };
+
+            /**
+            An error encountered attempting to parse a [`BucketSet`].
+            */
+            #[derive(Debug)]
+            pub struct ParseBucketSetError {}
+
+            impl fmt::Display for ParseBucketSetError {
+                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    write!(f, "the input was not a valid bucket set")
+                }
+            }
+
+            #[cfg(feature = "std")]
+            impl std::error::Error for ParseBucketSetError {}
+
+            /**
+            A collection for buckets in an exponential histogram.
+
+            The set stores sparse, sorted buckets as a tuple of their midpoint ([`Point`]), and count of occurrences.
+            */
+            #[derive(Clone, PartialEq, Eq)]
+            pub struct BucketSet {
+                total: u64,
+                buckets: BTreeMap<Point, u64>,
+            }
+
+            impl fmt::Debug for BucketSet {
+                fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                    fmt::Display::fmt(self, f)
+                }
+            }
+
+            impl fmt::Display for BucketSet {
+                fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                    f.write_char('[')?;
+
+                    let mut first = true;
+                    for (k, v) in &self.buckets {
+                        if !first {
+                            f.write_char(',')?;
+                        }
+                        first = false;
+
+                        f.write_char('[')?;
+                        fmt::Display::fmt(k, f)?;
+                        f.write_char(',')?;
+                        fmt::Display::fmt(v, f)?;
+                        f.write_char(']')?;
+                    }
+
+                    f.write_char(']')
+                }
+            }
+
+            impl BucketSet {
+                /**
+                Create a new empty `BucketSet`.
+
+                This method does not allocate.
+                */
+                pub const fn new() -> Self {
+                    BucketSet {
+                        buckets: BTreeMap::new(),
+                        total: 0,
+                    }
+                }
+
+                /**
+                Parse a `BucketSet` from its raw textual representation.
+                */
+                pub fn try_from_str(mut s: &str) -> Result<Self, ParseBucketSetError> {
+                    fn find(haystack: &str, needle: &[(char, u8)]) -> Option<(usize, usize)> {
+                        needle
+                            .iter()
+                            .filter_map(|(c, cs)| haystack.find(*c).map(|c| (c, *cs as usize)))
+                            .next()
+                    }
+
+                    let mut set = BucketSet::new();
+
+                    s = s.trim();
+
+                    if s.len() < 2 {
+                        // Truncated
+                        return Err(ParseBucketSetError {});
+                    }
+
+                    // Must be enclosed by `[]`, `()`, or `{}`
+                    let container_end = match (&s[0..1], &s[s.len() - 1..]) {
+                        ("[", "]") => ']',
+                        ("(", ")") => ')',
+                        ("{", "}") => '}',
+                        _ => return Err(ParseBucketSetError {}),
+                    };
+                    s = &s[1..];
+
+                    let mut first = true;
+                    while s.len() > 1 {
+                        // Parse each bucket
+                        if !first {
+                            s = s.trim_start();
+
+                            if s.len() < 2 {
+                                // Unexpected EOF parsing bucket: not enough chars for `,[`
+                                return Err(ParseBucketSetError {});
+                            }
+
+                            if &s[0..1] != "," {
+                                // Invalid bucket: expected `,`
+                                return Err(ParseBucketSetError {});
+                            }
+                            s = &s[1..];
+                        }
+                        first = false;
+
+                        // Determine the kind of bucket we're parsing
+                        s = s.trim_start();
+                        let (key_start_skip, key_end, value_end) = match &s[0..1] {
+                            // `[k, v]`, `[k: v]`, or `[k = v]`
+                            "[" => (
+                                1,
+                                &[(',', 1u8), (':', 1u8), ('=', 1u8)] as &[(char, u8)],
+                                &[(']', 1u8)] as &[(char, u8)],
+                            ),
+                            // `(k, v)`, `(k: v)`, or `(k = v)`
+                            "(" => (
+                                1,
+                                &[(',', 1u8), (':', 1u8), ('=', 1u8)] as &[(char, u8)],
+                                &[(')', 1u8)] as &[(char, u8)],
+                            ),
+                            // `{k, v}`, `{k: v}`, or `{k = v}`
+                            "{" => (
+                                1,
+                                &[(',', 1u8), (':', 1u8), ('=', 1u8)] as &[(char, u8)],
+                                &[('}', 1u8)] as &[(char, u8)],
+                            ),
+                            // `k: v`, or `k = v`
+                            _ => (
+                                0,
+                                &[(':', 1u8), ('=', 1u8)] as &[(char, u8)],
+                                &[(',', 0u8), (container_end, 0u8)] as &[(char, u8)],
+                            ),
+                        };
+                        s = &s[key_start_skip..];
+
+                        // Find the bounds of the key
+                        s = s.trim_start();
+                        let Some((key_end, key_end_skip)) = find(s, key_end) else {
+                            // Unexpected EOF parsing key: expected `$key_end`
+                            return Err(ParseBucketSetError {});
+                        };
+
+                        let key = &s[..key_end];
+                        s = &s[key_end + key_end_skip..];
+
+                        // Find the bounds of the value
+                        s = s.trim_start();
+                        let Some((value_end, value_end_skip)) = find(s, value_end) else {
+                            // Unexpected EOF parsing value: expected `$value_end`
+                            return Err(ParseBucketSetError {});
+                        };
+
+                        let value = &s[..value_end];
+                        s = &s[value_end + value_end_skip..];
+
+                        // Parse the key and value
+                        let key = key.parse().map_err(|_| ParseBucketSetError {})?;
+                        let value = value.parse().map_err(|_| ParseBucketSetError {})?;
+
+                        set.total += value;
+                        if set.buckets.insert(key, value).is_some() {
+                            // Duplicate key
+                            return Err(ParseBucketSetError {});
+                        }
+                    }
+
+                    if s.len() != 1 {
+                        // Unexpected EOF
+                        return Err(ParseBucketSetError {});
+                    }
+
+                    Ok(set)
+                }
+
+                /**
+                Observe a [`Point`] computed from a raw value.
+
+                The count for this point will be incremented by `1`.
+
+                All points should be computed from the same scale.
+                */
+                pub fn observe(&mut self, value: Point) {
+                    self.observe_all(value, 1)
+                }
+
+                /**
+                Observe `count` instances of a [`Point`] computed from a raw value.
+
+                The count for this point will be incremented by `count`.
+
+                All points should be computed from the same scale.
+                */
+                pub fn observe_all(&mut self, value: Point, count: u64) {
+                    *self.buckets.entry(value).or_default() += count;
+                    self.total += count;
+                }
+
+                /**
+                Remap and merge buckets.
+
+                This method can be used to rescale the buckets to a coarser granularity in combination with the [`crate::metric::exp::midpoint`] function. It accepts a closure that maps stored bucket [`Point`]s to new values. When multiple buckets map to the same new value, their counts will be summed.
+                */
+                pub fn remap(&mut self, mut map: impl FnMut(Point) -> Point) {
+                    let mut remapped = BTreeMap::new();
+
+                    for (value, count) in &self.buckets {
+                        *remapped.entry(map(*value)).or_default() += *count;
+                    }
+
+                    self.buckets = remapped;
+                }
+
+                /**
+                Get the number of buckets currently in the set.
+
+                This is **not** the total count of observed values in all buckets, just the count of buckets themselves. See [`BucketSet::total`] for the total count.
+                */
+                pub fn len(&self) -> usize {
+                    self.buckets.len()
+                }
+
+                /**
+                Get the total count of observed values.
+                */
+                pub fn total(&self) -> u64 {
+                    self.total
+                }
+
+                /**
+                Clear all buckets, allowing the allocation to be re-used.
+                */
+                pub fn clear(&mut self) {
+                    self.buckets.clear();
+                    self.total = 0;
+                }
+
+                /**
+                Get the count for a particular bucket.
+                */
+                pub fn get(&self, value: Point) -> Option<u64> {
+                    self.buckets.get(&value).copied()
+                }
+
+                /**
+                Get the first (lowest numbered) bucket.
+                */
+                pub fn first(&self) -> Option<(Point, u64)> {
+                    self.buckets.first_key_value().map(|(k, v)| (*k, *v))
+                }
+
+                /**
+                Get the last (highest numbered) bucket.
+                */
+                pub fn last(&self) -> Option<(Point, u64)> {
+                    self.buckets.last_key_value().map(|(k, v)| (*k, *v))
+                }
+
+                /**
+                Iterate over buckets in order.
+                */
+                pub fn iter(&self) -> Iter<'_> {
+                    Iter(self.buckets.iter())
+                }
+            }
+
+            impl<'a> IntoIterator for &'a BucketSet {
+                type IntoIter = Iter<'a>;
+                type Item = (Point, u64);
+
+                fn into_iter(self) -> Self::IntoIter {
+                    self.iter()
+                }
+            }
+
+            /**
+            An iterator over sorted buckets from a [`BucketSet`].
+
+            This method is the result of calling [`BucketSet::iter`].
+            */
+            pub struct Iter<'a>(btree_map::Iter<'a, Point, u64>);
+
+            impl<'a> Iterator for Iter<'a> {
+                type Item = (Point, u64);
+
+                fn next(&mut self) -> Option<Self::Item> {
+                    self.0.next().map(|(k, v)| (*k, *v))
+                }
+            }
+
+            #[cfg(feature = "sval")]
+            impl sval::Value for BucketSet {
+                fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(
+                    &'sval self,
+                    stream: &mut S,
+                ) -> sval::Result {
+                    stream.seq_begin(Some(self.buckets.len()))?;
+
+                    for bucket in &self.buckets {
+                        stream.value_computed(&bucket)?;
+                    }
+
+                    stream.seq_end()
+                }
+            }
+
+            #[cfg(feature = "serde")]
+            impl serde::Serialize for BucketSet {
+                fn serialize<S: serde::Serializer>(
+                    &self,
+                    serializer: S,
+                ) -> Result<S::Ok, S::Error> {
+                    use serde::ser::SerializeSeq as _;
+
+                    let mut seq = serializer.serialize_seq(Some(self.buckets.len()))?;
+
+                    for bucket in &self.buckets {
+                        seq.serialize_element(&bucket)?;
+                    }
+
+                    seq.end()
+                }
+            }
+
+            impl FromStr for BucketSet {
+                type Err = ParseBucketSetError;
+
+                fn from_str(s: &str) -> Result<Self, Self::Err> {
+                    Self::try_from_str(s)
+                }
+            }
+
+            impl ToValue for BucketSet {
+                fn to_value(&self) -> Value<'_> {
+                    #[cfg(feature = "sval")]
+                    {
+                        Value::capture_sval(self)
+                    }
+                    #[cfg(all(feature = "serde", not(feature = "sval")))]
+                    {
+                        Value::capture_serde(self)
+                    }
+                    #[cfg(all(not(feature = "serde"), not(feature = "sval")))]
+                    {
+                        Value::capture_display(self)
+                    }
+                }
+            }
+
+            impl<'a> FromValue<'a> for BucketSet {
+                fn from_value(v: Value<'a>) -> Option<Self> {
+                    if let Some(buckets) = v.downcast_ref::<Self>() {
+                        return Some(buckets.clone());
+                    }
+
+                    #[cfg(feature = "sval")]
+                    {
+                        if let Some(buckets) = from_sval(v.by_ref()) {
+                            return Some(buckets);
+                        }
+                    }
+
+                    #[cfg(all(not(feature = "sval"), feature = "serde"))]
+                    {
+                        if let Some(buckets) = from_serde(v.by_ref()) {
+                            return Some(buckets);
+                        }
+                    }
+
+                    v.parse()
+                }
+            }
+
+            #[cfg(any(feature = "sval", feature = "serde"))]
+            #[derive(Default)]
+            struct Extract {
+                depth: usize,
+                buckets: BTreeMap<Point, u64>,
+                count: u64,
+                next_midpoint: Option<f64>,
+                next_count: Option<u64>,
+            }
+
+            #[derive(Debug)]
+            #[cfg(any(feature = "sval", feature = "serde"))]
+            struct Incompatible;
+
+            #[cfg(any(feature = "sval", feature = "serde"))]
+            impl Extract {
+                fn push(
+                    &mut self,
+                    midpoint: impl FnOnce() -> Option<f64>,
+                    count: impl FnOnce() -> Option<u64>,
+                ) -> Result<(), Incompatible> {
+                    if self.depth == 2 {
+                        if self.next_midpoint.is_none() {
+                            self.next_midpoint = midpoint();
+
+                            return Ok(());
+                        }
+
+                        if self.next_count.is_none() {
+                            self.next_count = count();
+
+                            return Ok(());
+                        }
+                    }
+
+                    Err(Incompatible)
+                }
+
+                fn apply(&mut self) -> Result<(), Incompatible> {
+                    if self.depth == 2 {
+                        let midpoint = self.next_midpoint.take().ok_or(Incompatible)?;
+                        let count = self.next_count.take().ok_or(Incompatible)?;
+
+                        *self.buckets.entry(Point::new(midpoint)).or_default() += count;
+                        self.count += count;
+
+                        Ok(())
+                    } else {
+                        Ok(())
+                    }
+                }
+
+                fn down(&mut self) -> Result<(), Incompatible> {
+                    self.depth += 1;
+
+                    if self.depth > 2 {
+                        Err(Incompatible)
+                    } else {
+                        Ok(())
+                    }
+                }
+
+                fn up(&mut self) -> Result<(), Incompatible> {
+                    self.apply()?;
+                    self.depth -= 1;
+
+                    Ok(())
+                }
+
+                fn end(self) -> Option<BucketSet> {
+                    if self.buckets.len() == 0 {
+                        None
+                    } else {
+                        Some(BucketSet {
+                            buckets: self.buckets,
+                            total: self.count,
+                        })
+                    }
+                }
+            }
+
+            #[cfg(feature = "sval")]
+            fn from_sval(value: Value) -> Option<BucketSet> {
+                #[allow(non_local_definitions)]
+                impl From<Incompatible> for sval::Error {
+                    fn from(_: Incompatible) -> sval::Error {
+                        sval::Error::new()
+                    }
+                }
+
+                #[allow(non_local_definitions)]
+                impl<'sval> sval::Stream<'sval> for Extract {
+                    fn null(&mut self) -> sval::Result {
+                        sval::error()
+                    }
+
+                    fn bool(&mut self, _: bool) -> sval::Result {
+                        sval::error()
+                    }
+
+                    fn text_begin(&mut self, _: Option<usize>) -> sval::Result {
+                        sval::error()
+                    }
+
+                    fn text_fragment_computed(&mut self, _: &str) -> sval::Result {
+                        sval::error()
+                    }
+
+                    fn text_end(&mut self) -> sval::Result {
+                        sval::error()
+                    }
+
+                    fn i64(&mut self, value: i64) -> sval::Result {
+                        Ok(self.push(|| Some(value as f64), || value.try_into().ok())?)
+                    }
+
+                    fn u64(&mut self, value: u64) -> sval::Result {
+                        Ok(self.push(|| Some(value as f64), || Some(value))?)
+                    }
+
+                    fn i128(&mut self, value: i128) -> sval::Result {
+                        Ok(self.push(|| Some(value as f64), || value.try_into().ok())?)
+                    }
+
+                    fn u128(&mut self, value: u128) -> sval::Result {
+                        Ok(self.push(|| Some(value as f64), || value.try_into().ok())?)
+                    }
+
+                    fn f64(&mut self, value: f64) -> sval::Result {
+                        Ok(self.push(|| Some(value), || Some(value as u64))?)
+                    }
+
+                    fn seq_begin(&mut self, _: Option<usize>) -> sval::Result {
+                        Ok(self.down()?)
+                    }
+
+                    fn seq_value_begin(&mut self) -> sval::Result {
+                        Ok(())
+                    }
+
+                    fn seq_value_end(&mut self) -> sval::Result {
+                        Ok(())
+                    }
+
+                    fn seq_end(&mut self) -> sval::Result {
+                        Ok(self.up()?)
+                    }
+                }
+
+                let mut extract = Extract::default();
+                sval::stream(&mut extract, &value).ok()?;
+                extract.end()
+            }
+
+            #[cfg(all(not(feature = "sval"), feature = "serde"))]
+            fn from_serde(value: Value) -> Option<BucketSet> {
+                use serde::Serialize as _;
+
+                #[allow(non_local_definitions)]
+                impl fmt::Display for Incompatible {
+                    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                        f.write_str("incompatible")
+                    }
+                }
+
+                #[allow(non_local_definitions)]
+                impl serde::ser::StdError for Incompatible {}
+
+                #[allow(non_local_definitions)]
+                impl serde::ser::Error for Incompatible {
+                    fn custom<T>(_: T) -> Self
+                    where
+                        T: fmt::Display,
+                    {
+                        Incompatible
+                    }
+                }
+
+                #[allow(non_local_definitions)]
+                impl<'a> serde::Serializer for &'a mut Extract {
+                    type Ok = ();
+                    type Error = Incompatible;
+                    type SerializeSeq = Self;
+                    type SerializeTuple = Self;
+                    type SerializeTupleStruct = Self;
+                    type SerializeTupleVariant = Self;
+                    type SerializeMap = Self;
+                    type SerializeStruct = Self;
+                    type SerializeStructVariant = Self;
+
+                    fn serialize_bool(self, _: bool) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_i8(self, value: i8) -> Result<Self::Ok, Self::Error> {
+                        self.push(|| Some(value as f64), || value.try_into().ok())
+                    }
+
+                    fn serialize_i16(self, value: i16) -> Result<Self::Ok, Self::Error> {
+                        self.push(|| Some(value as f64), || value.try_into().ok())
+                    }
+
+                    fn serialize_i32(self, value: i32) -> Result<Self::Ok, Self::Error> {
+                        self.push(|| Some(value as f64), || value.try_into().ok())
+                    }
+
+                    fn serialize_i64(self, value: i64) -> Result<Self::Ok, Self::Error> {
+                        self.push(|| Some(value as f64), || value.try_into().ok())
+                    }
+
+                    fn serialize_u8(self, value: u8) -> Result<Self::Ok, Self::Error> {
+                        self.push(|| Some(value as f64), || value.try_into().ok())
+                    }
+
+                    fn serialize_u16(self, value: u16) -> Result<Self::Ok, Self::Error> {
+                        self.push(|| Some(value as f64), || value.try_into().ok())
+                    }
+
+                    fn serialize_u32(self, value: u32) -> Result<Self::Ok, Self::Error> {
+                        self.push(|| Some(value as f64), || value.try_into().ok())
+                    }
+
+                    fn serialize_u64(self, value: u64) -> Result<Self::Ok, Self::Error> {
+                        self.push(|| Some(value as f64), || value.try_into().ok())
+                    }
+
+                    fn serialize_u128(self, value: u128) -> Result<Self::Ok, Self::Error> {
+                        self.push(|| Some(value as f64), || value.try_into().ok())
+                    }
+
+                    fn serialize_i128(self, value: i128) -> Result<Self::Ok, Self::Error> {
+                        self.push(|| Some(value as f64), || value.try_into().ok())
+                    }
+
+                    fn serialize_f32(self, value: f32) -> Result<Self::Ok, Self::Error> {
+                        self.push(|| Some(value as f64), || Some(value as u64))
+                    }
+
+                    fn serialize_f64(self, value: f64) -> Result<Self::Ok, Self::Error> {
+                        self.push(|| Some(value as f64), || Some(value as u64))
+                    }
+
+                    fn serialize_char(self, _: char) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_str(self, _: &str) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_bytes(self, _: &[u8]) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_some<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
+                    where
+                        T: ?Sized + serde::Serialize,
+                    {
+                        value.serialize(self)
+                    }
+
+                    fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
+                        Err(Incompatible)
+                    }
+
+                    fn serialize_unit_struct(
+                        self,
+                        name: &'static str,
+                    ) -> Result<Self::Ok, Self::Error> {
+                        name.serialize(self)
+                    }
+
+                    fn serialize_unit_variant(
+                        self,
+                        _: &'static str,
+                        _: u32,
+                        variant: &'static str,
+                    ) -> Result<Self::Ok, Self::Error> {
+                        variant.serialize(self)
+                    }
+
+                    fn serialize_newtype_struct<T>(
+                        self,
+                        _: &'static str,
+                        value: &T,
+                    ) -> Result<Self::Ok, Self::Error>
+                    where
+                        T: ?Sized + serde::Serialize,
+                    {
+                        value.serialize(self)
+                    }
+
+                    fn serialize_newtype_variant<T>(
+                        self,
+                        _: &'static str,
+                        _: u32,
+                        _: &'static str,
+                        value: &T,
+                    ) -> Result<Self::Ok, Self::Error>
+                    where
+                        T: ?Sized + serde::Serialize,
+                    {
+                        value.serialize(self)
+                    }
+
+                    fn serialize_seq(
+                        self,
+                        _: Option<usize>,
+                    ) -> Result<Self::SerializeSeq, Self::Error> {
+                        self.down()?;
+
+                        Ok(self)
+                    }
+
+                    fn serialize_tuple(
+                        self,
+                        _: usize,
+                    ) -> Result<Self::SerializeTuple, Self::Error> {
+                        self.down()?;
+
+                        Ok(self)
+                    }
+
+                    fn serialize_tuple_struct(
+                        self,
+                        _: &'static str,
+                        _: usize,
+                    ) -> Result<Self::SerializeTupleStruct, Self::Error> {
+                        self.down()?;
+
+                        Ok(self)
+                    }
+
+                    fn serialize_tuple_variant(
+                        self,
+                        _: &'static str,
+                        _: u32,
+                        _: &'static str,
+                        _: usize,
+                    ) -> Result<Self::SerializeTupleVariant, Self::Error> {
+                        self.down()?;
+
+                        Ok(self)
+                    }
+
+                    fn serialize_map(
+                        self,
+                        _: Option<usize>,
+                    ) -> Result<Self::SerializeMap, Self::Error> {
+                        self.down()?;
+
+                        Ok(self)
+                    }
+
+                    fn serialize_struct(
+                        self,
+                        _: &'static str,
+                        _: usize,
+                    ) -> Result<Self::SerializeStruct, Self::Error> {
+                        self.down()?;
+
+                        Ok(self)
+                    }
+
+                    fn serialize_struct_variant(
+                        self,
+                        _: &'static str,
+                        _: u32,
+                        _: &'static str,
+                        _: usize,
+                    ) -> Result<Self::SerializeStructVariant, Self::Error> {
+                        self.down()?;
+
+                        Ok(self)
+                    }
+                }
+
+                #[allow(non_local_definitions)]
+                impl<'a> serde::ser::SerializeSeq for &'a mut Extract {
+                    type Ok = ();
+                    type Error = Incompatible;
+
+                    fn serialize_element<T>(&mut self, value: &T) -> Result<(), Self::Error>
+                    where
+                        T: ?Sized + serde::Serialize,
+                    {
+                        value.serialize(&mut **self)
+                    }
+
+                    fn end(self) -> Result<Self::Ok, Self::Error> {
+                        self.up()
+                    }
+                }
+
+                #[allow(non_local_definitions)]
+                impl<'a> serde::ser::SerializeTuple for &'a mut Extract {
+                    type Ok = ();
+                    type Error = Incompatible;
+
+                    fn serialize_element<T>(&mut self, value: &T) -> Result<(), Self::Error>
+                    where
+                        T: ?Sized + serde::Serialize,
+                    {
+                        value.serialize(&mut **self)
+                    }
+
+                    fn end(self) -> Result<Self::Ok, Self::Error> {
+                        self.up()
+                    }
+                }
+
+                #[allow(non_local_definitions)]
+                impl<'a> serde::ser::SerializeTupleStruct for &'a mut Extract {
+                    type Ok = ();
+                    type Error = Incompatible;
+
+                    fn serialize_field<T>(&mut self, value: &T) -> Result<(), Self::Error>
+                    where
+                        T: ?Sized + serde::Serialize,
+                    {
+                        value.serialize(&mut **self)
+                    }
+
+                    fn end(self) -> Result<Self::Ok, Self::Error> {
+                        self.up()
+                    }
+                }
+
+                #[allow(non_local_definitions)]
+                impl<'a> serde::ser::SerializeTupleVariant for &'a mut Extract {
+                    type Ok = ();
+                    type Error = Incompatible;
+
+                    fn serialize_field<T>(&mut self, value: &T) -> Result<(), Self::Error>
+                    where
+                        T: ?Sized + serde::Serialize,
+                    {
+                        value.serialize(&mut **self)
+                    }
+
+                    fn end(self) -> Result<Self::Ok, Self::Error> {
+                        self.up()
+                    }
+                }
+
+                #[allow(non_local_definitions)]
+                impl<'a> serde::ser::SerializeMap for &'a mut Extract {
+                    type Ok = ();
+                    type Error = Incompatible;
+
+                    fn serialize_key<T>(&mut self, key: &T) -> Result<(), Self::Error>
+                    where
+                        T: ?Sized + serde::Serialize,
+                    {
+                        self.down()?;
+                        key.serialize(&mut **self)
+                    }
+
+                    fn serialize_value<T>(&mut self, value: &T) -> Result<(), Self::Error>
+                    where
+                        T: ?Sized + serde::Serialize,
+                    {
+                        value.serialize(&mut **self)?;
+                        self.up()
+                    }
+
+                    fn end(self) -> Result<Self::Ok, Self::Error> {
+                        self.up()
+                    }
+                }
+
+                #[allow(non_local_definitions)]
+                impl<'a> serde::ser::SerializeStruct for &'a mut Extract {
+                    type Ok = ();
+                    type Error = Incompatible;
+
+                    fn serialize_field<T>(
+                        &mut self,
+                        key: &'static str,
+                        value: &T,
+                    ) -> Result<(), Self::Error>
+                    where
+                        T: ?Sized + serde::Serialize,
+                    {
+                        self.down()?;
+                        key.serialize(&mut **self)?;
+                        value.serialize(&mut **self)?;
+                        self.up()
+                    }
+
+                    fn end(self) -> Result<Self::Ok, Self::Error> {
+                        self.up()
+                    }
+                }
+
+                #[allow(non_local_definitions)]
+                impl<'a> serde::ser::SerializeStructVariant for &'a mut Extract {
+                    type Ok = ();
+                    type Error = Incompatible;
+
+                    fn serialize_field<T>(
+                        &mut self,
+                        key: &'static str,
+                        value: &T,
+                    ) -> Result<(), Self::Error>
+                    where
+                        T: ?Sized + serde::Serialize,
+                    {
+                        self.down()?;
+                        key.serialize(&mut **self)?;
+                        value.serialize(&mut **self)?;
+                        self.up()
+                    }
+
+                    fn end(self) -> Result<Self::Ok, Self::Error> {
+                        self.up()
+                    }
+                }
+
+                let mut extract = Extract::default();
+                value.serialize(&mut extract).ok()?;
+                extract.end()
+            }
+
+            #[cfg(test)]
+            mod tests {
+                use super::*;
+
+                use std::collections::{BTreeMap, BTreeSet};
+
+                #[test]
+                fn bucket_set_observe() {
+                    let mut set = BucketSet::new();
+
+                    assert_eq!(0, set.len());
+
+                    set.observe(Point::new(0.0));
+                    set.observe_all(Point::new(0.0), 2);
+                    set.observe_all(Point::new(1.0), 2);
+
+                    assert_eq!(2, set.len());
+                    assert_eq!(3, set.get(Point::new(0.0)).unwrap());
+                    assert_eq!(2, set.get(Point::new(1.0)).unwrap());
+
+                    assert_eq!((Point::new(0.0), 3), set.first().unwrap());
+                    assert_eq!((Point::new(1.0), 2), set.last().unwrap());
+                }
+
+                #[test]
+                fn bucket_set_remap() {
+                    let mut set = BucketSet::new();
+
+                    set.observe_all(Point::new(0.0), 3);
+                    set.observe_all(Point::new(1.0), 2);
+
+                    assert_eq!(2, set.len());
+
+                    set.remap(|_| Point::new(2.0));
+
+                    assert_eq!(1, set.len());
+                    assert_eq!(5, set.get(Point::new(2.0)).unwrap());
+                }
+
+                #[test]
+                fn bucket_set_roundtrip() {
+                    for case in [
+                        BucketSet::new(),
+                        {
+                            let mut set = BucketSet::new();
+                            set.observe(Point::new(0.0));
+                            set
+                        },
+                        {
+                            let mut set = BucketSet::new();
+                            set.observe(Point::new(0.0));
+                            set.observe(Point::new(1.0));
+                            set
+                        },
+                    ] {
+                        let fmt = case.to_string();
+                        assert_eq!(Some(case), BucketSet::try_from_str(&fmt).ok(), "{fmt}");
+                    }
+                }
+
+                #[test]
+                fn bucket_set_parse() {
+                    for (case, expected) in [
+                        (format!("{:?}", ([[1, 1], [2, 2]])), {
+                            let mut set = BucketSet::new();
+                            set.observe_all(Point::new(1.0), 1);
+                            set.observe_all(Point::new(2.0), 2);
+                            set
+                        }),
+                        (format!("{:?}", ([(1.0, 1), (2.0, 2)])), {
+                            let mut set = BucketSet::new();
+                            set.observe_all(Point::new(1.0), 1);
+                            set.observe_all(Point::new(2.0), 2);
+                            set
+                        }),
+                        (
+                            format!("{:?}", {
+                                let mut set = BTreeSet::new();
+                                set.insert((1, 1));
+                                set.insert((2, 2));
+                                set
+                            }),
+                            {
+                                let mut set = BucketSet::new();
+                                set.observe_all(Point::new(1.0), 1);
+                                set.observe_all(Point::new(2.0), 2);
+                                set
+                            },
+                        ),
+                        (
+                            format!("{:?}", {
+                                let mut set = BTreeMap::new();
+                                set.insert(1, 1);
+                                set.insert(2, 2);
+                                set
+                            }),
+                            {
+                                let mut set = BucketSet::new();
+                                set.observe_all(Point::new(1.0), 1);
+                                set.observe_all(Point::new(2.0), 2);
+                                set
+                            },
+                        ),
+                    ] {
+                        assert_eq!(
+                            Some(expected),
+                            BucketSet::try_from_str(&case).ok(),
+                            "{case}"
+                        );
+                    }
+                }
+
+                #[test]
+                fn bucket_set_parse_exotic() {
+                    for case in ["[[inf,1]]", "[[nan,1]]", "[(1, 1), [2, 1], {3: 1}]"] {
+                        assert!(BucketSet::try_from_str(case).is_ok());
+                    }
+                }
+
+                #[test]
+                fn bucket_set_to_from_value() {
+                    for case in [{
+                        let mut set = BucketSet::new();
+                        set.observe_all(Point::new(1.0), 1);
+                        set.observe_all(Point::new(2.0), 2);
+                        set
+                    }] {
+                        assert_eq!(case, BucketSet::from_value(case.to_value()).unwrap());
+                    }
+                }
+
+                #[test]
+                fn bucket_set_from_value_string() {
+                    for (case, expected) in [("[[1.0,1],[2.0,2]]", {
+                        let mut set = BucketSet::new();
+                        set.observe_all(Point::new(1.0), 1);
+                        set.observe_all(Point::new(2.0), 2);
+                        set
+                    })] {
+                        assert_eq!(expected, Value::from(case).cast().unwrap());
+                    }
+                }
+
+                #[test]
+                fn bucket_set_from_value_structured() {
+                    #[cfg(feature = "sval")]
+                    trait CaseSval: sval::Value {}
+                    #[cfg(feature = "sval")]
+                    impl<T: sval::Value> CaseSval for T {}
+                    #[cfg(not(feature = "sval"))]
+                    trait CaseSval {}
+                    #[cfg(not(feature = "sval"))]
+                    impl<T> CaseSval for T {}
+
+                    #[cfg(feature = "serde")]
+                    trait CaseSerde: serde::Serialize {}
+                    #[cfg(feature = "serde")]
+                    impl<T: serde::Serialize> CaseSerde for T {}
+                    #[cfg(not(feature = "serde"))]
+                    trait CaseSerde {}
+                    #[cfg(not(feature = "serde"))]
+                    impl<T> CaseSerde for T {}
+
+                    trait Case: CaseSval + CaseSerde + fmt::Debug {}
+                    impl<T: fmt::Debug + CaseSval + CaseSerde> Case for T {}
+
+                    fn case(case: &impl Case, expected: &BucketSet) {
+                        assert_eq!(expected, &Value::from_debug(case).cast().unwrap());
+
+                        #[cfg(feature = "sval")]
+                        {
+                            assert_eq!(expected, &Value::from_sval(case).cast().unwrap());
+                        }
+
+                        #[cfg(feature = "serde")]
+                        {
+                            assert_eq!(expected, &Value::from_serde(case).cast().unwrap());
+                        }
+                    }
+
+                    let mut set = BucketSet::new();
+                    set.observe_all(Point::new(1.0), 1);
+                    set.observe_all(Point::new(2.0), 2);
+
+                    case(&[[1, 1], [2, 2]], &set);
+                    case(&[(1.0, 1), (2.0, 2)], &set);
+                    case(
+                        &{
+                            let mut set = BTreeSet::new();
+                            set.insert((1, 1));
+                            set.insert((2, 2));
+                            set
+                        },
+                        &set,
+                    );
+                    case(
+                        &{
+                            let mut set = BTreeMap::new();
+                            set.insert(1, 1);
+                            set.insert(2, 2);
+                            set
+                        },
+                        &set,
+                    );
+                }
+
+                #[test]
+                fn err_bucket_set_invalid() {
+                    for case in [
+                        "",
+                        "<>",
+                        "[1, 1]",
+                        "1, 1",
+                        "[[1, 1]], [[2, 1]]",
+                        "[[]]",
+                        "[}",
+                        "[[1,1}]",
+                        "[[1 1]]",
+                        "[[1, 1] [2, 1]]",
+                        "[,]",
+                        "[[,]]",
+                        "[[1,]]",
+                        "[[,1]]",
+                        "[[:]]",
+                        "[[1:]]",
+                        "[[:1]]",
+                        "[[1, -1]]",
+                        "[[1, 1.0]]",
+                        "[[1, 0xff]]",
+                        "[[1, ff]]",
+                    ] {
+                        assert!(BucketSet::try_from_str(case).is_err(), "{case}");
+                    }
+                }
+            }
+        }
+
+        pub use self::bucket_set::BucketSet;
+
+        /**
+        A container for approximating the distribution of a streaming data source.
+
+        `Distribution`s aggregate statistics from raw samples that pass through them. They include:
+
+        - `total`: The total number of observed values.
+        - `sum`: The sum of all observed values.
+        - `min`: The smallest observed value.
+        - `max`: The largest observed value.
+        - `buckets`: An exponential histogram backed by a [`BucketSet`].
+
+        Call the [`Distribution::observe`] method on each raw value.
+
+        Use the [`Props`] implementation on `Distribution` to include it on a metric sample.
+        */
+        pub struct Distribution {
+            max_buckets: usize,
+            max_scale: i32,
+            scale: i32,
+            sum: Option<f64>,
+            min: Option<f64>,
+            max: Option<f64>,
+            buckets: BucketSet,
+        }
+
+        impl Default for Distribution {
+            fn default() -> Self {
+                Self::new(Self::DEFAULT_MAX_SCALE, Self::DEFAULT_MAX_BUCKETS)
+            }
+        }
+
+        impl Distribution {
+            /**
+            The default initial scale used when converting observed values into bucket midpoints.
+            */
+            pub const DEFAULT_MAX_SCALE: i32 = 20;
+
+            /**
+            The default maximum number of buckets before rescaling will apply.
+            */
+            pub const DEFAULT_MAX_BUCKETS: usize = 160;
+
+            /**
+            Create a new `Distribution` that can store up to `max_buckets` sparse buckets, at up to `max_scale` precision.
+
+            The distribution uses a large scale initially. Whenever the number of buckets would overflow `max_buckets`, the scale is decremented and the buckets are rescaled. This reduces the number of buckets by half while also decreasing precision.
+            */
+            pub const fn new(max_scale: i32, max_buckets: usize) -> Self {
+                Distribution {
+                    max_buckets,
+                    max_scale,
+                    scale: max_scale,
+                    min: None,
+                    max: None,
+                    sum: None,
+                    buckets: BucketSet::new(),
+                }
+            }
+
+            /**
+            Observe a raw value.
+
+            The value will be converted into a bucket midpoint at the current internal scale. The count for the resulting bucket will be incremented by `1`.
+            */
+            pub fn observe(&mut self, raw_value: f64) {
+                self.buckets.observe(midpoint(raw_value, self.scale));
+
+                // Track the extrema
+                self.min = self
+                    .min
+                    .map(|min| cmp::min_by(min, raw_value, |a, b| a.total_cmp(b)))
+                    .or(Some(raw_value));
+                self.max = self
+                    .max
+                    .map(|max| cmp::max_by(max, raw_value, |a, b| a.total_cmp(b)))
+                    .or(Some(raw_value));
+                self.sum = self.sum.map(|sum| sum + raw_value).or(Some(raw_value));
+
+                // If we've overflowed then reduce our scale and resample
+                // Each time `scale` is decremented, our number of buckets will be halved
+                if self.buckets.len() > self.max_buckets {
+                    self.scale -= 1;
+                    self.buckets
+                        .remap(|value| midpoint(value.get(), self.scale));
+                }
+            }
+
+            /**
+            Clear the distribution of any data so it can be re-used.
+
+            This method will also reset the internal scale back to its initial value.
+            */
+            pub fn reset(&mut self) {
+                let Distribution {
+                    max_scale,
+                    max_buckets: _,
+                    scale,
+                    min,
+                    max,
+                    sum,
+                    buckets,
+                } = self;
+
+                buckets.clear();
+                *min = None;
+                *max = None;
+                *sum = None;
+                *scale = *max_scale;
+            }
+
+            /**
+            Get the total count of observed values across all buckets.
+
+            This method returns `0` if no values have been seen.
+            */
+            pub fn count(&self) -> u64 {
+                self.buckets.total()
+            }
+
+            /**
+            Get the minimum observed value.
+
+            This method returns `None` if no values have been seen.
+            */
+            pub fn min(&self) -> Option<f64> {
+                self.min
+            }
+
+            /**
+            Get the maximum observed value.
+
+            This method returns `None` if no values have been seen.
+            */
+            pub fn max(&self) -> Option<f64> {
+                self.max
+            }
+
+            /**
+            Get the sum of all observed values.
+
+            This method returns `None` if no values have been seen.
+            */
+            pub fn sum(&self) -> Option<f64> {
+                self.sum
+            }
+
+            /**
+            Get the current scale used to bucket values.
+            */
+            pub fn scale(&self) -> i32 {
+                self.scale
+            }
+
+            /**
+            Get the bucket values.
+            */
+            pub fn buckets(&self) -> &BucketSet {
+                &self.buckets
+            }
+
+            /**
+            Get the maximum number of buckets the distribution can hold before rescaling.
+            */
+            pub fn max_buckets(&self) -> usize {
+                self.max_buckets
+            }
+
+            /**
+            Get the maximum scale the distribution can use.
+            */
+            pub fn max_scale(&self) -> i32 {
+                self.max_scale
+            }
+        }
+
+        impl Props for Distribution {
+            fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
+                &'kv self,
+                mut for_each: F,
+            ) -> ControlFlow<()> {
+                for_each(KEY_DIST_EXP_SCALE.to_str(), self.scale().into())?;
+                for_each(KEY_DIST_EXP_BUCKETS.to_str(), self.buckets().to_value())?;
+
+                for_each(KEY_DIST_COUNT.to_str(), self.count().into())?;
+
+                if let Some(sum) = self.sum() {
+                    for_each(KEY_DIST_SUM.to_str(), sum.into())?;
+                }
+                if let Some(min) = self.min() {
+                    for_each(KEY_DIST_MIN.to_str(), min.into())?;
+                }
+                if let Some(max) = self.max() {
+                    for_each(KEY_DIST_MAX.to_str(), max.into())?;
+                }
+
+                ControlFlow::Continue(())
+            }
+        }
+
+        #[cfg(test)]
+        mod tests {
+            use super::*;
+
+            #[test]
+            fn distribution_observe() {
+                let mut distribution = Distribution::new(10, 10);
+
+                assert_eq!(distribution.max_scale(), distribution.scale());
+                assert_eq!(0, distribution.buckets().len());
+                assert_eq!(None, distribution.min());
+                assert_eq!(None, distribution.max());
+                assert_eq!(None, distribution.sum());
+                assert_eq!(0, distribution.count());
+
+                distribution.observe(1.0);
+                distribution.observe(1.0);
+
+                assert_eq!(
+                    2,
+                    distribution
+                        .buckets()
+                        .get(midpoint(1.0, distribution.max_scale()))
+                        .unwrap()
+                );
+                assert_eq!(1, distribution.buckets().len());
+                assert_eq!(Some(1.0), distribution.min());
+                assert_eq!(Some(1.0), distribution.max());
+                assert_eq!(Some(2.0), distribution.sum());
+                assert_eq!(2, distribution.count());
+
+                distribution.reset();
+
+                assert_eq!(distribution.max_scale(), distribution.scale());
+                assert_eq!(0, distribution.buckets().len());
+                assert_eq!(None, distribution.min());
+                assert_eq!(None, distribution.max());
+                assert_eq!(None, distribution.sum());
+                assert_eq!(0, distribution.count());
+            }
+
+            #[test]
+            fn distribution_rescale() {
+                let mut distribution = Distribution::new(10, 10);
+
+                for i in 0..100 {
+                    distribution.observe(i as f64);
+                }
+
+                assert!(distribution.buckets().len() <= distribution.max_buckets());
+                assert!(distribution.scale() < distribution.max_scale());
+
+                distribution.reset();
+
+                assert_eq!(distribution.max_scale(), distribution.scale());
+            }
+        }
+    }
+
+    #[cfg(feature = "alloc")]
+    pub use self::alloc_support::*;
+
     #[cfg(test)]
     mod tests {
         use core::f64::consts::PI;
@@ -1548,6 +3019,13 @@ pub mod exp {
                 ],
                 &*values
             );
+        }
+
+        #[test]
+        fn point_roundtrip() {
+            let point = Point::new(1.0);
+
+            assert_eq!(point, Point::try_from_str(&point.to_string()).unwrap());
         }
 
         #[test]

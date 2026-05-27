@@ -175,12 +175,26 @@ pub fn is_span_filter() -> KindFilter {
 }
 
 /**
+Test whether an event is a span in a distributed trace.
+*/
+pub fn is_span(evt: impl ToEvent) -> bool {
+    is_span_filter().matches(evt)
+}
+
+/**
 Only match events that are metric samples.
 
 Events that match must carry a [`Kind::Metric`].
 */
 pub fn is_metric_filter() -> KindFilter {
     KindFilter::new(Kind::Metric)
+}
+
+/**
+Test whether an event is a metric sample.
+*/
+pub fn is_metric(evt: impl ToEvent) -> bool {
+    is_metric_filter().matches(evt)
 }
 
 impl Filter for KindFilter {

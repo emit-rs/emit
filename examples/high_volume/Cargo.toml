@@ -1,0 +1,15 @@
+[package]
+name = "emit_example_high_volume"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies.emit]
+path = "../../"
+features = ["sval"]
+
+[dependencies.emit_term]
+path = "../../emitter/term"
+
+[dependencies.rand]
+version = "0.10"

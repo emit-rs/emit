@@ -138,99 +138,30 @@ emit::count_sample!(
 
 ### Building exponential histograms
 
-`emit` doesn't directly define a type that builds an exponential histogram for you. What it does provide is the [`midpoint`](https://docs.rs/emit/1.18.0/emit/metric/exp/fn.midpoint.html) function, returning a [`Point`](https://docs.rs/emit/1.18.0/emit/metric/exp/struct.Point.html) that can be stored in a `BTreeMap` or `HashMap`.
-
-Here's an example type that can collect an exponential histogram from raw values:
+`emit` defines the [`Distribution`](https://docs.rs/emit/1.18.0/emit/metric/exp/struct.Distribution.html) type as a container for an exponential histogram, min, max, sum, and count for raw observed values:
 
 ```rust
 # extern crate emit;
-use std::collections::BTreeMap;
+// Create a `Distribution` as a container
+// This type is externally mutable, you'll need to wrap it in a `Mutex` to share it
+let mut my_distribution = emit::metric::exp::Distribution::default();
 
-struct MyDistribution {
-    scale: i32,
-    max_buckets: usize,
-    total: u64,
-    buckets: BTreeMap<emit::metric::exp::Point, u64>,
-}
+// Observe some raw samples
+my_distribution.observe(1.1);
+my_distribution.observe(1.11);
+my_distribution.observe(10.1);
 
-impl MyDistribution {
-    pub fn new() -> Self {
-        MyDistribution {
-            // Pick a large initial scale, we'll resample automatically
-            // when the number of stored buckets overflows `max_buckets`
-            scale: 20,
-            max_buckets: 160,
-            total: 0,
-            buckets: BTreeMap::new(),
-        }
-    }
-
-    pub fn buckets(&self) -> &BTreeMap<emit::metric::exp::Point, u64> {
-        &self.buckets
-    }
-
-    pub fn total(&self) -> u64 {
-        self.total
-    }
-
-    pub fn scale(&self) -> i32 {
-        self.scale
-    }
-
-    pub fn observe(&mut self, value: f64) {
-        *self
-            .buckets
-            .entry(emit::metric::exp::midpoint(value, self.scale))
-            .or_default() += 1;
-
-        self.total += 1;
-
-        // If we've overflowed then reduce our scale and resample
-        // Each time `scale` is decremented, our number of buckets will be halved
-        if self.buckets.len() >= self.max_buckets {
-            self.scale -= 1;
-
-            let mut resampled = BTreeMap::new();
-
-            for (value, count) in &self.buckets {
-                *resampled
-                    .entry(emit::metric::exp::midpoint(value.get(), self.scale))
-                    .or_default() += *count;
-            }
-
-            self.buckets = resampled;
-        }
-    }
-}
-```
-
-An exponential histogram in `MyDistribution` can then be converted into a metric sample:
-
-```rust
-# extern crate emit;
-# #[derive(Default)]
-# struct MyDistribution {
-#     scale: i32,
-#     max_buckets: usize,
-#     total: u64,
-#     buckets: std::collections::BTreeMap<emit::metric::exp::Point, u64>,
-# }
-# impl MyDistribution {
-#     pub fn buckets(&self) -> &std::collections::BTreeMap<emit::metric::exp::Point, u64> { &self.buckets }
-#     pub fn total(&self) -> u64 { self.total }
-#     pub fn scale(&self) -> i32 { self.scale }
-# }
-# let my_distribution = MyDistribution::default();
+// Emit the distribution as a count sample
 emit::count_sample!(
     name: "http_response",
-    value: my_distribution.total(),
-    props: emit::props! {
-        dist_exp_scale: my_distribution.scale(),
-        #[emit::as_sval]
-        dist_exp_buckets: my_distribution.buckets(),
-    },
+    value: my_distribution.count(),
+    // Include the distribution itself as a set of props
+    // This will add the buckets, scale, min, max, and sum
+    props: my_distribution,
 );
 ```
+
+`emit` also defines a raw [`midpoint`](https://docs.rs/emit/1.18.0/emit/metric/exp/fn.midpoint.html) function, returning a [`Point`](https://docs.rs/emit/1.18.0/emit/metric/exp/struct.Point.html) that can be stored in a `BTreeMap` or `HashMap` to build your own exponential histogram storage.
 
 ### How exponential histograms work
 

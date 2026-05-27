@@ -2,52 +2,20 @@
 This example demonstrates attaching a distribution to a metric sample.
 
 Distributions give you an idea of what the individual values that made up your sample look like
-without actually storing all of them. Values that are close together are bucketed together by
-a single `emit::metric::exp::midpoint`. The `scale` parameter decides how big these buckets are.
-Bigger buckets take up less space, because there are fewer of them, but are less accurate than
-smaller buckets. There's no single right `scale` to use, it depends on the shape of your input data.
+without actually storing all of them.
 
 The guide has more details on distributions.
 */
 
 use std::{
-    collections::BTreeMap,
     thread,
     time::{Duration, Instant},
 };
 
-// Define our distribution container
-//
-// `emit` doesn't put any constraints on how you track and store your buckets.
-// In this example, we use a regular sorted map of bucket midpoints, which is
-// sufficient for most cases.
-#[derive(Default)]
-struct MyDistribution {
-    scale: i32,
-    total: u64,
-    buckets: BTreeMap<emit::metric::exp::Point, u64>,
-}
-
-impl MyDistribution {
-    fn observe(&mut self, value: f64) {
-        *self
-            .buckets
-            .entry(emit::metric::exp::midpoint(value, self.scale))
-            .or_default() += 1;
-        self.total += 1;
-    }
-}
-
 fn main() {
     let rt = emit::setup().emit_to(emit_term::stdout()).init();
 
-    let mut metric_a = MyDistribution {
-        // Pick a scale of `2`, which is the largest value that gives us
-        // an error within 10%. That is, any observed value will be in a bucket
-        // that is within 10% of its actual value
-        scale: 2,
-        ..Default::default()
-    };
+    let mut metric_a = emit::metric::exp::Distribution::default();
 
     // Observe some values
     // In this case, we're just making up some repeating values to show
@@ -61,30 +29,12 @@ fn main() {
         thread::sleep(Duration::from_micros(317));
     }
 
-    // Sample our `MyDistribution` metric as a count using the `total` value we've been tracking.
-    //
-    // When written out by `emit_term`, we'll see an extra line that summarizes our distribution
-    // into quartiles.
-    //
-    // If emitted to `emit_otlp`, we'll get an exponential histogram metric instead of a sum.
+    // Sample our metric as a count using the total value
+    // We also include the metric itself to include its buckets and scale
     emit::count_sample!(
         name: "metric_a",
-        value: metric_a.total,
-        props: emit::props! {
-            // `dist_exp_buckets` are our `(midpoint, count)` pairs
-            // They can be attached either as an array of tuples, or as a map
-            // where keys are midpoints, and values are counts.
-            //
-            // The shape of `dist_exp_buckets` is complex, so we need to use `#[emit::as_sval]`
-            // or `#[emit::as_serde]` to capture them.
-            #[emit::as_sval]
-            dist_exp_buckets: metric_a.buckets,
-            // `dist_exp_scale` is our scale parameter, which tells us how big our buckets are.
-            //
-            // Buckets can be resampled into smaller scales, but can't be correctly split
-            // into larger ones.
-            dist_exp_scale: metric_a.scale,
-        },
+        value: metric_a.count(),
+        props: metric_a,
     );
 
     rt.blocking_flush(Duration::from_secs(5));

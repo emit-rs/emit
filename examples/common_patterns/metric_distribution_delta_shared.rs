@@ -7,70 +7,20 @@ by a `Mutex`, and the delta value is borrowed rather than consumed each time it'
 */
 
 use std::{
-    collections::BTreeMap,
     sync::{LazyLock, Mutex},
     thread,
     time::{Duration, Instant},
 };
 
-struct MyDistribution {
-    scale: i32,
-    total: u64,
-    max_buckets: usize,
-    buckets: BTreeMap<emit::metric::exp::Point, u64>,
-}
-
-impl MyDistribution {
-    const MAX_SCALE: i32 = 10;
-
-    fn new(max_buckets: usize) -> Self {
-        MyDistribution {
-            scale: Self::MAX_SCALE,
-            max_buckets,
-            total: 0,
-            buckets: BTreeMap::new(),
-        }
-    }
-
-    fn observe(&mut self, value: f64) {
-        *self
-            .buckets
-            .entry(emit::metric::exp::midpoint(value, self.scale))
-            .or_default() += 1;
-        self.total += 1;
-
-        // If we've overflowed then reduce our scale and resample
-        // Each time `scale` is decremented, our number of buckets will be halved
-        if self.buckets.len() >= self.max_buckets {
-            self.scale -= 1;
-
-            let mut resampled = BTreeMap::new();
-
-            for (value, count) in &self.buckets {
-                *resampled
-                    .entry(emit::metric::exp::midpoint(value.get(), self.scale))
-                    .or_default() += *count;
-            }
-
-            self.buckets = resampled;
-        }
-    }
-
-    fn reset(&mut self) {
-        self.buckets.clear();
-        self.total = 0;
-        self.scale = Self::MAX_SCALE;
-    }
-}
-
 // Define our shared metric as a static, so it can be reached throughout the program
 // We force initialization of the metric after `emit::setup()` in `main`.
-static METRIC_A: LazyLock<Mutex<emit::metric::Delta<MyDistribution>>> = LazyLock::new(|| {
-    Mutex::new(emit::metric::Delta::new(
-        emit::clock().now(),
-        MyDistribution::new(20),
-    ))
-});
+static METRIC_A: LazyLock<Mutex<emit::metric::Delta<emit::metric::exp::Distribution>>> =
+    LazyLock::new(|| {
+        Mutex::new(emit::metric::Delta::new(
+            emit::clock().now(),
+            emit::metric::exp::Distribution::default(),
+        ))
+    });
 
 fn main() {
     let rt = emit::setup()
@@ -109,12 +59,8 @@ fn main() {
         emit::count_sample!(
             extent,
             name: "metric_a",
-            value: metric_a.total,
-            props: emit::props! {
-                #[emit::as_sval]
-                dist_exp_buckets: metric_a.buckets,
-                dist_exp_scale: metric_a.scale,
-            },
+            value: metric_a.count(),
+            props: &*metric_a,
         );
 
         metric_a.reset();

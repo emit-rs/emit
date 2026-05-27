@@ -2,7 +2,7 @@
 
 Metrics are an effective approach to monitoring applications at scale. They can be cheap to collect, making them suitable for performance sensitive operations. They can also be compact to report, making them suitable for high-volume scenarios.
 
-`emit` doesn't provide its own definitions of types like gauges and counters that you can set or increment. The way you define, store, and track metrics in your application will depend on your specific needs. `emit` becomes involved at the point you want to send samples you collect of your metrics to external systems. It does this by representing the values you sample as events with well-known properties:
+`emit` provides limited APIs for defining metric sources. The way you define, store, and track metrics in your application will depend on your specific needs. What `emit` does define is a data model for metric samples as events with well-known properties:
 
 ```mermaid
 flowchart
