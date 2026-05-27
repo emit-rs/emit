@@ -2902,7 +2902,7 @@ pub mod exp {
             fn distribution_observe() {
                 let mut distribution = Distribution::new(10, 10);
 
-                assert_eq!(Distribution::DEFAULT_MAX_SCALE, distribution.scale());
+                assert_eq!(distribution.max_scale(), distribution.scale());
                 assert_eq!(0, distribution.buckets().len());
                 assert_eq!(None, distribution.min());
                 assert_eq!(None, distribution.max());
@@ -2916,7 +2916,7 @@ pub mod exp {
                     2,
                     distribution
                         .buckets()
-                        .get(midpoint(1.0, Distribution::DEFAULT_MAX_SCALE))
+                        .get(midpoint(1.0, distribution.max_scale()))
                         .unwrap()
                 );
                 assert_eq!(1, distribution.buckets().len());
@@ -2927,7 +2927,7 @@ pub mod exp {
 
                 distribution.reset();
 
-                assert_eq!(Distribution::DEFAULT_MAX_SCALE, distribution.scale());
+                assert_eq!(distribution.max_scale(), distribution.scale());
                 assert_eq!(0, distribution.buckets().len());
                 assert_eq!(None, distribution.min());
                 assert_eq!(None, distribution.max());
