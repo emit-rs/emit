@@ -22,6 +22,7 @@
         - [Propagating context across services](./producing-events/tracing/propagating-across-services.md)
         - [Sampling and filtering](./producing-events/tracing/sampling.md)
         - [Span links](./producing-events/tracing/links.md)
+        - [Wide events](./producing-events/tracing/wide-events.md)
         - [Limitations](./producing-events/tracing/limitations.md)
     - [Metrics](./producing-events/metrics.md)
         - [Data model](./producing-events/metrics/data-model.md)

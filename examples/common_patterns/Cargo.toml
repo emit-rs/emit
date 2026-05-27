@@ -92,6 +92,10 @@ name = "span_additional_props"
 path = "span_additional_props.rs"
 
 [[example]]
+name = "span_wide_events"
+path = "span_wide_events.rs"
+
+[[example]]
 name = "span_fallible_completion"
 path = "span_fallible_completion.rs"
 

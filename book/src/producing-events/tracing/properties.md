@@ -103,16 +103,12 @@ With a [`SpanGuard`](https://docs.rs/emit/1.18.0/emit/span/struct.SpanGuard.html
 ```rust
 # extern crate emit;
 # use std::collections::HashMap;
-#[emit::span(guard: span, "checking a value", i)]
+// This example uses a `HashMap` to store additional properties to include
+#[emit::span(guard: span, evt_props: HashMap::new(), "checking a value", i)]
 fn check(i: i32) {
-    // This example uses a `HashMap` to store additional properties to include
-    let mut span = span.push_props(HashMap::new());
-
     if i > 4 {
-        // The type of the span's properties are now `And<HashMap<_, _>, _>`
-        // We can access the hash map through `And::left_mut` to insert into it
-        span.props_mut()
-            .map(|props| props.left_mut().insert("is_big", true));
+        // The type of the span's properties derefence to `HashMap`, so we can insert into them
+        span.props_mut().map(|props| props.insert("is_big", true));
     }
 
     // At this point `span` will be dropped
