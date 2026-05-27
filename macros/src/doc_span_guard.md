@@ -6,7 +6,7 @@ Also see [the guide](https://emit-rs.io/producing-events/tracing/manual-span-cre
 
 ## Creating spans
 
-Note that [`macro@new_debug_span`], [`macro@new_info_span`], [`macro@new_warn_span`], and [`macro@new_error_span`] use the same syntax.
+Note that [`macro@debug_span_guard`], [`macro@info_span_guard`], [`macro@warn_span_guard`], and [`macro@error_span_guard`] use the same syntax.
 
 Creating a span with captured properties in the template:
 
@@ -64,12 +64,13 @@ where
 
 This macro accepts the following optional control parameters:
 
-| name        | type                          | description                                                                                                                                                    |
-| ----------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `rt`        | `impl emit::runtime::Runtime` | The runtime to emit the event through.                                                                                                                         |
-| `mdl`       | `impl Into<emit::Path>`       | The module the event belongs to. If unspecified the current module path is used.                                                                               |
-| `when`      | `impl emit::Filter`           | A filter to use instead of the one configured on the runtime.                                                                                                  |
-| `panic_lvl` | `str` or `emit::Level`        | Detect whether the function panics and use the given level if it does.                                                                                         |
+| name        | type                          | description                                                                                                                                                                                                                                                    |
+|-------------|-------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `rt`        | `impl emit::runtime::Runtime` | The runtime to emit the event through.                                                                                                                                                                                                                         |
+| `mdl`       | `impl Into<emit::Path>`       | The module the event belongs to. If unspecified the current module path is used.                                                                                                                                                                               |
+| `when`      | `impl emit::Filter`           | A filter to use instead of the one configured on the runtime.                                                                                                                                                                                                  |
+| `evt_props` | `impl emit::Props`            | A set of properties to attach to the span guard that will appear on the emitted span event, but not pushed to the ambient context. The type that will appear on the `SpanGuard` is an anonymous wrapper that dereferences to the concrete type of `evt_props`. |
+| `panic_lvl` | `str` or `emit::Level`        | Detect whether the function panics and use the given level if it does.                                                                                                                                                                                         |
 
 # Template literals
 
