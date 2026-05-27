@@ -144,7 +144,7 @@ emit::count_sample!(
 # extern crate emit;
 // Create a `Distribution` as a container
 // This type is externally mutable, you'll need to wrap it in a `Mutex` to share it
-let my_distribution = emit::metric::exp::Distribution::default();
+let mut my_distribution = emit::metric::exp::Distribution::default();
 
 // Observe some raw samples
 my_distribution.observe(1.1);

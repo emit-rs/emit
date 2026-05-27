@@ -15,7 +15,7 @@ use std::{
 fn main() {
     let rt = emit::setup().emit_to(emit_term::stdout()).init();
 
-    let mut metric_a = emit::metric::exp::Distribution::new(160);
+    let mut metric_a = emit::metric::exp::Distribution::default();
 
     // Observe some values
     // In this case, we're just making up some repeating values to show

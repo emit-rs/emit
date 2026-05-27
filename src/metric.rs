@@ -1634,7 +1634,7 @@ pub mod exp {
 
                 This method does not allocate.
                 */
-                pub fn new() -> Self {
+                pub const fn new() -> Self {
                     BucketSet(BTreeMap::new())
                 }
 
@@ -2707,6 +2707,7 @@ pub mod exp {
         */
         pub struct Distribution {
             max_buckets: usize,
+            max_scale: i32,
             scale: i32,
             total: u64,
             sum: Option<f64>,
@@ -2715,23 +2716,33 @@ pub mod exp {
             buckets: BucketSet,
         }
 
+        impl Default for Distribution {
+            fn default() -> Self {
+                Self::new(Self::DEFAULT_MAX_SCALE, Self::DEFAULT_MAX_BUCKETS)
+            }
+        }
+
         impl Distribution {
             /**
-            The initial scale used when converting observed values into bucket midpoints.
-
-            This scale is an upper bound on the precision of the buckets. When the distribution overflows its `max_buckets` value, its scale will be reduced.
+            The default initial scale used when converting observed values into bucket midpoints.
             */
-            pub const MAX_INITIAL_SCALE: i32 = 10;
+            pub const DEFAULT_MAX_SCALE: i32 = 20;
 
             /**
-            Create a new `Distribution` that can store up to `max_buckets` sparse buckets.
+            The default maximum number of buckets before rescaling will apply.
+            */
+            pub const DEFAULT_MAX_BUCKETS: usize = 160;
+
+            /**
+            Create a new `Distribution` that can store up to `max_buckets` sparse buckets, at up to `max_scale` precision.
 
             The distribution uses a large scale initially. Whenever the number of buckets would overflow `max_buckets`, the scale is decremented and the buckets are rescaled. This reduces the number of buckets by half while also decreasing precision.
             */
-            pub fn new(max_buckets: usize) -> Self {
+            pub const fn new(max_scale: i32, max_buckets: usize) -> Self {
                 Distribution {
                     max_buckets,
-                    scale: Self::MAX_INITIAL_SCALE,
+                    max_scale,
+                    scale: max_scale,
                     total: 0,
                     min: None,
                     max: None,
@@ -2776,6 +2787,7 @@ pub mod exp {
             */
             pub fn reset(&mut self) {
                 let Distribution {
+                    max_scale,
                     max_buckets: _,
                     scale,
                     total,
@@ -2790,7 +2802,7 @@ pub mod exp {
                 *min = None;
                 *max = None;
                 *sum = None;
-                *scale = Self::MAX_INITIAL_SCALE;
+                *scale = *max_scale;
             }
 
             /**
@@ -2849,6 +2861,13 @@ pub mod exp {
             pub fn max_buckets(&self) -> usize {
                 self.max_buckets
             }
+
+            /**
+            Get the maximum scale the distribution can use.
+            */
+            pub fn max_scale(&self) -> i32 {
+                self.max_scale
+            }
         }
 
         impl Props for Distribution {
@@ -2881,9 +2900,9 @@ pub mod exp {
 
             #[test]
             fn distribution_observe() {
-                let mut distribution = Distribution::new(10);
+                let mut distribution = Distribution::new(10, 10);
 
-                assert_eq!(Distribution::MAX_INITIAL_SCALE, distribution.scale());
+                assert_eq!(Distribution::DEFAULT_MAX_SCALE, distribution.scale());
                 assert_eq!(0, distribution.buckets().len());
                 assert_eq!(None, distribution.min());
                 assert_eq!(None, distribution.max());
@@ -2897,7 +2916,7 @@ pub mod exp {
                     2,
                     distribution
                         .buckets()
-                        .get(midpoint(1.0, Distribution::MAX_INITIAL_SCALE))
+                        .get(midpoint(1.0, Distribution::DEFAULT_MAX_SCALE))
                         .unwrap()
                 );
                 assert_eq!(1, distribution.buckets().len());
@@ -2908,7 +2927,7 @@ pub mod exp {
 
                 distribution.reset();
 
-                assert_eq!(Distribution::MAX_INITIAL_SCALE, distribution.scale());
+                assert_eq!(Distribution::DEFAULT_MAX_SCALE, distribution.scale());
                 assert_eq!(0, distribution.buckets().len());
                 assert_eq!(None, distribution.min());
                 assert_eq!(None, distribution.max());
@@ -2918,18 +2937,18 @@ pub mod exp {
 
             #[test]
             fn distribution_rescale() {
-                let mut distribution = Distribution::new(10);
+                let mut distribution = Distribution::new(10, 10);
 
                 for i in 0..100 {
                     distribution.observe(i as f64);
                 }
 
                 assert!(distribution.buckets().len() <= distribution.max_buckets());
-                assert!(distribution.scale() < Distribution::MAX_INITIAL_SCALE);
+                assert!(distribution.scale() < distribution.max_scale());
 
                 distribution.reset();
 
-                assert_eq!(Distribution::MAX_INITIAL_SCALE, distribution.scale());
+                assert_eq!(distribution.max_scale(), distribution.scale());
             }
         }
     }

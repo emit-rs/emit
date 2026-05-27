@@ -115,6 +115,7 @@ emit::emit!(
 Some control parameters produce a value for you to use instead of accepting one as input. In these cases, the initialization shorthand will use the parameter name as the identifier to bind the output to:
 
 ```rust
+# extern crate emit;
 // Equivalent to `guard: guard`
 #[emit::span(guard, "exec")]
 fn exec() {

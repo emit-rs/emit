@@ -21,7 +21,7 @@ fn main() {
                     guard
                         .current_value_mut()
                         .entry(key)
-                        .or_insert_with(|| emit::metric::exp::Distribution::new(160))
+                        .or_insert_with(|| emit::metric::exp::Distribution::default())
                         .observe(elapsed.as_secs_f64());
                 }
 

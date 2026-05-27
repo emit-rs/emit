@@ -38,11 +38,11 @@ You can use the [`Delta`](https://docs.rs/emit/1.18.0/emit/metric/struct.Delta.h
 # extern crate emit;
 // Wrap a value in a delta
 // The delta accepts a timestamp for the start of its initial time interval
-let mut delta = emit::metric::Delta<usize>::new_default(emit::clock().now());
+let mut delta = emit::metric::Delta::<usize>::new_default(emit::clock().now());
 
 // Update the value for the current time period
-delta.current_value_mut() += 1;
-delta.current_value_mut() += 1;
+*delta.current_value_mut() += 1;
+*delta.current_value_mut() += 1;
 
 // At some regular interval, pull the built up value and emit it
 // Advancing the delta returns a tuple of:
@@ -51,7 +51,7 @@ delta.current_value_mut() += 1;
 let (extent, my_metric) = delta.advance_default(emit::clock().now());
 
 // Emit the metric sample as an event
-emit::sample(extent, value: my_metric);
+emit::sample!(extent, value: my_metric);
 ```
 
 Internally, [`Delta`](https://docs.rs/emit/1.18.0/emit/metric/struct.Delta.html) just tracks the last [`Timestamp`](https://docs.rs/emit/1.18.0/emit/struct.Timestamp.html) passed to `advance` (which is the start of the current interval) and the value for the current interval. `Delta` relies on external mutability, so you'll need to wrap it in a mutex to share it, but can be used for arbitrarily complex metric sources, like [`Distribution`](https://docs.rs/emit/1.18.0/emit/metric/exp/struct.Distribution.html)s.

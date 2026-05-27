@@ -18,7 +18,7 @@ static METRIC_A: LazyLock<Mutex<emit::metric::Delta<emit::metric::exp::Distribut
     LazyLock::new(|| {
         Mutex::new(emit::metric::Delta::new(
             emit::clock().now(),
-            emit::metric::exp::Distribution::new(20),
+            emit::metric::exp::Distribution::default(),
         ))
     });
 

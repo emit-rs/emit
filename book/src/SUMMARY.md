@@ -28,7 +28,6 @@
         - [Key types](./producing-events/metrics/types.md)
         - [Metric sample creation](./producing-events/metrics/creation.md)
         - [Attaching properties](./producing-events/metrics/properties.md)
-        - [Creating samples](./producing-events/metrics/creation.md)
         - [Cumulative metrics](./producing-events/metrics/cumulative-metrics.md)
         - [Delta metrics](./producing-events/metrics/delta-metrics.md)
         - [Distributions](./producing-events/metrics/distributions.md)

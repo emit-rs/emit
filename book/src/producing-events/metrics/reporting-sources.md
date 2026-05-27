@@ -75,11 +75,13 @@ let source = emit::metric::source::from_fn(|sampler| {
 
     sampler.metric(emit::count_metric!(
         extent: sampler.sampled_at(),
+        name: "metric_a",
         value: metrics.metric_a,
     ));
 
     sampler.metric(emit::count_metric!(
         extent: sampler.sampled_at(),
+        name: "metric_b",
         value: metrics.metric_b,
     ));
 });
