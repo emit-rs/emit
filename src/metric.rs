@@ -1598,7 +1598,10 @@ pub mod exp {
             The set stores sparse, sorted buckets as a tuple of their midpoint ([`Point`]), and count of occurrences.
             */
             #[derive(Clone, PartialEq, Eq)]
-            pub struct BucketSet(BTreeMap<Point, u64>);
+            pub struct BucketSet {
+                total: u64,
+                buckets: BTreeMap<Point, u64>,
+            }
 
             impl fmt::Debug for BucketSet {
                 fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -1611,7 +1614,7 @@ pub mod exp {
                     f.write_char('[')?;
 
                     let mut first = true;
-                    for (k, v) in &self.0 {
+                    for (k, v) in &self.buckets {
                         if !first {
                             f.write_char(',')?;
                         }
@@ -1635,7 +1638,10 @@ pub mod exp {
                 This method does not allocate.
                 */
                 pub const fn new() -> Self {
-                    BucketSet(BTreeMap::new())
+                    BucketSet {
+                        buckets: BTreeMap::new(),
+                        total: 0,
+                    }
                 }
 
                 /**
@@ -1740,7 +1746,8 @@ pub mod exp {
                         let key = key.parse().map_err(|_| ParseBucketSetError {})?;
                         let value = value.parse().map_err(|_| ParseBucketSetError {})?;
 
-                        if set.0.insert(key, value).is_some() {
+                        set.total += value;
+                        if set.buckets.insert(key, value).is_some() {
                             // Duplicate key
                             return Err(ParseBucketSetError {});
                         }
@@ -1773,7 +1780,8 @@ pub mod exp {
                 All points should be computed from the same scale.
                 */
                 pub fn observe_all(&mut self, value: Point, count: u64) {
-                    *self.0.entry(value).or_default() += count;
+                    *self.buckets.entry(value).or_default() += count;
+                    self.total += count;
                 }
 
                 /**
@@ -1784,41 +1792,63 @@ pub mod exp {
                 pub fn remap(&mut self, mut map: impl FnMut(Point) -> Point) {
                     let mut remapped = BTreeMap::new();
 
-                    for (value, count) in &self.0 {
+                    for (value, count) in &self.buckets {
                         *remapped.entry(map(*value)).or_default() += *count;
                     }
 
-                    self.0 = remapped;
+                    self.buckets = remapped;
                 }
 
                 /**
                 Get the number of buckets currently in the set.
 
-                This is **not** the total count of observed values in all buckets, just the count of buckets themselves.
+                This is **not** the total count of observed values in all buckets, just the count of buckets themselves. See [`BucketSet::total`] for the total count.
                 */
                 pub fn len(&self) -> usize {
-                    self.0.len()
+                    self.buckets.len()
+                }
+
+                /**
+                Get the total count of observed values.
+                */
+                pub fn total(&self) -> u64 {
+                    self.total
                 }
 
                 /**
                 Clear all buckets, allowing the allocation to be re-used.
                 */
                 pub fn clear(&mut self) {
-                    self.0.clear();
+                    self.buckets.clear();
+                    self.total = 0;
                 }
 
                 /**
                 Get the count for a particular bucket.
                 */
                 pub fn get(&self, value: Point) -> Option<u64> {
-                    self.0.get(&value).copied()
+                    self.buckets.get(&value).copied()
+                }
+
+                /**
+                Get the first (lowest numbered) bucket.
+                */
+                pub fn first(&self) -> Option<(Point, u64)> {
+                    self.buckets.first_key_value().map(|(k, v)| (*k, *v))
+                }
+
+                /**
+                Get the last (highest numbered) bucket.
+                */
+                pub fn last(&self) -> Option<(Point, u64)> {
+                    self.buckets.last_key_value().map(|(k, v)| (*k, *v))
                 }
 
                 /**
                 Iterate over buckets in order.
                 */
                 pub fn iter(&self) -> Iter<'_> {
-                    Iter(self.0.iter())
+                    Iter(self.buckets.iter())
                 }
             }
 
@@ -1852,9 +1882,9 @@ pub mod exp {
                     &'sval self,
                     stream: &mut S,
                 ) -> sval::Result {
-                    stream.seq_begin(Some(self.0.len()))?;
+                    stream.seq_begin(Some(self.buckets.len()))?;
 
-                    for bucket in &self.0 {
+                    for bucket in &self.buckets {
                         stream.value_computed(&bucket)?;
                     }
 
@@ -1870,9 +1900,9 @@ pub mod exp {
                 ) -> Result<S::Ok, S::Error> {
                     use serde::ser::SerializeSeq as _;
 
-                    let mut seq = serializer.serialize_seq(Some(self.0.len()))?;
+                    let mut seq = serializer.serialize_seq(Some(self.buckets.len()))?;
 
-                    for bucket in &self.0 {
+                    for bucket in &self.buckets {
                         seq.serialize_element(&bucket)?;
                     }
 
@@ -2002,7 +2032,10 @@ pub mod exp {
                     if self.buckets.len() == 0 {
                         None
                     } else {
-                        Some(BucketSet(self.buckets))
+                        Some(BucketSet {
+                            buckets: self.buckets,
+                            total: self.count,
+                        })
                     }
                 }
             }
@@ -2473,6 +2506,9 @@ pub mod exp {
                     assert_eq!(2, set.len());
                     assert_eq!(3, set.get(Point::new(0.0)).unwrap());
                     assert_eq!(2, set.get(Point::new(1.0)).unwrap());
+
+                    assert_eq!((Point::new(0.0), 3), set.first().unwrap());
+                    assert_eq!((Point::new(1.0), 2), set.last().unwrap());
                 }
 
                 #[test]
@@ -2709,7 +2745,6 @@ pub mod exp {
             max_buckets: usize,
             max_scale: i32,
             scale: i32,
-            total: u64,
             sum: Option<f64>,
             min: Option<f64>,
             max: Option<f64>,
@@ -2743,7 +2778,6 @@ pub mod exp {
                     max_buckets,
                     max_scale,
                     scale: max_scale,
-                    total: 0,
                     min: None,
                     max: None,
                     sum: None,
@@ -2758,7 +2792,6 @@ pub mod exp {
             */
             pub fn observe(&mut self, raw_value: f64) {
                 self.buckets.observe(midpoint(raw_value, self.scale));
-                self.total += 1;
 
                 // Track the extrema
                 self.min = self
@@ -2790,7 +2823,6 @@ pub mod exp {
                     max_scale,
                     max_buckets: _,
                     scale,
-                    total,
                     min,
                     max,
                     sum,
@@ -2798,7 +2830,6 @@ pub mod exp {
                 } = self;
 
                 buckets.clear();
-                *total = 0;
                 *min = None;
                 *max = None;
                 *sum = None;
@@ -2811,7 +2842,7 @@ pub mod exp {
             This method returns `0` if no values have been seen.
             */
             pub fn count(&self) -> u64 {
-                self.total
+                self.buckets.total()
             }
 
             /**
@@ -2875,18 +2906,18 @@ pub mod exp {
                 &'kv self,
                 mut for_each: F,
             ) -> ControlFlow<()> {
-                for_each(KEY_DIST_EXP_SCALE.to_str(), self.scale.into())?;
-                for_each(KEY_DIST_EXP_BUCKETS.to_str(), self.buckets.to_value())?;
+                for_each(KEY_DIST_EXP_SCALE.to_str(), self.scale().into())?;
+                for_each(KEY_DIST_EXP_BUCKETS.to_str(), self.buckets().to_value())?;
 
-                for_each(KEY_DIST_COUNT.to_str(), self.total.into())?;
+                for_each(KEY_DIST_COUNT.to_str(), self.count().into())?;
 
-                if let Some(sum) = self.sum {
+                if let Some(sum) = self.sum() {
                     for_each(KEY_DIST_SUM.to_str(), sum.into())?;
                 }
-                if let Some(min) = self.min {
+                if let Some(min) = self.min() {
                     for_each(KEY_DIST_MIN.to_str(), min.into())?;
                 }
-                if let Some(max) = self.max {
+                if let Some(max) = self.max() {
                     for_each(KEY_DIST_MAX.to_str(), max.into())?;
                 }
 
