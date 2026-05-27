@@ -1,4 +1,4 @@
-use ::std::time::Duration;
+use ::std::{collections::BTreeMap, time::Duration};
 
 use emit::{Ctxt, Emitter, Kind, Props, Str};
 
@@ -278,6 +278,8 @@ async fn async_span_by_value_arg() {
     #[emit::span(rt: &RT, "test")]
     async fn exec(arg: ::std::string::String) {
         take_string(arg);
+
+        tokio::time::sleep(Default::default()).await;
     }
 
     exec("Owned".to_owned()).await;
@@ -413,6 +415,116 @@ fn span_fn_name() {
     RT.emitter().blocking_flush(Duration::from_secs(1));
 }
 
+#[tokio::test]
+async fn async_span_fn_name() {
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!("exec", evt.props().pull::<&str, _>("fn_name").unwrap());
+            assert_eq!(
+                "exec",
+                evt.props().pull::<&str, _>("other_fn_name").unwrap()
+            );
+        },
+        |evt| {
+            assert_eq!("exec", evt.props().pull::<&str, _>("fn_name").unwrap());
+            assert_eq!(
+                "exec",
+                evt.props().pull::<&str, _>("other_fn_name").unwrap()
+            );
+
+            true
+        },
+    );
+
+    #[emit::span(rt: RT, fn_name, "test", other_fn_name: fn_name)]
+    async fn exec() {
+        let _: &'static str = fn_name;
+
+        tokio::time::sleep(Default::default()).await;
+
+        RT.ctxt().with_current(|props| {
+            assert!(props.get("fn_name").is_none());
+        })
+    }
+
+    exec().await;
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+}
+
+#[test]
+fn span_evt_props() {
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!(42, evt.props().pull::<i32, _>("a").unwrap());
+        },
+        |evt| {
+            assert!(evt.props().get("a").is_none());
+
+            true
+        },
+    );
+
+    #[emit::span(rt: RT, guard: span, evt_props: BTreeMap::new(), "test")]
+    fn exec() {
+        span.props_mut().and_then(|props| props.insert("a", 42));
+    }
+
+    exec();
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+}
+
+#[tokio::test]
+async fn async_span_evt_props() {
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!(42, evt.props().pull::<i32, _>("a").unwrap());
+        },
+        |evt| {
+            assert!(evt.props().get("a").is_none());
+
+            true
+        },
+    );
+
+    #[emit::span(rt: RT, guard: span, evt_props: BTreeMap::new(), "test")]
+    async fn exec() {
+        span.props_mut().and_then(|props| props.insert("a", 42));
+
+        tokio::time::sleep(Default::default()).await;
+    }
+
+    exec().await;
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+}
+
+#[test]
+fn span_evt_props_fn_name() {
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!("exec", evt.props().pull::<&str, _>("fn_name").unwrap());
+            assert_eq!(42, evt.props().pull::<i32, _>("a").unwrap());
+        },
+        |evt| {
+            assert_eq!("exec", evt.props().pull::<&str, _>("fn_name").unwrap());
+            assert!(evt.props().get("a").is_none());
+
+            true
+        },
+    );
+
+    #[emit::span(rt: RT, guard: span, evt_props: BTreeMap::new(), fn_name, "test")]
+    fn exec() {
+        span.props_mut().and_then(|props| props.insert("a", 42));
+    }
+
+    exec();
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+}
+
 #[test]
 fn span_filter() {
     static CALLED: StaticCalled = StaticCalled::new();
@@ -512,6 +624,8 @@ async fn async_span_explicit_ids() {
     #[emit::span(rt: RT, "test", trace_id, span_parent, span_id)]
     async fn exec(trace_id: &str, span_parent: &str, span_id: &str) {
         let ctxt = emit::SpanCtxt::current(RT.ctxt());
+
+        tokio::time::sleep(Default::default()).await;
 
         assert_eq!(emit::TraceId::from_u128(1), ctxt.trace_id().copied());
         assert_eq!(emit::SpanId::from_u64(2), ctxt.span_parent().copied());

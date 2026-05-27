@@ -27,6 +27,7 @@ struct Args {
     mdl: args::MdlArg,
     when: args::WhenArg,
     guard: Option<Ident>,
+    evt_props: Option<TokenStream>,
     fn_name: Option<Ident>,
     catch_unwind: Option<bool>,
     setup: Option<TokenStream>,
@@ -79,6 +80,11 @@ impl Parse for Args {
             Ok(quote_spanned!(expr.span()=> #expr))
         });
         let mut guard = Arg::ident("guard");
+        let mut evt_props = Arg::token_stream("evt_props", |fv| {
+            let expr = &fv.expr;
+
+            Ok(quote_spanned!(expr.span()=> #expr))
+        });
         let mut fn_name = Arg::ident("fn_name");
         let mut catch_unwind = Arg::bool("catch_unwind");
 
@@ -87,6 +93,7 @@ impl Parse for Args {
             [
                 &mut mdl,
                 &mut guard,
+                &mut evt_props,
                 &mut fn_name,
                 &mut rt,
                 &mut when,
@@ -120,6 +127,7 @@ impl Parse for Args {
             err: err.take_if_std()?,
             setup: setup.take(),
             guard: guard.take(),
+            evt_props: evt_props.take(),
             fn_name: fn_name.take(),
         })
     }
@@ -136,7 +144,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
 
     check_evt_props(&ctxt_props)?;
 
-    let mut evt_props = Props::new();
+    let mut macro_evt_props = Props::new();
 
     let span_guard = args
         .guard
@@ -149,6 +157,8 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     let err_tokens = args.err;
     let catch_unwind = args.catch_unwind.unwrap_or_default();
     let setup_tokens = args.setup;
+
+    let user_evt_props_tokens = args.evt_props.unwrap_or_else(|| quote!(emit::Empty));
 
     let rt_tokens = args.rt.to_tokens()?.to_ref_tokens();
     let mdl_tokens = args.mdl.to_tokens();
@@ -164,7 +174,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         if let Some(fn_name) = fn_name(args.fn_name.as_ref(), item.fn_name().as_ref())? {
             let fn_name_prop = fn_name.to_prop();
 
-            evt_props.push(
+            macro_evt_props.push(
                 &fn_name_prop,
                 capture::default_fn_name(&fn_name_prop),
                 false,
@@ -176,7 +186,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
             None
         };
 
-    check_evt_props(&evt_props)?;
+    check_evt_props(&macro_evt_props)?;
 
     match &mut item {
         // A synchronous function
@@ -193,7 +203,8 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &when_tokens,
                 &template,
                 &ctxt_props,
-                &evt_props,
+                &user_evt_props_tokens,
+                &macro_evt_props,
                 fn_name_tokens,
                 setup_tokens,
                 &span_guard,
@@ -214,7 +225,8 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &when_tokens,
                 &template,
                 &ctxt_props,
-                &evt_props,
+                &user_evt_props_tokens,
+                &macro_evt_props,
                 fn_name_tokens,
                 setup_tokens,
                 &span_guard,
@@ -241,7 +253,8 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &when_tokens,
                 &template,
                 &ctxt_props,
-                &evt_props,
+                &user_evt_props_tokens,
+                &macro_evt_props,
                 fn_name_tokens,
                 setup_tokens,
                 &span_guard,
@@ -262,7 +275,8 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &when_tokens,
                 &template,
                 &ctxt_props,
-                &evt_props,
+                &user_evt_props_tokens,
+                &macro_evt_props,
                 fn_name_tokens,
                 setup_tokens,
                 &span_guard,
@@ -287,7 +301,8 @@ fn inject_sync(
     when_tokens: &TokenStream,
     template: &Template,
     ctxt_props: &Props,
-    evt_props: &Props,
+    user_evt_props_tokens: &TokenStream,
+    macro_evt_props: &Props,
     fn_name_tokens: Option<TokenStream>,
     setup_tokens: Option<TokenStream>,
     span_guard: &Ident,
@@ -358,7 +373,8 @@ fn inject_sync(
         mdl_tokens,
         when_tokens,
         ctxt_props,
-        evt_props,
+        user_evt_props_tokens,
+        macro_evt_props,
         &span_name_tokens,
         &default_completion_tokens,
         &default_lvl_tokens,
@@ -373,7 +389,8 @@ fn inject_sync(
         __ctxt.call(move || {
             __span_guard.start();
 
-            let #span_guard = __span_guard;
+            #[allow(unused_mut)]
+            let mut #span_guard = __span_guard;
 
             #body_tokens
         })
@@ -386,7 +403,8 @@ fn inject_async(
     when_tokens: &TokenStream,
     template: &Template,
     ctxt_props: &Props,
-    evt_props: &Props,
+    user_evt_props_tokens: &TokenStream,
+    macro_evt_props: &Props,
     fn_name_tokens: Option<TokenStream>,
     setup_tokens: Option<TokenStream>,
     span_guard: &Ident,
@@ -457,7 +475,8 @@ fn inject_async(
         mdl_tokens,
         when_tokens,
         ctxt_props,
-        evt_props,
+        user_evt_props_tokens,
+        macro_evt_props,
         &span_name_tokens,
         &default_completion_tokens,
         &default_lvl_tokens,
@@ -472,7 +491,9 @@ fn inject_async(
         __ctxt.in_future(async move {
             __span_guard.start();
 
-            let #span_guard = __span_guard;
+            #[allow(unused_mut)]
+            let mut #span_guard = __span_guard;
+
             #body_tokens
         }).await
     }))
@@ -483,7 +504,8 @@ fn span_guard_tokens(
     mdl_tokens: &TokenStream,
     when_tokens: &TokenStream,
     ctxt_props: &Props,
-    evt_props: &Props,
+    user_evt_props_tokens: &TokenStream,
+    macro_evt_props: &Props,
     span_name_tokens: &TokenStream,
     default_completion_tokens: &TokenStream,
     default_lvl_tokens: &TokenStream,
@@ -493,7 +515,9 @@ fn span_guard_tokens(
     let ctxt_props_tokens = ctxt_props.match_bound_tokens().to_ref_tokens();
 
     // We use type-preserving props here because they may span across await points
-    let evt_props_tokens = evt_props.raw_props_tokens()?;
+    let macro_evt_props_tokens = macro_evt_props.raw_props_tokens()?;
+
+    let evt_props_tokens = quote!(emit::__private::__PrivateSpanEventMacroProps::new(#user_evt_props_tokens, #macro_evt_props_tokens));
 
     Ok(quote!(match (#(#ctxt_props_match_input_tokens),*) {
         (#(#ctxt_props_match_binding_tokens),*) => {
@@ -759,6 +783,7 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
         mdl,
         when,
         guard,
+        evt_props,
         setup,
         fn_name,
         ok_lvl,
@@ -790,7 +815,7 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
     let template_tokens = template.template_tokens();
     let span_name_tokens = template.template_literal_tokens();
 
-    let evt_props_tokens = quote!(emit::Empty);
+    let evt_props_tokens = evt_props.unwrap_or_else(|| quote!(emit::Empty));
 
     let panic_lvl_tokens = lvl_tokens(
         panic_lvl_tokens.as_ref(),
