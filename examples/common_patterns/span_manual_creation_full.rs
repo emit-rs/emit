@@ -1,7 +1,7 @@
 /*!
-This example is a variant of `span_manual_creation` that doesn't use the `emit::new_span!` macro.
+This example is a variant of `span_manual_creation` that doesn't use the `emit::span_guard!` macro.
 
-It instead constructs a `SpanGuard` directly, which is what the `emit::new_span!` macro de-sugars to.
+It instead constructs a `SpanGuard` directly, which is what the `emit::span_guard!` macro de-sugars to.
 */
 
 use std::time::Duration;

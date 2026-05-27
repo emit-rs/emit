@@ -1,5 +1,5 @@
 /*!
-This example demonstrates how to construct a span manually, without using `#[span]`, `new_span!`, or `SpanGuard`s.
+This example demonstrates how to construct a span manually, without using `#[span]`, `span_guard!`, or `SpanGuard`s.
 
 It can be useful in applications that use disconnected middleware that makes it difficult to pick a single point to introduce `#[span]` to.
 

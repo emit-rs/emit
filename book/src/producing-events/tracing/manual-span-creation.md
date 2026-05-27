@@ -8,7 +8,7 @@ You can also create `SpanGuard`s manually if you can't or don't want to use the 
 
 ```rust
 # extern crate emit;
-let (mut span, frame) = emit::new_span!("manual span");
+let (mut span, frame) = emit::span_guard!("manual span");
 
 frame.call(move || {
     span.start();
@@ -17,9 +17,9 @@ frame.call(move || {
 })
 ```
 
-The `new_span!` macro returns a tuple of [`SpanGuard`](https://docs.rs/emit/1.18.0/emit/span/struct.SpanGuard.html) for completing the span, and [`Frame`](https://docs.rs/emit/1.18.0/emit/frame/struct.Frame.html) for activating the span's ambient trace and span ids for correlation.
+The `span_guard!` macro returns a tuple of [`SpanGuard`](https://docs.rs/emit/1.18.0/emit/span/struct.SpanGuard.html) for completing the span, and [`Frame`](https://docs.rs/emit/1.18.0/emit/frame/struct.Frame.html) for activating the span's ambient trace and span ids for correlation.
 
-The syntax accepted by the `new_span!` macro is the same as the [`#[span]`](https://docs.rs/emit/1.18.0/emit/attr.span.html) attribute.
+The syntax accepted by the `span_guard!` macro is the same as the [`#[span]`](https://docs.rs/emit/1.18.0/emit/attr.span.html) attribute.
 
 **Make sure you call [`SpanGuard::start`](https://docs.rs/emit/1.18.0/emit/span/struct.SpanGuard.html#method.start) in the closure in [`Frame::call`](https://docs.rs/emit/1.18.0/emit/frame/struct.Frame.html#method.call) or async block in [`Frame::in_future`](https://docs.rs/emit/1.18.0/emit/frame/struct.Frame.html#method.in_future)**. If you don't call `SpanGuard::start`, the span won't be emitted. If you don't call it within the frame, the span may be emitted early and without its ambient context.
 

@@ -14,7 +14,7 @@ Creating a span with captured properties in the template:
 let x = 42;
 let y = true;
 
-let (span, guard) = emit::new_span!("got {x} and {y}");
+let (span, guard) = emit::span_guard!("got {x} and {y}");
 ```
 
 Creating a span with captured properties after the template:
@@ -23,13 +23,13 @@ Creating a span with captured properties after the template:
 let x = 42;
 let y = true;
 
-let (span, guard) = emit::new_span!("something of note", x, y);
+let (span, guard) = emit::span_guard!("something of note", x, y);
 ```
 
 Specifying control parameters before the template (in this example, `mdl`):
 
 ```ignore
-let (span, guard) = emit::new_span!(mdl: emit::path!("a::b"), "something of note");
+let (span, guard) = emit::span_guard!(mdl: emit::path!("a::b"), "something of note");
 ```
 
 ## Entering the created span
@@ -37,7 +37,7 @@ let (span, guard) = emit::new_span!(mdl: emit::path!("a::b"), "something of note
 Once a span is created, a block of code can be executed within it:
 
 ```ignore
-let (mut span, guard) = emit::new_span!("manual span");
+let (mut span, guard) = emit::span_guard!("manual span");
 
 guard.call(move || {
     span.start();
