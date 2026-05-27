@@ -1574,7 +1574,7 @@ pub mod exp {
                     fmt::{self, Write as _},
                     str::FromStr,
                 },
-                metric::exp::{midpoint, Point},
+                metric::exp::Point,
             };
 
             /**
@@ -1777,22 +1777,24 @@ pub mod exp {
                 }
 
                 /**
-                Rescale all buckets.
+                Remap and merge buckets.
 
-                This method only has sensible behavior when the new scale is a smaller value (coarser-grained buckets). When the scale decreases, adjacent buckets are merged.
+                This method can be used to rescale the buckets to a coarser granularity in combination with the [`crate::metric::exp::midpoint`] function. It accepts a closure that maps stored bucket [`Point`]s to new values. When multiple buckets map to the same new value, their counts will be summed.
                 */
-                pub fn rescale(&mut self, scale: i32) {
-                    let mut resampled = BTreeMap::new();
+                pub fn remap(&mut self, mut map: impl FnMut(Point) -> Point) {
+                    let mut remapped = BTreeMap::new();
 
                     for (value, count) in &self.0 {
-                        *resampled.entry(midpoint(value.get(), scale)).or_default() += *count;
+                        *remapped.entry(map(*value)).or_default() += *count;
                     }
 
-                    self.0 = resampled;
+                    self.0 = remapped;
                 }
 
                 /**
                 Get the number of buckets currently in the set.
+
+                This is **not** the total count of observed values in all buckets, just the count of buckets themselves.
                 */
                 pub fn len(&self) -> usize {
                     self.0.len()
@@ -1803,6 +1805,13 @@ pub mod exp {
                 */
                 pub fn clear(&mut self) {
                     self.0.clear();
+                }
+
+                /**
+                Get the count for a particular bucket.
+                */
+                pub fn get(&self, value: Point) -> Option<u64> {
+                    self.0.get(&value).copied()
                 }
 
                 /**
@@ -2071,7 +2080,7 @@ pub mod exp {
                 extract.end()
             }
 
-            #[cfg(any(test, all(not(feature = "sval"), feature = "serde")))]
+            #[cfg(all(not(feature = "sval"), feature = "serde"))]
             fn from_serde(value: Value) -> Option<BucketSet> {
                 use serde::Serialize as _;
 
@@ -2452,8 +2461,33 @@ pub mod exp {
                 use std::collections::{BTreeMap, BTreeSet};
 
                 #[test]
-                fn observe_increments_counts() {
-                    todo!()
+                fn bucket_set_observe() {
+                    let mut set = BucketSet::new();
+
+                    assert_eq!(0, set.len());
+
+                    set.observe(Point::new(0.0));
+                    set.observe_all(Point::new(0.0), 2);
+                    set.observe_all(Point::new(1.0), 2);
+
+                    assert_eq!(2, set.len());
+                    assert_eq!(3, set.get(Point::new(0.0)).unwrap());
+                    assert_eq!(2, set.get(Point::new(1.0)).unwrap());
+                }
+
+                #[test]
+                fn bucket_set_remap() {
+                    let mut set = BucketSet::new();
+
+                    set.observe_all(Point::new(0.0), 3);
+                    set.observe_all(Point::new(1.0), 2);
+
+                    assert_eq!(2, set.len());
+
+                    set.remap(|_| Point::new(2.0));
+
+                    assert_eq!(1, set.len());
+                    assert_eq!(5, set.get(Point::new(2.0)).unwrap());
                 }
 
                 #[test]
@@ -2530,22 +2564,126 @@ pub mod exp {
                 }
 
                 #[test]
-                #[cfg(all(feature = "sval", feature = "serde"))]
-                fn bucket_set_sval_serde_compatibility() {
-                    todo!()
+                fn bucket_set_parse_exotic() {
+                    for case in ["[[inf,1]]", "[[nan,1]]", "[(1, 1), [2, 1], {3: 1}]"] {
+                        assert!(BucketSet::try_from_str(case).is_ok());
+                    }
+                }
+
+                #[test]
+                fn bucket_set_to_from_value() {
+                    for case in [{
+                        let mut set = BucketSet::new();
+                        set.observe_all(Point::new(1.0), 1);
+                        set.observe_all(Point::new(2.0), 2);
+                        set
+                    }] {
+                        assert_eq!(case, BucketSet::from_value(case.to_value()).unwrap());
+                    }
+                }
+
+                #[test]
+                fn bucket_set_from_value_string() {
+                    for (case, expected) in [("[[1.0,1],[2.0,2]]", {
+                        let mut set = BucketSet::new();
+                        set.observe_all(Point::new(1.0), 1);
+                        set.observe_all(Point::new(2.0), 2);
+                        set
+                    })] {
+                        assert_eq!(expected, Value::from(case).cast().unwrap());
+                    }
+                }
+
+                #[test]
+                fn bucket_set_from_value_structured() {
+                    #[cfg(feature = "sval")]
+                    trait CaseSval: sval::Value {}
+                    #[cfg(feature = "sval")]
+                    impl<T: sval::Value> CaseSval for T {}
+                    #[cfg(not(feature = "sval"))]
+                    trait CaseSval {}
+                    #[cfg(not(feature = "sval"))]
+                    impl<T> CaseSval for T {}
+
+                    #[cfg(feature = "serde")]
+                    trait CaseSerde: serde::Serialize {}
+                    #[cfg(feature = "serde")]
+                    impl<T: serde::Serialize> CaseSerde for T {}
+                    #[cfg(not(feature = "serde"))]
+                    trait CaseSerde {}
+                    #[cfg(not(feature = "serde"))]
+                    impl<T> CaseSerde for T {}
+
+                    trait Case: CaseSval + CaseSerde + fmt::Debug {}
+                    impl<T: fmt::Debug + CaseSval + CaseSerde> Case for T {}
+
+                    fn case(case: &impl Case, expected: &BucketSet) {
+                        assert_eq!(expected, &Value::from_debug(case).cast().unwrap());
+
+                        #[cfg(feature = "sval")]
+                        {
+                            assert_eq!(expected, &Value::from_sval(case).cast().unwrap());
+                        }
+
+                        #[cfg(feature = "serde")]
+                        {
+                            assert_eq!(expected, &Value::from_serde(case).cast().unwrap());
+                        }
+                    }
+
+                    let mut set = BucketSet::new();
+                    set.observe_all(Point::new(1.0), 1);
+                    set.observe_all(Point::new(2.0), 2);
+
+                    case(&[[1, 1], [2, 2]], &set);
+                    case(&[(1.0, 1), (2.0, 2)], &set);
+                    case(
+                        &{
+                            let mut set = BTreeSet::new();
+                            set.insert((1, 1));
+                            set.insert((2, 2));
+                            set
+                        },
+                        &set,
+                    );
+                    case(
+                        &{
+                            let mut set = BTreeMap::new();
+                            set.insert(1, 1);
+                            set.insert(2, 2);
+                            set
+                        },
+                        &set,
+                    );
                 }
 
                 #[test]
                 fn err_bucket_set_invalid() {
-                    /*
-                    - Truncated
-                    - Non-numeric
-                    - Empty bucket
-                    - 3-valued bucket
-                    - Whitespace
-                    - Duplicate key
-                    */
-                    todo!()
+                    for case in [
+                        "",
+                        "<>",
+                        "[1, 1]",
+                        "1, 1",
+                        "[[1, 1]], [[2, 1]]",
+                        "[[]]",
+                        "[}",
+                        "[[1,1}]",
+                        "[[1 1]]",
+                        "[[1, 1] [2, 1]]",
+                        "[,]",
+                        "[[,]]",
+                        "[[1,]]",
+                        "[[,1]]",
+                        "[[:]]",
+                        "[[1:]]",
+                        "[[:1]]",
+                        "[[1, -1]]",
+                        "[[1, 1.0]]",
+                        "[[1, 0xff]]",
+                        "[[1, ff]]",
+                    ] {
+                        assert!(BucketSet::try_from_str(case).is_err(), "{case}");
+                    }
                 }
             }
         }
@@ -2578,7 +2716,12 @@ pub mod exp {
         }
 
         impl Distribution {
-            const MAX_INITIAL_SCALE: i32 = 10;
+            /**
+            The initial scale used when converting observed values into bucket midpoints.
+
+            This scale is an upper bound on the precision of the buckets. When the distribution overflows its `max_buckets` value, its scale will be reduced.
+            */
+            pub const MAX_INITIAL_SCALE: i32 = 10;
 
             /**
             Create a new `Distribution` that can store up to `max_buckets` sparse buckets.
@@ -2619,9 +2762,10 @@ pub mod exp {
 
                 // If we've overflowed then reduce our scale and resample
                 // Each time `scale` is decremented, our number of buckets will be halved
-                if self.buckets.len() >= self.max_buckets {
+                if self.buckets.len() > self.max_buckets {
                     self.scale -= 1;
-                    self.buckets.rescale(self.scale);
+                    self.buckets
+                        .remap(|value| midpoint(value.get(), self.scale));
                 }
             }
 
@@ -2698,6 +2842,13 @@ pub mod exp {
             pub fn buckets(&self) -> &BucketSet {
                 &self.buckets
             }
+
+            /**
+            Get the maximum number of buckets the distribution can hold before rescaling.
+            */
+            pub fn max_buckets(&self) -> usize {
+                self.max_buckets
+            }
         }
 
         impl Props for Distribution {
@@ -2729,8 +2880,56 @@ pub mod exp {
             use super::*;
 
             #[test]
-            fn it_works() {
-                todo!();
+            fn distribution_observe() {
+                let mut distribution = Distribution::new(10);
+
+                assert_eq!(Distribution::MAX_INITIAL_SCALE, distribution.scale());
+                assert_eq!(0, distribution.buckets().len());
+                assert_eq!(None, distribution.min());
+                assert_eq!(None, distribution.max());
+                assert_eq!(None, distribution.sum());
+                assert_eq!(0, distribution.count());
+
+                distribution.observe(1.0);
+                distribution.observe(1.0);
+
+                assert_eq!(
+                    2,
+                    distribution
+                        .buckets()
+                        .get(midpoint(1.0, Distribution::MAX_INITIAL_SCALE))
+                        .unwrap()
+                );
+                assert_eq!(1, distribution.buckets().len());
+                assert_eq!(Some(1.0), distribution.min());
+                assert_eq!(Some(1.0), distribution.max());
+                assert_eq!(Some(2.0), distribution.sum());
+                assert_eq!(2, distribution.count());
+
+                distribution.reset();
+
+                assert_eq!(Distribution::MAX_INITIAL_SCALE, distribution.scale());
+                assert_eq!(0, distribution.buckets().len());
+                assert_eq!(None, distribution.min());
+                assert_eq!(None, distribution.max());
+                assert_eq!(None, distribution.sum());
+                assert_eq!(0, distribution.count());
+            }
+
+            #[test]
+            fn distribution_rescale() {
+                let mut distribution = Distribution::new(10);
+
+                for i in 0..100 {
+                    distribution.observe(i as f64);
+                }
+
+                assert!(distribution.buckets().len() <= distribution.max_buckets());
+                assert!(distribution.scale() < Distribution::MAX_INITIAL_SCALE);
+
+                distribution.reset();
+
+                assert_eq!(Distribution::MAX_INITIAL_SCALE, distribution.scale());
             }
         }
     }
@@ -2774,7 +2973,9 @@ pub mod exp {
 
         #[test]
         fn point_roundtrip() {
-            todo!()
+            let point = Point::new(1.0);
+
+            assert_eq!(point, Point::try_from_str(&point.to_string()).unwrap());
         }
 
         #[test]
