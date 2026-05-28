@@ -1,6 +1,9 @@
-use ::std::{collections::BTreeMap, time::Duration};
+use ::std::time::Duration;
 
 use emit::{Ctxt, Emitter, Kind, Props, Str};
+
+#[cfg(feature = "std")]
+use std::collections::BTreeMap;
 
 #[cfg(feature = "std")]
 use futures::FutureExt;
@@ -448,6 +451,31 @@ async fn async_span_fn_name() {
     }
 
     exec().await;
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+}
+
+#[test]
+fn span_evt_props_basic() {
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!(42, evt.props().pull::<i32, _>("a").unwrap());
+            assert_eq!(true, evt.props().pull::<bool, _>("b").unwrap());
+        },
+        |evt| {
+            assert_eq!(42, evt.props().pull::<i32, _>("a").unwrap());
+            assert!(evt.props().get("b").is_none());
+
+            true
+        },
+    );
+
+    #[emit::span(rt: RT, guard: span, evt_props: [("a", 42)], "test")]
+    fn exec() {
+        let _span = span.push_prop("b", true);
+    }
+
+    exec();
 
     RT.emitter().blocking_flush(Duration::from_secs(1));
 }

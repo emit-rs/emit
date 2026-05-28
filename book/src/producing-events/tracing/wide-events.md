@@ -6,24 +6,30 @@ You can implement wide events using `emit` by attaching an additional property c
 
 ```rust
 # extern crate emit;
-# use std::{collections::HashMap, ops::{ControlFlow, DerefMut}};
+# use std::{collections::HashMap, io, ops::{ControlFlow, DerefMut}};
 // In our outer-most span we create our wide event context
-#[emit::span(guard, evt_props: WideEvent::begin(), "exec")]
-fn exec() {
+#[emit::span(guard, evt_props: WideEvent::begin(), ok_lvl: "info", "exec")]
+fn exec() -> io::Result<()> {
     let mut cx = WideEvent::cx(guard.props_mut());
 
     // Our span guard carries our `WideEvent` context, so we can access it
-    check(&mut cx, 7);
+    check(&mut cx, 7)?;
 
     // When `exec` completes, the accumulated context will be emitted
+
+    Ok(())
 }
 
 // Child operations add to the context
-fn check(cx: &mut WideEvent, i: i32) {
+fn check(cx: &mut WideEvent, i: i32) -> io::Result<()> {
     cx.set("i", i);
 
     if i > 4 {
         cx.set("is_big", true);
+
+        Err(io::Error::new(io::ErrorKind::Other, "value is too big"))
+    } else {
+        Ok(())
     }
 }
 

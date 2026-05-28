@@ -7,28 +7,35 @@ the end. In this example, that container is passed around directly.
 
 use std::{
     collections::HashMap,
+    io,
     ops::{ControlFlow, DerefMut},
     time::Duration,
 };
 
 // The `guard` control parameter lets us manipulate the span within the body of the function
 // The `evt_props` control parameter lets us specify the type for properties on the resulting span event
-#[emit::span(guard, evt_props: WideEvent::begin(), "Running an example")]
-fn example() {
+#[emit::span(guard, evt_props: WideEvent::begin(), ok_lvl: "info", "Running an example")]
+fn example() -> io::Result<()> {
     let mut cx = WideEvent::cx(guard.props_mut());
 
     // Our span guard carries our `WideEvent` context, so we can access it
-    check(&mut cx, 7);
+    check(&mut cx, 7)?;
 
     // When `example` completes, the accumulated context will be emitted
+
+    Ok(())
 }
 
 // Child operations add to the context
-fn check(cx: &mut WideEvent, i: i32) {
+fn check(cx: &mut WideEvent, i: i32) -> io::Result<()> {
     cx.set("i", i);
 
     if i > 4 {
         cx.set("is_big", true);
+
+        Err(io::Error::new(io::ErrorKind::Other, "value is too big"))
+    } else {
+        Ok(())
     }
 }
 
@@ -37,7 +44,7 @@ fn main() {
         .emit_to(emit::emitter::from_fn(|evt| println!("{evt:#?}")))
         .init();
 
-    example();
+    let _ = example();
 
     rt.blocking_flush(Duration::from_secs(5));
 }

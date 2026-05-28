@@ -138,27 +138,29 @@ Attaching additional properties to the span guard is preferrable to adding them 
 
 ## Visibility of properties on spans
 
-Properties added through the span macros are added to the ambient context for the duration of the span, meaning they're included on any events or child spans, unless they explicitly override them. This is a good place to add contextual properties that link those events together.
+Properties on spans have two visibility levels:
 
-Properties added to a [`SpanGuard`](https://docs.rs/emit/1.18.0/emit/span/struct.SpanGuard.html) are visible only on to the completed span itself. This is a good place to add properties that apply only to the span.
+- **Shared:** Added to the ambient context and present on all child events. Properties you add to the [`#[span]`](https://docs.rs/emit/1.18.0/emit/attr.span.html) template are shared.
+- **Private:** Added to the [`SpanGuard`](https://docs.rs/emit/1.18.0/emit/span/struct.SpanGuard.html) and only present on the span event itself. Properties you add through the `evt_props` [control parameter](../../reference/control-parameters.md), and subsequently through the `SpanGuard` are private.
 
 ```rust
 # extern crate emit;
 #[emit::span(
     guard: span,
-    "checking a value",
-    // `public` is visible to all events and child spans produced in the body of `check`
-    public: i,
+    evt_props: [("private_1", i)],
+    "checking {public_1: i}",
+    public_2: i,
 )]
 fn check(i: i32) {
-    // `private` is visible only to this span itself
-    let _span = span.push_prop("private", i);
+    let _span = span.push_prop("private_2", i);
 
     // Your code goes here
 }
 ```
 
-Note that adding additional properties to the span guard itself _won't_ make those properties part of any child spans. They'll only appear on the parent span containing those properties when it completes. To make additional properties ambiently available, see [Context](../logging/context.md#manually).
+This means you only want to include properties in your `#[span]` template that are ambiently useful, because they'll also appear on all child events.
+
+To make additional properties ambiently available during the execution of a span, see [Context](../logging/context.md#manually).
 
 ## Capturing complex values
 

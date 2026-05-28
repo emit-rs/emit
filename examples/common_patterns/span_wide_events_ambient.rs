@@ -5,33 +5,43 @@ Operations push their context into a single container which is emitted as a sing
 the end. In this example, that container is ambient.
 */
 
-use std::time::Duration;
+use std::{io, time::Duration};
 
 use crate::wide_event::WideEvent;
 
 // The `guard` control parameter lets us manipulate the span within the body of the function
 // The `evt_props` control parameter lets us specify the type for properties on the resulting span event
-#[emit::info_span(guard: span, evt_props: WideEvent::begin(), "Running an example", i)]
-fn example(i: i32) {
+#[emit::span(guard: span, evt_props: WideEvent::begin(), ok_lvl: "info", "Running an example", i)]
+fn example(i: i32) -> io::Result<()> {
     // Your code goes here
 
-    check_i_is_big(i);
-    check_i_is_even(i);
+    check_i_is_big(i)?;
+    check_i_is_even(i)?;
+
+    Ok(())
 }
 
-fn check_i_is_big(i: i32) {
+fn check_i_is_big(i: i32) -> io::Result<()> {
     if i > 4 {
         WideEvent::set("is_big", true);
+
+        Err(io::Error::new(io::ErrorKind::Other, "value is too big"))
     } else {
         WideEvent::set("is_big", false);
+
+        Ok(())
     }
 }
 
-fn check_i_is_even(i: i32) {
+fn check_i_is_even(i: i32) -> io::Result<()> {
     if i % 2 == 0 {
         WideEvent::set("is_even", true);
+
+        Err(io::Error::new(io::ErrorKind::Other, "value is too even"))
     } else {
         WideEvent::set("is_even", false);
+
+        Ok(())
     }
 }
 
@@ -41,7 +51,7 @@ fn main() {
         .init();
 
     for i in 0..6 {
-        example(i);
+        let _ = example(i);
     }
 
     rt.blocking_flush(Duration::from_secs(5));
