@@ -2,12 +2,7 @@
 This example demonstrates one approach to using `emit` for wide events.
 
 Operations push their context into a single container which is emitted as a single large event at
-the end. In this example, that container is ambient, so operations don't need to be passed explicit
-context to participate. Some applications will already have established patterns for threading this
-kind of context around.
-
-The use of ambient context isn't what makes a "wide event", it's the pattern of collecting all context
-produced during the execution of an operation and emitting it all together at the end.
+the end. In this example, that container is ambient.
 */
 
 use std::time::Duration;
@@ -42,7 +37,7 @@ fn check_i_is_even(i: i32) {
 
 fn main() {
     let rt = emit::setup()
-        .emit_to(emit::emitter::from_fn(|evt| println!("{evt:?}")))
+        .emit_to(emit::emitter::from_fn(|evt| println!("{evt:#?}")))
         .init();
 
     for i in 0..6 {
