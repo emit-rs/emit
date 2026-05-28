@@ -3,7 +3,7 @@ use ::std::time::Duration;
 use emit::{Ctxt, Emitter, Kind, Props, Str};
 
 #[cfg(feature = "std")]
-use std::collections::BTreeMap;
+use ::std::collections::BTreeMap;
 
 #[cfg(feature = "std")]
 use futures::FutureExt;
