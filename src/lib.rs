@@ -58,11 +58,11 @@ Its macros can be grouped based on the kind of diagnostic signal they relate to.
 - [`macro@info_span`]: Trace the execution of a function at the info level.
 - [`macro@warn_span`]: Trace the execution of a function at the warning level.
 - [`macro@error_span`]: Trace the execution of a function at the error level.
-- [`macro@new_span`]: Create a span that can be started and completed manually.
-- [`macro@new_debug_span`]: Create a span at the debug level that can be started and completed manually.
-- [`macro@new_info_span`]: Create a span at the info level that can be started and completed manually.
-- [`macro@new_warn_span`]: Create a span at the warning level that can be started and completed manually.
-- [`macro@new_error_span`]: Create a span at the error level that can be started and completed manually.
+- [`macro@span_guard`]: Create a span that can be started and completed manually.
+- [`macro@debug_span_guard`]: Create a span at the debug level that can be started and completed manually.
+- [`macro@info_span_guard`]: Create a span at the info level that can be started and completed manually.
+- [`macro@warn_span_guard`]: Create a span at the warning level that can be started and completed manually.
+- [`macro@error_span_guard`]: Create a span at the error level that can be started and completed manually.
 
 ### Metrics macros
 

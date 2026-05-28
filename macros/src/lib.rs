@@ -350,9 +350,9 @@ pub fn error_span(
 
 #[doc = "Create a span that can be started and completed manually."]
 #[doc = ""]
-#[doc = include_str!("./doc_new_span.md")]
+#[doc = include_str!("./doc_span_guard.md")]
 #[proc_macro]
-pub fn new_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn span_guard(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     span::expand_new_tokens(span::ExpandNewTokens {
         level: None,
         input: TokenStream::from(item),
@@ -362,9 +362,9 @@ pub fn new_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
 #[doc = "Create a span at the debug level that can be started and completed manually."]
 #[doc = ""]
-#[doc = include_str!("./doc_new_span.md")]
+#[doc = include_str!("./doc_span_guard.md")]
 #[proc_macro]
-pub fn new_debug_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn debug_span_guard(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     span::expand_new_tokens(span::ExpandNewTokens {
         level: Some(quote!(emit::Level::Debug)),
         input: TokenStream::from(item),
@@ -374,9 +374,9 @@ pub fn new_debug_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream 
 
 #[doc = "Create a span at the info level that can be started and completed manually."]
 #[doc = ""]
-#[doc = include_str!("./doc_new_span.md")]
+#[doc = include_str!("./doc_span_guard.md")]
 #[proc_macro]
-pub fn new_info_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn info_span_guard(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     span::expand_new_tokens(span::ExpandNewTokens {
         level: Some(quote!(emit::Level::Info)),
         input: TokenStream::from(item),
@@ -386,9 +386,9 @@ pub fn new_info_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
 #[doc = "Create a span at the warn level that can be started and completed manually."]
 #[doc = ""]
-#[doc = include_str!("./doc_new_span.md")]
+#[doc = include_str!("./doc_span_guard.md")]
 #[proc_macro]
-pub fn new_warn_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn warn_span_guard(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     span::expand_new_tokens(span::ExpandNewTokens {
         level: Some(quote!(emit::Level::Warn)),
         input: TokenStream::from(item),
@@ -398,9 +398,9 @@ pub fn new_warn_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
 #[doc = "Create a span at the error level that can be started and completed manually."]
 #[doc = ""]
-#[doc = include_str!("./doc_new_span.md")]
+#[doc = include_str!("./doc_span_guard.md")]
 #[proc_macro]
-pub fn new_error_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn error_span_guard(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     span::expand_new_tokens(span::ExpandNewTokens {
         level: Some(quote!(emit::Level::Error)),
         input: TokenStream::from(item),
@@ -1061,4 +1061,59 @@ fn capture_as(
             }
         },
     })
+}
+
+#[doc(hidden)]
+#[deprecated(since = "1.19.0", note = "use `span_guard` instead")]
+#[proc_macro]
+pub fn new_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    span::expand_new_tokens(span::ExpandNewTokens {
+        level: None,
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
+}
+
+#[doc(hidden)]
+#[deprecated(since = "1.19.0", note = "use `debug_span_guard` instead")]
+#[proc_macro]
+pub fn new_debug_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    span::expand_new_tokens(span::ExpandNewTokens {
+        level: Some(quote!(emit::Level::Debug)),
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
+}
+
+#[doc(hidden)]
+#[deprecated(since = "1.19.0", note = "use `info_span_guard` instead")]
+#[proc_macro]
+pub fn new_info_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    span::expand_new_tokens(span::ExpandNewTokens {
+        level: Some(quote!(emit::Level::Info)),
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
+}
+
+#[doc(hidden)]
+#[deprecated(since = "1.19.0", note = "use `warn_span_guard` instead")]
+#[proc_macro]
+pub fn new_warn_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    span::expand_new_tokens(span::ExpandNewTokens {
+        level: Some(quote!(emit::Level::Warn)),
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
+}
+
+#[doc(hidden)]
+#[deprecated(since = "1.19.0", note = "use `error_span_guard` instead")]
+#[proc_macro]
+pub fn new_error_span(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    span::expand_new_tokens(span::ExpandNewTokens {
+        level: Some(quote!(emit::Level::Error)),
+        input: TokenStream::from(item),
+    })
+    .unwrap_or_compile_error()
 }

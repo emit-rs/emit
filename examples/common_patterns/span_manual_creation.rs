@@ -9,7 +9,7 @@ This example differs from `span_manual_full` in still using the same `SpanGuard`
 use std::time::Duration;
 
 fn example(i: i32) {
-    let (mut span, frame) = emit::new_span!("example");
+    let (mut span, frame) = emit::span_guard!("example");
 
     // Execute our code within the context of the frame
     // If this function was async, then you would use `frame.in_future(..).await`

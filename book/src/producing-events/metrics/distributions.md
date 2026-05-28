@@ -88,7 +88,7 @@ emit::count_sample!(
         dist_max: 29046,
         dist_exp_scale: 2,
         // Buckets have a complex type so need to be captured with
-        // either `serde` or `sval`
+        // either `serde`, `sval`, or as a `BucketSet`
         #[emit::as_sval]
         dist_exp_buckets: [
             (99.07220457217667, 7),

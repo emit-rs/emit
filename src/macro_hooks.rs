@@ -1,6 +1,10 @@
 #![allow(missing_docs)]
 
-use core::{any::Any, fmt, ops::ControlFlow};
+use core::{
+    any::Any,
+    fmt,
+    ops::{ControlFlow, Deref, DerefMut},
+};
 
 use emit_core::event::Event;
 use emit_core::{
@@ -1272,3 +1276,43 @@ impl_private_tuple_macro_props!(
     (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5 6 P6 7 P7 8 P8 9 P9 10 P10 11 P11 12 P12 13 P13 14 P14),
     (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5 6 P6 7 P7 8 P8 9 P9 10 P10 11 P11 12 P12 13 P13 14 P14 15 P15),
 );
+
+pub struct __PrivateSpanEventMacroProps<P, T>(P, T);
+
+impl<P, T> __PrivateSpanEventMacroProps<P, T> {
+    pub fn new(user_props: P, macro_props: T) -> Self {
+        __PrivateSpanEventMacroProps(user_props, macro_props)
+    }
+}
+
+impl<P, T> Deref for __PrivateSpanEventMacroProps<P, T> {
+    type Target = P;
+
+    fn deref(&self) -> &P {
+        &self.0
+    }
+}
+
+impl<P, T> DerefMut for __PrivateSpanEventMacroProps<P, T> {
+    fn deref_mut(&mut self) -> &mut P {
+        &mut self.0
+    }
+}
+
+impl<P: Props, T: Props> Props for __PrivateSpanEventMacroProps<P, T> {
+    fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
+        &'kv self,
+        mut for_each: F,
+    ) -> ControlFlow<()> {
+        self.0.for_each(&mut for_each)?;
+        self.1.for_each(&mut for_each)?;
+
+        ControlFlow::Continue(())
+    }
+
+    fn get<'v, K: ToStr>(&'v self, key: K) -> Option<Value<'v>> {
+        let key = key.to_str();
+
+        self.0.get(key.by_ref()).or_else(|| self.1.get(key))
+    }
+}

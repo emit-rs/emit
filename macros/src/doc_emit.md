@@ -46,14 +46,14 @@ where
 
 This macro accepts the following optional control parameters:
 
-| name      | type                          | description                                                                                                                                                                                    |
-| --------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `rt`      | `impl emit::runtime::Runtime` | The runtime to emit the event through.                                                                                                                                                         |
-| `mdl`     | `impl Into<emit::Path>`       | The module the event belongs to. If unspecified the current module path is used.                                                                                                               |
-| `extent`  | `impl emit::ToExtent`         | The extent to use on the event. If it resolves to `None` then the clock on the runtime will be used to assign a point extent.                                                                  |
-| `props`   | `impl emit::Props`            | A base set of properties to add to the event.                                                                                                                                                  |
-| `evt`     | `impl emit::event::ToEvent`   | A base event to emit. Any properties captured by the macro will be appended to the base event. If this control parameter is specified then `mdl`, `props`, and `extent` cannot also be set. |
-| `when`    | `impl emit::Filter`           | A filter to use instead of the one configured on the runtime.                                                                                                                                  |
+| name     | type                          | description                                                                                                                                                                                 |
+|----------|-------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `rt`     | `impl emit::runtime::Runtime` | The runtime to emit the event through.                                                                                                                                                      |
+| `mdl`    | `impl Into<emit::Path>`       | The module the event belongs to. If unspecified the current module path is used.                                                                                                            |
+| `extent` | `impl emit::ToExtent`         | The extent to use on the event. If it resolves to `None` then the clock on the runtime will be used to assign a point extent.                                                               |
+| `props`  | `impl emit::Props`            | A base set of properties to add to the event.                                                                                                                                               |
+| `evt`    | `impl emit::event::ToEvent`   | A base event to emit. Any properties captured by the macro will be appended to the base event. If this control parameter is specified then `mdl`, `props`, and `extent` cannot also be set. |
+| `when`   | `impl emit::Filter`           | A filter to use instead of the one configured on the runtime.                                                                                                                               |
 
 # Template literals
 

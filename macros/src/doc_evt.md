@@ -43,7 +43,7 @@ where
 This macro accepts the following optional control parameters:
 
 | name     | type                    | description                                                                      |
-| -------- | ----------------------- | -------------------------------------------------------------------------------- |
+|----------|-------------------------|----------------------------------------------------------------------------------|
 | `mdl`    | `impl Into<emit::Path>` | The module the event belongs to. If unspecified the current module path is used. |
 | `props`  | `impl emit::Props`      | A base set of properties to add to the event.                                    |
 | `extent` | `impl emit::ToExtent`   | The extent to use on the event.                                                  |

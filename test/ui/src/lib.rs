@@ -19,10 +19,10 @@ mod util;
 mod emit;
 mod event;
 mod metric;
-mod new_span;
 mod props;
 mod sample;
 mod span;
+mod span_guard;
 mod tpl;
 
 #[cfg(feature = "std")]

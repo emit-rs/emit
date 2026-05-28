@@ -6,7 +6,7 @@ Also see [the guide](https://emit-rs.io/producing-events/tracing/manual-span-cre
 
 ## Creating spans
 
-Note that [`macro@new_debug_span`], [`macro@new_info_span`], [`macro@new_warn_span`], and [`macro@new_error_span`] use the same syntax.
+Note that [`macro@debug_span_guard`], [`macro@info_span_guard`], [`macro@warn_span_guard`], and [`macro@error_span_guard`] use the same syntax.
 
 Creating a span with captured properties in the template:
 
@@ -14,7 +14,7 @@ Creating a span with captured properties in the template:
 let x = 42;
 let y = true;
 
-let (span, guard) = emit::new_span!("got {x} and {y}");
+let (span, guard) = emit::span_guard!("got {x} and {y}");
 ```
 
 Creating a span with captured properties after the template:
@@ -23,13 +23,13 @@ Creating a span with captured properties after the template:
 let x = 42;
 let y = true;
 
-let (span, guard) = emit::new_span!("something of note", x, y);
+let (span, guard) = emit::span_guard!("something of note", x, y);
 ```
 
 Specifying control parameters before the template (in this example, `mdl`):
 
 ```ignore
-let (span, guard) = emit::new_span!(mdl: emit::path!("a::b"), "something of note");
+let (span, guard) = emit::span_guard!(mdl: emit::path!("a::b"), "something of note");
 ```
 
 ## Entering the created span
@@ -37,7 +37,7 @@ let (span, guard) = emit::new_span!(mdl: emit::path!("a::b"), "something of note
 Once a span is created, a block of code can be executed within it:
 
 ```ignore
-let (mut span, guard) = emit::new_span!("manual span");
+let (mut span, guard) = emit::span_guard!("manual span");
 
 guard.call(move || {
     span.start();
@@ -64,12 +64,13 @@ where
 
 This macro accepts the following optional control parameters:
 
-| name        | type                          | description                                                                                                                                                    |
-| ----------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `rt`        | `impl emit::runtime::Runtime` | The runtime to emit the event through.                                                                                                                         |
-| `mdl`       | `impl Into<emit::Path>`       | The module the event belongs to. If unspecified the current module path is used.                                                                               |
-| `when`      | `impl emit::Filter`           | A filter to use instead of the one configured on the runtime.                                                                                                  |
-| `panic_lvl` | `str` or `emit::Level`        | Detect whether the function panics and use the given level if it does.                                                                                         |
+| name        | type                          | description                                                                                                                                                                                                                                                    |
+|-------------|-------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `rt`        | `impl emit::runtime::Runtime` | The runtime to emit the event through.                                                                                                                                                                                                                         |
+| `mdl`       | `impl Into<emit::Path>`       | The module the event belongs to. If unspecified the current module path is used.                                                                                                                                                                               |
+| `when`      | `impl emit::Filter`           | A filter to use instead of the one configured on the runtime.                                                                                                                                                                                                  |
+| `evt_props` | `impl emit::Props`            | A set of properties to attach to the span guard that will appear on the emitted span event, but not pushed to the ambient context. The type that will appear on the `SpanGuard` is an anonymous wrapper that dereferences to the concrete type of `evt_props`. |
+| `panic_lvl` | `str` or `emit::Level`        | Detect whether the function panics and use the given level if it does.                                                                                                                                                                                         |
 
 # Template literals
 

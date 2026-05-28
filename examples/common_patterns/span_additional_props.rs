@@ -5,18 +5,16 @@ This example demonstrates how to attach additional properties to a span on compl
 use std::{collections::HashMap, time::Duration};
 
 // The `guard` control parameter lets us manipulate the span within the body of the function
-#[emit::span(guard: span, "Running an example", i)]
+// The `evt_props` control parameter lets us specify the type for properties on the resulting span event
+#[emit::span(guard: span, evt_props: HashMap::new(), "Running an example", i)]
 fn example(i: i32) {
-    // This example uses a `HashMap` to store additional properties to include
-    let mut span = span.push_props(HashMap::new());
-
     // Your code goes here
 
     if i > 4 {
-        // The result of `push_props` is `And<HashMap, P>`, so we
-        // can access our additional props collection with `And::left_mut()`
-        span.props_mut()
-            .map(|props| props.left_mut().insert("is_big", true));
+        // Add a property to our additional collection
+        //
+        // `props_mut` returns `None` if the span guard is disabled (filtering rejected it).
+        span.props_mut().map(|props| props.insert("is_big", true));
     }
 }
 
