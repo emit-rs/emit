@@ -453,6 +453,7 @@ async fn async_span_fn_name() {
 }
 
 #[test]
+#[cfg(feature = "std")]
 fn span_evt_props() {
     static RT: StaticRuntime = static_runtime(
         |evt| {
@@ -548,6 +549,7 @@ async fn async_span_all() {
 }
 
 #[tokio::test]
+#[cfg(feature = "std")]
 async fn async_span_evt_props() {
     static RT: StaticRuntime = static_runtime(
         |evt| {
@@ -573,6 +575,7 @@ async fn async_span_evt_props() {
 }
 
 #[test]
+#[cfg(feature = "std")]
 fn span_evt_props_fn_name() {
     static RT: StaticRuntime = static_runtime(
         |evt| {
