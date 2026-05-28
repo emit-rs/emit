@@ -106,16 +106,6 @@ impl Parse for Args {
             ],
         )?;
 
-        if let Some(guard) = guard.peek() {
-            if ok_lvl.peek().is_some()
-                || err_lvl.peek().is_some()
-                || err.peek().is_some()
-                || catch_unwind.peek().is_some()
-            {
-                return Err(syn::Error::new(guard.span(), "the `guard` control parameter is incompatible with `catch_unwind`, `ok_lvl`, `err_lvl`, `panic_lvl`, or `err`"));
-            }
-        }
-
         Ok(Args {
             rt: rt.take_or_default(),
             mdl: mdl.take_or_default(),
@@ -146,9 +136,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
 
     let mut macro_evt_props = Props::new();
 
-    let span_guard = args
-        .guard
-        .unwrap_or_else(|| Ident::new("__span", Span::call_site()));
+    let span_guard = args.guard;
 
     let default_lvl_tokens = opts.level;
     let panic_lvl_tokens = args.panic_lvl;
@@ -207,7 +195,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &macro_evt_props,
                 fn_name_tokens,
                 setup_tokens,
-                &span_guard,
+                span_guard,
                 quote!(#block),
                 default_lvl_tokens,
                 panic_lvl_tokens,
@@ -229,7 +217,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &macro_evt_props,
                 fn_name_tokens,
                 setup_tokens,
-                &span_guard,
+                span_guard,
                 quote!(#block),
                 default_lvl_tokens,
                 panic_lvl_tokens,
@@ -257,7 +245,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &macro_evt_props,
                 fn_name_tokens,
                 setup_tokens,
-                &span_guard,
+                span_guard,
                 quote!(#block),
                 default_lvl_tokens,
                 panic_lvl_tokens,
@@ -279,7 +267,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &macro_evt_props,
                 fn_name_tokens,
                 setup_tokens,
-                &span_guard,
+                span_guard,
                 quote!(#block),
                 default_lvl_tokens,
                 panic_lvl_tokens,
@@ -305,7 +293,7 @@ fn inject_sync(
     macro_evt_props: &Props,
     fn_name_tokens: Option<TokenStream>,
     setup_tokens: Option<TokenStream>,
-    span_guard: &Ident,
+    span_guard: Option<Ident>,
     body_tokens: TokenStream,
     default_lvl_tokens: Option<TokenStream>,
     panic_lvl_tokens: Option<TokenStream>,
@@ -316,6 +304,18 @@ fn inject_sync(
 ) -> Result<TokenStream, syn::Error> {
     let template_tokens = template.template_tokens();
     let span_name_tokens = template.template_literal_tokens();
+
+    let SpanGuardBinding {
+        span_guard_binding_tokens,
+        span_guard_initial_ident,
+        span_guard_completion_ident,
+    } = span_guard_binding(
+        span_guard,
+        &ok_lvl_tokens,
+        &err_lvl_tokens,
+        &err_tokens,
+        catch_unwind,
+    );
 
     let body_tokens = if catch_unwind {
         quote!(emit::__private::__private_catch_unwind(move || { #body_tokens }))
@@ -346,7 +346,7 @@ fn inject_sync(
             body_tokens,
             rt_tokens,
             &template_tokens,
-            span_guard,
+            span_guard_completion_ident,
             default_lvl_tokens,
             panic_lvl_tokens,
             ok_lvl_tokens,
@@ -359,7 +359,7 @@ fn inject_sync(
             body_tokens,
             rt_tokens,
             &template_tokens,
-            span_guard,
+            span_guard_completion_ident,
             default_lvl_tokens,
             panic_lvl_tokens,
             catch_unwind,
@@ -384,13 +384,11 @@ fn inject_sync(
         #fn_name_tokens
         #setup_tokens
 
-        let (mut __span_guard, __ctxt) = #span_guard_tokens;
+        let (mut #span_guard_initial_ident, __ctxt) = #span_guard_tokens;
 
         __ctxt.call(move || {
-            __span_guard.start();
-
-            #[allow(unused_mut)]
-            let mut #span_guard = __span_guard;
+            #span_guard_initial_ident.start();
+            #span_guard_binding_tokens
 
             #body_tokens
         })
@@ -407,7 +405,7 @@ fn inject_async(
     macro_evt_props: &Props,
     fn_name_tokens: Option<TokenStream>,
     setup_tokens: Option<TokenStream>,
-    span_guard: &Ident,
+    span_guard: Option<Ident>,
     body_tokens: TokenStream,
     default_lvl_tokens: Option<TokenStream>,
     panic_lvl_tokens: Option<TokenStream>,
@@ -418,6 +416,18 @@ fn inject_async(
 ) -> Result<TokenStream, syn::Error> {
     let template_tokens = template.template_tokens();
     let span_name_tokens = template.template_literal_tokens();
+
+    let SpanGuardBinding {
+        span_guard_binding_tokens,
+        span_guard_initial_ident,
+        span_guard_completion_ident,
+    } = span_guard_binding(
+        span_guard,
+        &ok_lvl_tokens,
+        &err_lvl_tokens,
+        &err_tokens,
+        catch_unwind,
+    );
 
     let body_tokens = if catch_unwind {
         quote!(emit::__private::__private_catch_unwind_async(async move {
@@ -448,7 +458,7 @@ fn inject_async(
             body_tokens,
             rt_tokens,
             &template_tokens,
-            span_guard,
+            span_guard_completion_ident,
             default_lvl_tokens,
             panic_lvl_tokens,
             ok_lvl_tokens,
@@ -461,7 +471,7 @@ fn inject_async(
             body_tokens,
             rt_tokens,
             &template_tokens,
-            span_guard,
+            span_guard_completion_ident,
             default_lvl_tokens,
             panic_lvl_tokens,
             catch_unwind,
@@ -486,13 +496,11 @@ fn inject_async(
         #fn_name_tokens
         #setup_tokens
 
-        let (mut __span_guard, __ctxt) = #span_guard_tokens;
+        let (mut #span_guard_initial_ident, __ctxt) = #span_guard_tokens;
 
         __ctxt.in_future(async move {
-            __span_guard.start();
-
-            #[allow(unused_mut)]
-            let mut #span_guard = __span_guard;
+            #span_guard_initial_ident.start();
+            #span_guard_binding_tokens
 
             #body_tokens
         }).await
@@ -535,30 +543,82 @@ fn span_guard_tokens(
     }))
 }
 
+struct SpanGuardBinding {
+    span_guard_binding_tokens: TokenStream,
+    span_guard_initial_ident: Ident,
+    span_guard_completion_ident: Ident,
+}
+
+fn span_guard_binding(
+    user_span_guard: Option<Ident>,
+    ok_lvl_tokens: &Option<TokenStream>,
+    err_lvl_tokens: &Option<TokenStream>,
+    err_tokens: &Option<TokenStream>,
+    catch_unwind: bool,
+) -> SpanGuardBinding {
+    let initial_span_guard = Ident::new("__span_guard", Span::call_site());
+
+    let bind_by_ref =
+        catch_unwind || use_result_completion(ok_lvl_tokens, err_lvl_tokens, err_tokens);
+
+    if bind_by_ref {
+        if let Some(user_span_guard) = user_span_guard {
+            SpanGuardBinding {
+                span_guard_binding_tokens: quote!(let mut #user_span_guard = &mut #initial_span_guard;),
+                span_guard_initial_ident: initial_span_guard.clone(),
+                span_guard_completion_ident: initial_span_guard,
+            }
+        } else {
+            SpanGuardBinding {
+                span_guard_binding_tokens: Default::default(),
+                span_guard_initial_ident: initial_span_guard.clone(),
+                span_guard_completion_ident: initial_span_guard,
+            }
+        }
+    } else {
+        if let Some(user_span_guard) = user_span_guard {
+            SpanGuardBinding {
+                span_guard_binding_tokens: quote!(let mut #user_span_guard = #initial_span_guard;),
+                span_guard_initial_ident: initial_span_guard,
+                span_guard_completion_ident: user_span_guard,
+            }
+        } else {
+            SpanGuardBinding {
+                span_guard_binding_tokens: Default::default(),
+                span_guard_initial_ident: initial_span_guard.clone(),
+                span_guard_completion_ident: initial_span_guard,
+            }
+        }
+    }
+}
+
 struct FnName {
-    ident: Ident,
-    value: String,
+    fn_name_ident: Ident,
+    fn_name_value: String,
 }
 
 impl FnName {
     fn binding_tokens(&self) -> TokenStream {
-        let binding = &self.ident;
-        let name = &self.value;
+        let FnName {
+            fn_name_ident,
+            fn_name_value,
+        } = self;
 
-        quote!(let #binding = #name;)
+        quote!(let #fn_name_ident = #fn_name_value;)
     }
 
     fn to_prop(&self) -> FieldValue {
-        let ident = &self.ident;
-        let span = self.ident.span();
+        let FnName { fn_name_ident, .. } = self;
+
+        let span = fn_name_ident.span();
 
         FieldValue {
             attrs: vec![],
             // Bind as `x: x` instead of `x: "name"` so `x` doesn't trigger
             // unused warnings. The binding is assigned within the body of the span
-            member: Member::Named(self.ident.clone()),
+            member: Member::Named(fn_name_ident.clone()),
             colon_token: Some(Token![:](span)),
-            expr: parse_quote_spanned!(span=> #ident),
+            expr: parse_quote_spanned!(span=> #fn_name_ident),
         }
     }
 }
@@ -566,8 +626,8 @@ impl FnName {
 fn fn_name(binding: Option<&Ident>, name: Option<&Ident>) -> Result<Option<FnName>, syn::Error> {
     match (binding, name) {
         (Some(binding), Some(name)) => Ok(Some(FnName {
-            ident: binding.clone(),
-            value: name.to_string(),
+            fn_name_ident: binding.clone(),
+            fn_name_value: name.to_string(),
         })),
         (None, _) => Ok(None),
         (Some(binding), None) => Err(syn::Error::new(
@@ -595,7 +655,7 @@ fn result_completion(
     body_tokens: TokenStream,
     rt_tokens: &TokenStream,
     template_tokens: &TokenStream,
-    span_guard: &Ident,
+    span_guard: Ident,
     default_lvl_tokens: Option<TokenStream>,
     panic_lvl_tokens: Option<TokenStream>,
     ok_lvl_tokens: Option<TokenStream>,
@@ -694,7 +754,7 @@ fn completion(
     body_tokens: TokenStream,
     rt_tokens: &TokenStream,
     template_tokens: &TokenStream,
-    span_guard: &Ident,
+    span_guard: Ident,
     default_lvl_tokens: Option<TokenStream>,
     panic_lvl_tokens: Option<TokenStream>,
     catch_unwind: bool,

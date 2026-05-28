@@ -475,6 +475,78 @@ fn span_evt_props() {
     RT.emitter().blocking_flush(Duration::from_secs(1));
 }
 
+#[test]
+#[cfg(feature = "std")]
+fn span_all() {
+    use ::std::io;
+
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!(42, evt.props().pull::<i32, _>("a").unwrap());
+        },
+        |evt| {
+            assert!(evt.props().get("a").is_none());
+
+            true
+        },
+    );
+
+    #[emit::span(
+        rt: RT,
+        guard: span,
+        evt_props: BTreeMap::new(),
+        ok_lvl: emit::Level::Info,
+        catch_unwind: true,
+        "test",
+    )]
+    fn exec() -> ::std::result::Result<(), io::Error> {
+        span.props_mut().and_then(|props| props.insert("a", 42));
+
+        ::std::result::Result::Ok(())
+    }
+
+    let _ = exec();
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+}
+
+#[tokio::test]
+#[cfg(feature = "std")]
+async fn async_span_all() {
+    use ::std::io;
+
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!(42, evt.props().pull::<i32, _>("a").unwrap());
+        },
+        |evt| {
+            assert!(evt.props().get("a").is_none());
+
+            true
+        },
+    );
+
+    #[emit::span(
+        rt: RT,
+        guard: span,
+        evt_props: BTreeMap::new(),
+        ok_lvl: emit::Level::Info,
+        catch_unwind: true,
+        "test",
+    )]
+    async fn exec() -> ::std::result::Result<(), io::Error> {
+        span.props_mut().and_then(|props| props.insert("a", 42));
+
+        tokio::time::sleep(Default::default()).await;
+
+        ::std::result::Result::Ok(())
+    }
+
+    let _ = exec().await;
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+}
+
 #[tokio::test]
 async fn async_span_evt_props() {
     static RT: StaticRuntime = static_runtime(
