@@ -200,6 +200,7 @@ pub use self::{
     value::Value,
 };
 
+mod buf;
 mod macro_hooks;
 
 #[cfg(feature = "std")]

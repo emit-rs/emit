@@ -40,11 +40,13 @@ use core::{
 };
 
 pub use self::completion::Completion;
+#[cfg(feature = "alloc")]
+pub use self::alloc_support::SpanLinkSet;
 
 /**
 A [W3C Trace Id](https://www.w3.org/TR/trace-context/#trace-id).
 */
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TraceId(NonZeroU128);
 
 impl fmt::Debug for TraceId {
@@ -201,16 +203,16 @@ impl TraceId {
     If `hex` is not exactly 32 valid hex characters (`[a-fA-F0-9]`) then this method will fail.
     */
     pub fn try_from_hex(hex: impl fmt::Display) -> Result<Self, ParseIdError> {
-        let mut buf = Buffer::<32>::new();
+        let mut buf = crate::buf::Buffer::<32>::new();
 
-        Self::try_from_hex_slice(buf.buffer(hex)?)
+        Self::try_from_hex_slice(buf.buffer(hex).map_err(|_| ParseIdError {})?)
     }
 }
 
 /**
 A [W3C Span Id](https://www.w3.org/TR/trace-context/#parent-id).
 */
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SpanId(NonZeroU64);
 
 impl fmt::Debug for SpanId {
@@ -367,9 +369,9 @@ impl SpanId {
     If `hex` is not exactly 16 valid hex characters (`[a-fA-F0-9]`) then this method will fail.
     */
     pub fn try_from_hex(hex: impl fmt::Display) -> Result<Self, ParseIdError> {
-        let mut buf = Buffer::<16>::new();
+        let mut buf = crate::buf::Buffer::<16>::new();
 
-        Self::try_from_hex_slice(buf.buffer(hex)?)
+        Self::try_from_hex_slice(buf.buffer(hex).map_err(|_| ParseIdError {})?)
     }
 }
 
@@ -432,46 +434,6 @@ impl fmt::Display for ParseIdError {
 
 #[cfg(feature = "std")]
 impl std::error::Error for ParseIdError {}
-
-struct Buffer<const N: usize> {
-    value: [u8; N],
-    idx: usize,
-}
-
-impl<const N: usize> Buffer<N> {
-    fn new() -> Self {
-        Buffer {
-            value: [0; N],
-            idx: 0,
-        }
-    }
-
-    fn buffer(&mut self, value: impl fmt::Display) -> Result<&[u8], ParseIdError> {
-        use fmt::Write as _;
-
-        self.idx = 0;
-
-        write!(self, "{}", value).map_err(|_| ParseIdError {})?;
-
-        Ok(&self.value[..self.idx])
-    }
-}
-
-impl<const N: usize> fmt::Write for Buffer<N> {
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        let s = s.as_bytes();
-        let next_idx = self.idx + s.len();
-
-        if next_idx <= self.value.len() {
-            self.value[self.idx..next_idx].copy_from_slice(s);
-            self.idx = next_idx;
-
-            Ok(())
-        } else {
-            Err(fmt::Error)
-        }
-    }
-}
 
 /**
 A diagnostic event that represents a span in a distributed trace.
@@ -999,7 +961,7 @@ Links relate spans outside of the normal parent-child hierarchy.
 Links are largely informative and may not be understood by downstream consumers.
 In order to create a generic DAG out of span links, the spans would need to belong to separate traces, since the parent-child relationship is still required.
 */
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SpanLink {
     trace_id: TraceId,
     span_id: SpanId,
@@ -1039,7 +1001,7 @@ impl SpanLink {
     Try parse a span link from a formatted representation.
     */
     pub fn parse(s: impl fmt::Display) -> Result<Self, ParseLinkError> {
-        let mut buf = Buffer::<49>::new();
+        let mut buf = crate::buf::Buffer::<49>::new();
 
         Self::try_from_slice(buf.buffer(s).map_err(|_| ParseLinkError {})?)
     }
@@ -1128,6 +1090,1037 @@ impl fmt::Display for ParseLinkError {
 
 #[cfg(feature = "std")]
 impl std::error::Error for ParseLinkError {}
+
+#[cfg(feature = "alloc")]
+mod alloc_support {
+    use super::*;
+
+    use alloc::collections::{btree_set, BTreeSet};
+    use alloc::string::String;
+    use core::fmt::Write;
+    use core::str::FromStr;
+
+    use emit_core::value::{FromValue, ToValue, Value};
+
+    /**
+    An error encountered attempting to parse a [`SpanLinkSet`].
+    */
+    #[derive(Debug)]
+    pub struct ParseSpanLinkSetError {}
+
+    impl fmt::Display for ParseSpanLinkSetError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "the input was not a valid span link set")
+        }
+    }
+
+    #[cfg(feature = "std")]
+    impl std::error::Error for ParseSpanLinkSetError {}
+
+    /**
+    A collection of [`SpanLink`]s.
+
+    The set stores sorted, deduplicated span links. Links can be parsed from strings
+    in the format `[$link,...]`, `{$link,...}`, or `($link,...)` where each `$link`
+    is a valid [`SpanLink`] string (`traceid-spanid`).
+    */
+    #[derive(Clone, PartialEq, Eq)]
+    pub struct SpanLinkSet {
+        links: BTreeSet<SpanLink>,
+    }
+
+    impl fmt::Debug for SpanLinkSet {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            fmt::Display::fmt(self, f)
+        }
+    }
+
+    impl fmt::Display for SpanLinkSet {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            f.write_char('[')?;
+
+            let mut first = true;
+            for link in &self.links {
+                if !first {
+                    f.write_char(',')?;
+                }
+                first = false;
+
+                fmt::Display::fmt(link, f)?;
+            }
+
+            f.write_char(']')
+        }
+    }
+
+    impl SpanLinkSet {
+        /**
+        Create a new empty `SpanLinkSet`.
+
+        This method does not allocate.
+        */
+        pub const fn new() -> Self {
+            SpanLinkSet {
+                links: BTreeSet::new(),
+            }
+        }
+
+        /**
+        Parse a `SpanLinkSet` from its raw textual representation.
+
+        The input must be enclosed in matching brackets (`[]`, `()`, or `{}`),
+        with comma-separated [`SpanLink`] strings inside.
+        */
+        pub fn try_from_str(s: &str) -> Result<Self, ParseSpanLinkSetError> {
+            let mut set = SpanLinkSet::new();
+
+            let s = s.trim();
+
+            if s.len() < 2 {
+                return Err(ParseSpanLinkSetError {});
+            }
+
+            // Must be enclosed by `[]`, `()`, or `{}`
+            let _container_end = match (&s[0..1], &s[s.len() - 1..]) {
+                ("[", "]") => ']',
+                ("(", ")") => ')',
+                ("{", "}") => '}',
+                _ => return Err(ParseSpanLinkSetError {}),
+            };
+            let inner = &s[1..s.len() - 1];
+
+            // Allow empty set: `[]`, `[  ]`
+            if inner.trim().is_empty() {
+                return Ok(set);
+            }
+
+            // Split by comma and parse each link
+            for part in inner.split(',') {
+                let part = part.trim();
+                if part.is_empty() {
+                    return Err(ParseSpanLinkSetError {});
+                }
+
+                // Strip surrounding quotes (from debug format)
+                let part = part.strip_prefix('"')
+                    .and_then(|s| s.strip_suffix('"'))
+                    .unwrap_or(part);
+
+                let link = SpanLink::try_from_str(part).map_err(|_| ParseSpanLinkSetError {})?;
+                set.links.insert(link);
+            }
+
+            Ok(set)
+        }
+
+        /**
+        Insert a [`SpanLink`] into the set.
+
+        Returns `true` if the link was not already present.
+        */
+        pub fn insert(&mut self, link: SpanLink) -> bool {
+            self.links.insert(link)
+        }
+
+        /**
+        Get the number of links in the set.
+        */
+        pub fn len(&self) -> usize {
+            self.links.len()
+        }
+
+        /**
+        Returns `true` if the set contains no links.
+        */
+        pub fn is_empty(&self) -> bool {
+            self.links.is_empty()
+        }
+
+        /**
+        Clear all links, allowing the allocation to be re-used.
+        */
+        pub fn clear(&mut self) {
+            self.links.clear();
+        }
+
+        /**
+        Returns `true` if the set contains the given link.
+        */
+        pub fn contains(&self, link: SpanLink) -> bool {
+            self.links.contains(&link)
+        }
+
+        /**
+        Get the first (smallest) link in the set.
+        */
+        pub fn first(&self) -> Option<SpanLink> {
+            self.links.first().copied()
+        }
+
+        /**
+        Get the last (largest) link in the set.
+        */
+        pub fn last(&self) -> Option<SpanLink> {
+            self.links.last().copied()
+        }
+
+        /**
+        Iterate over links in sorted order.
+        */
+        pub fn iter(&self) -> Iter<'_> {
+            Iter(self.links.iter())
+        }
+    }
+
+    impl Default for SpanLinkSet {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
+    impl<'a> IntoIterator for &'a SpanLinkSet {
+        type IntoIter = Iter<'a>;
+        type Item = SpanLink;
+
+        fn into_iter(self) -> Self::IntoIter {
+            self.iter()
+        }
+    }
+
+    /**
+    An iterator over sorted links from a [`SpanLinkSet`].
+
+    This is the result of calling [`SpanLinkSet::iter`].
+    */
+    pub struct Iter<'a>(btree_set::Iter<'a, SpanLink>);
+
+    impl<'a> Iterator for Iter<'a> {
+        type Item = SpanLink;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.0.next().copied()
+        }
+    }
+
+    #[cfg(feature = "sval")]
+    impl sval::Value for SpanLinkSet {
+        fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(
+            &'sval self,
+            stream: &mut S,
+        ) -> sval::Result {
+            stream.seq_begin(Some(self.links.len()))?;
+
+            for link in &self.links {
+                stream.value_computed(link)?;
+            }
+
+            stream.seq_end()
+        }
+    }
+
+    #[cfg(feature = "serde")]
+    impl serde::Serialize for SpanLinkSet {
+        fn serialize<S: serde::Serializer>(
+            &self,
+            serializer: S,
+        ) -> Result<S::Ok, S::Error> {
+            use serde::ser::SerializeSeq as _;
+
+            let mut seq = serializer.serialize_seq(Some(self.links.len()))?;
+
+            for link in &self.links {
+                seq.serialize_element(link)?;
+            }
+
+            seq.end()
+        }
+    }
+
+    impl FromStr for SpanLinkSet {
+        type Err = ParseSpanLinkSetError;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            Self::try_from_str(s)
+        }
+    }
+
+    impl ToValue for SpanLinkSet {
+        fn to_value(&self) -> Value<'_> {
+            #[cfg(feature = "sval")]
+            {
+                Value::capture_sval(self)
+            }
+            #[cfg(all(feature = "serde", not(feature = "sval")))]
+            {
+                Value::capture_serde(self)
+            }
+            #[cfg(all(not(feature = "serde"), not(feature = "sval")))]
+            {
+                Value::capture_display(self)
+            }
+        }
+    }
+
+    impl<'a> FromValue<'a> for SpanLinkSet {
+        fn from_value(v: Value<'a>) -> Option<Self> {
+            if let Some(link_set) = v.downcast_ref::<Self>() {
+                return Some(link_set.clone());
+            }
+
+            #[cfg(feature = "sval")]
+            {
+                if let Some(link_set) = from_sval(v.by_ref()) {
+                    return Some(link_set);
+                }
+            }
+
+            #[cfg(all(not(feature = "sval"), feature = "serde"))]
+            {
+                if let Some(link_set) = from_serde(v.by_ref()) {
+                    return Some(link_set);
+                }
+            }
+
+            v.parse()
+        }
+    }
+
+    #[cfg(any(feature = "sval", feature = "serde"))]
+    struct Extract {
+        depth: usize,
+        links: BTreeSet<SpanLink>,
+        text_buf: crate::buf::Buffer<49>,
+        full_text: String,
+    }
+
+    #[cfg(any(feature = "sval", feature = "serde"))]
+    impl Default for Extract {
+        fn default() -> Self {
+            Extract {
+                depth: 0,
+                links: BTreeSet::new(),
+                text_buf: crate::buf::Buffer::new(),
+                full_text: String::new(),
+            }
+        }
+    }
+
+    #[cfg(any(feature = "sval", feature = "serde"))]
+    #[derive(Debug)]
+    struct Incompatible;
+
+    #[cfg(any(feature = "sval", feature = "serde"))]
+    impl Extract {
+        fn push_link_fragment(&mut self, fragment: &str) -> Result<(), Incompatible> {
+            if self.depth == 0 {
+                self.full_text.push_str(fragment);
+                return Ok(());
+            }
+
+            if self.depth != 1 {
+                return Err(Incompatible);
+            }
+
+            if !self.text_buf.push_str(fragment) {
+                return Err(Incompatible);
+            }
+
+            Ok(())
+        }
+
+        fn push_link(&mut self) -> Result<(), Incompatible> {
+            if self.depth == 0 {
+                return Ok(());
+            }
+
+            if self.depth != 1 {
+                return Err(Incompatible);
+            }
+
+            let link_bytes = self.text_buf.as_bytes();
+            let link = SpanLink::try_from_slice(link_bytes)
+                .map_err(|_| Incompatible)?;
+            self.links.insert(link);
+            self.text_buf.reset();
+
+            Ok(())
+        }
+
+        fn down(&mut self) -> Result<(), Incompatible> {
+            self.depth += 1;
+
+            if self.depth > 1 {
+                Err(Incompatible)
+            } else {
+                Ok(())
+            }
+        }
+
+        fn up(&mut self) -> Result<(), Incompatible> {
+            self.depth -= 1;
+
+            Ok(())
+        }
+
+        fn end(self) -> Option<SpanLinkSet> {
+            if !self.links.is_empty() {
+                return Some(SpanLinkSet { links: self.links });
+            }
+
+            if !self.full_text.is_empty() {
+                return SpanLinkSet::try_from_str(&self.full_text).ok();
+            }
+
+            None
+        }
+    }
+
+    #[cfg(feature = "sval")]
+    fn from_sval(value: Value) -> Option<SpanLinkSet> {
+        #[allow(non_local_definitions)]
+        impl From<Incompatible> for sval::Error {
+            fn from(_: Incompatible) -> sval::Error {
+                sval::Error::new()
+            }
+        }
+
+        #[allow(non_local_definitions)]
+        impl<'sval> sval::Stream<'sval> for Extract {
+            fn null(&mut self) -> sval::Result {
+                sval::error()
+            }
+
+            fn bool(&mut self, _: bool) -> sval::Result {
+                sval::error()
+            }
+
+            fn text_begin(&mut self, _: Option<usize>) -> sval::Result {
+                Ok(())
+            }
+
+            fn text_fragment_computed(&mut self, fragment: &str) -> sval::Result {
+                self.push_link_fragment(fragment).map_err(Into::into)
+            }
+
+            fn text_end(&mut self) -> sval::Result {
+                Ok(self.push_link()?)
+            }
+
+            fn i64(&mut self, _: i64) -> sval::Result {
+                sval::error()
+            }
+
+            fn u64(&mut self, _: u64) -> sval::Result {
+                sval::error()
+            }
+
+            fn i128(&mut self, _: i128) -> sval::Result {
+                sval::error()
+            }
+
+            fn u128(&mut self, _: u128) -> sval::Result {
+                sval::error()
+            }
+
+            fn f64(&mut self, _: f64) -> sval::Result {
+                sval::error()
+            }
+
+            fn seq_begin(&mut self, _: Option<usize>) -> sval::Result {
+                Ok(self.down()?)
+            }
+
+            fn seq_value_begin(&mut self) -> sval::Result {
+                Ok(())
+            }
+
+            fn seq_value_end(&mut self) -> sval::Result {
+                Ok(())
+            }
+
+            fn seq_end(&mut self) -> sval::Result {
+                Ok(self.up()?)
+            }
+        }
+
+        let mut extract = Extract::default();
+        sval::stream(&mut extract, &value).ok()?;
+        extract.end()
+    }
+
+    #[cfg(all(not(feature = "sval"), feature = "serde"))]
+    fn from_serde(value: Value) -> Option<SpanLinkSet> {
+        use serde::Serialize as _;
+
+        #[allow(non_local_definitions)]
+        impl fmt::Display for Incompatible {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("incompatible")
+            }
+        }
+
+        #[allow(non_local_definitions)]
+        impl serde::ser::StdError for Incompatible {}
+
+        #[allow(non_local_definitions)]
+        impl serde::ser::Error for Incompatible {
+            fn custom<T>(_: T) -> Self
+            where
+                T: fmt::Display,
+            {
+                Incompatible
+            }
+        }
+
+        #[allow(non_local_definitions)]
+        impl<'a> serde::Serializer for &'a mut Extract {
+            type Ok = ();
+            type Error = Incompatible;
+            type SerializeSeq = Self;
+            type SerializeTuple = Self;
+            type SerializeTupleStruct = Self;
+            type SerializeTupleVariant = Self;
+            type SerializeMap = Self;
+            type SerializeStruct = Self;
+            type SerializeStructVariant = Self;
+
+            fn serialize_bool(self, _: bool) -> Result<Self::Ok, Self::Error> {
+                Err(Incompatible)
+            }
+
+            fn serialize_i8(self, _: i8) -> Result<Self::Ok, Self::Error> {
+                Err(Incompatible)
+            }
+
+            fn serialize_i16(self, _: i16) -> Result<Self::Ok, Self::Error> {
+                Err(Incompatible)
+            }
+
+            fn serialize_i32(self, _: i32) -> Result<Self::Ok, Self::Error> {
+                Err(Incompatible)
+            }
+
+            fn serialize_i64(self, _: i64) -> Result<Self::Ok, Self::Error> {
+                Err(Incompatible)
+            }
+
+            fn serialize_u8(self, _: u8) -> Result<Self::Ok, Self::Error> {
+                Err(Incompatible)
+            }
+
+            fn serialize_u16(self, _: u16) -> Result<Self::Ok, Self::Error> {
+                Err(Incompatible)
+            }
+
+            fn serialize_u32(self, _: u32) -> Result<Self::Ok, Self::Error> {
+                Err(Incompatible)
+            }
+
+            fn serialize_u64(self, _: u64) -> Result<Self::Ok, Self::Error> {
+                Err(Incompatible)
+            }
+
+            fn serialize_u128(self, _: u128) -> Result<Self::Ok, Self::Error> {
+                Err(Incompatible)
+            }
+
+            fn serialize_i128(self, _: i128) -> Result<Self::Ok, Self::Error> {
+                Err(Incompatible)
+            }
+
+            fn serialize_f32(self, _: f32) -> Result<Self::Ok, Self::Error> {
+                Err(Incompatible)
+            }
+
+            fn serialize_f64(self, _: f64) -> Result<Self::Ok, Self::Error> {
+                Err(Incompatible)
+            }
+
+            fn serialize_char(self, _: char) -> Result<Self::Ok, Self::Error> {
+                Err(Incompatible)
+            }
+
+            fn serialize_str(self, value: &str) -> Result<Self::Ok, Self::Error> {
+                if self.depth == 1 {
+                    self.text_buf.reset();
+                    self.push_link_fragment(value)?;
+                    self.push_link()
+                } else {
+                    Err(Incompatible)
+                }
+            }
+
+            fn serialize_bytes(self, _: &[u8]) -> Result<Self::Ok, Self::Error> {
+                Err(Incompatible)
+            }
+
+            fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
+                Err(Incompatible)
+            }
+
+            fn serialize_some<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
+            where
+                T: ?Sized + serde::Serialize,
+            {
+                value.serialize(self)
+            }
+
+            fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
+                Err(Incompatible)
+            }
+
+            fn serialize_unit_struct(
+                self,
+                name: &'static str,
+            ) -> Result<Self::Ok, Self::Error> {
+                name.serialize(self)
+            }
+
+            fn serialize_newtype_struct<T>(
+                self,
+                _: &'static str,
+                value: &T,
+            ) -> Result<Self::Ok, Self::Error>
+            where
+                T: ?Sized + serde::Serialize,
+            {
+                value.serialize(self)
+            }
+
+            fn serialize_newtype_variant<T>(
+                self,
+                _: &'static str,
+                _: u32,
+                _: &'static str,
+                value: &T,
+            ) -> Result<Self::Ok, Self::Error>
+            where
+                T: ?Sized + serde::Serialize,
+            {
+                value.serialize(self)
+            }
+
+            fn serialize_seq(
+                self,
+                _: Option<usize>,
+            ) -> Result<Self::SerializeSeq, Self::Error> {
+                self.down()?;
+                Ok(self)
+            }
+
+            fn serialize_tuple(
+                self,
+                _: usize,
+            ) -> Result<Self::SerializeTuple, Self::Error> {
+                self.down()?;
+                Ok(self)
+            }
+
+            fn serialize_tuple_struct(
+                self,
+                _: &'static str,
+                _: usize,
+            ) -> Result<Self::SerializeTupleStruct, Self::Error> {
+                self.down()?;
+                Ok(self)
+            }
+
+            fn serialize_tuple_variant(
+                self,
+                _: &'static str,
+                _: u32,
+                _: &'static str,
+                _: usize,
+            ) -> Result<Self::SerializeTupleVariant, Self::Error> {
+                self.down()?;
+                Ok(self)
+            }
+
+            fn serialize_map(
+                self,
+                _: Option<usize>,
+            ) -> Result<Self::SerializeMap, Self::Error> {
+                self.down()?;
+                Ok(self)
+            }
+
+            fn serialize_struct(
+                self,
+                _: &'static str,
+                _: usize,
+            ) -> Result<Self::SerializeStruct, Self::Error> {
+                self.down()?;
+                Ok(self)
+            }
+
+            fn serialize_struct_variant(
+                self,
+                _: &'static str,
+                _: u32,
+                _: &'static str,
+                _: usize,
+            ) -> Result<Self::SerializeStructVariant, Self::Error> {
+                self.down()?;
+                Ok(self)
+            }
+
+            fn serialize_unit_variant(
+                self,
+                _: &'static str,
+                _: u32,
+                variant: &'static str,
+            ) -> Result<Self::Ok, Self::Error> {
+                variant.serialize(self)
+            }
+        }
+
+        #[allow(non_local_definitions)]
+        impl<'a> serde::ser::SerializeSeq for &'a mut Extract {
+            type Ok = ();
+            type Error = Incompatible;
+
+            fn serialize_element<T>(&mut self, value: &T) -> Result<(), Self::Error>
+            where
+                T: ?Sized + serde::Serialize,
+            {
+                value.serialize(&mut **self)
+            }
+
+            fn end(self) -> Result<Self::Ok, Self::Error> {
+                self.up()?;
+                Ok(())
+            }
+        }
+
+        #[allow(non_local_definitions)]
+        impl<'a> serde::ser::SerializeTuple for &'a mut Extract {
+            type Ok = ();
+            type Error = Incompatible;
+
+            fn serialize_element<T>(&mut self, value: &T) -> Result<(), Self::Error>
+            where
+                T: ?Sized + serde::Serialize,
+            {
+                value.serialize(&mut **self)
+            }
+
+            fn end(self) -> Result<Self::Ok, Self::Error> {
+                self.up()?;
+                Ok(())
+            }
+        }
+
+        #[allow(non_local_definitions)]
+        impl<'a> serde::ser::SerializeTupleStruct for &'a mut Extract {
+            type Ok = ();
+            type Error = Incompatible;
+
+            fn serialize_field<T>(&mut self, value: &T) -> Result<(), Self::Error>
+            where
+                T: ?Sized + serde::Serialize,
+            {
+                value.serialize(&mut **self)
+            }
+
+            fn end(self) -> Result<Self::Ok, Self::Error> {
+                self.up()?;
+                Ok(())
+            }
+        }
+
+        #[allow(non_local_definitions)]
+        impl<'a> serde::ser::SerializeTupleVariant for &'a mut Extract {
+            type Ok = ();
+            type Error = Incompatible;
+
+            fn serialize_field<T>(&mut self, value: &T) -> Result<(), Self::Error>
+            where
+                T: ?Sized + serde::Serialize,
+            {
+                value.serialize(&mut **self)
+            }
+
+            fn end(self) -> Result<Self::Ok, Self::Error> {
+                self.up()?;
+                Ok(())
+            }
+        }
+
+        #[allow(non_local_definitions)]
+        impl<'a> serde::ser::SerializeMap for &'a mut Extract {
+            type Ok = ();
+            type Error = Incompatible;
+
+            fn serialize_key<T>(&mut self, _: &T) -> Result<(), Self::Error>
+            where
+                T: ?Sized + serde::Serialize,
+            {
+                Err(Incompatible)
+            }
+
+            fn serialize_value<T>(&mut self, _: &T) -> Result<(), Self::Error>
+            where
+                T: ?Sized + serde::Serialize,
+            {
+                Err(Incompatible)
+            }
+
+            fn end(self) -> Result<Self::Ok, Self::Error> {
+                self.up()?;
+                Ok(())
+            }
+        }
+
+        #[allow(non_local_definitions)]
+        impl<'a> serde::ser::SerializeStruct for &'a mut Extract {
+            type Ok = ();
+            type Error = Incompatible;
+
+            fn serialize_field<T>(&mut self, _: &'static str, _: &T) -> Result<(), Self::Error>
+            where
+                T: ?Sized + serde::Serialize,
+            {
+                Err(Incompatible)
+            }
+
+            fn end(self) -> Result<Self::Ok, Self::Error> {
+                self.up()?;
+                Ok(())
+            }
+        }
+
+        #[allow(non_local_definitions)]
+        impl<'a> serde::ser::SerializeStructVariant for &'a mut Extract {
+            type Ok = ();
+            type Error = Incompatible;
+
+            fn serialize_field<T>(&mut self, _: &'static str, _: &T) -> Result<(), Self::Error>
+            where
+                T: ?Sized + serde::Serialize,
+            {
+                Err(Incompatible)
+            }
+
+            fn end(self) -> Result<Self::Ok, Self::Error> {
+                self.up()?;
+                Ok(())
+            }
+        }
+
+        let mut extract = Extract::default();
+        value.serialize(&mut extract).ok()?;
+        extract.end()
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        fn link1() -> SpanLink {
+            SpanLink::new(
+                TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                SpanId::from_u64(0x0123456789abcdef).unwrap(),
+            )
+        }
+
+        fn link2() -> SpanLink {
+            SpanLink::new(
+                TraceId::from_u128(0xfedcba9876543210fedcba9876543210).unwrap(),
+                SpanId::from_u64(0xfedcba9876543210).unwrap(),
+            )
+        }
+
+        fn set_with_links() -> SpanLinkSet {
+            let mut set = SpanLinkSet::new();
+            set.insert(link1());
+            set.insert(link2());
+            set
+        }
+
+        #[test]
+        fn span_link_set() {
+            let mut set = SpanLinkSet::new();
+
+            assert_eq!(0, set.len());
+            assert!(set.is_empty());
+            assert!(set.first().is_none());
+            assert!(set.last().is_none());
+            assert!(!set.contains(link1()));
+
+            set.insert(link1());
+            assert_eq!(1, set.len());
+            assert!(set.contains(link1()));
+
+            set.insert(link2());
+            assert_eq!(2, set.len());
+
+            // Deduplication
+            assert!(!set.insert(link1()));
+            assert_eq!(2, set.len());
+
+            // First/last
+            assert_eq!(Some(link1()), set.first());
+            assert_eq!(Some(link2()), set.last());
+
+            // Iter
+            let collected: alloc::vec::Vec<_> = set.iter().collect();
+            assert_eq!(alloc::vec![link1(), link2()], collected);
+
+            // Clear
+            set.clear();
+            assert_eq!(0, set.len());
+            assert!(set.is_empty());
+        }
+
+        #[test]
+        fn span_link_set_roundtrip() {
+            for case in [
+                SpanLinkSet::new(),
+                {
+                    let mut set = SpanLinkSet::new();
+                    set.insert(link1());
+                    set
+                },
+                set_with_links(),
+            ] {
+                let fmt = case.to_string();
+                assert_eq!(Some(case), SpanLinkSet::try_from_str(&fmt).ok(), "{fmt}");
+            }
+        }
+
+        #[test]
+        fn span_link_set_parse() {
+            for (case, expected) in [
+                (
+                    "[0123456789abcdef0123456789abcdef-0123456789abcdef,fedcba9876543210fedcba9876543210-fedcba9876543210]",
+                    set_with_links(),
+                ),
+                (
+                    "{0123456789abcdef0123456789abcdef-0123456789abcdef,fedcba9876543210fedcba9876543210-fedcba9876543210}",
+                    set_with_links(),
+                ),
+                (
+                    "(0123456789abcdef0123456789abcdef-0123456789abcdef,fedcba9876543210fedcba9876543210-fedcba9876543210)",
+                    set_with_links(),
+                ),
+                (
+                    " [ 0123456789abcdef0123456789abcdef-0123456789abcdef , fedcba9876543210fedcba9876543210-fedcba9876543210 ] ",
+                    set_with_links(),
+                ),
+                ("[]", SpanLinkSet::new()),
+            ] {
+                assert_eq!(
+                    Some(expected),
+                    SpanLinkSet::try_from_str(case).ok(),
+                    "{case}"
+                );
+            }
+        }
+
+        #[test]
+        fn span_link_set_parse_exotic() {
+            // Deduplication: duplicate links produce single entry
+            let set = SpanLinkSet::try_from_str(
+                "[0123456789abcdef0123456789abcdef-0123456789abcdef,0123456789abcdef0123456789abcdef-0123456789abcdef]"
+            )
+            .unwrap();
+
+            assert_eq!(1, set.len());
+            assert!(set.contains(link1()));
+        }
+
+        #[test]
+        fn span_link_set_to_from_value() {
+            for case in [set_with_links()] {
+                assert_eq!(case, SpanLinkSet::from_value(case.to_value()).unwrap());
+            }
+        }
+
+        #[test]
+        fn span_link_set_from_value_string() {
+            for (case, expected) in [
+                (
+                    "[0123456789abcdef0123456789abcdef-0123456789abcdef,fedcba9876543210fedcba9876543210-fedcba9876543210]",
+                    set_with_links(),
+                ),
+            ] {
+                assert_eq!(expected, Value::from(case).cast().unwrap());
+            }
+        }
+
+        #[test]
+        fn span_link_set_from_value_structured() {
+            #[cfg(feature = "sval")]
+            trait CaseSval: sval::Value {}
+            #[cfg(feature = "sval")]
+            impl<T: sval::Value> CaseSval for T {}
+            #[cfg(not(feature = "sval"))]
+            trait CaseSval {}
+            #[cfg(not(feature = "sval"))]
+            impl<T> CaseSval for T {}
+
+            #[cfg(feature = "serde")]
+            trait CaseSerde: serde::Serialize {}
+            #[cfg(feature = "serde")]
+            impl<T: serde::Serialize> CaseSerde for T {}
+            #[cfg(not(feature = "serde"))]
+            trait CaseSerde {}
+            #[cfg(not(feature = "serde"))]
+            impl<T> CaseSerde for T {}
+
+            trait Case: CaseSval + CaseSerde + fmt::Debug {}
+            impl<T: fmt::Debug + CaseSval + CaseSerde> Case for T {}
+
+            fn case(case: &impl Case, expected: &SpanLinkSet) {
+                assert_eq!(expected, &Value::from_debug(case).cast().unwrap());
+
+                #[cfg(feature = "sval")]
+                {
+                    assert_eq!(expected, &Value::from_sval(case).cast().unwrap());
+                }
+
+                #[cfg(feature = "serde")]
+                {
+                    assert_eq!(expected, &Value::from_serde(case).cast().unwrap());
+                }
+            }
+
+            let expected = set_with_links();
+
+            case(
+                &[
+                    "0123456789abcdef0123456789abcdef-0123456789abcdef",
+                    "fedcba9876543210fedcba9876543210-fedcba9876543210",
+                ],
+                &expected,
+            );
+            case(&[link1(), link2()], &expected);
+
+            let mut btree_set = alloc::collections::BTreeSet::new();
+            btree_set.insert(link1());
+            btree_set.insert(link2());
+            case(&btree_set, &expected);
+        }
+
+        #[test]
+        fn err_span_link_set_invalid() {
+            for case in [
+                "",
+                "<>",
+                "0123456789abcdef0123456789abcdef-0123456789abcdef",
+                "[0123456789abcdef0123456789abcdef-0123456789abcdef,",
+                "[,]",
+                "[,,]",
+                "[invalid]",
+                "[0123456789abcdef0123456789abcdef-0123456789abcdef,invalid]",
+                "{]",
+                "([",
+            ] {
+                assert!(SpanLinkSet::try_from_str(case).is_err(), "{case}");
+            }
+        }
+    }
+}
 
 /**
 An active span in a distributed trace.
