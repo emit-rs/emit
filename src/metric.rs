@@ -2,7 +2,7 @@
 The [`Metric`] type.
 */
 
-use core::{fmt, ops::ControlFlow, str};
+use core::{fmt, ops::ControlFlow};
 
 use emit_core::{
     and::And,
@@ -1655,8 +1655,6 @@ pub mod exp {
                 fn try_from_slice(mut s: &[u8]) -> Result<Self, ParseBucketSetError> {
                     let mut set = BucketSet::new();
 
-                    s = trim(s);
-
                     if s.len() < 2 {
                         // Truncated
                         return Err(ParseBucketSetError {});
@@ -1670,25 +1668,22 @@ pub mod exp {
                         _ => return Err(ParseBucketSetError {}),
                     };
                     s = &s[1..];
+                    s = trim_start(s);
 
                     let mut first = true;
                     while s.len() > 1 {
                         // Parse each bucket
                         if !first {
-                            s = trim_start(s);
-
                             if s.first() != Some(&b',') {
                                 // Invalid bucket: expected `,`
                                 return Err(ParseBucketSetError {});
                             }
                             s = &s[1..];
+                            s = trim_start(s);
                         }
                         first = false;
 
-                        // TODO: These accessors can panic on excessive whitespace
-
                         // Determine the kind of bucket we're parsing
-                        s = trim_start(s);
                         let (key_start_skip, key_end, value_end): (
                             usize,
                             &[(u8, u8)],
@@ -1716,25 +1711,23 @@ pub mod exp {
                         s = &s[key_start_skip..];
 
                         // Find the bounds of the key
-                        s = trim_start(s);
                         let Some((key_end, key_end_skip)) = find(s, key_end) else {
                             // Unexpected EOF parsing key: expected `$key_end`
                             return Err(ParseBucketSetError {});
                         };
 
-                        let key =
-                            str::from_utf8(&s[..key_end]).map_err(|_| ParseBucketSetError {})?;
+                        let key = str::from_utf8(trim(&s[..key_end]))
+                            .map_err(|_| ParseBucketSetError {})?;
                         s = &s[key_end + key_end_skip..];
 
                         // Find the bounds of the value
-                        s = trim_start(s);
                         let Some((value_end, value_end_skip)) = find(s, value_end) else {
                             // Unexpected EOF parsing value: expected `$value_end`
                             return Err(ParseBucketSetError {});
                         };
 
-                        let value =
-                            str::from_utf8(&s[..value_end]).map_err(|_| ParseBucketSetError {})?;
+                        let value = str::from_utf8(trim(&s[..value_end]))
+                            .map_err(|_| ParseBucketSetError {})?;
                         s = &s[value_end + value_end_skip..];
 
                         // Parse the key and value
@@ -1746,6 +1739,8 @@ pub mod exp {
                             // Duplicate key
                             return Err(ParseBucketSetError {});
                         }
+
+                        s = trim_start(s);
                     }
 
                     if s.len() != 1 {
@@ -2583,6 +2578,18 @@ pub mod exp {
                                 set
                             },
                         ),
+                        ("[ [ 1 , 1 ] , [ 2 , 2 ] ]".to_string(), {
+                            let mut set = BucketSet::new();
+                            set.observe_all(Point::new(1.0), 1);
+                            set.observe_all(Point::new(2.0), 2);
+                            set
+                        }),
+                        ("[ 1 : 1 , 2 : 2 ]".to_string(), {
+                            let mut set = BucketSet::new();
+                            set.observe_all(Point::new(1.0), 1);
+                            set.observe_all(Point::new(2.0), 2);
+                            set
+                        }),
                     ] {
                         assert_eq!(
                             Some(expected),

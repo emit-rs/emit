@@ -1100,7 +1100,7 @@ pub mod span_link_set {
     use alloc::collections::{btree_set, BTreeSet};
     use core::{fmt::Write, str::FromStr};
 
-    use crate::buf::{trim, trim_start};
+    use crate::buf::trim_start;
     use emit_core::value::{FromValue, ToValue, Value};
 
     /**
@@ -1176,8 +1176,6 @@ pub mod span_link_set {
         fn try_from_slice(mut s: &[u8]) -> Result<Self, ParseSpanLinkSetError> {
             let mut set = SpanLinkSet::new();
 
-            s = trim(s);
-
             if s.len() < 2 {
                 return Err(ParseSpanLinkSetError {});
             }
@@ -1210,8 +1208,6 @@ pub mod span_link_set {
                     s = trim_start(s);
                 }
                 first = false;
-
-                // TODO: These accessors can panic on excessive whitespace
 
                 let link = match s.first() {
                     Some(&b'"') => {
@@ -1923,6 +1919,8 @@ pub mod span_link_set {
     mod tests {
         use super::*;
 
+        use std::collections::BTreeSet;
+
         fn link1() -> SpanLink {
             SpanLink::new(
                 TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
@@ -1999,38 +1997,51 @@ pub mod span_link_set {
         fn span_link_set_parse() {
             for (case, expected) in [
                 (
-                    "[0123456789abcdef0123456789abcdef-0123456789abcdef,fedcba9876543210fedcba9876543210-fedcba9876543210]",
+                    format!("{:?}", [link1(), link2()]),
                     set_with_links(),
                 ),
                 (
-                    "{0123456789abcdef0123456789abcdef-0123456789abcdef,fedcba9876543210fedcba9876543210-fedcba9876543210}",
+                    format!("{:?}", ["0123456789abcdef0123456789abcdef-0123456789abcdef", "fedcba9876543210fedcba9876543210-fedcba9876543210"]),
                     set_with_links(),
                 ),
                 (
-                    "(0123456789abcdef0123456789abcdef-0123456789abcdef,fedcba9876543210fedcba9876543210-fedcba9876543210)",
+                    format!("{:?}", (link1(), link2())),
                     set_with_links(),
                 ),
                 (
-                    " [ 0123456789abcdef0123456789abcdef-0123456789abcdef , fedcba9876543210fedcba9876543210-fedcba9876543210 ] ",
+                    format!("{:?}", {
+                        let mut set = BTreeSet::new();
+                        set.insert(link1());
+                        set.insert(link2());
+                        set
+                    }),
                     set_with_links(),
                 ),
-                ("[]", SpanLinkSet::new()),
+                (
+                    format!("{:?}", {
+                        let mut set = BTreeSet::new();
+                        set.insert("0123456789abcdef0123456789abcdef-0123456789abcdef");
+                        set.insert("fedcba9876543210fedcba9876543210-fedcba9876543210");
+                        set
+                    }),
+                    set_with_links(),
+                ),
+                (
+                    " [ 0123456789abcdef0123456789abcdef-0123456789abcdef , fedcba9876543210fedcba9876543210-fedcba9876543210 ] ".to_string(),
+                    set_with_links(),
+                ),
+                (
+                    " [ \"0123456789abcdef0123456789abcdef-0123456789abcdef\" , \"fedcba9876543210fedcba9876543210-fedcba9876543210\" ] ".to_string(),
+                    set_with_links(),
+                ),
+                ("[]".to_string(), SpanLinkSet::new()),
             ] {
                 assert_eq!(
                     Some(expected),
-                    SpanLinkSet::try_from_str(case).ok(),
+                    SpanLinkSet::try_from_str(&case).ok(),
                     "{case}"
                 );
             }
-        }
-
-        #[test]
-        fn span_link_set_parse_exotic() {
-            // Duplicate links produce an error
-            assert!(SpanLinkSet::try_from_str(
-                "[0123456789abcdef0123456789abcdef-0123456789abcdef,0123456789abcdef0123456789abcdef-0123456789abcdef]"
-            )
-            .is_err());
         }
 
         #[test]
@@ -2113,12 +2124,14 @@ pub mod span_link_set {
                 "<>",
                 "0123456789abcdef0123456789abcdef-0123456789abcdef",
                 "[0123456789abcdef0123456789abcdef-0123456789abcdef,",
+                "[0123456789abcdef0123456789abcdef-0123456789abcdef)",
                 "[,]",
                 "[,,]",
                 "[invalid]",
                 "[0123456789abcdef0123456789abcdef-0123456789abcdef,invalid]",
                 "{]",
                 "([",
+                "[0123456789abcdef0123456789abcdef-0123456789abcdef,0123456789abcdef0123456789abcdef-0123456789abcdef]",
             ] {
                 assert!(SpanLinkSet::try_from_str(case).is_err(), "{case}");
             }
