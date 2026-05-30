@@ -40,8 +40,6 @@ use core::{
 };
 
 pub use self::completion::Completion;
-#[cfg(feature = "alloc")]
-pub use self::alloc_support::SpanLinkSet;
 
 /**
 A [W3C Trace Id](https://www.w3.org/TR/trace-context/#trace-id).
@@ -1092,13 +1090,15 @@ impl fmt::Display for ParseLinkError {
 impl std::error::Error for ParseLinkError {}
 
 #[cfg(feature = "alloc")]
-mod alloc_support {
+pub mod span_link_set {
+    /*!
+    The [`SpanLinkSet`] type.
+    */
+
     use super::*;
 
     use alloc::collections::{btree_set, BTreeSet};
-    use alloc::string::String;
-    use core::fmt::Write;
-    use core::str::FromStr;
+    use core::{fmt::Write, str::FromStr};
 
     use emit_core::value::{FromValue, ToValue, Value};
 
@@ -1120,9 +1120,7 @@ mod alloc_support {
     /**
     A collection of [`SpanLink`]s.
 
-    The set stores sorted, deduplicated span links. Links can be parsed from strings
-    in the format `[$link,...]`, `{$link,...}`, or `($link,...)` where each `$link`
-    is a valid [`SpanLink`] string (`traceid-spanid`).
+    The set stores sorted, deduplicated span links.
     */
     #[derive(Clone, PartialEq, Eq)]
     pub struct SpanLinkSet {
@@ -1168,46 +1166,77 @@ mod alloc_support {
         /**
         Parse a `SpanLinkSet` from its raw textual representation.
 
-        The input must be enclosed in matching brackets (`[]`, `()`, or `{}`),
-        with comma-separated [`SpanLink`] strings inside.
+        The input must be enclosed in matching brackets (`[]`, `()`, or `{}`), with comma-separated [`SpanLink`] strings inside.
         */
-        pub fn try_from_str(s: &str) -> Result<Self, ParseSpanLinkSetError> {
+        pub fn try_from_str(mut s: &str) -> Result<Self, ParseSpanLinkSetError> {
             let mut set = SpanLinkSet::new();
 
-            let s = s.trim();
+            s = s.trim();
 
             if s.len() < 2 {
                 return Err(ParseSpanLinkSetError {});
             }
 
             // Must be enclosed by `[]`, `()`, or `{}`
-            let _container_end = match (&s[0..1], &s[s.len() - 1..]) {
-                ("[", "]") => ']',
-                ("(", ")") => ')',
-                ("{", "}") => '}',
+            match (&s[0..1], &s[s.len() - 1..]) {
+                ("[", "]") => (),
+                ("(", ")") => (),
+                ("{", "}") => (),
                 _ => return Err(ParseSpanLinkSetError {}),
             };
-            let inner = &s[1..s.len() - 1];
+            s = &s[1..].trim_start();
 
-            // Allow empty set: `[]`, `[  ]`
-            if inner.trim().is_empty() {
-                return Ok(set);
-            }
+            let mut first = true;
 
-            // Split by comma and parse each link
-            for part in inner.split(',') {
-                let part = part.trim();
-                if part.is_empty() {
+            while s.len() > 1 {
+                if s.len() < 49 {
+                    // Unexpected EOF parsing link: not enough chars for `$link`
                     return Err(ParseSpanLinkSetError {});
                 }
 
-                // Strip surrounding quotes (from debug format)
-                let part = part.strip_prefix('"')
-                    .and_then(|s| s.strip_suffix('"'))
-                    .unwrap_or(part);
+                // Parse each link
+                if !first {
+                    if &s[0..1] != "," {
+                        // Invalid link: expected `,`
+                        return Err(ParseSpanLinkSetError {});
+                    }
+                    s = &s[1..].trim_start();
+                }
+                first = false;
 
-                let link = SpanLink::try_from_str(part).map_err(|_| ParseSpanLinkSetError {})?;
+                // TODO: These accessors can panic on excessive whitespace
+
+                let link = match &s[0..1] {
+                    "\"" => {
+                        // Parse a link surrounded by quotes
+                        if &s[50..51] != "\"" {
+                            // Unquoted
+                            return Err(ParseSpanLinkSetError {});
+                        }
+
+                        let link = &s[1..50];
+                        s = &s[51..];
+
+                        link
+                    }
+                    _ => {
+                        // Parse an unquoted span link
+                        let link = &s[0..49];
+                        s = &s[49..];
+
+                        link
+                    }
+                };
+
+                let link = SpanLink::try_from_str(link).map_err(|_| ParseSpanLinkSetError {})?;
                 set.links.insert(link);
+
+                s = s.trim_start();
+            }
+
+            if s.len() != 1 {
+                // Unexpected EOF
+                return Err(ParseSpanLinkSetError {});
             }
 
             Ok(set)
@@ -1311,7 +1340,7 @@ mod alloc_support {
             stream.seq_begin(Some(self.links.len()))?;
 
             for link in &self.links {
-                stream.value_computed(link)?;
+                stream.value(link)?;
             }
 
             stream.seq_end()
@@ -1320,10 +1349,7 @@ mod alloc_support {
 
     #[cfg(feature = "serde")]
     impl serde::Serialize for SpanLinkSet {
-        fn serialize<S: serde::Serializer>(
-            &self,
-            serializer: S,
-        ) -> Result<S::Ok, S::Error> {
+        fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
             use serde::ser::SerializeSeq as _;
 
             let mut seq = serializer.serialize_seq(Some(self.links.len()))?;
@@ -1390,7 +1416,6 @@ mod alloc_support {
         depth: usize,
         links: BTreeSet<SpanLink>,
         text_buf: crate::buf::Buffer<49>,
-        full_text: String,
     }
 
     #[cfg(any(feature = "sval", feature = "serde"))]
@@ -1400,7 +1425,6 @@ mod alloc_support {
                 depth: 0,
                 links: BTreeSet::new(),
                 text_buf: crate::buf::Buffer::new(),
-                full_text: String::new(),
             }
         }
     }
@@ -1412,11 +1436,6 @@ mod alloc_support {
     #[cfg(any(feature = "sval", feature = "serde"))]
     impl Extract {
         fn push_link_fragment(&mut self, fragment: &str) -> Result<(), Incompatible> {
-            if self.depth == 0 {
-                self.full_text.push_str(fragment);
-                return Ok(());
-            }
-
             if self.depth != 1 {
                 return Err(Incompatible);
             }
@@ -1429,17 +1448,13 @@ mod alloc_support {
         }
 
         fn push_link(&mut self) -> Result<(), Incompatible> {
-            if self.depth == 0 {
-                return Ok(());
-            }
-
             if self.depth != 1 {
                 return Err(Incompatible);
             }
 
             let link_bytes = self.text_buf.as_bytes();
-            let link = SpanLink::try_from_slice(link_bytes)
-                .map_err(|_| Incompatible)?;
+            let link = SpanLink::try_from_slice(link_bytes).map_err(|_| Incompatible)?;
+
             self.links.insert(link);
             self.text_buf.reset();
 
@@ -1462,16 +1477,8 @@ mod alloc_support {
             Ok(())
         }
 
-        fn end(self) -> Option<SpanLinkSet> {
-            if !self.links.is_empty() {
-                return Some(SpanLinkSet { links: self.links });
-            }
-
-            if !self.full_text.is_empty() {
-                return SpanLinkSet::try_from_str(&self.full_text).ok();
-            }
-
-            None
+        fn end(self) -> SpanLinkSet {
+            SpanLinkSet { links: self.links }
         }
     }
 
@@ -1545,7 +1552,8 @@ mod alloc_support {
 
         let mut extract = Extract::default();
         sval::stream(&mut extract, &value).ok()?;
-        extract.end()
+
+        Some(extract.end())
     }
 
     #[cfg(all(not(feature = "sval"), feature = "serde"))]
@@ -1669,10 +1677,7 @@ mod alloc_support {
                 Err(Incompatible)
             }
 
-            fn serialize_unit_struct(
-                self,
-                name: &'static str,
-            ) -> Result<Self::Ok, Self::Error> {
+            fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
                 name.serialize(self)
             }
 
@@ -1700,18 +1705,12 @@ mod alloc_support {
                 value.serialize(self)
             }
 
-            fn serialize_seq(
-                self,
-                _: Option<usize>,
-            ) -> Result<Self::SerializeSeq, Self::Error> {
+            fn serialize_seq(self, _: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
                 self.down()?;
                 Ok(self)
             }
 
-            fn serialize_tuple(
-                self,
-                _: usize,
-            ) -> Result<Self::SerializeTuple, Self::Error> {
+            fn serialize_tuple(self, _: usize) -> Result<Self::SerializeTuple, Self::Error> {
                 self.down()?;
                 Ok(self)
             }
@@ -1736,10 +1735,7 @@ mod alloc_support {
                 Ok(self)
             }
 
-            fn serialize_map(
-                self,
-                _: Option<usize>,
-            ) -> Result<Self::SerializeMap, Self::Error> {
+            fn serialize_map(self, _: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
                 self.down()?;
                 Ok(self)
             }
@@ -1909,7 +1905,8 @@ mod alloc_support {
 
         let mut extract = Extract::default();
         value.serialize(&mut extract).ok()?;
-        extract.end()
+
+        Some(extract.end())
     }
 
     #[cfg(test)]
@@ -2121,6 +2118,9 @@ mod alloc_support {
         }
     }
 }
+
+#[cfg(feature = "alloc")]
+pub use self::span_link_set::SpanLinkSet;
 
 /**
 An active span in a distributed trace.

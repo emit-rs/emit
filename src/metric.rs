@@ -1679,11 +1679,6 @@ pub mod exp {
                         if !first {
                             s = s.trim_start();
 
-                            if s.len() < 2 {
-                                // Unexpected EOF parsing bucket: not enough chars for `,[`
-                                return Err(ParseBucketSetError {});
-                            }
-
                             if &s[0..1] != "," {
                                 // Invalid bucket: expected `,`
                                 return Err(ParseBucketSetError {});
@@ -1691,6 +1686,8 @@ pub mod exp {
                             s = &s[1..];
                         }
                         first = false;
+
+                        // TODO: These accessors can panic on excessive whitespace
 
                         // Determine the kind of bucket we're parsing
                         s = s.trim_start();
@@ -2028,14 +2025,10 @@ pub mod exp {
                     Ok(())
                 }
 
-                fn end(self) -> Option<BucketSet> {
-                    if self.buckets.len() == 0 {
-                        None
-                    } else {
-                        Some(BucketSet {
-                            buckets: self.buckets,
-                            total: self.count,
-                        })
+                fn end(self) -> BucketSet {
+                    BucketSet {
+                        buckets: self.buckets,
+                        total: self.count,
                     }
                 }
             }
@@ -2110,7 +2103,8 @@ pub mod exp {
 
                 let mut extract = Extract::default();
                 sval::stream(&mut extract, &value).ok()?;
-                extract.end()
+
+                Some(extract.end())
             }
 
             #[cfg(all(not(feature = "sval"), feature = "serde"))]
@@ -2484,7 +2478,8 @@ pub mod exp {
 
                 let mut extract = Extract::default();
                 value.serialize(&mut extract).ok()?;
-                extract.end()
+
+                Some(extract.end())
             }
 
             #[cfg(test)]

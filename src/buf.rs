@@ -13,10 +13,12 @@ impl<const N: usize> Buffer<N> {
         }
     }
 
+    #[cfg(any(feature = "sval", feature = "serde"))]
     pub(super) fn reset(&mut self) {
         self.idx = 0;
     }
 
+    #[cfg(any(feature = "sval", feature = "serde"))]
     pub(super) fn as_bytes(&self) -> &[u8] {
         &self.value[..self.idx]
     }
