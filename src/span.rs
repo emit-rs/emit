@@ -1100,6 +1100,7 @@ pub mod span_link_set {
     use alloc::collections::{btree_set, BTreeSet};
     use core::{fmt::Write, str::FromStr};
 
+    use crate::buf::{trim, trim_start};
     use emit_core::value::{FromValue, ToValue, Value};
 
     /**
@@ -1168,23 +1169,28 @@ pub mod span_link_set {
 
         The input must be enclosed in matching brackets (`[]`, `()`, or `{}`), with comma-separated [`SpanLink`] strings inside.
         */
-        pub fn try_from_str(mut s: &str) -> Result<Self, ParseSpanLinkSetError> {
+        pub fn try_from_str(s: &str) -> Result<Self, ParseSpanLinkSetError> {
+            Self::try_from_slice(s.as_bytes())
+        }
+
+        fn try_from_slice(mut s: &[u8]) -> Result<Self, ParseSpanLinkSetError> {
             let mut set = SpanLinkSet::new();
 
-            s = s.trim();
+            s = trim(s);
 
             if s.len() < 2 {
                 return Err(ParseSpanLinkSetError {});
             }
 
             // Must be enclosed by `[]`, `()`, or `{}`
-            match (&s[0..1], &s[s.len() - 1..]) {
-                ("[", "]") => (),
-                ("(", ")") => (),
-                ("{", "}") => (),
+            match (s.first(), s.last()) {
+                (Some(&b'['), Some(&b']')) => (),
+                (Some(&b'('), Some(&b')')) => (),
+                (Some(&b'{'), Some(&b'}')) => (),
                 _ => return Err(ParseSpanLinkSetError {}),
             };
-            s = &s[1..].trim_start();
+            s = &s[1..];
+            s = trim_start(s);
 
             let mut first = true;
 
@@ -1196,20 +1202,21 @@ pub mod span_link_set {
 
                 // Parse each link
                 if !first {
-                    if &s[0..1] != "," {
+                    if s.first() != Some(&b',') {
                         // Invalid link: expected `,`
                         return Err(ParseSpanLinkSetError {});
                     }
-                    s = &s[1..].trim_start();
+                    s = &s[1..];
+                    s = trim_start(s);
                 }
                 first = false;
 
                 // TODO: These accessors can panic on excessive whitespace
 
-                let link = match &s[0..1] {
-                    "\"" => {
+                let link = match s.first() {
+                    Some(&b'"') => {
                         // Parse a link surrounded by quotes
-                        if &s[50..51] != "\"" {
+                        if s.get(50) != Some(&b'"') {
                             // Unquoted
                             return Err(ParseSpanLinkSetError {});
                         }
@@ -1228,10 +1235,13 @@ pub mod span_link_set {
                     }
                 };
 
-                let link = SpanLink::try_from_str(link).map_err(|_| ParseSpanLinkSetError {})?;
-                set.links.insert(link);
+                let link = SpanLink::try_from_slice(link).map_err(|_| ParseSpanLinkSetError {})?;
+                if !set.links.insert(link) {
+                    // Duplicate link
+                    return Err(ParseSpanLinkSetError {});
+                }
 
-                s = s.trim_start();
+                s = trim_start(s);
             }
 
             if s.len() != 1 {
@@ -2016,14 +2026,11 @@ pub mod span_link_set {
 
         #[test]
         fn span_link_set_parse_exotic() {
-            // Deduplication: duplicate links produce single entry
-            let set = SpanLinkSet::try_from_str(
+            // Duplicate links produce an error
+            assert!(SpanLinkSet::try_from_str(
                 "[0123456789abcdef0123456789abcdef-0123456789abcdef,0123456789abcdef0123456789abcdef-0123456789abcdef]"
             )
-            .unwrap();
-
-            assert_eq!(1, set.len());
-            assert!(set.contains(link1()));
+            .is_err());
         }
 
         #[test]

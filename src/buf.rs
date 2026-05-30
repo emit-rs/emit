@@ -1,5 +1,46 @@
 use core::fmt;
 
+/// Strip leading ASCII whitespace from a byte slice.
+pub(crate) fn trim_start(s: &[u8]) -> &[u8] {
+    let start = s
+        .iter()
+        .position(|&b| !b.is_ascii_whitespace())
+        .unwrap_or(s.len());
+    &s[start..]
+}
+
+/// Strip trailing ASCII whitespace from a byte slice.
+pub(crate) fn trim_end(s: &[u8]) -> &[u8] {
+    let end = s
+        .iter()
+        .rposition(|&b| !b.is_ascii_whitespace())
+        .map(|i| i + 1)
+        .unwrap_or(0);
+    &s[..end]
+}
+
+/// Strip leading and trailing ASCII whitespace from a byte slice.
+pub(crate) fn trim(s: &[u8]) -> &[u8] {
+    trim_end(trim_start(s))
+}
+
+/// Find the first occurrence of any needle byte in the haystack, returning
+/// the matched position and its associated skip count.
+///
+/// Each needle entry is a `(byte, skip)` pair. The `skip` value is returned
+/// as `usize` in the result tuple.
+pub(crate) fn find(haystack: &[u8], needle: &[(u8, u8)]) -> Option<(usize, usize)> {
+    needle
+        .iter()
+        .filter_map(|(n, cs)| {
+            haystack
+                .iter()
+                .position(|&b| b == *n)
+                .map(|c| (c, *cs as usize))
+        })
+        .next()
+}
+
 pub(super) struct Buffer<const N: usize> {
     value: [u8; N],
     idx: usize,

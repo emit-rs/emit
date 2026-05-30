@@ -2,7 +2,7 @@
 The [`Metric`] type.
 */
 
-use core::{fmt, ops::ControlFlow};
+use core::{fmt, ops::ControlFlow, str};
 
 use emit_core::{
     and::And,
@@ -1570,6 +1570,7 @@ pub mod exp {
 
             use crate::{
                 alloc::collections::{btree_map, BTreeMap},
+                buf::{find, trim, trim_start},
                 core::{
                     fmt::{self, Write as _},
                     str::FromStr,
@@ -1647,17 +1648,14 @@ pub mod exp {
                 /**
                 Parse a `BucketSet` from its raw textual representation.
                 */
-                pub fn try_from_str(mut s: &str) -> Result<Self, ParseBucketSetError> {
-                    fn find(haystack: &str, needle: &[(char, u8)]) -> Option<(usize, usize)> {
-                        needle
-                            .iter()
-                            .filter_map(|(c, cs)| haystack.find(*c).map(|c| (c, *cs as usize)))
-                            .next()
-                    }
+                pub fn try_from_str(s: &str) -> Result<Self, ParseBucketSetError> {
+                    Self::try_from_slice(s.as_bytes())
+                }
 
+                fn try_from_slice(mut s: &[u8]) -> Result<Self, ParseBucketSetError> {
                     let mut set = BucketSet::new();
 
-                    s = s.trim();
+                    s = trim(s);
 
                     if s.len() < 2 {
                         // Truncated
@@ -1665,10 +1663,10 @@ pub mod exp {
                     }
 
                     // Must be enclosed by `[]`, `()`, or `{}`
-                    let container_end = match (&s[0..1], &s[s.len() - 1..]) {
-                        ("[", "]") => ']',
-                        ("(", ")") => ')',
-                        ("{", "}") => '}',
+                    let container_end = match (s.first(), s.last()) {
+                        (Some(&b'['), Some(&b']')) => b']',
+                        (Some(&b'('), Some(&b')')) => b')',
+                        (Some(&b'{'), Some(&b'}')) => b'}',
                         _ => return Err(ParseBucketSetError {}),
                     };
                     s = &s[1..];
@@ -1677,9 +1675,9 @@ pub mod exp {
                     while s.len() > 1 {
                         // Parse each bucket
                         if !first {
-                            s = s.trim_start();
+                            s = trim_start(s);
 
-                            if &s[0..1] != "," {
+                            if s.first() != Some(&b',') {
                                 // Invalid bucket: expected `,`
                                 return Err(ParseBucketSetError {});
                             }
@@ -1690,53 +1688,53 @@ pub mod exp {
                         // TODO: These accessors can panic on excessive whitespace
 
                         // Determine the kind of bucket we're parsing
-                        s = s.trim_start();
-                        let (key_start_skip, key_end, value_end) = match &s[0..1] {
+                        s = trim_start(s);
+                        let (key_start_skip, key_end, value_end): (
+                            usize,
+                            &[(u8, u8)],
+                            &[(u8, u8)],
+                        ) = match s.first() {
                             // `[k, v]`, `[k: v]`, or `[k = v]`
-                            "[" => (
-                                1,
-                                &[(',', 1u8), (':', 1u8), ('=', 1u8)] as &[(char, u8)],
-                                &[(']', 1u8)] as &[(char, u8)],
-                            ),
+                            Some(&b'[') => {
+                                (1, &[(b',', 1u8), (b':', 1u8), (b'=', 1u8)], &[(b']', 1u8)])
+                            }
                             // `(k, v)`, `(k: v)`, or `(k = v)`
-                            "(" => (
-                                1,
-                                &[(',', 1u8), (':', 1u8), ('=', 1u8)] as &[(char, u8)],
-                                &[(')', 1u8)] as &[(char, u8)],
-                            ),
+                            Some(&b'(') => {
+                                (1, &[(b',', 1u8), (b':', 1u8), (b'=', 1u8)], &[(b')', 1u8)])
+                            }
                             // `{k, v}`, `{k: v}`, or `{k = v}`
-                            "{" => (
-                                1,
-                                &[(',', 1u8), (':', 1u8), ('=', 1u8)] as &[(char, u8)],
-                                &[('}', 1u8)] as &[(char, u8)],
-                            ),
+                            Some(&b'{') => {
+                                (1, &[(b',', 1u8), (b':', 1u8), (b'=', 1u8)], &[(b'}', 1u8)])
+                            }
                             // `k: v`, or `k = v`
                             _ => (
                                 0,
-                                &[(':', 1u8), ('=', 1u8)] as &[(char, u8)],
-                                &[(',', 0u8), (container_end, 0u8)] as &[(char, u8)],
+                                &[(b':', 1u8), (b'=', 1u8)],
+                                &[(b',', 0u8), (container_end, 0u8)],
                             ),
                         };
                         s = &s[key_start_skip..];
 
                         // Find the bounds of the key
-                        s = s.trim_start();
+                        s = trim_start(s);
                         let Some((key_end, key_end_skip)) = find(s, key_end) else {
                             // Unexpected EOF parsing key: expected `$key_end`
                             return Err(ParseBucketSetError {});
                         };
 
-                        let key = &s[..key_end];
+                        let key =
+                            str::from_utf8(&s[..key_end]).map_err(|_| ParseBucketSetError {})?;
                         s = &s[key_end + key_end_skip..];
 
                         // Find the bounds of the value
-                        s = s.trim_start();
+                        s = trim_start(s);
                         let Some((value_end, value_end_skip)) = find(s, value_end) else {
                             // Unexpected EOF parsing value: expected `$value_end`
                             return Err(ParseBucketSetError {});
                         };
 
-                        let value = &s[..value_end];
+                        let value =
+                            str::from_utf8(&s[..value_end]).map_err(|_| ParseBucketSetError {})?;
                         s = &s[value_end + value_end_skip..];
 
                         // Parse the key and value
