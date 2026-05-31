@@ -18,7 +18,7 @@ members = [
     "examples/trace_zipkin",
     "examples/metric_prometheus",
     "examples/high_volume",
-    "test/ui", "fuzz",
+    "test/ui",
 ]
 
 [package]

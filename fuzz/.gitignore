@@ -1,0 +1,6 @@
+.idea
+/target
+Cargo.lock
+/wip
+**/*.rs.bk
+*.log

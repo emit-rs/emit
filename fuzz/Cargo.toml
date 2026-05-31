@@ -4,8 +4,13 @@ version = "0.0.0"
 edition = "2024"
 publish = false
 
+[workspace]
+
+[features]
+force = []
+
 [[bin]]
-name = "fuzz_timestamp"
+name = "timestamp"
 path = "timestamp/main.rs"
 
 [dependencies.emit]
