@@ -32,7 +32,7 @@ cargo afl build --manifest-path fuzz/Cargo.toml --features afl
 And run one interactively:
 
 ```shell
-cargo afl fuzz -i fuzz/$TARGET_NAME/in -o target/fuzz_$TARGET_NAME target/debug/fuzz_$TARGET_NAME
+cargo afl fuzz -i fuzz/$TARGET_NAME/in -o fuzz/target/$TARGET_NAME fuzz/target/debug/$TARGET_NAME
 ```
 
 where `$TARGET_NAME` is the name of the fuzz test you want to run. This should show you an AFL TUI.
@@ -42,7 +42,7 @@ where `$TARGET_NAME` is the name of the fuzz test you want to run. This should s
 Crashes are saved into the `target` directory and are re-tested by the regular unit tests on each fuzz case. Just run:
 
 ```shell
-cargo test -p emit_fuzz
+cargo test --manifest-path fuzz/Cargo.toml
 ```
 
 and any crashes will be re-tested.

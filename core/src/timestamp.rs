@@ -75,13 +75,6 @@ pub struct Parts {
     pub nanos: u32,
 }
 
-// 2000-03-01 (mod 400 year, immediately after feb29
-const LEAPOCH_SECS: u64 = 946_684_800 + 86400 * (31 + 29);
-const DAYS_PER_400Y: i32 = 365 * 400 + 97;
-const DAYS_PER_100Y: i32 = 365 * 100 + 24;
-const DAYS_PER_4Y: i32 = 365 * 4 + 1;
-const DAYS_IN_MONTH: [u8; 12] = [31, 30, 31, 30, 31, 31, 30, 31, 30, 31, 31, 29];
-
 // 1970-01-01T00:00:00.000000000Z
 const MIN: Duration = Duration::new(0, 0);
 
@@ -170,11 +163,13 @@ impl Timestamp {
     /**
     Try get a timestamp from its individual date and time parts.
 
-    If the resulting timestamp is within [`Timestamp::MIN`]..=[`Timestamp::MAX`] then this method will return `Some`. Otherwise it will return `None`.
-
-    If any field of `parts` would overflow its maximum value, such as `days: 32`, then it will wrap into the next unit.
+    If the resulting timestamp is within [`Timestamp::MIN`]..=[`Timestamp::MAX`] then this method will return `Some`.
+    If it's outside then it will return `None`. If any of the fields in `parts` is out of range for its type, such as `days: 32`, then this method will also return `None`.
     */
     pub fn from_parts(parts: Parts) -> Option<Self> {
+        const DAYS_IN_MONTH: [u8; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+        const LEAP_DAYS_IN_MONTH: [u8; 12] = [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
         let is_leap;
         let start_of_year;
         let year = (parts.years as i64) - 1900;
@@ -237,6 +232,35 @@ impl Timestamp {
                 + i128::from(leaps * 86400 + 946_684_800 + 86400);
         }
 
+        if parts.months < 1 || parts.months > 12 {
+            // Invalid month
+            return None;
+        }
+
+        if parts.days == 0
+            || parts.days
+                > DAYS_IN_MONTH[usize::from(parts.months - 1)]
+                    + (LEAP_DAYS_IN_MONTH[usize::from(parts.months - 1)] * u8::from(is_leap))
+        {
+            // Invalid days
+            return None;
+        }
+
+        if parts.hours > 23 {
+            // Invalid hour
+            return None;
+        }
+
+        if parts.minutes > 59 {
+            // Invalid minutes
+            return None;
+        }
+
+        if parts.seconds > 60 {
+            // Invalid seconds
+            return None;
+        }
+
         let seconds_within_month = 86400 * u32::from(parts.days - 1)
             + 3600 * u32::from(parts.hours)
             + 60 * u32::from(parts.minutes)
@@ -276,6 +300,13 @@ impl Timestamp {
     The returned parts are in exactly the form needed to display them. Months and days are both one-based.
     */
     pub fn to_parts(&self) -> Parts {
+        // 2000-03-01 (mod 400 year, immediately after feb29
+        const LEAPOCH_SECS: u64 = 946_684_800 + 86400 * (31 + 29);
+        const DAYS_PER_400Y: i32 = 365 * 400 + 97;
+        const DAYS_PER_100Y: i32 = 365 * 100 + 24;
+        const DAYS_PER_4Y: i32 = 365 * 4 + 1;
+        const DAYS_IN_MONTH: [u8; 12] = [31, 30, 31, 30, 31, 31, 30, 31, 30, 31, 31, 29];
+
         let dur = self.0;
         let secs = dur.as_secs();
         let nanos = dur.subsec_nanos();
@@ -479,25 +510,51 @@ impl fmt::Display for ParseTimestampError {
 impl std::error::Error for ParseTimestampError {}
 
 fn parse_rfc3339(fmt: &str) -> Result<Timestamp, ParseTimestampError> {
-    if fmt.len() > 30 || fmt.len() < 19 {
+    fn utf8(fmt: &[u8]) -> Result<&str, ParseTimestampError> {
+        str::from_utf8(fmt).map_err(|_| ParseTimestampError {})
+    }
+
+    let fmt = fmt.as_bytes();
+
+    if fmt.len() > 30 || fmt.len() < 20 {
         // Invalid length
         return Err(ParseTimestampError {});
     }
 
-    if *fmt.as_bytes().last().unwrap() != b'Z' {
+    if *fmt.last().unwrap() != b'Z' {
         // Non-UTC
         return Err(ParseTimestampError {});
     }
 
-    let years = u16::from_str_radix(&fmt[0..4], 10).map_err(|_| ParseTimestampError {})?;
-    let months = u8::from_str_radix(&fmt[5..7], 10).map_err(|_| ParseTimestampError {})?;
-    let days = u8::from_str_radix(&fmt[8..10], 10).map_err(|_| ParseTimestampError {})?;
-    let hours = u8::from_str_radix(&fmt[11..13], 10).map_err(|_| ParseTimestampError {})?;
-    let minutes = u8::from_str_radix(&fmt[14..16], 10).map_err(|_| ParseTimestampError {})?;
-    let seconds = u8::from_str_radix(&fmt[17..19], 10).map_err(|_| ParseTimestampError {})?;
-    let nanos = if fmt.len() > 19 {
+    if [fmt[4], fmt[7], fmt[10], fmt[13], fmt[16]] != [b'-', b'-', b'T', b':', b':'] {
+        // Invalid format
+        return Err(ParseTimestampError {});
+    }
+
+    if fmt[19] != b'.' && fmt.len() > 20 {
+        // Invalid format
+        return Err(ParseTimestampError {});
+    }
+
+    let years = u16::from_str_radix(utf8(&fmt[0..4])?, 10).map_err(|_| ParseTimestampError {})?;
+
+    let months = u8::from_str_radix(utf8(&fmt[5..7])?, 10).map_err(|_| ParseTimestampError {})?;
+
+    let days = u8::from_str_radix(utf8(&fmt[8..10])?, 10).map_err(|_| ParseTimestampError {})?;
+
+    let hours = u8::from_str_radix(utf8(&fmt[11..13])?, 10).map_err(|_| ParseTimestampError {})?;
+
+    let minutes =
+        u8::from_str_radix(utf8(&fmt[14..16])?, 10).map_err(|_| ParseTimestampError {})?;
+
+    let seconds =
+        u8::from_str_radix(utf8(&fmt[17..19])?, 10).map_err(|_| ParseTimestampError {})?;
+
+    let nanos = if fmt.len() > 20 {
         let subsecond = &fmt[20..fmt.len() - 1];
-        u32::from_str_radix(subsecond, 10).unwrap() * 10u32.pow(9 - subsecond.len() as u32)
+
+        u32::from_str_radix(utf8(subsecond)?, 10).map_err(|_| ParseTimestampError {})?
+            * 10u32.pow(9 - subsecond.len() as u32)
     } else {
         0
     };
@@ -587,18 +644,31 @@ mod tests {
 
     #[test]
     fn roundtrip() {
-        let ts = Timestamp::from_unix(Duration::new(1691961703, 17532)).unwrap();
+        for days in 1..=31 {
+            for months in 1..=12 {
+                for years in [2019, 2020] {
+                    let Some(ts) = Timestamp::from_parts(Parts {
+                        years,
+                        months,
+                        days,
+                        ..Default::default()
+                    }) else {
+                        continue;
+                    };
 
-        let fmt = ts.to_string();
+                    let fmt = ts.to_string();
 
-        for parsed in [
-            Timestamp::try_from_str(&fmt),
-            Timestamp::parse(&fmt),
-            fmt.parse(),
-        ] {
-            let parsed = parsed.unwrap();
+                    for parsed in [
+                        Timestamp::try_from_str(&fmt),
+                        Timestamp::parse(&fmt),
+                        fmt.parse(),
+                    ] {
+                        let parsed = parsed.unwrap();
 
-            assert_eq!(ts, parsed, "{}", fmt);
+                        assert_eq!(ts, parsed, "{fmt}");
+                    }
+                }
+            }
         }
     }
 
@@ -610,6 +680,10 @@ mod tests {
             "2024-01-01T00:00:00.00000000000000000000000000Z",
             "2024-01-01T00:00:00.000+10",
             "Thursday, September 12, 2024",
+            "2026-02,71N86;\0ʚ;8,111Z",
+            "0000-00-00T00:00:00.000000000Z",
+            "2026-05-30T22:32:09.0A0Z",
+            "2026-05-30T22:32:0Z",
         ] {
             assert!(Timestamp::try_from_str(case).is_err());
             assert!(Timestamp::parse(case).is_err());
@@ -650,7 +724,7 @@ mod tests {
 
     #[test]
     fn parts_overflow() {
-        let ts = Timestamp::from_parts(Parts {
+        assert!(Timestamp::from_parts(Parts {
             years: 2000,
             months: 13,
             days: 32,
@@ -659,20 +733,7 @@ mod tests {
             seconds: 61,
             nanos: 1000000000,
         })
-        .unwrap();
-
-        let expected = Timestamp::from_parts(Parts {
-            years: 2000,
-            months: 13,
-            days: 32,
-            hours: 25,
-            minutes: 61,
-            seconds: 62,
-            nanos: 0,
-        })
-        .unwrap();
-
-        assert_eq!(expected, ts);
+        .is_none(),);
     }
 
     #[test]

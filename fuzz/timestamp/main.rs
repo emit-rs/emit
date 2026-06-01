@@ -3,12 +3,15 @@ fn main() {
 }
 
 pub fn de(input: &[u8]) {
-    // Just make sure we don't panic
     let Ok(input) = std::str::from_utf8(input) else {
         return;
     };
 
-    let _ = emit::Timestamp::try_from_str(input);
+    let Ok(ts) = emit::Timestamp::try_from_str(input) else {
+        return;
+    };
+
+    assert_eq!(ts, emit::Timestamp::try_from_str(&ts.to_string()).unwrap());
 }
 
 #[cfg(test)]
