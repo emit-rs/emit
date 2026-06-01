@@ -13,6 +13,14 @@ force = []
 name = "timestamp"
 path = "timestamp/main.rs"
 
+[[bin]]
+name = "bucket_set"
+path = "bucket_set/main.rs"
+
+[[bin]]
+name = "span_link_set"
+path = "span_link_set/main.rs"
+
 [dependencies.emit]
 path = "../"
 

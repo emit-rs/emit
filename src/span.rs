@@ -1193,11 +1193,6 @@ pub mod span_link_set {
             let mut first = true;
 
             while s.len() > 1 {
-                if s.len() < 49 {
-                    // Unexpected EOF parsing link: not enough chars for `$link`
-                    return Err(ParseSpanLinkSetError {});
-                }
-
                 // Parse each link
                 if !first {
                     if s.first() != Some(&b',') {
@@ -1223,6 +1218,11 @@ pub mod span_link_set {
                         link
                     }
                     _ => {
+                        if s.len() < 49 {
+                            // Unexpected EOF parsing link: not enough chars for `$link`
+                            return Err(ParseSpanLinkSetError {});
+                        }
+
                         // Parse an unquoted span link
                         let link = &s[0..49];
                         s = &s[49..];
@@ -2027,11 +2027,11 @@ pub mod span_link_set {
                     set_with_links(),
                 ),
                 (
-                    " [ 0123456789abcdef0123456789abcdef-0123456789abcdef , fedcba9876543210fedcba9876543210-fedcba9876543210 ] ".to_string(),
+                    "[ 0123456789abcdef0123456789abcdef-0123456789abcdef , fedcba9876543210fedcba9876543210-fedcba9876543210 ]".to_string(),
                     set_with_links(),
                 ),
                 (
-                    " [ \"0123456789abcdef0123456789abcdef-0123456789abcdef\" , \"fedcba9876543210fedcba9876543210-fedcba9876543210\" ] ".to_string(),
+                    "[ \"0123456789abcdef0123456789abcdef-0123456789abcdef\" , \"fedcba9876543210fedcba9876543210-fedcba9876543210\" ]".to_string(),
                     set_with_links(),
                 ),
                 ("[]".to_string(), SpanLinkSet::new()),
@@ -2132,6 +2132,7 @@ pub mod span_link_set {
                 "{]",
                 "([",
                 "[0123456789abcdef0123456789abcdef-0123456789abcdef,0123456789abcdef0123456789abcdef-0123456789abcdef]",
+                "{0123456789abcdef0123456789Cbcdef-0123456A89abcdef,  fba9876543210fedcba9876543210-fedcba9876543210\"}",
             ] {
                 assert!(SpanLinkSet::try_from_str(case).is_err(), "{case}");
             }
