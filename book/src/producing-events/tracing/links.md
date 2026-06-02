@@ -48,7 +48,7 @@ fn wait_a_bit(sleep_ms: u64) {
 
 Since the expected type of `span_links` is a sequence, you'll need to use either the [`#[as_serde]`](../../reference/property-attributes.md#as_serde) or [`#[as_sval]`](../../reference/property-attributes.md#as_sval) attributes to capture them.
 
-In this example, the span link is a constant string. You can avoid allocating strings at runtime for links by using the [`SpanLink`](https://docs.rs/emit/1.18.0/emit/span/struct.SpanLink.html) type instead:
+`emit` also offers a [`SpanLinkSet`](https://docs.rs/emit/1.18.0/emit/span/struct.SpanLinkSet.html) type you can use to capture span links without needing to explicitly conform to the data model:
 
 ```rust
 # extern crate emit;
@@ -60,13 +60,14 @@ In this example, the span link is a constant string. You can avoid allocating st
 fn wait_a_bit(sleep_ms: u64) {
     // Add span links to the guard rather than as props in the macro so they aren't
     // also added to any child spans or events
-    let span_links = [
-        emit::span::SpanLink::new(
-            emit::span::TraceId::from_u128(0x0a85ccaf666e11aaca6bd5d469e2850d).unwrap(),
-            emit::span::SpanId::from_u64(0x2b9caa35eaefed3a).unwrap(),
-        ),
-    ];
-    let _span = span.push_prop("span_links", emit::Value::capture_serde(&span_links));
+    let mut span_links = emit::span::SpanLinkSet::new();
+
+    span_links.insert(emit::span::SpanLink::new(
+        emit::span::TraceId::from_u128(0x0a85ccaf666e11aaca6bd5d469e2850d).unwrap(),
+        emit::span::SpanId::from_u64(0x2b9caa35eaefed3a).unwrap(),
+    ));
+
+    let _span = span.push_prop("span_links", span_links);
 
     std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
 
