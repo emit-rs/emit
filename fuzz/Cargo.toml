@@ -1,0 +1,29 @@
+[package]
+name = "emit_fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[features]
+force = []
+
+[[bin]]
+name = "timestamp"
+path = "timestamp/main.rs"
+
+[[bin]]
+name = "bucket_set"
+path = "bucket_set/main.rs"
+
+[[bin]]
+name = "span_link_set"
+path = "span_link_set/main.rs"
+
+[dependencies.emit]
+path = "../"
+
+[dependencies.afl]
+version = "~0.17"
+optional = true

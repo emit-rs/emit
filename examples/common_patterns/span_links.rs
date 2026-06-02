@@ -60,13 +60,13 @@ fn worker<T>(queue: Weak<MessageQueue<T>>, mut process: impl FnMut(T)) {
         //    This could be done any number of ways depending on the system.
         //    In this example, we're just converting an `emit::span::SpanCtxt` into
         //    an `emit::span::SpanLink`.
-        let span_links = if let (Some(trace_id), Some(span_id)) =
+        let mut span_links = emit::span::SpanLinkSet::new();
+
+        if let (Some(trace_id), Some(span_id)) =
             (msg.producer_ctxt.trace_id(), msg.producer_ctxt.span_id())
         {
-            Some([emit::span::SpanLink::new(*trace_id, *span_id)])
-        } else {
-            None
-        };
+            span_links.insert(emit::span::SpanLink::new(*trace_id, *span_id));
+        }
 
         // 2. Create a span for the worker that will include the span link
         //    This is an inline alternative to creating a function with `#[emit::span]`
@@ -75,11 +75,7 @@ fn worker<T>(queue: Weak<MessageQueue<T>>, mut process: impl FnMut(T)) {
 
         frame.call(move || {
             // 3. Add the link as a property on the span
-            let mut span = span.push_props(
-                span_links
-                    .as_ref()
-                    .map(|span_links| ("span_links", emit::Value::capture_serde(span_links))),
-            );
+            let mut span = span.push_prop("span_links", span_links);
 
             span.start();
 

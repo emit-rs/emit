@@ -1570,6 +1570,7 @@ pub mod exp {
 
             use crate::{
                 alloc::collections::{btree_map, BTreeMap},
+                buf::{find, trim, trim_start},
                 core::{
                     fmt::{self, Write as _},
                     str::FromStr,
@@ -1637,7 +1638,7 @@ pub mod exp {
 
                 This method does not allocate.
                 */
-                pub const fn new() -> Self {
+                pub fn new() -> Self {
                     BucketSet {
                         buckets: BTreeMap::new(),
                         total: 0,
@@ -1647,17 +1648,12 @@ pub mod exp {
                 /**
                 Parse a `BucketSet` from its raw textual representation.
                 */
-                pub fn try_from_str(mut s: &str) -> Result<Self, ParseBucketSetError> {
-                    fn find(haystack: &str, needle: &[(char, u8)]) -> Option<(usize, usize)> {
-                        needle
-                            .iter()
-                            .filter_map(|(c, cs)| haystack.find(*c).map(|c| (c, *cs as usize)))
-                            .next()
-                    }
+                pub fn try_from_str(s: &str) -> Result<Self, ParseBucketSetError> {
+                    Self::try_from_slice(s.as_bytes())
+                }
 
+                fn try_from_slice(mut s: &[u8]) -> Result<Self, ParseBucketSetError> {
                     let mut set = BucketSet::new();
-
-                    s = s.trim();
 
                     if s.len() < 2 {
                         // Truncated
@@ -1665,81 +1661,73 @@ pub mod exp {
                     }
 
                     // Must be enclosed by `[]`, `()`, or `{}`
-                    let container_end = match (&s[0..1], &s[s.len() - 1..]) {
-                        ("[", "]") => ']',
-                        ("(", ")") => ')',
-                        ("{", "}") => '}',
+                    let container_end = match (s.first(), s.last()) {
+                        (Some(&b'['), Some(&b']')) => b']',
+                        (Some(&b'('), Some(&b')')) => b')',
+                        (Some(&b'{'), Some(&b'}')) => b'}',
                         _ => return Err(ParseBucketSetError {}),
                     };
                     s = &s[1..];
+                    s = trim_start(s);
 
                     let mut first = true;
                     while s.len() > 1 {
                         // Parse each bucket
                         if !first {
-                            s = s.trim_start();
-
-                            if s.len() < 2 {
-                                // Unexpected EOF parsing bucket: not enough chars for `,[`
-                                return Err(ParseBucketSetError {});
-                            }
-
-                            if &s[0..1] != "," {
+                            if s.first() != Some(&b',') {
                                 // Invalid bucket: expected `,`
                                 return Err(ParseBucketSetError {});
                             }
                             s = &s[1..];
+                            s = trim_start(s);
                         }
                         first = false;
 
                         // Determine the kind of bucket we're parsing
-                        s = s.trim_start();
-                        let (key_start_skip, key_end, value_end) = match &s[0..1] {
+                        let (key_start_skip, key_end, value_end): (
+                            usize,
+                            &[(u8, u8)],
+                            &[(u8, u8)],
+                        ) = match s.first() {
                             // `[k, v]`, `[k: v]`, or `[k = v]`
-                            "[" => (
-                                1,
-                                &[(',', 1u8), (':', 1u8), ('=', 1u8)] as &[(char, u8)],
-                                &[(']', 1u8)] as &[(char, u8)],
-                            ),
+                            Some(&b'[') => {
+                                (1, &[(b',', 1u8), (b':', 1u8), (b'=', 1u8)], &[(b']', 1u8)])
+                            }
                             // `(k, v)`, `(k: v)`, or `(k = v)`
-                            "(" => (
-                                1,
-                                &[(',', 1u8), (':', 1u8), ('=', 1u8)] as &[(char, u8)],
-                                &[(')', 1u8)] as &[(char, u8)],
-                            ),
+                            Some(&b'(') => {
+                                (1, &[(b',', 1u8), (b':', 1u8), (b'=', 1u8)], &[(b')', 1u8)])
+                            }
                             // `{k, v}`, `{k: v}`, or `{k = v}`
-                            "{" => (
-                                1,
-                                &[(',', 1u8), (':', 1u8), ('=', 1u8)] as &[(char, u8)],
-                                &[('}', 1u8)] as &[(char, u8)],
-                            ),
+                            Some(&b'{') => {
+                                (1, &[(b',', 1u8), (b':', 1u8), (b'=', 1u8)], &[(b'}', 1u8)])
+                            }
                             // `k: v`, or `k = v`
                             _ => (
                                 0,
-                                &[(':', 1u8), ('=', 1u8)] as &[(char, u8)],
-                                &[(',', 0u8), (container_end, 0u8)] as &[(char, u8)],
+                                &[(b':', 1u8), (b'=', 1u8)],
+                                &[(b',', 0u8), (container_end, 0u8)],
                             ),
                         };
                         s = &s[key_start_skip..];
 
                         // Find the bounds of the key
-                        s = s.trim_start();
                         let Some((key_end, key_end_skip)) = find(s, key_end) else {
                             // Unexpected EOF parsing key: expected `$key_end`
                             return Err(ParseBucketSetError {});
                         };
 
-                        let key = &s[..key_end];
+                        let key = str::from_utf8(trim(&s[..key_end]))
+                            .map_err(|_| ParseBucketSetError {})?;
                         s = &s[key_end + key_end_skip..];
 
                         // Find the bounds of the value
-                        s = s.trim_start();
                         let Some((value_end, value_end_skip)) = find(s, value_end) else {
                             // Unexpected EOF parsing value: expected `$value_end`
                             return Err(ParseBucketSetError {});
                         };
 
-                        let value = &s[..value_end];
+                        let value = str::from_utf8(trim(&s[..value_end]))
+                            .map_err(|_| ParseBucketSetError {})?;
                         s = &s[value_end + value_end_skip..];
 
                         // Parse the key and value
@@ -1751,6 +1739,8 @@ pub mod exp {
                             // Duplicate key
                             return Err(ParseBucketSetError {});
                         }
+
+                        s = trim_start(s);
                     }
 
                     if s.len() != 1 {
@@ -2028,14 +2018,10 @@ pub mod exp {
                     Ok(())
                 }
 
-                fn end(self) -> Option<BucketSet> {
-                    if self.buckets.len() == 0 {
-                        None
-                    } else {
-                        Some(BucketSet {
-                            buckets: self.buckets,
-                            total: self.count,
-                        })
+                fn end(self) -> BucketSet {
+                    BucketSet {
+                        buckets: self.buckets,
+                        total: self.count,
                     }
                 }
             }
@@ -2110,7 +2096,8 @@ pub mod exp {
 
                 let mut extract = Extract::default();
                 sval::stream(&mut extract, &value).ok()?;
-                extract.end()
+
+                Some(extract.end())
             }
 
             #[cfg(all(not(feature = "sval"), feature = "serde"))]
@@ -2484,7 +2471,8 @@ pub mod exp {
 
                 let mut extract = Extract::default();
                 value.serialize(&mut extract).ok()?;
-                extract.end()
+
+                Some(extract.end())
             }
 
             #[cfg(test)]
@@ -2590,6 +2578,18 @@ pub mod exp {
                                 set
                             },
                         ),
+                        ("[ [ 1 , 1 ] , [ 2 , 2 ] ]".to_string(), {
+                            let mut set = BucketSet::new();
+                            set.observe_all(Point::new(1.0), 1);
+                            set.observe_all(Point::new(2.0), 2);
+                            set
+                        }),
+                        ("[ 1 : 1 , 2 : 2 ]".to_string(), {
+                            let mut set = BucketSet::new();
+                            set.observe_all(Point::new(1.0), 1);
+                            set.observe_all(Point::new(2.0), 2);
+                            set
+                        }),
                     ] {
                         assert_eq!(
                             Some(expected),
@@ -2773,7 +2773,7 @@ pub mod exp {
 
             The distribution uses a large scale initially. Whenever the number of buckets would overflow `max_buckets`, the scale is decremented and the buckets are rescaled. This reduces the number of buckets by half while also decreasing precision.
             */
-            pub const fn new(max_scale: i32, max_buckets: usize) -> Self {
+            pub fn new(max_scale: i32, max_buckets: usize) -> Self {
                 Distribution {
                     max_buckets,
                     max_scale,
