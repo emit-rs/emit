@@ -1638,7 +1638,7 @@ pub mod exp {
 
                 This method does not allocate.
                 */
-                pub const fn new() -> Self {
+                pub fn new() -> Self {
                     BucketSet {
                         buckets: BTreeMap::new(),
                         total: 0,
@@ -2773,7 +2773,7 @@ pub mod exp {
 
             The distribution uses a large scale initially. Whenever the number of buckets would overflow `max_buckets`, the scale is decremented and the buckets are rescaled. This reduces the number of buckets by half while also decreasing precision.
             */
-            pub const fn new(max_scale: i32, max_buckets: usize) -> Self {
+            pub fn new(max_scale: i32, max_buckets: usize) -> Self {
                 Distribution {
                     max_buckets,
                     max_scale,

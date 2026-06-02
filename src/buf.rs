@@ -1,6 +1,9 @@
 use core::fmt;
 
-/// Strip leading ASCII whitespace from a byte slice.
+/**
+Trim ASCII whitespace from the start of `s`.
+*/
+#[cfg(feature = "alloc")]
 pub(crate) fn trim_start(s: &[u8]) -> &[u8] {
     let start = s
         .iter()
@@ -9,7 +12,10 @@ pub(crate) fn trim_start(s: &[u8]) -> &[u8] {
     &s[start..]
 }
 
-/// Strip trailing ASCII whitespace from a byte slice.
+/**
+Trim ASCII whitespace from the end of `s`.
+*/
+#[cfg(feature = "alloc")]
 pub(crate) fn trim_end(s: &[u8]) -> &[u8] {
     let end = s
         .iter()
@@ -19,16 +25,18 @@ pub(crate) fn trim_end(s: &[u8]) -> &[u8] {
     &s[..end]
 }
 
-/// Strip leading and trailing ASCII whitespace from a byte slice.
+/**
+Trim ASCII whitespace from `s`.
+*/
+#[cfg(feature = "alloc")]
 pub(crate) fn trim(s: &[u8]) -> &[u8] {
     trim_end(trim_start(s))
 }
 
-/// Find the first occurrence of any needle byte in the haystack, returning
-/// the matched position and its associated skip count.
-///
-/// Each needle entry is a `(byte, skip)` pair. The `skip` value is returned
-/// as `usize` in the result tuple.
+/**
+Find the first occurrence of any `(needle, skip)` in `haystack`.
+*/
+#[cfg(feature = "alloc")]
 pub(crate) fn find(haystack: &[u8], needle: &[(u8, u8)]) -> Option<(usize, usize)> {
     needle
         .iter()
@@ -41,6 +49,9 @@ pub(crate) fn find(haystack: &[u8], needle: &[(u8, u8)]) -> Option<(usize, usize
         .next()
 }
 
+/**
+An internal utility for buffering `Display` into `&str`.
+*/
 pub(super) struct Buffer<const N: usize> {
     value: [u8; N],
     idx: usize,
@@ -54,12 +65,12 @@ impl<const N: usize> Buffer<N> {
         }
     }
 
-    #[cfg(any(feature = "sval", feature = "serde"))]
+    #[cfg(all(feature = "alloc", any(feature = "sval", feature = "serde")))]
     pub(super) fn reset(&mut self) {
         self.idx = 0;
     }
 
-    #[cfg(any(feature = "sval", feature = "serde"))]
+    #[cfg(all(feature = "alloc", any(feature = "sval", feature = "serde")))]
     pub(super) fn as_bytes(&self) -> &[u8] {
         &self.value[..self.idx]
     }

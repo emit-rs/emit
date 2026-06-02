@@ -261,6 +261,11 @@ impl Timestamp {
             return None;
         }
 
+        if parts.nanos > 999999999 {
+            // Invalid nanos
+            return None;
+        }
+
         let seconds_within_month = 86400 * u32::from(parts.days - 1)
             + 3600 * u32::from(parts.hours)
             + 60 * u32::from(parts.minutes)
@@ -724,16 +729,91 @@ mod tests {
 
     #[test]
     fn parts_overflow() {
-        assert!(Timestamp::from_parts(Parts {
-            years: 2000,
-            months: 13,
-            days: 32,
-            hours: 25,
-            minutes: 61,
-            seconds: 61,
-            nanos: 1000000000,
-        })
-        .is_none(),);
+        for case in [
+            Parts {
+                years: 2000,
+                months: 0,
+                days: 1,
+                hours: 0,
+                minutes: 0,
+                seconds: 0,
+                nanos: 0,
+            },
+            Parts {
+                years: 2000,
+                months: 1,
+                days: 0,
+                hours: 0,
+                minutes: 0,
+                seconds: 0,
+                nanos: 0,
+            },
+            Parts {
+                years: 2000,
+                months: 13,
+                days: 1,
+                hours: 0,
+                minutes: 0,
+                seconds: 0,
+                nanos: 0,
+            },
+            Parts {
+                years: 1999,
+                months: 2,
+                days: 29,
+                hours: 0,
+                minutes: 0,
+                seconds: 0,
+                nanos: 0,
+            },
+            Parts {
+                years: 2000,
+                months: 4,
+                days: 31,
+                hours: 0,
+                minutes: 0,
+                seconds: 0,
+                nanos: 0,
+            },
+            Parts {
+                years: 2000,
+                months: 1,
+                days: 1,
+                hours: 25,
+                minutes: 0,
+                seconds: 0,
+                nanos: 0,
+            },
+            Parts {
+                years: 2000,
+                months: 1,
+                days: 1,
+                hours: 0,
+                minutes: 61,
+                seconds: 0,
+                nanos: 0,
+            },
+            Parts {
+                years: 2000,
+                months: 1,
+                days: 1,
+                hours: 0,
+                minutes: 0,
+                seconds: 61,
+                nanos: 0,
+            },
+            Parts {
+                years: 2000,
+                months: 1,
+                days: 1,
+                hours: 0,
+                minutes: 0,
+                seconds: 0,
+                nanos: 1000000000,
+            },
+        ] {
+            assert!(Timestamp::from_parts(case).is_none(), "{case:?}");
+        }
     }
 
     #[test]

@@ -1097,7 +1097,11 @@ pub mod span_link_set {
 
     use super::*;
 
-    use alloc::collections::{btree_set, BTreeSet};
+    #[cfg(not(feature = "std"))]
+    use alloc::collections::{btree_set as set, BTreeSet as Set};
+    #[cfg(feature = "std")]
+    use std::collections::{hash_set as set, HashSet as Set};
+
     use core::{fmt::Write, str::FromStr};
 
     use crate::buf::trim_start;
@@ -1120,12 +1124,10 @@ pub mod span_link_set {
 
     /**
     A collection of [`SpanLink`]s.
-
-    The set stores sorted, deduplicated span links.
     */
     #[derive(Clone, PartialEq, Eq)]
     pub struct SpanLinkSet {
-        links: BTreeSet<SpanLink>,
+        links: Set<SpanLink>,
     }
 
     impl fmt::Debug for SpanLinkSet {
@@ -1158,10 +1160,8 @@ pub mod span_link_set {
 
         This method does not allocate.
         */
-        pub const fn new() -> Self {
-            SpanLinkSet {
-                links: BTreeSet::new(),
-            }
+        pub fn new() -> Self {
+            SpanLinkSet { links: Set::new() }
         }
 
         /**
@@ -1286,20 +1286,6 @@ pub mod span_link_set {
         }
 
         /**
-        Get the first (smallest) link in the set.
-        */
-        pub fn first(&self) -> Option<SpanLink> {
-            self.links.first().copied()
-        }
-
-        /**
-        Get the last (largest) link in the set.
-        */
-        pub fn last(&self) -> Option<SpanLink> {
-            self.links.last().copied()
-        }
-
-        /**
         Iterate over links in sorted order.
         */
         pub fn iter(&self) -> Iter<'_> {
@@ -1327,7 +1313,7 @@ pub mod span_link_set {
 
     This is the result of calling [`SpanLinkSet::iter`].
     */
-    pub struct Iter<'a>(btree_set::Iter<'a, SpanLink>);
+    pub struct Iter<'a>(set::Iter<'a, SpanLink>);
 
     impl<'a> Iterator for Iter<'a> {
         type Item = SpanLink;
@@ -1346,7 +1332,9 @@ pub mod span_link_set {
             stream.seq_begin(Some(self.links.len()))?;
 
             for link in &self.links {
+                stream.seq_value_begin()?;
                 stream.value(link)?;
+                stream.seq_value_end()?;
             }
 
             stream.seq_end()
@@ -1420,7 +1408,7 @@ pub mod span_link_set {
     #[cfg(any(feature = "sval", feature = "serde"))]
     struct Extract {
         depth: usize,
-        links: BTreeSet<SpanLink>,
+        links: Set<SpanLink>,
         text_buf: crate::buf::Buffer<49>,
     }
 
@@ -1429,7 +1417,7 @@ pub mod span_link_set {
         fn default() -> Self {
             Extract {
                 depth: 0,
-                links: BTreeSet::new(),
+                links: Set::new(),
                 text_buf: crate::buf::Buffer::new(),
             }
         }
@@ -1520,18 +1508,6 @@ pub mod span_link_set {
             }
 
             fn i64(&mut self, _: i64) -> sval::Result {
-                sval::error()
-            }
-
-            fn u64(&mut self, _: u64) -> sval::Result {
-                sval::error()
-            }
-
-            fn i128(&mut self, _: i128) -> sval::Result {
-                sval::error()
-            }
-
-            fn u128(&mut self, _: u128) -> sval::Result {
                 sval::error()
             }
 
@@ -1631,14 +1607,6 @@ pub mod span_link_set {
             }
 
             fn serialize_u64(self, _: u64) -> Result<Self::Ok, Self::Error> {
-                Err(Incompatible)
-            }
-
-            fn serialize_u128(self, _: u128) -> Result<Self::Ok, Self::Error> {
-                Err(Incompatible)
-            }
-
-            fn serialize_i128(self, _: i128) -> Result<Self::Ok, Self::Error> {
                 Err(Incompatible)
             }
 
@@ -1948,31 +1916,22 @@ pub mod span_link_set {
 
             assert_eq!(0, set.len());
             assert!(set.is_empty());
-            assert!(set.first().is_none());
-            assert!(set.last().is_none());
             assert!(!set.contains(link1()));
 
             set.insert(link1());
+
             assert_eq!(1, set.len());
             assert!(set.contains(link1()));
 
             set.insert(link2());
+
             assert_eq!(2, set.len());
 
-            // Deduplication
             assert!(!set.insert(link1()));
             assert_eq!(2, set.len());
 
-            // First/last
-            assert_eq!(Some(link1()), set.first());
-            assert_eq!(Some(link2()), set.last());
-
-            // Iter
-            let collected: alloc::vec::Vec<_> = set.iter().collect();
-            assert_eq!(alloc::vec![link1(), link2()], collected);
-
-            // Clear
             set.clear();
+
             assert_eq!(0, set.len());
             assert!(set.is_empty());
         }
