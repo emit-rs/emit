@@ -1889,45 +1889,39 @@ pub mod span_link_set {
 
         use std::collections::BTreeSet;
 
-        fn link1() -> SpanLink {
-            SpanLink::new(
-                TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
-                SpanId::from_u64(0x0123456789abcdef).unwrap(),
-            )
-        }
-
-        fn link2() -> SpanLink {
-            SpanLink::new(
-                TraceId::from_u128(0xfedcba9876543210fedcba9876543210).unwrap(),
-                SpanId::from_u64(0xfedcba9876543210).unwrap(),
-            )
-        }
-
-        fn set_with_links() -> SpanLinkSet {
-            let mut set = SpanLinkSet::new();
-            set.insert(link1());
-            set.insert(link2());
-            set
-        }
-
         #[test]
         fn span_link_set() {
             let mut set = SpanLinkSet::new();
 
             assert_eq!(0, set.len());
             assert!(set.is_empty());
-            assert!(!set.contains(link1()));
+            assert!(!set.contains(SpanLink::new(
+                TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                SpanId::from_u64(0x0123456789abcdef).unwrap(),
+            )));
 
-            set.insert(link1());
+            set.insert(SpanLink::new(
+                TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                SpanId::from_u64(0x0123456789abcdef).unwrap(),
+            ));
 
             assert_eq!(1, set.len());
-            assert!(set.contains(link1()));
+            assert!(set.contains(SpanLink::new(
+                TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                SpanId::from_u64(0x0123456789abcdef).unwrap(),
+            )));
 
-            set.insert(link2());
+            set.insert(SpanLink::new(
+                TraceId::from_u128(0xfedcba9876543210fedcba9876543210).unwrap(),
+                SpanId::from_u64(0xfedcba9876543210).unwrap(),
+            ));
 
             assert_eq!(2, set.len());
 
-            assert!(!set.insert(link1()));
+            assert!(!set.insert(SpanLink::new(
+                TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                SpanId::from_u64(0x0123456789abcdef).unwrap(),
+            )));
             assert_eq!(2, set.len());
 
             set.clear();
@@ -1942,10 +1936,24 @@ pub mod span_link_set {
                 SpanLinkSet::new(),
                 {
                     let mut set = SpanLinkSet::new();
-                    set.insert(link1());
+                    set.insert(SpanLink::new(
+                        TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                        SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                    ));
                     set
                 },
-                set_with_links(),
+                {
+                    let mut set = SpanLinkSet::new();
+                    set.insert(SpanLink::new(
+                        TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                        SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                    ));
+                    set.insert(SpanLink::new(
+                        TraceId::from_u128(0xfedcba9876543210fedcba9876543210).unwrap(),
+                        SpanId::from_u64(0xfedcba9876543210).unwrap(),
+                    ));
+                    set
+                },
             ] {
                 let fmt = case.to_string();
                 assert_eq!(Some(case), SpanLinkSet::try_from_str(&fmt).ok(), "{fmt}");
@@ -1956,25 +1964,91 @@ pub mod span_link_set {
         fn span_link_set_parse() {
             for (case, expected) in [
                 (
-                    format!("{:?}", [link1(), link2()]),
-                    set_with_links(),
+                    format!("{:?}", [
+                        SpanLink::new(
+                            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                        ), SpanLink::new(
+                            TraceId::from_u128(0xfedcba9876543210fedcba9876543210).unwrap(),
+                            SpanId::from_u64(0xfedcba9876543210).unwrap(),
+                        )]
+                    ),
+                    {
+                        let mut set = SpanLinkSet::new();
+                        set.insert(SpanLink::new(
+                            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                        ));
+                        set.insert(SpanLink::new(
+                            TraceId::from_u128(0xfedcba9876543210fedcba9876543210).unwrap(),
+                            SpanId::from_u64(0xfedcba9876543210).unwrap(),
+                        ));
+                        set
+                    },
                 ),
                 (
                     format!("{:?}", ["0123456789abcdef0123456789abcdef-0123456789abcdef", "fedcba9876543210fedcba9876543210-fedcba9876543210"]),
-                    set_with_links(),
+                    {
+                        let mut set = SpanLinkSet::new();
+                        set.insert(SpanLink::new(
+                            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                        ));
+                        set.insert(SpanLink::new(
+                            TraceId::from_u128(0xfedcba9876543210fedcba9876543210).unwrap(),
+                            SpanId::from_u64(0xfedcba9876543210).unwrap(),
+                        ));
+                        set
+                    },
                 ),
                 (
-                    format!("{:?}", (link1(), link2())),
-                    set_with_links(),
+                    format!("{:?}", (
+                        SpanLink::new(
+                            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                        ), SpanLink::new(
+                            TraceId::from_u128(0xfedcba9876543210fedcba9876543210).unwrap(),
+                            SpanId::from_u64(0xfedcba9876543210).unwrap(),
+                        ))
+                    ),
+                    {
+                        let mut set = SpanLinkSet::new();
+                        set.insert(SpanLink::new(
+                            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                        ));
+                        set.insert(SpanLink::new(
+                            TraceId::from_u128(0xfedcba9876543210fedcba9876543210).unwrap(),
+                            SpanId::from_u64(0xfedcba9876543210).unwrap(),
+                        ));
+                        set
+                    },
                 ),
                 (
                     format!("{:?}", {
                         let mut set = BTreeSet::new();
-                        set.insert(link1());
-                        set.insert(link2());
+                        set.insert(SpanLink::new(
+                            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                        ));
+                        set.insert(SpanLink::new(
+                            TraceId::from_u128(0xfedcba9876543210fedcba9876543210).unwrap(),
+                            SpanId::from_u64(0xfedcba9876543210).unwrap(),
+                        ));
                         set
                     }),
-                    set_with_links(),
+                    {
+                        let mut set = SpanLinkSet::new();
+                        set.insert(SpanLink::new(
+                            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                        ));
+                        set.insert(SpanLink::new(
+                            TraceId::from_u128(0xfedcba9876543210fedcba9876543210).unwrap(),
+                            SpanId::from_u64(0xfedcba9876543210).unwrap(),
+                        ));
+                        set
+                    },
                 ),
                 (
                     format!("{:?}", {
@@ -1983,15 +2057,48 @@ pub mod span_link_set {
                         set.insert("fedcba9876543210fedcba9876543210-fedcba9876543210");
                         set
                     }),
-                    set_with_links(),
+                    {
+                        let mut set = SpanLinkSet::new();
+                        set.insert(SpanLink::new(
+                            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                        ));
+                        set.insert(SpanLink::new(
+                            TraceId::from_u128(0xfedcba9876543210fedcba9876543210).unwrap(),
+                            SpanId::from_u64(0xfedcba9876543210).unwrap(),
+                        ));
+                        set
+                    },
                 ),
                 (
                     "[ 0123456789abcdef0123456789abcdef-0123456789abcdef , fedcba9876543210fedcba9876543210-fedcba9876543210 ]".to_string(),
-                    set_with_links(),
+                    {
+                        let mut set = SpanLinkSet::new();
+                        set.insert(SpanLink::new(
+                            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                        ));
+                        set.insert(SpanLink::new(
+                            TraceId::from_u128(0xfedcba9876543210fedcba9876543210).unwrap(),
+                            SpanId::from_u64(0xfedcba9876543210).unwrap(),
+                        ));
+                        set
+                    },
                 ),
                 (
                     "[ \"0123456789abcdef0123456789abcdef-0123456789abcdef\" , \"fedcba9876543210fedcba9876543210-fedcba9876543210\" ]".to_string(),
-                    set_with_links(),
+                    {
+                        let mut set = SpanLinkSet::new();
+                        set.insert(SpanLink::new(
+                            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                        ));
+                        set.insert(SpanLink::new(
+                            TraceId::from_u128(0xfedcba9876543210fedcba9876543210).unwrap(),
+                            SpanId::from_u64(0xfedcba9876543210).unwrap(),
+                        ));
+                        set
+                    },
                 ),
                 ("[]".to_string(), SpanLinkSet::new()),
             ] {
@@ -2005,7 +2112,18 @@ pub mod span_link_set {
 
         #[test]
         fn span_link_set_to_from_value() {
-            for case in [set_with_links()] {
+            for case in [{
+                let mut set = SpanLinkSet::new();
+                set.insert(SpanLink::new(
+                    TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                    SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                ));
+                set.insert(SpanLink::new(
+                    TraceId::from_u128(0xfedcba9876543210fedcba9876543210).unwrap(),
+                    SpanId::from_u64(0xfedcba9876543210).unwrap(),
+                ));
+                set
+            }] {
                 assert_eq!(case, SpanLinkSet::from_value(case.to_value()).unwrap());
             }
         }
@@ -2015,7 +2133,18 @@ pub mod span_link_set {
             for (case, expected) in [
                 (
                     "[0123456789abcdef0123456789abcdef-0123456789abcdef,fedcba9876543210fedcba9876543210-fedcba9876543210]",
-                    set_with_links(),
+                    {
+                        let mut set = SpanLinkSet::new();
+                        set.insert(SpanLink::new(
+                            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                        ));
+                        set.insert(SpanLink::new(
+                            TraceId::from_u128(0xfedcba9876543210fedcba9876543210).unwrap(),
+                            SpanId::from_u64(0xfedcba9876543210).unwrap(),
+                        ));
+                        set
+                    },
                 ),
             ] {
                 assert_eq!(expected, Value::from(case).cast().unwrap());
@@ -2059,7 +2188,18 @@ pub mod span_link_set {
                 }
             }
 
-            let expected = set_with_links();
+            let expected = {
+                let mut set = SpanLinkSet::new();
+                set.insert(SpanLink::new(
+                    TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                    SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                ));
+                set.insert(SpanLink::new(
+                    TraceId::from_u128(0xfedcba9876543210fedcba9876543210).unwrap(),
+                    SpanId::from_u64(0xfedcba9876543210).unwrap(),
+                ));
+                set
+            };
 
             case(
                 &[
@@ -2068,11 +2208,29 @@ pub mod span_link_set {
                 ],
                 &expected,
             );
-            case(&[link1(), link2()], &expected);
+            case(
+                &[
+                    SpanLink::new(
+                        TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                        SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                    ),
+                    SpanLink::new(
+                        TraceId::from_u128(0xfedcba9876543210fedcba9876543210).unwrap(),
+                        SpanId::from_u64(0xfedcba9876543210).unwrap(),
+                    ),
+                ],
+                &expected,
+            );
 
             let mut btree_set = alloc::collections::BTreeSet::new();
-            btree_set.insert(link1());
-            btree_set.insert(link2());
+            btree_set.insert(SpanLink::new(
+                TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                SpanId::from_u64(0x0123456789abcdef).unwrap(),
+            ));
+            btree_set.insert(SpanLink::new(
+                TraceId::from_u128(0xfedcba9876543210fedcba9876543210).unwrap(),
+                SpanId::from_u64(0xfedcba9876543210).unwrap(),
+            ));
             case(&btree_set, &expected);
         }
 
