@@ -27,7 +27,31 @@ fn sample_basic() {
     );
 
     let my_metric = 42;
-    emit::sample!(rt, value: my_metric);
+    {
+        match {
+            #[allow(unused_imports)]
+            use emit::__private::{
+                __PrivateCaptureHook as _, __PrivateInterpolatedHook as _,
+                __PrivateKeyExternalHook as _, __PrivateOptionalCaptureHook as _,
+                __PrivateOptionalHook as _,
+            };
+            (my_metric)
+                .__private_capture_as_default()
+                .__private_key_external()
+                .__private_uninterpolated()
+                .__private_captured()
+        } {
+            __tmp_value => emit::__private::__private_sample(
+                emit::__private::__private_default_sampler(&(rt)),
+                ::emit::Path::new_raw("emit_test_ui::sample"),
+                &(emit::Empty),
+                &(emit::Empty),
+                "my_metric",
+                "last",
+                __tmp_value,
+            ),
+        }
+    };
 
     assert!(called.was_called());
 }

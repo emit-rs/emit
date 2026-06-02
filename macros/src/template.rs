@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, fmt::Write as _};
 
 use proc_macro2::TokenStream;
 
-use syn::{parse::Parse, punctuated::Punctuated, spanned::Spanned, Expr, ExprPath, FieldValue};
+use syn::{Expr, ExprPath, FieldValue, parse::Parse, punctuated::Punctuated, spanned::Spanned};
 
 use crate::{fmt, props::Props, util::FieldValueKey};
 
@@ -44,7 +44,10 @@ pub fn parse2<A: Parse>(
                 if let Expr::Path(ExprPath { ref path, .. }) = fv.expr {
                     // Make sure the field-value in the template is just a plain identifier
                     if !fv.attrs.is_empty() {
-                        return Err(syn::Error::new(fv.span(), "keys that exist in the template and extra pairs can only use attributes on the extra pair"));
+                        return Err(syn::Error::new(
+                            fv.span(),
+                            "keys that exist in the template and extra pairs can only use attributes on the extra pair",
+                        ));
                     }
 
                     assert_eq!(

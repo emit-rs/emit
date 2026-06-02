@@ -2,12 +2,12 @@ use std::{fmt, marker::PhantomData};
 
 use proc_macro2::{Span, TokenStream};
 use syn::{
+    Attribute, Expr, ExprField, ExprLit, ExprParen, FieldValue, Ident, Item, ItemFn, Lit, LitStr,
+    MacroDelimiter, Member, Meta, MetaList, Signature, Stmt,
     ext::IdentExt,
     parse::{self, Parse, ParseStream},
     punctuated::Punctuated,
     spanned::Spanned,
-    Attribute, Expr, ExprField, ExprLit, ExprParen, FieldValue, Ident, Item, ItemFn, Lit, LitStr,
-    MacroDelimiter, Member, Meta, MetaList, Signature, Stmt,
 };
 
 pub trait FieldValueKey {
@@ -206,7 +206,7 @@ pub trait ToOptionTokens {
 impl ToOptionTokens for Option<TokenStream> {
     fn to_option_tokens(&self, none_ty_hint: TokenStream) -> TokenStream {
         match self {
-            Some(ref tokens) => quote!(emit::__private::core::option::Option::Some(#tokens)),
+            Some(tokens) => quote!(emit::__private::core::option::Option::Some(#tokens)),
             None => quote!(emit::__private::core::option::Option::None::<#none_ty_hint>),
         }
     }

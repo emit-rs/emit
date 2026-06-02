@@ -1,10 +1,10 @@
 use proc_macro2::TokenStream;
-use syn::{parse::Parse, spanned::Spanned, FieldValue, LitStr};
+use syn::{FieldValue, LitStr, parse::Parse, spanned::Spanned};
 
 use crate::{
     args::{self, Arg},
     capture,
-    props::{push_evt_props, Props},
+    props::{Props, push_evt_props},
     template,
     util::ToRefTokens,
 };

@@ -32,16 +32,18 @@ fn main() {
 
     // Spawn some independent background workers that operate on the metric
     for _ in 0..3 {
-        let _ = thread::spawn(move || loop {
-            let start = Instant::now();
-            for _ in 0..3977 {
-                let sample = start.elapsed().as_millis() as f64;
+        let _ = thread::spawn(move || {
+            loop {
+                let start = Instant::now();
+                for _ in 0..3977 {
+                    let sample = start.elapsed().as_millis() as f64;
 
-                let mut guard = METRIC_A.lock().unwrap();
-                guard.current_value_mut().observe(sample);
-                drop(guard);
+                    let mut guard = METRIC_A.lock().unwrap();
+                    guard.current_value_mut().observe(sample);
+                    drop(guard);
 
-                thread::sleep(Duration::from_micros(117));
+                    thread::sleep(Duration::from_micros(117));
+                }
             }
         });
     }

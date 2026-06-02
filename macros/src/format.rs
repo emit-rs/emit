@@ -15,7 +15,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     }
     #[cfg(feature = "std")]
     {
-        use syn::{parse::Parse, FieldValue};
+        use syn::{FieldValue, parse::Parse};
 
         use crate::{args, template, util::ToRefTokens};
 

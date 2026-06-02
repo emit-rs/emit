@@ -3,12 +3,12 @@ use std::{collections::HashMap, fmt::Write, sync::OnceLock};
 use proc_macro2::TokenStream;
 use quote::ToTokens;
 use syn::{
+    Attribute, Expr, ExprMethodCall, Ident, Meta, MetaList,
     parse::Parse,
     punctuated::Punctuated,
     spanned::Spanned,
     token::Comma,
     visit_mut::{self, VisitMut},
-    Attribute, Expr, ExprMethodCall, Ident, Meta, MetaList,
 };
 
 use crate::util::parse_comma_separated2;
@@ -149,7 +149,7 @@ pub(crate) fn eval_hooks(attrs: &[Attribute], expr: Expr) -> syn::Result<TokenSt
 
             if root.ident == "emit" {
                 let args = match &attr.meta {
-                    Meta::List(MetaList { ref tokens, .. }) => Some(tokens),
+                    Meta::List(MetaList { tokens, .. }) => Some(tokens),
                     _ => None,
                 };
 
