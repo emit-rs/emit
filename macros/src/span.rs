@@ -1,14 +1,14 @@
 use proc_macro2::{Ident, Span, TokenStream};
 use syn::{
-    parse::Parse, spanned::Spanned, Block, Expr, ExprAsync, ExprBlock, FieldValue, Item, ItemFn,
-    Member, Signature, Stmt,
+    Block, Expr, ExprAsync, ExprBlock, FieldValue, Item, ItemFn, Member, Signature, Stmt,
+    parse::Parse, spanned::Spanned,
 };
 
 use crate::util::StmtFnName;
 use crate::{
     args::{self, Arg},
     capture,
-    props::{check_evt_props, Props},
+    props::{Props, check_evt_props},
     template::{self, Template},
     util::{ToOptionTokens, ToRefTokens},
 };

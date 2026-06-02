@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream;
 use syn::{
-    parse::Parse, punctuated::Punctuated, spanned::Spanned, token::Comma, Attribute, Expr, ExprLit,
-    FieldValue, Ident, Lit, LitStr,
+    Attribute, Expr, ExprLit, FieldValue, Ident, Lit, LitStr, parse::Parse, punctuated::Punctuated,
+    spanned::Spanned, token::Comma,
 };
 
 use crate::{

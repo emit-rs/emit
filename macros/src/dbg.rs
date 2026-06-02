@@ -1,9 +1,9 @@
 use proc_macro2::TokenStream;
-use syn::{parse::Parse, spanned::Spanned, FieldValue};
+use syn::{FieldValue, parse::Parse, spanned::Spanned};
 
 use crate::{
     args, capture,
-    props::{push_evt_props, Props},
+    props::{Props, push_evt_props},
     template::{self, Template},
     util::{ToOptionTokens, ToRefTokens},
 };
@@ -145,7 +145,7 @@ fn check_dbg_props(props: &Props) -> Result<(), syn::Error> {
                 return Err(syn::Error::new(
                     v.span(),
                     format!("`{k}` can't be used as a key in the `dbg` macro"),
-                ))
+                ));
             }
             _ => (),
         }

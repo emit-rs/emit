@@ -7,8 +7,8 @@ needs a read lock.
 
 use std::{
     sync::{
-        atomic::{AtomicUsize, Ordering},
         LazyLock, RwLock,
+        atomic::{AtomicUsize, Ordering},
     },
     thread,
     time::Duration,
@@ -31,14 +31,16 @@ fn main() {
 
     // Spawn some independent background workers that operate on the metric
     for _ in 0..3 {
-        let _ = thread::spawn(move || loop {
-            METRIC_A
-                .read()
-                .unwrap()
-                .current_value()
-                .fetch_add(1, Ordering::Relaxed);
+        let _ = thread::spawn(move || {
+            loop {
+                METRIC_A
+                    .read()
+                    .unwrap()
+                    .current_value()
+                    .fetch_add(1, Ordering::Relaxed);
 
-            thread::sleep(Duration::from_millis(117));
+                thread::sleep(Duration::from_millis(117));
+            }
         });
     }
 

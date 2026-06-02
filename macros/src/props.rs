@@ -1,11 +1,11 @@
 use std::collections::BTreeMap;
 
 use proc_macro2::{Span, TokenStream};
-use syn::{parse::Parse, spanned::Spanned, Attribute, FieldValue, Ident};
+use syn::{Attribute, FieldValue, Ident, parse::Parse, spanned::Spanned};
 
 use crate::{
     capture, hook,
-    util::{maybe_cfg, AttributeCfg, ExprIsLocalVariable, FieldValueKey},
+    util::{AttributeCfg, ExprIsLocalVariable, FieldValueKey, maybe_cfg},
 };
 
 #[derive(Debug)]
@@ -271,30 +271,32 @@ pub fn check_evt_props(props: &Props) -> Result<(), syn::Error> {
                 return Err(syn::Error::new(
                     v.span(),
                     "specify the module using the `mdl` control parameter before the template",
-                ))
+                ));
             }
             emit_core::well_known::KEY_TPL => {
                 return Err(syn::Error::new(
                     v.span(),
                     "the template is specified as a string literal before properties",
-                ))
+                ));
             }
             emit_core::well_known::KEY_MSG => {
                 return Err(syn::Error::new(
                     v.span(),
                     "the message is specified as a string literal template before properties",
-                ))
+                ));
             }
             emit_core::well_known::KEY_TS => {
                 return Err(syn::Error::new(
                     v.span(),
                     "specify the timestamp using the `extent` control parameter before the template",
-                ))
+                ));
             }
-            emit_core::well_known::KEY_TS_START => return Err(syn::Error::new(
-                v.span(),
-                "specify the start timestamp using the `extent` control parameter before the template",
-            )),
+            emit_core::well_known::KEY_TS_START => {
+                return Err(syn::Error::new(
+                    v.span(),
+                    "specify the start timestamp using the `extent` control parameter before the template",
+                ));
+            }
             _ => (),
         }
     }

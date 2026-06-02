@@ -2,7 +2,7 @@
 
 use core::{
     any::Any,
-    fmt,
+    fmt, mem,
     ops::{ControlFlow, Deref, DerefMut},
 };
 
@@ -1201,6 +1201,12 @@ pub struct __PrivateMacroProps<'a, const N: usize>([(Str<'a>, Option<Value<'a>>)
 impl<'a, const N: usize> __PrivateMacroProps<'a, N> {
     pub fn from_array(props: [(Str<'a>, Option<Value<'a>>); N]) -> Self {
         __PrivateMacroProps(props)
+    }
+}
+
+impl<'a> __PrivateMacroProps<'a, 1> {
+    pub fn into_value(mut self) -> Option<Value<'a>> {
+        mem::replace(&mut self.0[0].1, None)
     }
 }
 

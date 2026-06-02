@@ -1,5 +1,5 @@
 use proc_macro2::TokenStream;
-use syn::{parse::Parse, spanned::Spanned, FieldValue};
+use syn::{FieldValue, parse::Parse, spanned::Spanned};
 
 use crate::{
     args::{self, Arg},
@@ -73,7 +73,10 @@ impl Parse for Args {
 
         if let Some(ref evt) = evt.peek() {
             if mdl.peek().is_some() || extent.peek().is_some() || props.peek().is_some() {
-                return Err(syn::Error::new(evt.span(), "the `evt` argument cannot be set if any of `mdl`, `extent`, or `props` are also set"));
+                return Err(syn::Error::new(
+                    evt.span(),
+                    "the `evt` argument cannot be set if any of `mdl`, `extent`, or `props` are also set",
+                ));
             }
         }
 

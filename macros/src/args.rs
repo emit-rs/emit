@@ -5,9 +5,9 @@ Arguments are the field-value inputs to attribute macros, like `x` in `#[attr(x:
 */
 
 use proc_macro2::{Ident, Span, TokenStream};
-use syn::{spanned::Spanned, Expr, ExprLit, ExprPath, FieldValue, Lit};
+use syn::{Expr, ExprLit, ExprPath, FieldValue, Lit, spanned::Spanned};
 
-use crate::util::{print_list, FieldValueKey};
+use crate::util::{FieldValueKey, print_list};
 
 /**
 An argument represented as a field-value input to a macro.

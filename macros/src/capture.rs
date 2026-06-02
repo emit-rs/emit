@@ -1,8 +1,8 @@
 use proc_macro2::TokenStream;
 
 use syn::{
-    parse::Parse, punctuated::Punctuated, spanned::Spanned, token::Comma, Attribute, Expr,
-    FieldValue, Ident,
+    Attribute, Expr, FieldValue, Ident, parse::Parse, punctuated::Punctuated, spanned::Spanned,
+    token::Comma,
 };
 
 use crate::{
@@ -70,19 +70,6 @@ pub fn eval_key_with_hook(
     let key_tokens = key::key_with_hook(&[], &key_expr, interpolated, captured);
 
     hook::eval_hooks(&attrs, syn::parse_quote_spanned!(fv.span()=>#key_tokens))
-}
-
-pub fn eval_value_with_hook(
-    attrs: &[Attribute],
-    fv: &FieldValue,
-    fn_name: &TokenStream,
-    interpolated: bool,
-    captured: bool,
-) -> syn::Result<TokenStream> {
-    let value_expr = &fv.expr;
-    let value_tokens = value_with_hook(&value_expr, fn_name, interpolated, captured);
-
-    hook::eval_hooks(&attrs, syn::parse_quote_spanned!(fv.span()=>#value_tokens))
 }
 
 pub(crate) fn value_with_hook(

@@ -22,11 +22,7 @@ struct Error {
 fn example(i: i32) -> Result<(), Error> {
     let r = i + 1;
 
-    if r == 4 {
-        Err(Error { n: r })
-    } else {
-        Ok(())
-    }
+    if r == 4 { Err(Error { n: r }) } else { Ok(()) }
 }
 
 fn main() {

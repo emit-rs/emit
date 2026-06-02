@@ -1,6 +1,6 @@
 use crate::hook;
 use proc_macro2::TokenStream;
-use syn::{parse::Parse, punctuated::Punctuated, token::Comma, Expr, Ident};
+use syn::{Expr, Ident, parse::Parse, punctuated::Punctuated, token::Comma};
 
 pub struct Args {
     /*
