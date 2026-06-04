@@ -32,7 +32,7 @@ Event {
 
 ## The `Delta` type
 
-You can use the [`Delta`](https://docs.rs/emit/1.18.0/emit/metric/struct.Delta.html) type to implement metric sources that track deltas instead of cumulative values. The `Delta` type tracks the range the value covers, automatically updating it when sampled.
+You can use the [`Delta`](https://docs.rs/emit/1.19.0/emit/metric/struct.Delta.html) type to implement metric sources that track deltas instead of cumulative values. The `Delta` type tracks the range the value covers, automatically updating it when sampled.
 
 ```rust
 # extern crate emit;
@@ -54,6 +54,6 @@ let (extent, my_metric) = delta.advance_default(emit::clock().now());
 emit::sample!(extent, value: my_metric);
 ```
 
-Internally, [`Delta`](https://docs.rs/emit/1.18.0/emit/metric/struct.Delta.html) just tracks the last [`Timestamp`](https://docs.rs/emit/1.18.0/emit/struct.Timestamp.html) passed to `advance` (which is the start of the current interval) and the value for the current interval. `Delta` relies on external mutability, so you'll need to wrap it in a mutex to share it, but can be used for arbitrarily complex metric sources, like [`Distribution`](https://docs.rs/emit/1.18.0/emit/metric/exp/struct.Distribution.html)s.
+Internally, [`Delta`](https://docs.rs/emit/1.19.0/emit/metric/struct.Delta.html) just tracks the last [`Timestamp`](https://docs.rs/emit/1.19.0/emit/struct.Timestamp.html) passed to `advance` (which is the start of the current interval) and the value for the current interval. `Delta` relies on external mutability, so you'll need to wrap it in a mutex to share it, but can be used for arbitrarily complex metric sources, like [`Distribution`](https://docs.rs/emit/1.19.0/emit/metric/exp/struct.Distribution.html)s.
 
-See [Reporting sources](./reporting-sources.md) for details on how to sample a [`Source`](https://docs.rs/emit/1.18.0/emit/metric/source/trait.Source.html) containing a `Delta`.
+See [Reporting sources](./reporting-sources.md) for details on how to sample a [`Source`](https://docs.rs/emit/1.19.0/emit/metric/source/trait.Source.html) containing a `Delta`.
