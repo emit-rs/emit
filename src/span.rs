@@ -1308,6 +1308,41 @@ pub mod span_link_set {
         }
     }
 
+    impl<'a> FromIterator<SpanLink> for SpanLinkSet {
+        fn from_iter<I: IntoIterator<Item = SpanLink>>(iter: I) -> Self {
+            let mut set = SpanLinkSet::new();
+            set.extend(iter);
+
+            set
+        }
+    }
+
+    impl<'a> Extend<SpanLink> for SpanLinkSet {
+        fn extend<I: IntoIterator<Item = SpanLink>>(&mut self, iter: I) {
+            for link in iter {
+                self.insert(link);
+            }
+        }
+    }
+
+    impl<'a> FromIterator<(TraceId, SpanId)> for SpanLinkSet {
+        fn from_iter<I: IntoIterator<Item = (TraceId, SpanId)>>(iter: I) -> Self {
+            Self::from_iter(
+                iter.into_iter()
+                    .map(|(trace_id, span_id)| SpanLink::new(trace_id, span_id)),
+            )
+        }
+    }
+
+    impl<'a> Extend<(TraceId, SpanId)> for SpanLinkSet {
+        fn extend<I: IntoIterator<Item = (TraceId, SpanId)>>(&mut self, iter: I) {
+            self.extend(
+                iter.into_iter()
+                    .map(|(trace_id, span_id)| SpanLink::new(trace_id, span_id)),
+            )
+        }
+    }
+
     /**
     An iterator over sorted links from a [`SpanLinkSet`].
 
@@ -1958,6 +1993,39 @@ pub mod span_link_set {
                 let fmt = case.to_string();
                 assert_eq!(Some(case), SpanLinkSet::try_from_str(&fmt).ok(), "{fmt}");
             }
+        }
+
+        #[test]
+        fn span_link_set_from_iter() {
+            let mut set = SpanLinkSet::from_iter([
+                SpanLink::new(
+                    TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                    SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                ),
+                SpanLink::new(
+                    TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                    SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                ),
+            ]);
+
+            assert!(set.contains(SpanLink::new(
+                TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                SpanId::from_u64(0x0123456789abcdef).unwrap(),
+            )));
+
+            set.extend([SpanLink::new(
+                TraceId::from_u128(0xfedcba9876543210fedcba9876543210).unwrap(),
+                SpanId::from_u64(0xfedcba9876543210).unwrap(),
+            )]);
+
+            assert!(set.contains(SpanLink::new(
+                TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                SpanId::from_u64(0x0123456789abcdef).unwrap(),
+            )));
+            assert!(set.contains(SpanLink::new(
+                TraceId::from_u128(0xfedcba9876543210fedcba9876543210).unwrap(),
+                SpanId::from_u64(0xfedcba9876543210).unwrap(),
+            )));
         }
 
         #[test]
