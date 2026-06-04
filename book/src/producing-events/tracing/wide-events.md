@@ -89,4 +89,4 @@ Event {
 }
 ```
 
-Applications may already have established patterns for handling this kind of context. All that's needed is for the value attached to the wide event span via its `evt_props` [control parameter](../../reference/control-parameters.md) to implement [`Props`](https://docs.rs/emit/1.18.0/emit/props/trait.Props.html), yielding any context pushed during its execution.
+Applications may already have established patterns for handling this kind of context. All that's needed is for the value attached to the wide event span via its `evt_props` [control parameter](../../reference/control-parameters.md) to implement [`Props`](https://docs.rs/emit/1.19.0/emit/props/trait.Props.html), yielding any context pushed during its execution.

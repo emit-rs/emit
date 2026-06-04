@@ -1734,7 +1734,10 @@ pub mod exp {
                         let key = key.parse().map_err(|_| ParseBucketSetError {})?;
                         let value = value.parse().map_err(|_| ParseBucketSetError {})?;
 
-                        set.total += value;
+                        set.total = set
+                            .total
+                            .checked_add(value)
+                            .ok_or_else(|| ParseBucketSetError {})?;
                         if set.buckets.insert(key, value).is_some() {
                             // Duplicate key
                             return Err(ParseBucketSetError {});
@@ -1768,22 +1771,40 @@ pub mod exp {
                 The count for this point will be incremented by `count`.
 
                 All points should be computed from the same scale.
+
+                # Panics
+
+                This method will panic if adding `count` to an existing entry in `value` would overflow.
                 */
                 pub fn observe_all(&mut self, value: Point, count: u64) {
-                    *self.buckets.entry(value).or_default() += count;
-                    self.total += count;
+                    let entry = self.buckets.entry(value).or_default();
+
+                    *entry = entry.checked_add(count).unwrap_or_else(|| {
+                        panic!("adding {count} observations would overflow bucket")
+                    });
+                    self.total = self.total.checked_add(count).unwrap_or_else(|| {
+                        panic!("adding {count} observations would overflow total")
+                    });
                 }
 
                 /**
                 Remap and merge buckets.
 
                 This method can be used to rescale the buckets to a coarser granularity in combination with the [`crate::metric::exp::midpoint`] function. It accepts a closure that maps stored bucket [`Point`]s to new values. When multiple buckets map to the same new value, their counts will be summed.
+
+                # Panics
+
+                This method will panic if adding `count` to an existing entry in `value` would overflow. This can happen when merging buckets with large counts.
                 */
                 pub fn remap(&mut self, mut map: impl FnMut(Point) -> Point) {
-                    let mut remapped = BTreeMap::new();
+                    let mut remapped = BTreeMap::<Point, u64>::new();
 
                     for (value, count) in &self.buckets {
-                        *remapped.entry(map(*value)).or_default() += *count;
+                        let entry = remapped.entry(map(*value)).or_default();
+
+                        *entry = entry.checked_add(*count).unwrap_or_else(|| {
+                            panic!("adding {count} observations would overflow bucket")
+                        });
                     }
 
                     self.buckets = remapped;
@@ -2009,8 +2030,10 @@ pub mod exp {
                         let midpoint = self.next_midpoint.take().ok_or(Incompatible)?;
                         let count = self.next_count.take().ok_or(Incompatible)?;
 
-                        *self.buckets.entry(Point::new(midpoint)).or_default() += count;
-                        self.count += count;
+                        let entry = self.buckets.entry(Point::new(midpoint)).or_default();
+                        *entry = entry.checked_add(count).ok_or_else(|| Incompatible)?;
+
+                        self.count = self.count.checked_add(count).ok_or_else(|| Incompatible)?;
 
                         Ok(())
                     } else {
@@ -2751,6 +2774,7 @@ pub mod exp {
                         "[[1, 1.0]]",
                         "[[1, 0xff]]",
                         "[[1, ff]]",
+                        "{1.2789: 11111111111111111111, 2789: 11111111111111111111, 2 \0:  \0: 2}",
                     ] {
                         assert!(BucketSet::try_from_str(case).is_err(), "{case}");
                     }
