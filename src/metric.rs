@@ -1851,6 +1851,23 @@ pub mod exp {
                 }
             }
 
+            impl<'a> FromIterator<(Point, u64)> for BucketSet {
+                fn from_iter<I: IntoIterator<Item = (Point, u64)>>(iter: I) -> Self {
+                    let mut set = BucketSet::new();
+                    set.extend(iter);
+
+                    set
+                }
+            }
+
+            impl<'a> Extend<(Point, u64)> for BucketSet {
+                fn extend<I: IntoIterator<Item = (Point, u64)>>(&mut self, iter: I) {
+                    for (value, count) in iter {
+                        self.observe_all(value, count);
+                    }
+                }
+            }
+
             /**
             An iterator over sorted buckets from a [`BucketSet`].
 
@@ -2533,6 +2550,23 @@ pub mod exp {
                         let fmt = case.to_string();
                         assert_eq!(Some(case), BucketSet::try_from_str(&fmt).ok(), "{fmt}");
                     }
+                }
+
+                #[test]
+                fn bucket_set_from_iter() {
+                    let mut set = BucketSet::from_iter([
+                        (Point::new(0.0), 3),
+                        (Point::new(0.0), 2),
+                        (Point::new(1.0), 2),
+                    ]);
+
+                    assert_eq!(5, set.get(Point::new(0.0)).unwrap());
+                    assert_eq!(2, set.get(Point::new(1.0)).unwrap());
+
+                    set.extend([(Point::new(1.0), 3), (Point::new(2.0), 2)]);
+
+                    assert_eq!(5, set.get(Point::new(1.0)).unwrap());
+                    assert_eq!(2, set.get(Point::new(2.0)).unwrap());
                 }
 
                 #[test]

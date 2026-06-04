@@ -60,12 +60,9 @@ Since the expected type of `span_links` is a sequence, you'll need to use either
 fn wait_a_bit(sleep_ms: u64) {
     // Add span links to the guard rather than as props in the macro so they aren't
     // also added to any child spans or events
-    let mut span_links = emit::span::SpanLinkSet::new();
-
-    span_links.insert(emit::span::SpanLink::new(
-        emit::span::TraceId::from_u128(0x0a85ccaf666e11aaca6bd5d469e2850d).unwrap(),
-        emit::span::SpanId::from_u64(0x2b9caa35eaefed3a).unwrap(),
-    ));
+    let span_links = emit::span::SpanLinkSet::from_iter([
+        (emit::span::TraceId::from_u128(0x0a85ccaf666e11aaca6bd5d469e2850d).unwrap(), emit::span::SpanId::from_u64(0x2b9caa35eaefed3a).unwrap()),
+    ]);
 
     let _span = span.push_prop("span_links", span_links);
 
