@@ -513,16 +513,7 @@ http://localhost:4318/v1/logs
 When the metrics signal is not configured, diagnostic events for metric samples are represented as regular OTLP log records. The following diagnostic:
 
 ```
-emit::emit!(
-    evt: emit::Metric::new(
-        emit::mdl!(),
-        "my_metric",
-        "count",
-        emit::Empty,
-        42,
-        emit::Empty,
-    )
-);
+emit::count_sample!(name: "my_metric", value: 42);
 ```
 
 will produce the following HTTP+JSON export request:
@@ -1015,17 +1006,12 @@ emit_otlp::new()
 If the metric aggregation is `"count"` then the resulting OTLP metric is a monotonic sum:
 
 ```
-emit::emit!(
-    evt: emit::Metric::new(
-        emit::mdl!(),
-        "my_metric",
-        "count",
-        emit::Empty,
-        42,
-        emit::props! {
-            a: true
-        },
-    )
+emit::count_sample!(
+    name: "my_metric",
+    value: -8,
+    props: emit::props! {
+        a: true
+    },
 );
 ```
 
@@ -1089,17 +1075,12 @@ http://localhost:4318/v1/metrics
 If the metric aggregation is `"sum"` then the resulting OTLP metric is a non-monotonic sum:
 
 ```
-emit::emit!(
-    evt: emit::Metric::new(
-        emit::mdl!(),
-        "my_metric",
-        "sum",
-        emit::Empty,
-        -8,
-        emit::props! {
-            a: true
-        },
-    )
+emit::sum_sample!(
+    name: "my_metric",
+    value: -8,
+    props: emit::props! {
+        a: true
+    },
 );
 ```
 
@@ -1158,22 +1139,124 @@ http://localhost:4318/v1/metrics
 }
 ```
 
+## Exponential histograms
+
+If the metric aggregation is `"count"`, and it carries a distribution, then it will be emitted as an exponential histogram:
+
+```
+let mut dist = emit::metric::exp::Distribution::new(1, 160);
+
+dist.observe_all(1.0, 4);
+dist.observe_all(1.01, 6);
+dist.observe_all(2.0, 3);
+dist.observe_all(2.001, 7);
+dist.observe_all(15.0, 10);
+
+emit::count_sample!(
+    name: "my_metric",
+    value: 30,
+    props: dist,
+);
+```
+
+```json
+{
+  "resourceMetrics": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "my_app"
+            }
+          }
+        ]
+      },
+      "scopeMetrics": [
+        {
+          "scope": {
+            "name": "my_app"
+          },
+          "metrics": [
+            {
+              "name": "my_metric",
+              "unit": null,
+              "exponentialHistogram": {
+                "dataPoints": [
+                  {
+                    "attributes": [
+                      {
+                        "key": "dist_count",
+                        "value": {
+                          "intValue": 30
+                        }
+                      },
+                      {
+                        "key": "dist_sum",
+                        "value": {
+                          "doubleValue": 21.011
+                        }
+                      },
+                      {
+                        "key": "dist_min",
+                        "value": {
+                          "doubleValue": 1
+                        }
+                      },
+                      {
+                        "key": "dist_max",
+                        "value": {
+                          "doubleValue": 15
+                        }
+                      }
+                    ],
+                    "startTimeUnixNano": 1780622035104234000,
+                    "timeUnixNano": 1780622035104234000,
+                    "count": 30,
+                    "scale": 1,
+                    "zeroCount": 0,
+                    "positive": {
+                      "offset": 0,
+                      "bucketCounts": [
+                        4,
+                        6,
+                        3,
+                        7,
+                        0,
+                        0,
+                        0,
+                        0,
+                        10
+                      ]
+                    },
+                    "negative": null
+                  }
+                ],
+                "aggregationTemporality": 2
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+See [the book](https://emit-rs.io/producing-events/metrics/distributions.html#exponential-histograms) for more details on `emit`'s distribution data model.
+
 ## Gauges
 
 Any other aggregation will be represented as an OTLP gauge:
 
 ```
-emit::emit!(
-    evt: emit::Metric::new(
-        emit::mdl!(),
-        "my_metric",
-        "last",
-        emit::Empty,
-        615,
-        emit::props! {
-            a: true
-        },
-    )
+emit::last_sample!(
+    name: "my_metric",
+    value: 615,
+    props: emit::props! {
+        a: true
+    },
 );
 ```
 
@@ -1230,95 +1313,11 @@ http://localhost:4318/v1/metrics
 }
 ```
 
-## Sequences
-
-If the metric aggregation is `"count"` or `"sum"`, and value is a sequence, then each value will be summed to produce a single data point:
-
-```
-let start = emit::Timestamp::from_unix(std::time::Duration::from_secs(1716890420));
-let end = emit::Timestamp::from_unix(std::time::Duration::from_secs(1716890425));
-
-emit::emit!(
-    evt: emit::Metric::new(
-        emit::mdl!(),
-        "my_metric",
-        "count",
-        start..end,
-        &[
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-        ],
-        emit::props! {
-            a: true
-        },
-    )
-);
-```
-
-```text
-http://localhost:4318/v1/metrics
-```
-
-```json
-{
-   "resourceMetrics": [
-      {
-         "resource": {
-            "attributes": [
-               {
-                  "key": "service.name",
-                  "value": {
-                     "stringValue": "my_app"
-                  }
-               }
-            ]
-         },
-         "scopeMetrics": [
-            {
-               "scope": {
-                  "name": "my_app"
-               },
-               "metrics": [
-                  {
-                     "name": "my_metric",
-                     "unit": null,
-                     "sum": {
-                        "dataPoints": [
-                           {
-                              "attributes": [
-                                 {
-                                    "key": "a",
-                                    "value": {
-                                       "boolValue": true
-                                    }
-                                 }
-                              ],
-                              "startTimeUnixNano": 1716890420000000000,
-                              "timeUnixNano": 1716890425000000000,
-                              "value": 5
-                           }
-                        ],
-                        "aggregationTemporality": 1,
-                        "isMonotonic": true
-                     }
-                  }
-               ]
-            }
-         ]
-      }
-   ]
-}
-```
-
 # Limitations
 
 This library is not an alternative to the OpenTelemetry SDK. It's specifically targeted at emitting diagnostic events to OTLP-compatible services. It has some intentional limitations:
 
 - **No propagation.** This is the responsibility of the application to manage.
-- **No histogram metrics.** `emit`'s data model for metrics is simplistic compared to OpenTelemetry's, so it doesn't support histograms or exponential histograms.
 - **No span events.** Only the conventional exception event is supported. Standalone log events are not converted into span events. They're sent via the logs endpoint instead.
 - **No tracestate.** `emit`'s data model for spans doesn't include the W3C tracestate.
 

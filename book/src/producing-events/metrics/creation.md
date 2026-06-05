@@ -29,11 +29,11 @@ let metric = emit::Metric::new(
 
 `emit` also defines macros for producing metric samples for specific aggregations. Each well-known aggregation has a corresponding macro:
 
-- [`count_metric!`](https://docs.rs/emit/1.19.0/emit/macro.count_metric_.html) for samples of a monotonic counter.
-- [`sum_metric!`](https://docs.rs/emit/1.19.0/emit/macro.sum_metric_.html) for samples of a non-monotonic sum.
-- [`min_metric!`](https://docs.rs/emit/1.19.0/emit/macro.min_metric_.html) for samples of the minimum observed value.
-- [`max_metric!`](https://docs.rs/emit/1.19.0/emit/macro.max_metric_.html) for samples of the maximum observed value.
-- [`last_metric!`](https://docs.rs/emit/1.19.0/emit/macro.last_metric_.html) for samples of the latest value.
+- [`count_metric!`](https://docs.rs/emit/1.19.0/emit/macro.count_metric.html) for samples of a monotonic counter.
+- [`sum_metric!`](https://docs.rs/emit/1.19.0/emit/macro.sum_metric.html) for samples of a non-monotonic sum.
+- [`min_metric!`](https://docs.rs/emit/1.19.0/emit/macro.min_metric.html) for samples of the minimum observed value.
+- [`max_metric!`](https://docs.rs/emit/1.19.0/emit/macro.max_metric.html) for samples of the maximum observed value.
+- [`last_metric!`](https://docs.rs/emit/1.19.0/emit/macro.last_metric.html) for samples of the latest value.
 
 This example produces an equivalent [`Metric`](https://docs.rs/emit/1.19.0/emit/metric/struct.Metric.html)) to the manual one above:
 
