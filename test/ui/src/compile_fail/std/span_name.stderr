@@ -1,0 +1,5 @@
+error: the `span_name` property is always given the value of the template
+ --> src/compile_fail/std/span_name.rs:1:22
+  |
+1 | #[emit::span("test", span_name: "custom")]
+  |                      ^^^^^^^^^^^^^^^^^^^

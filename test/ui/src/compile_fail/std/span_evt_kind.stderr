@@ -1,0 +1,5 @@
+error: the `evt_kind` property is always given the value `"span"`
+ --> src/compile_fail/std/span_evt_kind.rs:1:22
+  |
+1 | #[emit::span("test", evt_kind: "custom")]
+  |                      ^^^^^^^^^^^^^^^^^^

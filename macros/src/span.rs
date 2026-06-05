@@ -8,7 +8,7 @@ use crate::util::StmtFnName;
 use crate::{
     args::{self, Arg},
     capture,
-    props::{Props, check_evt_props},
+    props::{Props, check_evt_props, check_span_props},
     template::{self, Template},
     util::{ToOptionTokens, ToRefTokens},
 };
@@ -133,6 +133,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;
 
     check_evt_props(&ctxt_props)?;
+    check_span_props(&ctxt_props)?;
 
     let mut macro_evt_props = Props::new();
 
@@ -175,6 +176,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         };
 
     check_evt_props(&macro_evt_props)?;
+    check_span_props(&macro_evt_props)?;
 
     match &mut item {
         // A synchronous function
@@ -837,6 +839,7 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
         template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;
 
     check_evt_props(&ctxt_props)?;
+    check_span_props(&ctxt_props)?;
 
     let Args {
         rt,
