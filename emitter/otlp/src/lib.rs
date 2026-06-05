@@ -1144,7 +1144,7 @@ http://localhost:4318/v1/metrics
 If the metric aggregation is `"count"`, and it carries a distribution, then it will be emitted as an exponential histogram:
 
 ```
-let mut dist = emit::metric::exp::Distribution::new();
+let mut dist = emit::metric::exp::Distribution::new(1, 160);
 
 dist.observe_all(1.0, 4);
 dist.observe_all(1.01, 6);
