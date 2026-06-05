@@ -1760,6 +1760,10 @@ pub mod exp {
                 The count for this point will be incremented by `1`.
 
                 All points should be computed from the same scale.
+
+                # Panics
+
+                This method will panic if adding `count` to an existing entry in `value` would overflow.
                 */
                 pub fn observe(&mut self, value: Point) {
                     self.observe_all(value, 1)
@@ -2847,9 +2851,27 @@ pub mod exp {
             Observe a raw value.
 
             The value will be converted into a bucket midpoint at the current internal scale. The count for the resulting bucket will be incremented by `1`.
+
+            # Panics
+
+            This method will panic if adding `count` to an existing entry in `value` would overflow.
             */
             pub fn observe(&mut self, raw_value: f64) {
-                self.buckets.observe(midpoint(raw_value, self.scale));
+                self.observe_all(raw_value, 1)
+            }
+
+            /**
+            Observe a raw value.
+
+            The value will be converted into a bucket midpoint at the current internal scale. The count for the resulting bucket will be incremented by `1`.
+
+            # Panics
+
+            This method will panic if adding `count` to an existing entry in `value` would overflow.
+            */
+            pub fn observe_all(&mut self, raw_value: f64, count: u64) {
+                self.buckets
+                    .observe_all(midpoint(raw_value, self.scale), count);
 
                 // Track the extrema
                 self.min = self

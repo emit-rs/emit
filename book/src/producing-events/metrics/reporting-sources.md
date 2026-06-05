@@ -1,6 +1,6 @@
 # Reporting metric sources
 
-The [`Source`](https://docs.rs/emit/1.19.0/emit/metric/source/trait.Source.html) trait represents some underlying data source that can be sampled through a [`Sampler`](https://docs.rs/emit/1.19.0/emit/metric/source/trait.Sampler.html) to provide [`Metric`](https://docs.rs/emit/1.19.0/emit/metric/struct.Metric.html)s. You can sample sources directly, or combine them into a [`Reporter`](https://docs.rs/emit/1.19.0/emit/metric/struct.Reporter.html) to sample all the sources of metrics in your application together.
+The [`Source`](https://docs.rs/emit/1.19.0/emit/metric/source/trait.Source.html) trait represents some underlying data source that can be sampled through a [`Sampler`](https://docs.rs/emit/1.19.0/emit/metric/sampler/trait.Sampler.html) to provide [`Metric`](https://docs.rs/emit/1.19.0/emit/metric/struct.Metric.html)s. You can sample sources directly, or combine them into a [`Reporter`](https://docs.rs/emit/1.19.0/emit/metric/struct.Reporter.html) to sample all the sources of metrics in your application together.
 
 This example defines two metric sources, each producing a fixed value when sampled:
 
@@ -48,7 +48,7 @@ std::thread::spawn(move || {
 
 The [`count_metric!`](https://docs.rs/emit/1.19.0/emit/macro.count_metric.html) macro is a convenient way to construct a `Metric` for a counter. See [Metric creation](./creation.md) for more details.
 
-The [`Sampler`](https://docs.rs/emit/1.19.0/emit/metric/source/trait.Sampler.html) passed to a [`Source`](https://docs.rs/emit/1.19.0/emit/metric/source/trait.Source.html) carries a `sampled_at` [`Timestamp`](https://docs.rs/emit/1.19.0/emit/struct.Timestamp.html) for the point in time when the sample is being collected. Sources are encouraged to use this timestamp instead of computing one themselves.
+The [`Sampler`](https://docs.rs/emit/1.19.0/emit/metric/sampler/trait.Sampler.html) passed to a [`Source`](https://docs.rs/emit/1.19.0/emit/metric/source/trait.Source.html) carries a `sampled_at` [`Timestamp`](https://docs.rs/emit/1.19.0/emit/struct.Timestamp.html) for the point in time when the sample is being collected. Sources are encouraged to use this timestamp instead of computing one themselves.
 
 ## Multiple metrics per source
 

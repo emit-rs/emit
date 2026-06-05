@@ -48,7 +48,7 @@ fn wait_a_bit(sleep_ms: u64) {
 
 Since the expected type of `span_links` is a sequence, you'll need to use either the [`#[as_serde]`](../../reference/property-attributes.md#as_serde) or [`#[as_sval]`](../../reference/property-attributes.md#as_sval) attributes to capture them.
 
-`emit` also offers a [`SpanLinkSet`](https://docs.rs/emit/1.19.0/emit/span/struct.SpanLinkSet.html) type you can use to capture span links without needing to explicitly conform to the data model:
+`emit` also offers a [`SpanLinkSet`](https://docs.rs/emit/1.19.0/emit/span/span_link_set/struct.SpanLinkSet.html) type you can use to capture span links without needing to explicitly conform to the data model:
 
 ```rust
 # extern crate emit;
