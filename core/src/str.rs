@@ -390,6 +390,20 @@ mod alloc_support {
         }
 
         /**
+        Get the underlying value as a potentially owned string.
+
+        If the string contains a `'static` value then this method will return `Cow::Borrowed`. Otherwise it will return `Cow::Owned`.
+
+        If the underlying value is already an owned string then this method will return it without allocating.
+        */
+        pub fn into_cow(self) -> Cow<'static, str> {
+            match self.owner {
+                StrOwner::Static(key) => Cow::Borrowed(key),
+                _ => Cow::Owned(self.into_string()),
+            }
+        }
+
+        /**
         Get a new string, taking an owned copy of the data in this one.
 
         If the string contains a `'static` or `Arc` value then this method is cheap and doesn't involve cloning. In other cases the underlying value will be passed through [`Str::new_owned`].
@@ -535,6 +549,18 @@ mod alloc_support {
         }
 
         #[test]
+        fn into_cow() {
+            for case in [
+                Str::new("string"),
+                Str::new_ref("string"),
+                Str::new_owned("string"),
+                Str::new_shared("string"),
+            ] {
+                assert_eq!(case.get().to_owned(), case.into_cow());
+            }
+        }
+
+        #[test]
         fn owned_into_string() {
             let s = Str::new_owned("string");
             let ptr = match s.owner {
@@ -543,6 +569,19 @@ mod alloc_support {
             };
 
             let owned = s.into_string();
+
+            assert_eq!(ptr, owned.as_ptr());
+        }
+
+        #[test]
+        fn owned_into_cow() {
+            let s = Str::new_owned("string");
+            let ptr = match s.owner {
+                StrOwner::Box(boxed) => boxed as *const u8,
+                _ => panic!("expected an owned string"),
+            };
+
+            let owned = s.into_cow();
 
             assert_eq!(ptr, owned.as_ptr());
         }

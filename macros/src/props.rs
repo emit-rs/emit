@@ -305,6 +305,31 @@ pub fn check_evt_props(props: &Props) -> Result<(), syn::Error> {
 }
 
 /**
+Check properties for reserved keys used by event metadata.
+*/
+pub fn check_span_props(props: &Props) -> Result<(), syn::Error> {
+    for (k, v) in &props.key_values {
+        match &**k {
+            emit_core::well_known::KEY_EVT_KIND => {
+                return Err(syn::Error::new(
+                    v.span(),
+                    "the `evt_kind` property is always given the value `\"span\"`",
+                ));
+            }
+            emit_core::well_known::KEY_SPAN_NAME => {
+                return Err(syn::Error::new(
+                    v.span(),
+                    "specify the span name using the `name` control parameter before the template",
+                ));
+            }
+            _ => (),
+        }
+    }
+
+    Ok(())
+}
+
+/**
 Push common properties for events.
 */
 pub fn push_evt_props(props: &mut Props, level: Option<TokenStream>) -> Result<(), syn::Error> {

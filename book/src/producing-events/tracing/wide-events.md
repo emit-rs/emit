@@ -4,7 +4,7 @@ Wide events are a pattern for application diagnostics that collects all the cont
 
 You can implement wide events using `emit` by attaching an additional property collection to your outer-most span call and sharing it with child procedures. See [Adding properties to a span as it runs](./properties.md#adding-properties-to-a-span-as-it-runs) for details. 
 
-Here's an example that demonstrates an approach to wrapping `emit`'s span context for passing around:
+Here's an example that demonstrates an approach to wrapping `emit`'s span context for passing around and enriching as the operation executes:
 
 ```rust
 # extern crate emit;

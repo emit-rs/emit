@@ -8,7 +8,7 @@ use crate::util::StmtFnName;
 use crate::{
     args::{self, Arg},
     capture,
-    props::{Props, check_evt_props},
+    props::{Props, check_evt_props, check_span_props},
     template::{self, Template},
     util::{ToOptionTokens, ToRefTokens},
 };
@@ -29,6 +29,7 @@ struct Args {
     guard: Option<Ident>,
     evt_props: Option<TokenStream>,
     fn_name: Option<Ident>,
+    name: Option<String>,
     catch_unwind: Option<bool>,
     setup: Option<TokenStream>,
     ok_lvl: Option<TokenStream>,
@@ -86,6 +87,7 @@ impl Parse for Args {
             Ok(quote_spanned!(expr.span()=> #expr))
         });
         let mut fn_name = Arg::ident("fn_name");
+        let mut name = Arg::str("name");
         let mut catch_unwind = Arg::bool("catch_unwind");
 
         args::set_from_field_values(
@@ -95,6 +97,7 @@ impl Parse for Args {
                 &mut guard,
                 &mut evt_props,
                 &mut fn_name,
+                &mut name,
                 &mut rt,
                 &mut when,
                 &mut ok_lvl,
@@ -119,6 +122,7 @@ impl Parse for Args {
             guard: guard.take(),
             evt_props: evt_props.take(),
             fn_name: fn_name.take(),
+            name: name.take(),
         })
     }
 }
@@ -133,6 +137,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;
 
     check_evt_props(&ctxt_props)?;
+    check_span_props(&ctxt_props)?;
 
     let mut macro_evt_props = Props::new();
 
@@ -174,7 +179,13 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
             None
         };
 
+    let span_name_tokens = args
+        .name
+        .map(|name| quote!(#name))
+        .unwrap_or_else(|| template.template_literal_tokens());
+
     check_evt_props(&macro_evt_props)?;
+    check_span_props(&macro_evt_props)?;
 
     match &mut item {
         // A synchronous function
@@ -194,6 +205,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &user_evt_props_tokens,
                 &macro_evt_props,
                 fn_name_tokens,
+                &span_name_tokens,
                 setup_tokens,
                 span_guard,
                 quote!(#block),
@@ -216,6 +228,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &user_evt_props_tokens,
                 &macro_evt_props,
                 fn_name_tokens,
+                &span_name_tokens,
                 setup_tokens,
                 span_guard,
                 quote!(#block),
@@ -244,6 +257,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &user_evt_props_tokens,
                 &macro_evt_props,
                 fn_name_tokens,
+                &span_name_tokens,
                 setup_tokens,
                 span_guard,
                 quote!(#block),
@@ -266,6 +280,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
                 &user_evt_props_tokens,
                 &macro_evt_props,
                 fn_name_tokens,
+                &span_name_tokens,
                 setup_tokens,
                 span_guard,
                 quote!(#block),
@@ -292,6 +307,7 @@ fn inject_sync(
     user_evt_props_tokens: &TokenStream,
     macro_evt_props: &Props,
     fn_name_tokens: Option<TokenStream>,
+    span_name_tokens: &TokenStream,
     setup_tokens: Option<TokenStream>,
     span_guard: Option<Ident>,
     body_tokens: TokenStream,
@@ -303,7 +319,6 @@ fn inject_sync(
     catch_unwind: bool,
 ) -> Result<TokenStream, syn::Error> {
     let template_tokens = template.template_tokens();
-    let span_name_tokens = template.template_literal_tokens();
 
     let SpanGuardBinding {
         span_guard_binding_tokens,
@@ -404,6 +419,7 @@ fn inject_async(
     user_evt_props_tokens: &TokenStream,
     macro_evt_props: &Props,
     fn_name_tokens: Option<TokenStream>,
+    span_name_tokens: &TokenStream,
     setup_tokens: Option<TokenStream>,
     span_guard: Option<Ident>,
     body_tokens: TokenStream,
@@ -415,7 +431,6 @@ fn inject_async(
     catch_unwind: bool,
 ) -> Result<TokenStream, syn::Error> {
     let template_tokens = template.template_tokens();
-    let span_name_tokens = template.template_literal_tokens();
 
     let SpanGuardBinding {
         span_guard_binding_tokens,
@@ -837,6 +852,7 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
         template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;
 
     check_evt_props(&ctxt_props)?;
+    check_span_props(&ctxt_props)?;
 
     let Args {
         rt,
@@ -846,6 +862,7 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
         evt_props,
         setup,
         fn_name,
+        name,
         ok_lvl,
         err_lvl,
         panic_lvl,
@@ -873,7 +890,9 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
 
     let ctxt_props_tokens = ctxt_props.props_tokens().to_ref_tokens();
     let template_tokens = template.template_tokens();
-    let span_name_tokens = template.template_literal_tokens();
+    let span_name_tokens = name
+        .map(|name| quote!(#name))
+        .unwrap_or_else(|| template.template_literal_tokens());
 
     let evt_props_tokens = evt_props.unwrap_or_else(|| quote!(emit::Empty));
 
