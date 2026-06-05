@@ -98,7 +98,7 @@ Notice the `span_parent` of `inner_span` is the same as the `span_id` of `outer_
 
 If you bind the implicit span guard created for an instrumented function to an identifier, you can use it in the body of the function to interact with the span before it completes. See [Manual span creation](./manual-span-creation.md) for more details.
 
-With a [`SpanGuard`](https://docs.rs/emit/1.19.0/emit/span/struct.SpanGuard.html), you can attach additional properties collection to the span:
+With a [`SpanGuard`](https://docs.rs/emit/1.20.0/emit/span/struct.SpanGuard.html), you can attach additional properties collection to the span:
 
 ```rust
 # extern crate emit;
@@ -140,8 +140,8 @@ Attaching additional properties to the span guard is preferrable to adding them 
 
 Properties on spans have two visibility levels:
 
-- **Shared:** Added to the ambient context and present on all child events. Properties you add to the [`#[span]`](https://docs.rs/emit/1.19.0/emit/attr.span.html) template are shared.
-- **Private:** Added to the [`SpanGuard`](https://docs.rs/emit/1.19.0/emit/span/struct.SpanGuard.html) and only present on the span event itself. Properties you add through the `evt_props` [control parameter](../../reference/control-parameters.md), and subsequently through the `SpanGuard` are private.
+- **Shared:** Added to the ambient context and present on all child events. Properties you add to the [`#[span]`](https://docs.rs/emit/1.20.0/emit/attr.span.html) template are shared.
+- **Private:** Added to the [`SpanGuard`](https://docs.rs/emit/1.20.0/emit/span/struct.SpanGuard.html) and only present on the span event itself. Properties you add through the `evt_props` [control parameter](../../reference/control-parameters.md), and subsequently through the `SpanGuard` are private.
 
 ```rust
 # extern crate emit;
