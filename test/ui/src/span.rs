@@ -336,6 +336,48 @@ fn span_guard_props() {
 }
 
 #[test]
+fn span_name() {
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!("{test}", evt.props().pull::<&str, _>("span_name").unwrap());
+        },
+        |evt| {
+            assert_eq!("{test}", evt.props().pull::<&str, _>("span_name").unwrap());
+
+            true
+        },
+    );
+
+    #[emit::span(rt: RT, "{test}", test: 42)]
+    fn exec() {}
+
+    exec();
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+}
+
+#[test]
+fn span_name_custom() {
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!("custom", evt.props().pull::<&str, _>("span_name").unwrap());
+        },
+        |evt| {
+            assert_eq!("custom", evt.props().pull::<&str, _>("span_name").unwrap());
+
+            true
+        },
+    );
+
+    #[emit::span(rt: RT, name: "custom", "span")]
+    fn exec() {}
+
+    exec();
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+}
+
+#[test]
 fn span_name_escape() {
     static RT: StaticRuntime = static_runtime(
         |evt| {

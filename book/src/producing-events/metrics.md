@@ -2,16 +2,7 @@
 
 Metrics are an effective approach to monitoring applications at scale. They can be cheap to collect, making them suitable for performance sensitive operations. They can also be compact to report, making them suitable for high-volume scenarios.
 
-`emit` provides limited APIs for defining metric sources. The way you define, store, and track metrics in your application will depend on your specific needs. What `emit` does define is a data model for metric samples as events with well-known properties:
-
-```mermaid
-flowchart
-    meter["`**meter/instrument**
-    _Atomic integers, local variables_`"] -- sample --> emit
-    emit["`**emit event**
-    _Events in the metrics data model_
-    `"]
-```
+`emit` provides limited APIs for defining metric sources. The way you define, store, and track metrics in your application will depend on your specific needs. What `emit` does define is a data model for metric samples as events with well-known properties.
 
 Emitters that are metric-aware, like [`emit_otlp`](../emitting-events/otlp.md), can then handle those samples differently from regular events.
 

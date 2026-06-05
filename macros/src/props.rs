@@ -319,7 +319,7 @@ pub fn check_span_props(props: &Props) -> Result<(), syn::Error> {
             emit_core::well_known::KEY_SPAN_NAME => {
                 return Err(syn::Error::new(
                     v.span(),
-                    "the `span_name` property is always given the value of the template",
+                    "specify the span name using the `name` control parameter before the template",
                 ));
             }
             _ => (),
