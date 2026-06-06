@@ -81,6 +81,9 @@ impl EventEncoder for MetricsEventEncoder {
             let mut metric_unit = None;
             let mut dist_exp_scale = None;
             let mut dist_exp_buckets = None;
+            let mut dist_min = None;
+            let mut dist_max = None;
+            let mut dist_sum = None;
             let mut attributes = Vec::new();
 
             let _ = evt.props().for_each(|k, v| match k.get() {
@@ -97,6 +100,21 @@ impl EventEncoder for MetricsEventEncoder {
                 }
                 emit::well_known::KEY_DIST_EXP_BUCKETS => {
                     dist_exp_buckets = Some(v);
+
+                    ControlFlow::Continue(())
+                }
+                emit::well_known::KEY_DIST_SUM => {
+                    dist_sum = Some(v);
+
+                    ControlFlow::Continue(())
+                }
+                emit::well_known::KEY_DIST_MIN => {
+                    dist_min = Some(v);
+
+                    ControlFlow::Continue(())
+                }
+                emit::well_known::KEY_DIST_MAX => {
+                    dist_max = Some(v);
 
                     ControlFlow::Continue(())
                 }
@@ -140,9 +158,13 @@ impl EventEncoder for MetricsEventEncoder {
                     }),
                 }),
                 Some(emit::well_known::METRIC_AGG_COUNT) => {
-                    if let Some(distribution) =
-                        Distribution::from_values(dist_exp_scale, dist_exp_buckets)
-                    {
+                    if let Some(distribution) = Distribution::from_values(
+                        dist_exp_scale,
+                        dist_exp_buckets,
+                        dist_sum,
+                        dist_min,
+                        dist_max,
+                    ) {
                         E::encode(Metric::<_, _, _> {
                             name: &sval::Display::new(metric_name),
                             unit: &metric_unit.map(sval::Display::new),
@@ -154,6 +176,9 @@ impl EventEncoder for MetricsEventEncoder {
                                         start_time_unix_nano,
                                         time_unix_nano,
                                         count: distribution.count,
+                                        sum: distribution.sum,
+                                        min: distribution.min,
+                                        max: distribution.max,
                                         scale: distribution.scale,
                                         zero_count: distribution.zero,
                                         positive: distribution.positive.as_ref().map(|buckets| {
@@ -279,6 +304,9 @@ struct Distribution {
     negative: Option<DistributionBuckets>,
     zero: u64,
     count: u64,
+    sum: Option<f64>,
+    min: Option<f64>,
+    max: Option<f64>,
     scale: i32,
 }
 
@@ -315,6 +343,9 @@ impl Distribution {
     fn from_values(
         dist_exp_scale: Option<emit::Value>,
         dist_exp_buckets: Option<emit::Value>,
+        dist_sum: Option<emit::Value>,
+        dist_min: Option<emit::Value>,
+        dist_max: Option<emit::Value>,
     ) -> Option<Self> {
         struct Extract {
             depth: usize,
@@ -447,6 +478,10 @@ impl Distribution {
             dist_exp_scale.and_then(|v| v.cast::<i32>()),
             dist_exp_buckets,
         ) {
+            let sum = dist_sum.and_then(|v| v.cast::<f64>());
+            let min = dist_min.and_then(|v| v.cast::<f64>());
+            let max = dist_max.and_then(|v| v.cast::<f64>());
+
             let scale = dist_exp_scale;
             let gamma = 2.0f64.powf(2.0f64.powi(-scale));
 
@@ -488,6 +523,9 @@ impl Distribution {
                 }),
                 zero: extract.zero,
                 count: extract.count,
+                sum,
+                min,
+                max,
                 scale,
             });
         }
@@ -821,6 +859,9 @@ mod tests {
                     (-midpoint_from_index(3, 2), 2),
                 ],
                 dist_exp_scale: 2,
+                dist_min: -0.1,
+                dist_max: 10.1,
+                dist_sum: 43.1,
             ),
             |buf| {
                 let de = metrics::Metric::decode(buf).unwrap();
@@ -861,6 +902,9 @@ mod tests {
                         assert_eq!(3, histogram.data_points[0].zero_count);
 
                         assert_eq!(22, histogram.data_points[0].count);
+                        assert_eq!(Some(-0.1), histogram.data_points[0].min);
+                        assert_eq!(Some(10.1), histogram.data_points[0].max);
+                        assert_eq!(Some(43.1), histogram.data_points[0].sum);
                     }
                     other => panic!("unexpected {other:?}"),
                 }
