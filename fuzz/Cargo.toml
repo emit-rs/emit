@@ -21,6 +21,10 @@ path = "bucket_set/main.rs"
 name = "span_link_set"
 path = "span_link_set/main.rs"
 
+[[bin]]
+name = "otel_baggage"
+path = "otel_baggage/main.rs"
+
 [dependencies.emit]
 path = "../"
 
