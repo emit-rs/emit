@@ -1185,35 +1185,12 @@ emit::count_sample!(
               "exponentialHistogram": {
                 "dataPoints": [
                   {
-                    "attributes": [
-                      {
-                        "key": "dist_count",
-                        "value": {
-                          "intValue": 30
-                        }
-                      },
-                      {
-                        "key": "dist_sum",
-                        "value": {
-                          "doubleValue": 21.011
-                        }
-                      },
-                      {
-                        "key": "dist_min",
-                        "value": {
-                          "doubleValue": 1
-                        }
-                      },
-                      {
-                        "key": "dist_max",
-                        "value": {
-                          "doubleValue": 15
-                        }
-                      }
-                    ],
                     "startTimeUnixNano": 1780622035104234000,
                     "timeUnixNano": 1780622035104234000,
                     "count": 30,
+                    "sum":21.011,
+                    "min":1.0,
+                    "max":15.0,
                     "scale": 1,
                     "zeroCount": 0,
                     "positive": {

@@ -116,6 +116,12 @@ pub struct ExponentialHistogramDataPoint<
         data_tag = "sval_protobuf::tags::PROTOBUF_I64"
     )]
     pub count: u64,
+    #[sval(label = "sum", index = 5)]
+    pub sum: Option<f64>,
+    #[sval(label = "min", index = 12)]
+    pub min: Option<f64>,
+    #[sval(label = "max", index = 13)]
+    pub max: Option<f64>,
     #[sval(
         label = "scale",
         index = 6,
