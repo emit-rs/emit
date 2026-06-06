@@ -1,6 +1,6 @@
 # Reporting metric sources
 
-The [`Source`](https://docs.rs/emit/1.19.0/emit/metric/source/trait.Source.html) trait represents some underlying data source that can be sampled through a [`Sampler`](https://docs.rs/emit/1.19.0/emit/metric/sampler/trait.Sampler.html) to provide [`Metric`](https://docs.rs/emit/1.19.0/emit/metric/struct.Metric.html)s. You can sample sources directly, or combine them into a [`Reporter`](https://docs.rs/emit/1.19.0/emit/metric/struct.Reporter.html) to sample all the sources of metrics in your application together.
+The [`Source`](https://docs.rs/emit/1.20.0/emit/metric/source/trait.Source.html) trait represents some underlying data source that can be sampled through a [`Sampler`](https://docs.rs/emit/1.20.0/emit/metric/sampler/trait.Sampler.html) to provide [`Metric`](https://docs.rs/emit/1.20.0/emit/metric/struct.Metric.html)s. You can sample sources directly, or combine them into a [`Reporter`](https://docs.rs/emit/1.20.0/emit/metric/struct.Reporter.html) to sample all the sources of metrics in your application together.
 
 This example defines two metric sources, each producing a fixed value when sampled:
 
@@ -46,13 +46,13 @@ std::thread::spawn(move || {
 });
 ```
 
-The [`count_metric!`](https://docs.rs/emit/1.19.0/emit/macro.count_metric.html) macro is a convenient way to construct a `Metric` for a counter. See [Metric creation](./creation.md) for more details.
+The [`count_metric!`](https://docs.rs/emit/1.20.0/emit/macro.count_metric.html) macro is a convenient way to construct a `Metric` for a counter. See [Metric creation](./creation.md) for more details.
 
-The [`Sampler`](https://docs.rs/emit/1.19.0/emit/metric/sampler/trait.Sampler.html) passed to a [`Source`](https://docs.rs/emit/1.19.0/emit/metric/source/trait.Source.html) carries a `sampled_at` [`Timestamp`](https://docs.rs/emit/1.19.0/emit/struct.Timestamp.html) for the point in time when the sample is being collected. Sources are encouraged to use this timestamp instead of computing one themselves.
+The [`Sampler`](https://docs.rs/emit/1.20.0/emit/metric/sampler/trait.Sampler.html) passed to a [`Source`](https://docs.rs/emit/1.20.0/emit/metric/source/trait.Source.html) carries a `sampled_at` [`Timestamp`](https://docs.rs/emit/1.20.0/emit/struct.Timestamp.html) for the point in time when the sample is being collected. Sources are encouraged to use this timestamp instead of computing one themselves.
 
 ## Multiple metrics per source
 
-There's no requirement that a single [`Source`](https://docs.rs/emit/1.19.0/emit/metric/source/trait.Source.html) will produce exactly one [`Metric`](https://docs.rs/emit/1.19.0/emit/metric/struct.Metric.html) when sampled. A [`Source`](https://docs.rs/emit/1.19.0/emit/metric/source/trait.Source.html) can produce multiple metrics, which can be used to reduce synchronization costs when locks are involved:
+There's no requirement that a single [`Source`](https://docs.rs/emit/1.20.0/emit/metric/source/trait.Source.html) will produce exactly one [`Metric`](https://docs.rs/emit/1.20.0/emit/metric/struct.Metric.html) when sampled. A [`Source`](https://docs.rs/emit/1.20.0/emit/metric/source/trait.Source.html) can produce multiple metrics, which can be used to reduce synchronization costs when locks are involved:
 
 ```rust
 # extern crate emit;
@@ -89,7 +89,7 @@ let source = emit::metric::source::from_fn(|sampler| {
 
 ## Delta sources
 
-You can use the [`Delta`](https://docs.rs/emit/1.19.0/emit/metric/struct.Delta.html) type to implement sources that track deltas instead of cumulative values. The `Delta` type tracks the range the value covers, automatically updating it when sampled.
+You can use the [`Delta`](https://docs.rs/emit/1.20.0/emit/metric/struct.Delta.html) type to implement sources that track deltas instead of cumulative values. The `Delta` type tracks the range the value covers, automatically updating it when sampled.
 
 ```rust
 # extern crate emit;
@@ -132,12 +132,12 @@ See [Delta metrics](./delta-metrics.md) for more details on sampling deltas.
 
 ## Normalization of timestamps
 
-The [`Reporter`](https://docs.rs/emit/1.19.0/emit/metric/struct.Reporter.html) type will attempt to normalize the extents of any metrics sampled from its sources. Normalization will:
+The [`Reporter`](https://docs.rs/emit/1.20.0/emit/metric/struct.Reporter.html) type will attempt to normalize the extents of any metrics sampled from its sources. Normalization will:
 
 1. Take the current timestamp, `now`, when sampling metrics.
 2. If the metric sample has no extent, or has a point extent, it will be replaced with `now`.
 3. If the metric sample has a range extent, the end will be set to `now` and the start will be `now` minus the original length. If this would produce an invalid range then the original is kept.
 
-When the `std` Cargo feature is enabled this will be done automatically. In other cases, normalization won't happen unless it's configured by [`Reporter::normalize_with_clock`](https://docs.rs/emit/1.19.0/emit/metric/struct.Reporter.html#method.normalize_with_clock).
+When the `std` Cargo feature is enabled this will be done automatically. In other cases, normalization won't happen unless it's configured by [`Reporter::normalize_with_clock`](https://docs.rs/emit/1.20.0/emit/metric/struct.Reporter.html#method.normalize_with_clock).
 
-Normalization can be disabled by calling [`Reporter::without_normalization`](https://docs.rs/emit/1.19.0/emit/metric/struct.Reporter.html#method.without_normalization).
+Normalization can be disabled by calling [`Reporter::without_normalization`](https://docs.rs/emit/1.20.0/emit/metric/struct.Reporter.html#method.without_normalization).
