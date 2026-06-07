@@ -793,7 +793,7 @@ pub fn __private_emit<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
     extent: &'b (impl ToExtent + ?Sized),
     tpl: &'b (impl TplControlParam + ?Sized),
     base_props: &'b (impl Props + ?Sized),
-    props: &'b (impl Props + ?Sized),
+    props: impl Props,
 ) {
     emit_core::emit(
         rt.emitter(),
@@ -815,7 +815,7 @@ pub fn __private_emit_event<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R:
     when: Option<&'b (impl Filter + ?Sized)>,
     event: &'b (impl ToEvent + ?Sized),
     tpl: Option<&'b (impl TplControlParam + ?Sized)>,
-    props: &'b (impl Props + ?Sized),
+    props: impl Props,
 ) {
     let mut event = event.to_event();
 
@@ -869,7 +869,7 @@ pub fn __private_begin_span<
     name: impl Into<Str<'static>>,
     lvl: Option<&'b (impl CaptureLevel + ?Sized)>,
     when: Option<&'b (impl Filter + ?Sized)>,
-    span_ctxt_props: &'b (impl Props + ?Sized),
+    span_ctxt_props: impl Props,
     span_evt_props: P,
     default_complete: S,
 ) -> (SpanGuard<'static, &'a T, P, S>, Frame<&'a C>) {

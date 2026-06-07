@@ -60,10 +60,6 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     push_loc_props(&mut props)?;
     push_evt_props(&mut props, Some(quote!(emit::Level::Debug)))?;
 
-    let props_match_input_tokens = props.match_input_tokens();
-    let props_match_binding_tokens = props.match_binding_tokens();
-    let props_tokens = props.match_bound_tokens().to_ref_tokens();
-
     let rt_tokens = args::RtArg::default().to_tokens()?.to_ref_tokens();
     let when_tokens = None::<TokenStream>.to_option_tokens(quote!(&emit::Empty));
 
@@ -73,25 +69,19 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
 
     let template_tokens = template.template_tokens().to_ref_tokens();
 
-    let emit_tokens = quote!(
-        emit::__private::__private_emit(
-            #rt_tokens,
-            #mdl_tokens,
-            #when_tokens,
-            #extent_tokens,
-            #template_tokens,
-            #base_props_tokens,
-            #props_tokens,
-        );
-    );
-
-    Ok(quote!({
-        match (#(#props_match_input_tokens),*) {
-            (#(#props_match_binding_tokens),*) => {
-                #emit_tokens
-            }
-        }
-    }))
+    props.match_bound_props_tokens(|props_tokens| {
+        Ok(quote!(
+            emit::__private::__private_emit(
+                #rt_tokens,
+                #mdl_tokens,
+                #when_tokens,
+                #extent_tokens,
+                #template_tokens,
+                #base_props_tokens,
+                #props_tokens,
+            )
+        ))
+    })
 }
 
 fn push_loc_props(props: &mut Props) -> Result<(), syn::Error> {
@@ -116,7 +106,7 @@ fn compute_template(props: &Props) -> Result<Template, syn::Error> {
 
         literal.push_str(name);
         literal.push_str(" = {");
-        literal.push_str(&key_value.hole_tokens().to_string());
+        literal.push_str(&key_value.hole_tokens()?.to_string());
         literal.push_str("}");
     }
 

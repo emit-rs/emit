@@ -17,7 +17,7 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     {
         use syn::{FieldValue, parse::Parse};
 
-        use crate::{args, template, util::ToRefTokens};
+        use crate::{args, template};
 
         struct Args {}
 
@@ -40,21 +40,13 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         let template =
             template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;
 
-        let props_match_input_tokens = props.match_input_tokens();
-        let props_match_binding_tokens = props.match_binding_tokens();
-        let props_tokens = props.match_bound_tokens().to_ref_tokens();
-
         let template_tokens = template.template_tokens();
 
-        Ok(quote!({
-            match (#(#props_match_input_tokens),*) {
-                (#(#props_match_binding_tokens),*) => {
-                    emit::__private::__private_format(
-                        #template_tokens,
-                        #props_tokens,
-                    )
-                }
-            }
-        }))
+        props.match_bound_props_tokens(|props_tokens| {
+            Ok(quote!(emit::__private::__private_format(
+                #template_tokens,
+                #props_tokens,
+            )))
+        })
     }
 }

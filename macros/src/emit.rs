@@ -100,10 +100,6 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     check_evt_props(&props)?;
     push_evt_props(&mut props, opts.level)?;
 
-    let props_match_input_tokens = props.match_input_tokens();
-    let props_match_binding_tokens = props.match_binding_tokens();
-    let props_tokens = props.match_bound_tokens().to_ref_tokens();
-
     let rt_tokens = args.rt.to_tokens()?.to_ref_tokens();
     let when_tokens = args
         .when
@@ -111,49 +107,43 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         .map(|when| when.to_ref_tokens())
         .to_option_tokens(quote!(&emit::Empty));
 
-    let emit_tokens = if let Some(event_tokens) = args.evt {
-        // If the `event` parameter is present, then we can emit it without a template
-        let template_tokens = template
-            .map(|template| template.template_tokens().to_ref_tokens())
-            .to_option_tokens(quote!(&emit::Template));
-        let event_tokens = event_tokens.to_ref_tokens();
+    props.match_bound_props_tokens(|props_tokens| {
+        if let Some(event_tokens) = args.evt {
+            // If the `event` parameter is present, then we can emit it without a template
+            let template_tokens = template
+                .map(|template| template.template_tokens().to_ref_tokens())
+                .to_option_tokens(quote!(&emit::Template));
+            let event_tokens = event_tokens.to_ref_tokens();
 
-        quote!(
-            emit::__private::__private_emit_event(
-                #rt_tokens,
-                #when_tokens,
-                #event_tokens,
-                #template_tokens,
-                #props_tokens,
-            );
-        )
-    } else {
-        let base_props_tokens = args.props.to_tokens().to_ref_tokens();
-        let extent_tokens = args.extent.to_tokens().to_ref_tokens();
-        let mdl_tokens = args.mdl.to_tokens().to_ref_tokens();
+            Ok(quote!(
+                emit::__private::__private_emit_event(
+                    #rt_tokens,
+                    #when_tokens,
+                    #event_tokens,
+                    #template_tokens,
+                    #props_tokens,
+                )
+            ))
+        } else {
+            let base_props_tokens = args.props.to_tokens().to_ref_tokens();
+            let extent_tokens = args.extent.to_tokens().to_ref_tokens();
+            let mdl_tokens = args.mdl.to_tokens().to_ref_tokens();
 
-        let template =
-            template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;
-        let template_tokens = template.template_tokens().to_ref_tokens();
+            let template =
+                template.ok_or_else(|| syn::Error::new(span, "missing template string literal"))?;
+            let template_tokens = template.template_tokens().to_ref_tokens();
 
-        quote!(
-            emit::__private::__private_emit(
-                #rt_tokens,
-                #mdl_tokens,
-                #when_tokens,
-                #extent_tokens,
-                #template_tokens,
-                #base_props_tokens,
-                #props_tokens,
-            );
-        )
-    };
-
-    Ok(quote!({
-        match (#(#props_match_input_tokens),*) {
-            (#(#props_match_binding_tokens),*) => {
-                #emit_tokens
-            }
+            Ok(quote!(
+                emit::__private::__private_emit(
+                    #rt_tokens,
+                    #mdl_tokens,
+                    #when_tokens,
+                    #extent_tokens,
+                    #template_tokens,
+                    #base_props_tokens,
+                    #props_tokens,
+                )
+            ))
         }
-    }))
+    })
 }

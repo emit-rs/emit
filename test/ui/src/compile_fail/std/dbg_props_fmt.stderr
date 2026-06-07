@@ -1,5 +1,5 @@
 error: `fmt` isn't valid here; it can only be applied to values in templates or event macros
- --> src/compile_fail/std/dbg_props_fmt.rs:2:16
+ --> src/compile_fail/std/dbg_props_fmt.rs:2:35
   |
 2 |     emit::dbg!(#[emit::fmt("#?")] a: 42);
-  |                ^^^^^^^^^^^^^^^^^^^^^^^^
+  |                                   ^

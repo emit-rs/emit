@@ -10,8 +10,6 @@ use crate::{
 
 #[derive(Debug)]
 pub struct Props {
-    match_value_tokens: Vec<TokenStream>,
-    match_binding_tokens: Vec<TokenStream>,
     key_values: BTreeMap<String, KeyValue>,
     key_value_index: usize,
 }
@@ -32,11 +30,9 @@ impl Parse for Props {
 
 #[derive(Debug)]
 pub struct KeyValue {
-    match_bound_tokens: TokenStream,
-    direct_bound_tokens: TokenStream,
-    raw_bound_tokens: TokenStream,
-    label: Ident,
-    span: Span,
+    idx: usize,
+    fv: FieldValue,
+    fn_name: TokenStream,
     pub interpolated: bool,
     pub captured: bool,
     pub cfg_attr: Option<Attribute>,
@@ -45,84 +41,193 @@ pub struct KeyValue {
 
 impl KeyValue {
     pub fn span(&self) -> Span {
-        self.span.clone()
+        self.fv.span()
     }
 
-    pub fn hole_tokens(&self) -> TokenStream {
-        let label = &self.label;
+    pub fn hole_tokens(&self) -> Result<TokenStream, syn::Error> {
+        let label = self.fv.key_ident()?;
         let attrs = &self.attrs;
 
-        quote!(#(#attrs)* #label)
+        Ok(quote!(#(#attrs)* #label))
     }
 }
 
 impl Props {
     pub fn new() -> Self {
         Props {
-            match_value_tokens: Vec::new(),
-            match_binding_tokens: Vec::new(),
             key_values: BTreeMap::new(),
             key_value_index: 0,
         }
     }
 
-    pub fn match_input_tokens(&self) -> impl Iterator<Item = &TokenStream> {
-        self.match_value_tokens.iter()
+    pub fn match_bound_props_tokens(
+        &self,
+        match_arm: impl FnOnce(TokenStream) -> Result<TokenStream, syn::Error>,
+    ) -> Result<TokenStream, syn::Error> {
+        let mut match_input_tokens = Vec::new();
+        let mut match_binding_tokens = Vec::new();
+        let mut match_bound_tokens = Vec::new();
+
+        for kv in self.key_values.values() {
+            let match_bound_ident = Ident::new(&format!("__tmp{}", kv.idx), kv.span());
+
+            // This is one of the few places we end up looking at the shape of an expression and deciding how to emit code for it.
+            //
+            // In the 2021 edition and prior, lifetimes of temporaries created in a `match expr` would be extended to the end of the
+            // `match`. In the 2024 edition, that doesn't happen anymore. So to keep the semantics that you can capture a value in scope
+            // by reference, and supply temporaries inline, we check whether the field value is a local like `x: a.b.c` and take a reference
+            // inside the `match expr`, or a complex expression like `x: a.b()`, where it's taken by value in the `match expr`.
+            let (kv_match_input_tokens, kv_match_bound_tokens) = if kv.fv.expr.is_local_variable() {
+                let key_value_tokens = maybe_cfg(
+                    kv.cfg_attr.as_ref(),
+                    kv.span(),
+                    capture::eval_key_value_with_hook(
+                        &kv.attrs,
+                        &kv.fv,
+                        &kv.fn_name,
+                        kv.interpolated,
+                        kv.captured,
+                    )?,
+                );
+
+                // If the expression is a local variable then it's an already in-scope identifier
+                // We take the expression by reference in a `match`
+
+                let cfg_attr = &kv.cfg_attr;
+                let kv_match_input_tokens = quote_spanned!(kv.span()=>#key_value_tokens);
+                let kv_match_bound_tokens = quote_spanned!(kv.span()=>#cfg_attr (#match_bound_ident.0, #match_bound_ident.1));
+
+                (kv_match_input_tokens, kv_match_bound_tokens)
+            } else {
+                let cfg_attr = &kv.cfg_attr;
+
+                // If the expression is not a local variable then it's constructed for the call
+                // We take the expression by value in a `match`
+
+                let key_tokens =
+                    capture::eval_key_with_hook(&kv.attrs, &kv.fv, kv.interpolated, kv.captured)?;
+                let value_expr = &kv.fv.expr;
+
+                let kv_match_input_tokens = maybe_cfg(
+                    kv.cfg_attr.as_ref(),
+                    kv.span(),
+                    quote_spanned!(kv.span()=> (#key_tokens, #value_expr)),
+                );
+
+                let bound_value_tokens = capture::value_with_hook(
+                    &syn::parse_quote_spanned!(kv.fv.span()=>#match_bound_ident.1),
+                    &kv.fn_name,
+                    kv.interpolated,
+                    kv.captured,
+                );
+                let bound_value_tokens = hook::eval_hooks(
+                    &kv.attrs,
+                    syn::parse_quote_spanned!(kv.span()=>#bound_value_tokens),
+                )?;
+
+                let kv_match_bound_tokens =
+                    quote!(#cfg_attr (#match_bound_ident.0, #bound_value_tokens));
+
+                (kv_match_input_tokens, kv_match_bound_tokens)
+            };
+
+            match_input_tokens.push(kv_match_input_tokens);
+            match_binding_tokens.push(quote_spanned!(kv.span()=> #match_bound_ident));
+
+            // If there's a #[cfg] then also push its reverse
+            // This is to give a dummy value to the pattern binding since they don't support attributes
+            if let Some(cfg_attr) = &kv.cfg_attr {
+                let cfg_attr = cfg_attr
+                    .invert_cfg()
+                    .ok_or_else(|| syn::Error::new(cfg_attr.span(), "attribute is not a #[cfg]"))?;
+
+                match_input_tokens.push(quote_spanned!(kv.span()=> #cfg_attr ()));
+            }
+
+            match_bound_tokens.push(kv_match_bound_tokens);
+        }
+
+        let props_tokens =
+            quote!(emit::__private::__PrivateMacroProps::from_array([#(#match_bound_tokens),*]));
+        let body_tokens = match_arm(props_tokens)?;
+
+        Ok(quote!({
+            match (#(#match_input_tokens),*) {
+                (#(#match_binding_tokens),*) => #body_tokens,
+            }
+        }))
     }
 
-    pub fn match_binding_tokens(&self) -> impl Iterator<Item = &TokenStream> {
-        self.match_binding_tokens.iter()
+    pub fn direct_bound_props_tokens(&self) -> Result<TokenStream, syn::Error> {
+        let mut err = None;
+
+        let key_values = self.key_values.values().filter_map(|kv| {
+            let key_value_tokens = match capture::eval_key_value_with_hook(
+                &kv.attrs,
+                &kv.fv,
+                &kv.fn_name,
+                kv.interpolated,
+                kv.captured,
+            ) {
+                Ok(key_value_tokens) => key_value_tokens,
+                Err(e) => {
+                    err = Some(e);
+                    return None;
+                }
+            };
+
+            let key_value_tokens = maybe_cfg(kv.cfg_attr.as_ref(), kv.span(), key_value_tokens);
+
+            Some(quote_spanned!(kv.span()=> #key_value_tokens))
+        });
+
+        let props_tokens =
+            quote!(emit::__private::__PrivateMacroProps::from_array([#(#key_values),*]));
+
+        match err {
+            None => Ok(props_tokens),
+            Some(err) => Err(err),
+        }
     }
 
-    pub fn match_bound_tokens(&self) -> TokenStream {
-        Self::sorted_props_tokens(self.key_values.values().map(|kv| &kv.match_bound_tokens))
-    }
-
-    pub fn props_tokens(&self) -> TokenStream {
-        Self::sorted_props_tokens(self.key_values.values().map(|kv| &kv.direct_bound_tokens))
-    }
-
-    pub fn raw_props_tokens(&self) -> Result<TokenStream, syn::Error> {
+    pub fn raw_bound_props_tokens(&self) -> Result<TokenStream, syn::Error> {
         // Make sure no key-values carry attributes
         // This is a limitation imposed while this code is only used internally
         // If we expose some way for users to produce raw props we'll need to rethink this
         for (k, v) in &self.key_values {
             if v.attrs.len() != 0 {
                 return Err(syn::Error::new(
-                    v.span,
+                    v.span(),
                     format!("attributes on {k} are not supported when capturing directly"),
                 ));
             }
         }
 
-        Ok(match self.key_values.len() {
-            0 => quote!(emit::Empty),
-            1 => self
-                .key_values
-                .first_key_value()
-                .unwrap()
-                .1
-                .raw_bound_tokens
-                .clone(),
+        match self.key_values.len() {
+            0 => Ok(quote!(emit::Empty)),
+            1 => capture::raw_key_value(&self.key_values.first_key_value().unwrap().1.fv),
             _ => {
-                let key_values = self.key_values.values().map(|kv| &kv.raw_bound_tokens);
+                let mut err = None;
 
-                quote!(emit::__private::__PrivateTupleMacroProps::new((#(#key_values),*)))
+                let key_values = self.key_values.values().filter_map(|kv| {
+                    match capture::raw_key_value(&kv.fv) {
+                        Ok(key_value_tokens) => Some(key_value_tokens),
+                        Err(e) => {
+                            err = Some(e);
+                            None
+                        }
+                    }
+                });
+
+                let props_tokens =
+                    quote!(emit::__private::__PrivateTupleMacroProps::new((#(#key_values),*)));
+
+                match err {
+                    None => Ok(props_tokens),
+                    Some(err) => Err(err),
+                }
             }
-        })
-    }
-
-    fn sorted_props_tokens<'a>(
-        key_values: impl Iterator<Item = &'a TokenStream> + 'a,
-    ) -> TokenStream {
-        quote!(emit::__private::__PrivateMacroProps::from_array([#(#key_values),*]))
-    }
-
-    fn next_match_binding_ident(&mut self, span: Span) -> Ident {
-        let i = Ident::new(&format!("__tmp{}", self.key_value_index), span);
-        self.key_value_index += 1;
-
-        i
+        }
     }
 
     pub fn get(&self, label: &str) -> Option<&KeyValue> {
@@ -158,77 +263,8 @@ impl Props {
             }
         }
 
-        let match_bound_ident = self.next_match_binding_ident(fv.span());
-
-        let key_value_tokens = maybe_cfg(
-            cfg_attr.as_ref(),
-            fv.span(),
-            capture::eval_key_value_with_hook(&attrs, &fv, &fn_name, interpolated, captured)?,
-        );
-
-        let direct_bound_tokens = quote_spanned!(fv.span()=> #key_value_tokens);
-
-        let raw_bound_tokens = capture::raw_key_value(fv)?;
-
-        // This is one of the few places we end up looking at the shape of an expression and deciding how to emit code for it.
-        //
-        // In the 2021 edition and prior, lifetimes of temporaries created in a `match expr` would be extended to the end of the
-        // `match`. In the 2024 edition, that doesn't happen anymore. So to keep the semantics that you can capture a value in scope
-        // by reference, and supply temporaries inline, we check whether the field value is a local like `x: a.b.c` and take a reference
-        // inside the `match expr`, or a complex expression like `x: a.b()`, where it's taken by value in the `match expr`.
-        let (match_value_tokens, match_bound_tokens) = if fv.expr.is_local_variable() {
-            // If the expression is a local variable then it's an already in-scope identifier
-            // We take the expression by reference in a `match`
-
-            let match_value_tokens = quote_spanned!(fv.span()=>#key_value_tokens);
-            let match_bound_tokens =
-                quote_spanned!(fv.span()=>#cfg_attr (#match_bound_ident.0, #match_bound_ident.1));
-
-            (match_value_tokens, match_bound_tokens)
-        } else {
-            // If the expression is not a local variable then it's constructed for the call
-            // We take the expression by value in a `match`
-
-            let key_tokens = capture::eval_key_with_hook(&attrs, &fv, interpolated, captured)?;
-            let value_expr = &fv.expr;
-
-            let match_value_tokens = maybe_cfg(
-                cfg_attr.as_ref(),
-                fv.span(),
-                quote_spanned!(fv.span()=> (#key_tokens, #value_expr)),
-            );
-
-            let bound_value_tokens = capture::value_with_hook(
-                &syn::parse_quote_spanned!(fv.span()=>#match_bound_ident.1),
-                &fn_name,
-                interpolated,
-                captured,
-            );
-            let bound_value_tokens = hook::eval_hooks(
-                &attrs,
-                syn::parse_quote_spanned!(fv.span()=>#bound_value_tokens),
-            )?;
-
-            let match_bound_tokens = quote!(#cfg_attr (#match_bound_ident.0, #bound_value_tokens));
-
-            (match_value_tokens, match_bound_tokens)
-        };
-
-        self.match_value_tokens.push(match_value_tokens);
-
-        // If there's a #[cfg] then also push its reverse
-        // This is to give a dummy value to the pattern binding since they don't support attributes
-        if let Some(cfg_attr) = &cfg_attr {
-            let cfg_attr = cfg_attr
-                .invert_cfg()
-                .ok_or_else(|| syn::Error::new(cfg_attr.span(), "attribute is not a #[cfg]"))?;
-
-            self.match_value_tokens
-                .push(quote_spanned!(fv.span()=> #cfg_attr ()));
-        }
-
-        self.match_binding_tokens
-            .push(quote_spanned!(fv.span()=> #match_bound_ident));
+        let idx = self.key_value_index;
+        self.key_value_index += 1;
 
         if fv.colon_token.is_some() && !captured {
             return Err(syn::Error::new(
@@ -241,11 +277,9 @@ impl Props {
         let previous = self.key_values.insert(
             fv.key_name()?,
             KeyValue {
-                match_bound_tokens,
-                direct_bound_tokens,
-                raw_bound_tokens,
-                span: fv.span(),
-                label: fv.key_ident()?,
+                idx,
+                fv: fv.clone(),
+                fn_name,
                 cfg_attr,
                 attrs,
                 captured,
