@@ -386,20 +386,22 @@ fn props_as_display() {
 
 #[test]
 #[cfg(feature = "std")]
+fn props_move() {
+    let a = ::std::string::String::from("short lived");
+
+    let props = emit::props! { a };
+
+    assert_eq!("short lived", props.pull::<&str, _>("a").unwrap());
+}
+
+#[test]
+#[cfg(feature = "std")]
 fn props_ref() {
     let a = ::std::string::String::from("short lived");
 
-    // NOTE: `a` worked inline on 2021 edition, but doesn't anymore
-    // We've fixed this for macros like `emit!()` that don't return values
-    match emit::props! {
-        a,
-    } {
-        props => {
-            assert_eq!("short lived", props.pull::<&str, _>("a").unwrap());
-        }
-    }
+    let props = emit::props! { a: &a };
 
-    drop(a);
+    assert_eq!("short lived", props.pull::<&str, _>("a").unwrap());
 }
 
 #[test]
