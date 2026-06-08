@@ -72,7 +72,7 @@ pub fn eval_key_with_hook(
     hook::eval_hooks(&attrs, syn::parse_quote_spanned!(fv.span()=>#key_tokens))
 }
 
-pub(crate) fn value_with_hook(
+pub fn value_with_hook(
     expr: &Expr,
     fn_name: &TokenStream,
     interpolated: bool,
@@ -94,6 +94,21 @@ pub(crate) fn value_with_hook(
         use emit::__private::{__PrivateCaptureHook as _, __PrivateOptionalCaptureHook as _, __PrivateOptionalHook as _, __PrivateInterpolatedHook as _, __PrivateKeyExternalHook as _};
         (#expr).#fn_name().__private_key_external() #interpolated_expr #captured_expr
     })
+}
+
+pub fn eval_value_with_hook(
+    attrs: &[Attribute],
+    expr: &Expr,
+    fn_name: &TokenStream,
+    interpolated: bool,
+    captured: bool,
+) -> Result<TokenStream, syn::Error> {
+    let value_tokens = value_with_hook(expr, fn_name, interpolated, captured);
+
+    hook::eval_hooks(
+        &attrs,
+        syn::parse_quote_spanned!(expr.span()=>#value_tokens),
+    )
 }
 
 pub fn default_fn_name(fv: &FieldValue) -> TokenStream {

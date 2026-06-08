@@ -456,6 +456,8 @@ pub trait Optional<'a> {
     type Value: ?Sized + 'a;
 
     fn into_option(self) -> Option<&'a Self::Value>;
+
+    fn into_option_ref(&'a self) -> Option<&'a Self::Value>;
 }
 
 impl<'a, T: ?Sized> Optional<'a> for Option<&'a T> {
@@ -463,6 +465,22 @@ impl<'a, T: ?Sized> Optional<'a> for Option<&'a T> {
 
     fn into_option(self) -> Option<&'a T> {
         self
+    }
+
+    fn into_option_ref(&'a self) -> Option<&'a T> {
+        self.as_deref()
+    }
+}
+
+impl<'a, O: Optional<'a> + ?Sized> Optional<'a> for &'a O {
+    type Value = O::Value;
+
+    fn into_option(self) -> Option<&'a Self::Value> {
+        (*self).into_option_ref()
+    }
+
+    fn into_option_ref(&'a self) -> Option<&'a Self::Value> {
+        (*self).into_option_ref()
     }
 }
 
@@ -730,6 +748,32 @@ impl<T> __PrivateKeyExternalHook for T {
     }
 }
 
+pub trait __PrivateInferInput {
+    fn __private_infer_input<F>(&self, f: F) -> F
+    where
+        F: Fn(&Self) -> (Str<'_>, Option<Value<'_>>),
+    {
+        f
+    }
+}
+
+impl<T: ?Sized> __PrivateInferInput for T {}
+
+pub trait __PrivateClose {
+    fn __private_close_ref(&self) -> &Self {
+        self
+    }
+
+    fn __private_close_move(self) -> Self
+    where
+        Self: Sized,
+    {
+        self
+    }
+}
+
+impl<T: ?Sized> __PrivateClose for T {}
+
 #[track_caller]
 #[cfg(feature = "alloc")]
 pub fn __private_format(tpl: Template, props: impl Props) -> alloc::string::String {
@@ -836,13 +880,13 @@ pub fn __private_emit_event<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R:
 
 #[track_caller]
 #[must_use = "this macro returns an `Event` without emitting it; send it through an `emit::Emitter`, or use the `emit::emit!` macro instead"]
-pub fn __private_evt<'a, B: Props + ?Sized, P: Props>(
+pub fn __private_evt<'a, B: Props, P: Props>(
     mdl: impl Into<Path<'a>>,
     tpl: impl Into<Template<'a>>,
     extent: impl ToExtent,
-    base_props: &'a B,
+    base_props: B,
     props: P,
-) -> Event<'a, And<P, &'a B>> {
+) -> Event<'a, And<P, B>> {
     Event::new(
         mdl.into(),
         tpl.into(),
@@ -1150,14 +1194,14 @@ where
 
 #[track_caller]
 #[must_use = "this macro returns a `Metric` without emitting it; sample it through an `emit::metric::Sampler`, or use the `emit::sample!` macro instead to sample and emit it"]
-pub fn __private_metric<'a, P: Props + ?Sized>(
+pub fn __private_metric<'a, P: Props>(
     mdl: impl Into<Path<'a>>,
     extent: impl ToExtent,
-    props: &'a P,
+    props: P,
     metric_name: impl Into<Str<'a>>,
     metric_agg: impl Into<Str<'a>>,
     metric_value: Option<Value<'a>>,
-) -> Metric<'a, &'a P> {
+) -> Metric<'a, P> {
     Metric::new(
         mdl.into(),
         metric_name,

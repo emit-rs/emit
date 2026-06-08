@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use proc_macro2::{Span, TokenStream};
-use syn::{Attribute, FieldValue, Ident, parse::Parse, spanned::Spanned};
+use syn::{Attribute, FieldValue, Ident, Lifetime, parse::Parse, spanned::Spanned};
 
 use crate::{
     capture, hook,
@@ -154,6 +154,99 @@ impl Props {
         Ok(quote!({
             match (#(#match_input_tokens),*) {
                 (#(#match_binding_tokens),*) => #body_tokens,
+            }
+        }))
+    }
+
+    pub fn gen_bound_props_tokens(&self) -> Result<TokenStream, syn::Error> {
+        let mut struct_decl_lfs = Vec::new();
+        let mut struct_decl_tys = Vec::new();
+        let mut struct_decl_fvs = Vec::new();
+        let mut struct_decl_markers = Vec::new();
+
+        let mut impl_decl_tys = Vec::new();
+        let mut impl_struct_tys = Vec::new();
+        let mut impl_for_each = Vec::new();
+
+        let mut let_bindings = Vec::new();
+
+        let mut struct_ctor_fvs = Vec::new();
+
+        // TODO: `#[cfg]`
+        for kv in self.key_values.values() {
+            let input_ident = Ident::new(&format!("__i{}", kv.idx), kv.span());
+            let fn_ident = Ident::new(&format!("__f{}", kv.idx), kv.span());
+
+            let input_ty = Ident::new(&format!("__I{}", kv.idx), kv.span());
+            let fn_ty = Ident::new(&format!("__F{}", kv.idx), kv.span());
+
+            let input_lf = Lifetime::new(&format!("'__i{}", kv.idx), kv.span());
+
+            struct_decl_lfs.push(quote!(#input_lf));
+            struct_decl_tys.push(quote!(#input_ty: ?Sized));
+            struct_decl_tys.push(quote!(#fn_ty));
+
+            impl_decl_tys.push(quote!(#input_ty: ?Sized));
+            impl_decl_tys
+                .push(quote!(#fn_ty: Fn(&#input_ty) -> (emit::Str<'_>, emit::__private::core::option::Option<emit::Value<'_>>)));
+            impl_struct_tys.push(quote!(#input_ty));
+            impl_struct_tys.push(quote!(#fn_ty));
+
+            struct_decl_fvs.push(quote!(#input_ident: &#input_lf #input_ty));
+            struct_decl_fvs.push(quote!(#fn_ident: #fn_ty));
+            struct_decl_markers.push(quote!(&#input_lf #input_ty));
+            struct_decl_markers.push(quote!(#fn_ty));
+
+            let value = &kv.fv.expr;
+            let_bindings.push(quote!(let #input_ident = (#value).__private_close_ref()));
+
+            let key_tokens =
+                capture::eval_key_with_hook(&kv.attrs, &kv.fv, kv.interpolated, kv.captured)?;
+
+            let value_tokens = capture::eval_value_with_hook(
+                &kv.attrs,
+                &syn::parse_quote_spanned!(kv.fv.span()=>#input_ident),
+                &kv.fn_name,
+                kv.interpolated,
+                kv.captured,
+            )?;
+
+            struct_ctor_fvs.push(quote!(
+                #fn_ident: (*#input_ident).__private_infer_input(|#input_ident| (#key_tokens, #value_tokens))
+            ));
+            struct_ctor_fvs.push(quote!(#input_ident));
+
+            impl_for_each.push(quote!(
+                match (self.#fn_ident)(&self.#input_ident) {
+                    (k, emit::__private::core::option::Option::Some(v)) => for_each(k, v)?,
+                    _ => (),
+                }
+            ));
+        }
+
+        struct_decl_fvs.push(quote!(__marker: emit::__private::core::marker::PhantomData<(#(#struct_decl_markers,)*)>));
+        struct_ctor_fvs.push(quote!(__marker: emit::__private::core::marker::PhantomData));
+
+        Ok(quote!({
+            #[allow(unused_imports)]
+            use emit::__private::{__PrivateInferInput, __PrivateClose};
+
+            struct __Props<#(#struct_decl_lfs,)* #(#struct_decl_tys,)*> {
+                #(#struct_decl_fvs,)*
+            }
+
+            impl<#(#struct_decl_lfs,)* #(#impl_decl_tys,)*> emit::Props for __Props<#(#struct_decl_lfs,)* #(#impl_struct_tys,)*> {
+                fn for_each<'kv, F: emit::__private::core::ops::FnMut(emit::Str<'kv>, emit::Value<'kv>) -> emit::__private::core::ops::ControlFlow<()>>(&'kv self, mut for_each: F) -> emit::__private::core::ops::ControlFlow<()> {
+                    #(#impl_for_each)*
+
+                    emit::__private::core::ops::ControlFlow::Continue(())
+                }
+            }
+
+            #(#let_bindings;)*
+
+            __Props {
+                #(#struct_ctor_fvs,)*
             }
         }))
     }

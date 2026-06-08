@@ -19,7 +19,7 @@ The `props!` macro.
 pub fn expand_props_tokens(opts: ExpandPropsTokens) -> Result<TokenStream, syn::Error> {
     let props = syn::parse2::<Props>(opts.input)?;
 
-    props.direct_bound_props_tokens()
+    props.gen_bound_props_tokens()
 }
 
 pub struct ExpandTplTokens {
