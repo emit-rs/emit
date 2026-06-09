@@ -759,19 +759,6 @@ pub trait __PrivateInferInput {
 
 impl<T: ?Sized> __PrivateInferInput for T {}
 
-pub trait __PrivateClose {
-    fn __private_close_ref(&self) -> &Self {
-        self
-    }
-
-    fn __private_close_move(self) -> Self
-    where
-        Self: Sized,
-    {
-        self
-    }
-}
-
 #[track_caller]
 #[cfg(feature = "alloc")]
 pub fn __private_format(tpl: Template, props: impl Props) -> alloc::string::String {
