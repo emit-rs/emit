@@ -569,7 +569,7 @@ async fn async_span_evt_props_macro() {
         let _span = span.push_prop("b", true);
     }
 
-    exec();
+    exec().await;
 
     RT.emitter().blocking_flush(Duration::from_secs(1));
 }
