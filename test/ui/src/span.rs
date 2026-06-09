@@ -564,7 +564,7 @@ async fn async_span_evt_props_macro() {
 
     #[emit::span(rt: RT, guard: span, evt_props: emit::props! { a: 42 }, "test")]
     async fn exec() {
-        tokio::time::delay(Default::default()).await;
+        tokio::time::sleep(Default::default()).await;
 
         let _span = span.push_prop("b", true);
     }
