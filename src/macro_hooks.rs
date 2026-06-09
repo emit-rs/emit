@@ -2,7 +2,7 @@
 
 use core::{
     any::Any,
-    fmt, mem,
+    fmt,
     ops::{ControlFlow, Deref, DerefMut},
 };
 
@@ -772,17 +772,6 @@ pub trait __PrivateClose {
     }
 }
 
-impl<T: ?Sized> __PrivateClose for T {}
-
-#[track_caller]
-#[cfg(feature = "alloc")]
-pub fn __private_format(tpl: Template, props: impl Props) -> alloc::string::String {
-    let mut s = alloc::string::String::new();
-    tpl.render(props).write(&mut s).expect("infallible write");
-
-    s
-}
-
 struct FirstDefined<A, B>(Option<A>, B);
 
 impl<A: Filter, B: Filter> Filter for FirstDefined<A, B> {
@@ -1194,33 +1183,33 @@ where
 
 #[track_caller]
 #[must_use = "this macro returns a `Metric` without emitting it; sample it through an `emit::metric::Sampler`, or use the `emit::sample!` macro instead to sample and emit it"]
-pub fn __private_metric<'a, P: Props>(
+pub fn __private_metric<'a, P: Props, V: ToValue>(
     mdl: impl Into<Path<'a>>,
     extent: impl ToExtent,
     props: P,
     metric_name: impl Into<Str<'a>>,
     metric_agg: impl Into<Str<'a>>,
-    metric_value: Option<Value<'a>>,
-) -> Metric<'a, P> {
+    metric_value: V,
+) -> Metric<'a, P, V> {
     Metric::new(
         mdl.into(),
         metric_name,
         metric_agg,
         extent.to_extent(),
-        metric_value.unwrap_or_else(|| Value::null()),
+        metric_value,
         props,
     )
 }
 
 #[track_caller]
-pub fn __private_sample<'a, S: Sampler, P: Props + ?Sized>(
+pub fn __private_sample<'a, S: Sampler, P: Props + ?Sized, V: ToValue + ?Sized>(
     sampler: S,
     mdl: impl Into<Path<'a>>,
     extent: impl ToExtent,
     props: &'a P,
     metric_name: impl Into<Str<'a>>,
     metric_agg: impl Into<Str<'a>>,
-    metric_value: Option<Value<'a>>,
+    metric_value: &'a V,
 ) {
     sampler.metric(__private_metric(
         mdl,
@@ -1248,9 +1237,13 @@ impl<'a, const N: usize> __PrivateMacroProps<'a, N> {
     }
 }
 
-impl<'a> __PrivateMacroProps<'a, 1> {
-    pub fn into_value(mut self) -> Option<Value<'a>> {
-        mem::replace(&mut self.0[0].1, None)
+impl<'a> ToValue for __PrivateMacroProps<'a, 1> {
+    fn to_value(&self) -> Value<'_> {
+        self.0[0]
+            .1
+            .as_ref()
+            .map(|v| v.by_ref())
+            .unwrap_or(Value::null())
     }
 }
 

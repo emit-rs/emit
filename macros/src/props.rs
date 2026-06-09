@@ -166,6 +166,7 @@ impl Props {
         let mut impl_decl_tys = Vec::new();
         let mut impl_struct_tys = Vec::new();
         let mut impl_for_each = Vec::new();
+        let mut impl_to_value = Vec::new();
 
         let mut let_bindings = Vec::new();
 
@@ -218,18 +219,36 @@ impl Props {
                     _ => (),
                 }
             ));
+
+            impl_to_value.push(
+                quote!((self.#fn_ident)(&self.#input_ident).1.unwrap_or(emit::Value::null())),
+            );
         }
 
         struct_decl_fvs.push(quote!(__marker: emit::__private::core::marker::PhantomData<(#(#struct_decl_markers,)*)>));
         struct_ctor_fvs.push(quote!(__marker: emit::__private::core::marker::PhantomData));
 
+        let single_impls = if self.key_values.len() == 1 {
+            Some(quote!(
+                impl<#(#impl_decl_tys,)*> emit::value::ToValue for __Props<#(#impl_struct_tys,)*> {
+                    fn to_value(&self) -> emit::Value<'_> {
+                        #(#impl_to_value)*
+                    }
+                }
+            ))
+        } else {
+            None
+        };
+
         Ok(quote!({
             #[allow(unused_imports)]
-            use emit::__private::{__PrivateInferInput, __PrivateClose};
+            use emit::__private::__PrivateInferInput;
 
             struct __Props<#(#struct_decl_tys,)*> {
                 #(#struct_decl_fvs,)*
             }
+
+            #single_impls
 
             impl<#(#impl_decl_tys,)*> emit::Props for __Props<#(#impl_struct_tys,)*> {
                 fn for_each<
@@ -248,38 +267,6 @@ impl Props {
                 #(#struct_ctor_fvs,)*
             }
         }))
-    }
-
-    pub fn direct_bound_props_tokens(&self) -> Result<TokenStream, syn::Error> {
-        let mut err = None;
-
-        let key_values = self.key_values.values().filter_map(|kv| {
-            let key_value_tokens = match capture::eval_key_value_with_hook(
-                &kv.attrs,
-                &kv.fv,
-                &kv.fn_name,
-                kv.interpolated,
-                kv.captured,
-            ) {
-                Ok(key_value_tokens) => key_value_tokens,
-                Err(e) => {
-                    err = Some(e);
-                    return None;
-                }
-            };
-
-            let key_value_tokens = maybe_cfg(kv.cfg_attr.as_ref(), kv.span(), key_value_tokens);
-
-            Some(quote_spanned!(kv.span()=> #key_value_tokens))
-        });
-
-        let props_tokens =
-            quote!(emit::__private::__PrivateMacroProps::from_array([#(#key_values),*]));
-
-        match err {
-            None => Ok(props_tokens),
-            Some(err) => Err(err),
-        }
     }
 
     pub fn raw_bound_props_tokens(&self) -> Result<TokenStream, syn::Error> {

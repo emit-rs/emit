@@ -30,17 +30,17 @@ Metrics are an extension of [`Event`]s that explicitly take the well-known prope
 
 A `Metric` can be converted into an [`Event`] through its [`ToEvent`] implemenation, or passed directly to an [`Emitter`] to emit it.
 */
-pub struct Metric<'a, P> {
+pub struct Metric<'a, P, V> {
     mdl: Path<'a>,
     name: Str<'a>,
     agg: Str<'a>,
     extent: Option<Extent>,
     tpl: Option<Template<'a>>,
-    value: Value<'a>,
     props: P,
+    value: V,
 }
 
-impl<'a, P> Metric<'a, P> {
+impl<'a, P, V> Metric<'a, P, V> {
     /**
     Create a new metric from its properties.
 
@@ -58,7 +58,7 @@ impl<'a, P> Metric<'a, P> {
         name: impl Into<Str<'a>>,
         agg: impl Into<Str<'a>>,
         extent: impl ToExtent,
-        value: impl Into<Value<'a>>,
+        value: V,
         props: P,
     ) -> Self {
         Metric {
@@ -124,16 +124,23 @@ impl<'a, P> Metric<'a, P> {
     /**
     Get the value of the sample itself.
     */
-    pub fn value(&self) -> &Value<'a> {
+    pub fn value(&self) -> &V {
         &self.value
     }
 
     /**
     Set the sample to a new value.
     */
-    pub fn with_value(mut self, value: impl Into<Value<'a>>) -> Self {
-        self.value = value.into();
-        self
+    pub fn with_value<U>(self, value: U) -> Metric<'a, P, U> {
+        Metric {
+            mdl: self.mdl,
+            extent: self.extent,
+            tpl: self.tpl,
+            name: self.name,
+            agg: self.agg,
+            props: self.props,
+            value,
+        }
     }
 
     /**
@@ -204,7 +211,7 @@ impl<'a, P> Metric<'a, P> {
     /**
     Set the additional properties associated with the sample to a new value.
     */
-    pub fn with_props<U>(self, props: U) -> Metric<'a, U> {
+    pub fn with_props<U>(self, props: U) -> Metric<'a, U, V> {
         Metric {
             mdl: self.mdl,
             extent: self.extent,
@@ -219,7 +226,7 @@ impl<'a, P> Metric<'a, P> {
     /**
     Map the properties of the metric.
     */
-    pub fn map_props<U>(self, map: impl FnOnce(P) -> U) -> Metric<'a, U> {
+    pub fn map_props<U>(self, map: impl FnOnce(P) -> U) -> Metric<'a, U, V> {
         Metric {
             mdl: self.mdl,
             extent: self.extent,
@@ -232,13 +239,13 @@ impl<'a, P> Metric<'a, P> {
     }
 }
 
-impl<'a, P: Props> fmt::Debug for Metric<'a, P> {
+impl<'a, P: Props, V: ToValue> fmt::Debug for Metric<'a, P, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(&self.to_event(), f)
     }
 }
 
-impl<'a, P: Props> ToEvent for Metric<'a, P> {
+impl<'a, P: Props, V: ToValue> ToEvent for Metric<'a, P, V> {
     type Props<'b>
         = &'b Self
     where
@@ -254,18 +261,18 @@ impl<'a, P: Props> ToEvent for Metric<'a, P> {
     }
 }
 
-impl<'a, P: Props> Metric<'a, P> {
+impl<'a, P: Props, V: ToValue> Metric<'a, P, V> {
     /**
     Get a new metric sample, borrowing data from this one.
     */
-    pub fn by_ref<'b>(&'b self) -> Metric<'b, &'b P> {
+    pub fn by_ref<'b>(&'b self) -> Metric<'b, &'b P, &'b V> {
         Metric {
             mdl: self.mdl.by_ref(),
             extent: self.extent.clone(),
             tpl: self.tpl.as_ref().map(|tpl| tpl.by_ref()),
             name: self.name.by_ref(),
             agg: self.agg.by_ref(),
-            value: self.value.by_ref(),
+            value: &self.value,
             props: &self.props,
         }
     }
@@ -273,26 +280,26 @@ impl<'a, P: Props> Metric<'a, P> {
     /**
     Get a type-erased metric sample, borrowing data from this one.
     */
-    pub fn erase<'b>(&'b self) -> Metric<'b, &'b dyn ErasedProps> {
+    pub fn erase<'b>(&'b self) -> Metric<'b, &'b dyn ErasedProps, Value<'b>> {
         Metric {
             mdl: self.mdl.by_ref(),
             extent: self.extent.clone(),
             tpl: self.tpl.as_ref().map(|tpl| tpl.by_ref()),
             name: self.name.by_ref(),
             agg: self.agg.by_ref(),
-            value: self.value.by_ref(),
+            value: self.value.to_value(),
             props: &self.props,
         }
     }
 }
 
-impl<'a, P> ToExtent for Metric<'a, P> {
+impl<'a, P, V> ToExtent for Metric<'a, P, V> {
     fn to_extent(&self) -> Option<Extent> {
         self.extent.clone()
     }
 }
 
-impl<'a, P: Props> Props for Metric<'a, P> {
+impl<'a, P: Props, V: ToValue> Props for Metric<'a, P, V> {
     fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
         &'kv self,
         mut for_each: F,
@@ -300,7 +307,7 @@ impl<'a, P: Props> Props for Metric<'a, P> {
         for_each(KEY_EVT_KIND.to_str(), Kind::Metric.to_value())?;
         for_each(KEY_METRIC_NAME.to_str(), self.name.to_value())?;
         for_each(KEY_METRIC_AGG.to_str(), self.agg.to_value())?;
-        for_each(KEY_METRIC_VALUE.to_str(), self.value.by_ref())?;
+        for_each(KEY_METRIC_VALUE.to_str(), self.value.to_value())?;
 
         self.props.for_each(for_each)
     }
@@ -390,7 +397,7 @@ pub mod source {
         }
     }
 
-    impl<'a, P: Props> Source for Metric<'a, P> {
+    impl<'a, P: Props, V: ToValue> Source for Metric<'a, P, V> {
         fn sample_metrics<S: Sampler>(&self, sampler: S) {
             sampler.metric(self.by_ref());
         }
@@ -743,7 +750,7 @@ mod alloc_support {
     }
 
     impl<S: Sampler> Sampler for TimeNormalizer<S> {
-        fn metric<P: Props>(&self, metric: Metric<P>) {
+        fn metric<P: Props, V: ToValue>(&self, metric: Metric<P, V>) {
             if let Some(now) = self.now {
                 let extent = metric.extent();
 
@@ -1045,7 +1052,7 @@ pub mod sampler {
         /**
         Receive a metric sample.
         */
-        fn metric<P: Props>(&self, metric: Metric<P>);
+        fn metric<P: Props, V: ToValue>(&self, metric: Metric<P, V>);
 
         /**
         A value for the point in time that the sample was requested.
@@ -1068,7 +1075,7 @@ pub mod sampler {
     }
 
     impl<'a, T: Sampler + ?Sized> Sampler for &'a T {
-        fn metric<P: Props>(&self, metric: Metric<P>) {
+        fn metric<P: Props, V: ToValue>(&self, metric: Metric<P, V>) {
             (**self).metric(metric)
         }
 
@@ -1078,7 +1085,7 @@ pub mod sampler {
     }
 
     impl Sampler for Empty {
-        fn metric<P: Props>(&self, _: Metric<P>) {}
+        fn metric<P: Props, V: ToValue>(&self, _: Metric<P, V>) {}
     }
 
     /**
@@ -1099,7 +1106,7 @@ pub mod sampler {
     }
 
     impl<S: Sampler> Sampler for WithSampledAt<S> {
-        fn metric<P: Props>(&self, metric: Metric<P>) {
+        fn metric<P: Props, V: ToValue>(&self, metric: Metric<P, V>) {
             self.sampler.metric(metric)
         }
 
@@ -1118,7 +1125,7 @@ pub mod sampler {
     pub struct FromEmitter<E>(E);
 
     impl<E: Emitter> Sampler for FromEmitter<E> {
-        fn metric<P: Props>(&self, metric: Metric<P>) {
+        fn metric<P: Props, V: ToValue>(&self, metric: Metric<P, V>) {
             self.0.emit(metric)
         }
     }
@@ -1146,12 +1153,12 @@ pub mod sampler {
 
     This type can be created directly, or via [`from_fn`].
     */
-    pub struct FromFn<F = fn(Metric<&dyn ErasedProps>)>(F);
+    pub struct FromFn<F = fn(Metric<&dyn ErasedProps, Value>)>(F);
 
     /**
     Create a [`Sampler`] from a function.
     */
-    pub const fn from_fn<F: Fn(Metric<&dyn ErasedProps>)>(f: F) -> FromFn<F> {
+    pub const fn from_fn<F: Fn(Metric<&dyn ErasedProps, Value>)>(f: F) -> FromFn<F> {
         FromFn(f)
     }
 
@@ -1164,8 +1171,8 @@ pub mod sampler {
         }
     }
 
-    impl<F: Fn(Metric<&dyn ErasedProps>)> Sampler for FromFn<F> {
-        fn metric<P: Props>(&self, metric: Metric<P>) {
+    impl<F: Fn(Metric<&dyn ErasedProps, Value>)> Sampler for FromFn<F> {
+        fn metric<P: Props, V: ToValue>(&self, metric: Metric<P, V>) {
             (self.0)(metric.erase())
         }
     }
@@ -1174,7 +1181,7 @@ pub mod sampler {
         use super::*;
 
         pub trait DispatchSampler {
-            fn dispatch_metric(&self, metric: Metric<&dyn ErasedProps>);
+            fn dispatch_metric(&self, metric: Metric<&dyn ErasedProps, Value>);
 
             fn dispatch_sampled_at(&self) -> Option<Timestamp>;
         }
@@ -1200,7 +1207,7 @@ pub mod sampler {
     }
 
     impl<T: Sampler> internal::DispatchSampler for T {
-        fn dispatch_metric(&self, metric: Metric<&dyn ErasedProps>) {
+        fn dispatch_metric(&self, metric: Metric<&dyn ErasedProps, Value>) {
             self.metric(metric)
         }
 
@@ -1210,7 +1217,7 @@ pub mod sampler {
     }
 
     impl<'a> Sampler for dyn ErasedSampler + 'a {
-        fn metric<P: Props>(&self, metric: Metric<P>) {
+        fn metric<P: Props, V: ToValue>(&self, metric: Metric<P, V>) {
             self.erase_sampler().0.dispatch_metric(metric.erase())
         }
 
@@ -1220,7 +1227,7 @@ pub mod sampler {
     }
 
     impl<'a> Sampler for dyn ErasedSampler + Send + Sync + 'a {
-        fn metric<P: Props>(&self, metric: Metric<P>) {
+        fn metric<P: Props, V: ToValue>(&self, metric: Metric<P, V>) {
             (self as &(dyn ErasedSampler + 'a)).metric(metric)
         }
 
@@ -3439,7 +3446,7 @@ mod tests {
         );
         assert_eq!("my metric", metric.name());
         assert_eq!("count", metric.agg());
-        assert_eq!(42, metric.value().by_ref().cast::<i32>().unwrap());
+        assert_eq!(42, metric.value().to_value().cast::<i32>().unwrap());
         assert_eq!(true, metric.props().pull::<bool, _>("metric_prop").unwrap());
     }
 

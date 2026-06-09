@@ -24,7 +24,7 @@ macro_rules! metrics {
         }
 
         impl $internal_container {
-            pub fn sample(&self) -> impl Iterator<Item = emit::metric::Metric<'static, emit::empty::Empty>> + 'static {
+            pub fn sample(&self) -> impl Iterator<Item = emit::metric::Metric<'static, emit::empty::Empty, usize>> + 'static {
                 let $internal_container { $($metric),* } = self;
 
                 [$(

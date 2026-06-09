@@ -882,36 +882,38 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
         .map(|when| when.to_ref_tokens())
         .to_option_tokens(quote!(&emit::Empty));
 
-    let ctxt_props_tokens = ctxt_props.direct_bound_props_tokens()?.to_ref_tokens();
-    let template_tokens = template.template_tokens();
-    let span_name_tokens = name
-        .map(|name| quote!(#name))
-        .unwrap_or_else(|| template.template_literal_tokens());
+    ctxt_props.match_bound_props_tokens(|ctxt_props_tokens| {
+        let template_tokens = template.template_tokens();
+        let span_name_tokens = name
+            .map(|name| quote!(#name))
+            .unwrap_or_else(|| template.template_literal_tokens());
 
-    let evt_props_tokens = evt_props.unwrap_or_else(|| quote!(emit::Empty));
+        let evt_props_tokens = evt_props.unwrap_or_else(|| quote!(emit::Empty));
 
-    let panic_lvl_tokens = lvl_tokens(
-        panic_lvl_tokens.as_ref(),
-        default_lvl_tokens.as_ref(),
-        emit_core::well_known::LVL_ERROR,
-    );
-    let lvl_tokens = optional_lvl_tokens(default_lvl_tokens.as_ref(), default_lvl_tokens.as_ref());
+        let panic_lvl_tokens = lvl_tokens(
+            panic_lvl_tokens.as_ref(),
+            default_lvl_tokens.as_ref(),
+            emit_core::well_known::LVL_ERROR,
+        );
+        let lvl_tokens =
+            optional_lvl_tokens(default_lvl_tokens.as_ref(), default_lvl_tokens.as_ref());
 
-    Ok(quote!(
-        emit::__private::__private_begin_span(
-            #rt_tokens,
-            #mdl_tokens,
-            #span_name_tokens,
-            #lvl_tokens,
-            #when_tokens,
-            #ctxt_props_tokens,
-            #evt_props_tokens,
-            emit::__private::__private_complete_span(
+        Ok(quote!(
+            emit::__private::__private_begin_span(
                 #rt_tokens,
-                #template_tokens,
+                #mdl_tokens,
+                #span_name_tokens,
                 #lvl_tokens,
-                #panic_lvl_tokens,
-            ),
-        )
-    ))
+                #when_tokens,
+                #ctxt_props_tokens,
+                #evt_props_tokens,
+                emit::__private::__private_complete_span(
+                    #rt_tokens,
+                    #template_tokens,
+                    #lvl_tokens,
+                    #panic_lvl_tokens,
+                ),
+            )
+        ))
+    })
 }
