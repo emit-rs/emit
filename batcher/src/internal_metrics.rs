@@ -8,7 +8,7 @@ macro_rules! metrics {
         pub(crate) struct $container { $(pub(crate) $name: $ty),* }
 
         impl $container {
-            pub fn sample(&self) -> impl Iterator<Item = emit::metric::Metric<'static, emit::empty::Empty, usize>> + 'static {
+            pub fn sample(&self) -> impl Iterator<Item = emit::metric::Metric<'static, usize, emit::empty::Empty>> + 'static {
                 let $container { $($name),* } = self;
 
                 [$(

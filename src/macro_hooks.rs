@@ -1192,14 +1192,14 @@ where
 
 #[track_caller]
 #[must_use = "this macro returns a `Metric` without emitting it; sample it through an `emit::metric::Sampler`, or use the `emit::sample!` macro instead to sample and emit it"]
-pub fn __private_metric<'a, P: Props, V: ToValue>(
+pub fn __private_metric<'a, V: ToValue, P: Props>(
     mdl: impl Into<Path<'a>>,
     extent: impl ToExtent,
     props: P,
     metric_name: impl Into<Str<'a>>,
     metric_agg: impl Into<Str<'a>>,
     metric_value: V,
-) -> Metric<'a, P, V> {
+) -> Metric<'a, V, P> {
     Metric::new(
         mdl.into(),
         metric_name,
@@ -1211,7 +1211,7 @@ pub fn __private_metric<'a, P: Props, V: ToValue>(
 }
 
 #[track_caller]
-pub fn __private_sample<'a, S: Sampler, P: Props + ?Sized, V: ToValue + ?Sized>(
+pub fn __private_sample<'a, S: Sampler, V: ToValue + ?Sized, P: Props + ?Sized>(
     sampler: S,
     mdl: impl Into<Path<'a>>,
     extent: impl ToExtent,
