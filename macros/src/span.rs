@@ -534,7 +534,7 @@ fn span_guard_tokens(
     default_lvl_tokens: &TokenStream,
 ) -> Result<TokenStream, syn::Error> {
     // We use type-preserving props here because they may span across await points
-    let macro_evt_props_tokens = macro_evt_props.raw_bound_props_tokens()?;
+    let macro_evt_props_tokens = macro_evt_props.gen_bound_props_tokens()?;
 
     let evt_props_tokens = quote!(emit::__private::__PrivateSpanEventMacroProps::new(#user_evt_props_tokens, #macro_evt_props_tokens));
 
@@ -882,7 +882,7 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
         .map(|when| when.to_ref_tokens())
         .to_option_tokens(quote!(&emit::Empty));
 
-    ctxt_props.match_bound_props_tokens(|ctxt_props_tokens| {
+    let span_tokens = ctxt_props.match_bound_props_tokens(|ctxt_props_tokens| {
         let template_tokens = template.template_tokens();
         let span_name_tokens = name
             .map(|name| quote!(#name))
@@ -915,5 +915,7 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
                 ),
             )
         ))
-    })
+    })?;
+
+    Ok(quote!(emit::__private::__must_use_span_guard(#span_tokens)))
 }

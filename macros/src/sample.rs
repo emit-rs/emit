@@ -193,7 +193,7 @@ pub fn expand_metric_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Erro
     args::ensure_missing("rt", args.sampler.map(|arg| arg.span()))?;
 
     let extent_tokens = args.extent.to_tokens().to_ref_tokens();
-    let props_tokens = args.props.to_tokens().to_ref_tokens();
+    let props_tokens = args.props.to_tokens();
     let mdl_tokens = args.mdl.to_tokens();
     let name = if let Some(name) = args.name {
         name
@@ -210,6 +210,6 @@ pub fn expand_metric_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Erro
     });
 
     Ok(
-        quote!(emit::__private::__private_metric(#mdl_tokens, #extent_tokens, #props_tokens, #name, #agg, #value_props_tokens)),
+        quote!(emit::__private::__must_use_metric(emit::__private::__private_metric(#mdl_tokens, #extent_tokens, #props_tokens, #name, #agg, #value_props_tokens))),
     )
 }

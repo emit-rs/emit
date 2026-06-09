@@ -865,6 +865,12 @@ pub fn __private_emit_event<'a, 'b, E: Emitter, F: Filter, C: Ctxt, T: Clock, R:
 
 #[track_caller]
 #[must_use = "this macro returns an `Event` without emitting it; send it through an `emit::Emitter`, or use the `emit::emit!` macro instead"]
+pub fn __must_use_evt<T>(value: T) -> T {
+    value
+}
+
+#[track_caller]
+#[must_use = "this macro returns an `Event` without emitting it; send it through an `emit::Emitter`, or use the `emit::emit!` macro instead"]
 pub fn __private_evt<'a, B: Props, P: Props>(
     mdl: impl Into<Path<'a>>,
     tpl: impl Into<Template<'a>>,
@@ -882,6 +888,11 @@ pub fn __private_evt<'a, B: Props, P: Props>(
 
 #[track_caller]
 #[must_use = "this macro returns a `(SpanGuard, Frame)` without starting it; see the docs for `emit::span::SpanGuard::new` for details on starting and completing the returned span"]
+pub fn __must_use_span_guard<T>(value: T) -> T {
+    value
+}
+
+#[track_caller]
 pub fn __private_begin_span<
     'a,
     'b,
@@ -1179,6 +1190,11 @@ where
 
 #[track_caller]
 #[must_use = "this macro returns a `Metric` without emitting it; sample it through an `emit::metric::Sampler`, or use the `emit::sample!` macro instead to sample and emit it"]
+pub fn __must_use_metric<T>(value: T) -> T {
+    value
+}
+
+#[track_caller]
 pub fn __private_metric<'a, V: ToValue, P: Props>(
     mdl: impl Into<Path<'a>>,
     extent: impl ToExtent,

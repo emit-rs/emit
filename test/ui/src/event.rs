@@ -41,12 +41,10 @@ fn event_extent() {
 
 #[test]
 fn event_base_props() {
-    let props = emit::props! {
-        a: "base",
-    };
-
     let evt = emit::evt!(
-        props,
+        props: emit::props! {
+            a: "base",
+        },
         "template",
         b: "evt",
     );

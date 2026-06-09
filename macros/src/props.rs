@@ -294,46 +294,6 @@ impl Props {
         }))
     }
 
-    pub fn raw_bound_props_tokens(&self) -> Result<TokenStream, syn::Error> {
-        // Make sure no key-values carry attributes
-        // This is a limitation imposed while this code is only used internally
-        // If we expose some way for users to produce raw props we'll need to rethink this
-        for (k, v) in &self.key_values {
-            if v.attrs.len() != 0 {
-                return Err(syn::Error::new(
-                    v.span(),
-                    format!("attributes on {k} are not supported when capturing directly"),
-                ));
-            }
-        }
-
-        match self.key_values.len() {
-            0 => Ok(quote!(emit::Empty)),
-            1 => capture::raw_key_value(&self.key_values.first_key_value().unwrap().1.fv),
-            _ => {
-                let mut err = None;
-
-                let key_values = self.key_values.values().filter_map(|kv| {
-                    match capture::raw_key_value(&kv.fv) {
-                        Ok(key_value_tokens) => Some(key_value_tokens),
-                        Err(e) => {
-                            err = Some(e);
-                            None
-                        }
-                    }
-                });
-
-                let props_tokens =
-                    quote!(emit::__private::__PrivateTupleMacroProps::new((#(#key_values),*)));
-
-                match err {
-                    None => Ok(props_tokens),
-                    Some(err) => Err(err),
-                }
-            }
-        }
-    }
-
     pub fn get(&self, label: &str) -> Option<&KeyValue> {
         self.key_values.get(label)
     }

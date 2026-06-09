@@ -52,13 +52,6 @@ pub fn eval_key_value_with_hook(
     )
 }
 
-pub fn raw_key_value(fv: &FieldValue) -> syn::Result<TokenStream> {
-    let key = fv.key_expr()?;
-    let value = &fv.expr;
-
-    Ok(quote_spanned!(fv.span()=> (#key, #value)))
-}
-
 pub fn eval_key_with_hook(
     attrs: &[Attribute],
     fv: &FieldValue,

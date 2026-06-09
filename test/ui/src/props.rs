@@ -80,19 +80,15 @@ fn props_cfg_single() {
 fn props_capture_err() {
     use ::std::{error, io};
 
-    let err = io::Error::new(io::ErrorKind::Other, "Some error");
+    let props = emit::props! {
+        err: io::Error::new(io::ErrorKind::Other, "Some error"),
+    };
 
-    match emit::props! {
-        err,
-    } {
-        props => {
-            let err = props
-                .pull::<&(dyn error::Error + 'static), _>("err")
-                .unwrap();
+    let err = props
+        .pull::<&(dyn error::Error + 'static), _>("err")
+        .unwrap();
 
-            assert_eq!("Some error", err.to_string());
-        }
-    }
+    assert_eq!("Some error", err.to_string());
 }
 
 #[test]
@@ -113,17 +109,15 @@ fn props_capture_err_anyhow() {
 
     let err = anyhow::Error::msg("Some error");
 
-    match emit::props! {
+    let props = emit::props! {
         err: emit::err::as_ref(&err),
-    } {
-        props => {
-            let err = props
-                .pull::<&(dyn error::Error + 'static), _>("err")
-                .unwrap();
+    };
 
-            assert_eq!("Some error", err.to_string());
-        }
-    }
+    let err = props
+        .pull::<&(dyn error::Error + 'static), _>("err")
+        .unwrap();
+
+    assert_eq!("Some error", err.to_string());
 }
 
 #[test]
@@ -418,17 +412,14 @@ fn props_ref() {
 fn props_as_error() {
     use ::std::{error, io};
 
-    let a = io::Error::new(io::ErrorKind::Other, "Some error");
+    let props = emit::props! {
+        #[emit::as_error]
+        a: io::Error::new(io::ErrorKind::Other, "Some error"),
+    };
 
-    match emit::props! {
-        #[emit::as_error] a,
-    } {
-        props => {
-            let err = props.pull::<&(dyn error::Error + 'static), _>("a").unwrap();
+    let err = props.pull::<&(dyn error::Error + 'static), _>("a").unwrap();
 
-            assert_eq!("Some error", err.to_string());
-        }
-    }
+    assert_eq!("Some error", err.to_string());
 }
 
 #[test]
