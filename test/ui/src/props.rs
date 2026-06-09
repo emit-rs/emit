@@ -1,5 +1,4 @@
 use ::std::fmt;
-
 use emit::Props;
 
 #[allow(unused_imports)]
@@ -63,6 +62,16 @@ fn props_cfg() {
     };
 
     assert_eq!("enabled", props.pull::<&str, _>("enabled").unwrap());
+    assert!(props.get("disabled").is_none());
+}
+
+#[test]
+fn props_cfg_single() {
+    let props = emit::props! {
+        #[cfg(emit_disabled)]
+        disabled: "disabled",
+    };
+
     assert!(props.get("disabled").is_none());
 }
 

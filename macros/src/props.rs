@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use proc_macro2::{Span, TokenStream};
 use syn::{Attribute, FieldValue, Ident, parse::Parse, spanned::Spanned};
 
+use crate::util::maybe_cfg_else;
 use crate::{
     capture, hook,
     util::{AttributeCfg, ExprIsLocalVariable, FieldValueKey, maybe_cfg},
@@ -111,7 +112,7 @@ impl Props {
                 let kv_match_input_tokens = maybe_cfg(
                     kv.cfg_attr.as_ref(),
                     kv.span(),
-                    quote_spanned!(kv.span()=> (#key_tokens, #value_expr)),
+                    quote_spanned!(kv.span()=> {(#key_tokens, #value_expr)}),
                 );
 
                 let bound_value_tokens = capture::value_with_hook(
@@ -172,13 +173,14 @@ impl Props {
 
         let mut struct_ctor_fvs = Vec::new();
 
-        // TODO: `#[cfg]`
         for kv in self.key_values.values() {
             let input_ident = Ident::new(&format!("__i{}", kv.idx), kv.span());
             let fn_ident = Ident::new(&format!("__f{}", kv.idx), kv.span());
 
             let input_ty = Ident::new(&format!("__I{}", kv.idx), kv.span());
             let fn_ty = Ident::new(&format!("__F{}", kv.idx), kv.span());
+
+            let cfg_attr = &kv.cfg_attr;
 
             struct_decl_tys.push(quote!(#input_ty));
             struct_decl_tys.push(quote!(#fn_ty));
@@ -195,7 +197,9 @@ impl Props {
             struct_decl_markers.push(quote!(#fn_ty));
 
             let value = &kv.fv.expr;
-            let_bindings.push(quote!(let #input_ident = #value));
+            let value = maybe_cfg(cfg_attr.as_ref(), kv.span(), quote!({#value}));
+
+            let_bindings.push(quote!(let #input_ident = { #value }));
 
             let key_tokens =
                 capture::eval_key_with_hook(&kv.attrs, &kv.fv, kv.interpolated, kv.captured)?;
@@ -208,21 +212,38 @@ impl Props {
                 kv.captured,
             )?;
 
+            let fn_body = quote!((#key_tokens, #value_tokens));
+            let fn_body = maybe_cfg_else(
+                cfg_attr.as_ref(),
+                kv.span(),
+                fn_body,
+                quote!(emit::__private::core::unreachable!()),
+            )?;
+
             struct_ctor_fvs.push(quote!(
-                #fn_ident: (&#input_ident).__private_infer_input(|#input_ident| (#key_tokens, #value_tokens))
+                #fn_ident: (&#input_ident).__private_infer_input(|#input_ident| #fn_body)
             ));
             struct_ctor_fvs.push(quote!(#input_ident));
 
-            impl_for_each.push(quote!(
-                match (self.#fn_ident)(&self.#input_ident) {
-                    (k, emit::__private::core::option::Option::Some(v)) => for_each(k, v)?,
-                    _ => (),
-                }
+            impl_for_each.push(maybe_cfg(
+                cfg_attr.as_ref(),
+                kv.span(),
+                quote!(
+                    {
+                        match (self.#fn_ident)(&self.#input_ident) {
+                            (k, emit::__private::core::option::Option::Some(v)) => for_each(k, v)?,
+                            _ => (),
+                        }
+                    }
+                ),
             ));
 
-            impl_to_value.push(
-                quote!((self.#fn_ident)(&self.#input_ident).1.unwrap_or(emit::Value::null())),
-            );
+            impl_to_value.push(maybe_cfg_else(
+                cfg_attr.as_ref(),
+                kv.span(),
+                quote!({ (self.#fn_ident)(&self.#input_ident).1.unwrap_or(emit::Value::null()) }),
+                quote!({ emit::Value::null() }),
+            )?);
         }
 
         struct_decl_fvs.push(quote!(__marker: emit::__private::core::marker::PhantomData<(#(#struct_decl_markers,)*)>));
