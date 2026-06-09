@@ -523,6 +523,58 @@ fn span_evt_props_basic() {
 }
 
 #[test]
+fn span_evt_props_macro() {
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!(42, evt.props().pull::<i32, _>("a").unwrap());
+            assert_eq!(true, evt.props().pull::<bool, _>("b").unwrap());
+        },
+        |evt| {
+            assert_eq!(42, evt.props().pull::<i32, _>("a").unwrap());
+            assert!(evt.props().get("b").is_none());
+
+            true
+        },
+    );
+
+    #[emit::span(rt: RT, guard: span, evt_props: emit::props! { a: 42 }, "test")]
+    fn exec() {
+        let _span = span.push_prop("b", true);
+    }
+
+    exec();
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+}
+
+#[tokio::test]
+async fn async_span_evt_props_macro() {
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!(42, evt.props().pull::<i32, _>("a").unwrap());
+            assert_eq!(true, evt.props().pull::<bool, _>("b").unwrap());
+        },
+        |evt| {
+            assert_eq!(42, evt.props().pull::<i32, _>("a").unwrap());
+            assert!(evt.props().get("b").is_none());
+
+            true
+        },
+    );
+
+    #[emit::span(rt: RT, guard: span, evt_props: emit::props! { a: 42 }, "test")]
+    async fn exec() {
+        tokio::time::delay(Default::default()).await;
+
+        let _span = span.push_prop("b", true);
+    }
+
+    exec();
+
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+}
+
+#[test]
 #[cfg(feature = "std")]
 fn span_evt_props() {
     static RT: StaticRuntime = static_runtime(
