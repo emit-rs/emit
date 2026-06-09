@@ -196,7 +196,7 @@ impl Props {
             impl_struct_tys.push(quote!(#input_ty));
             impl_struct_tys.push(quote!(#fn_ty));
 
-            struct_decl_fvs.push(quote!(#cfg_attr pub(super) #input_field: #input_ty));
+            struct_decl_fvs.push(quote!(#cfg_attr pub #input_field: #input_ty));
             if let Some(invert_cfg_attr) = &invert_cfg_attr {
                 struct_decl_fvs.push(quote!(#invert_cfg_attr #input_field: #input_ty));
             }
@@ -266,7 +266,7 @@ impl Props {
 
         let single_impls = if self.key_values.len() == 1 {
             Some(quote!(
-                impl<#(#impl_decl_tys,)*> emit::value::ToValue for __Props<#(#impl_struct_tys,)*> {
+                impl<#(#impl_decl_tys,)*> emit::value::ToValue for __PrivateMacroGenProps<#(#impl_struct_tys,)*> {
                     fn to_value(&self) -> emit::Value<'_> {
                         #(#impl_to_value)*
                     }
@@ -280,16 +280,16 @@ impl Props {
             #[allow(unused_imports)]
             use emit::__private::__PrivateInferInput;
 
-            mod __props {
-                pub(super) struct __Props<#(#struct_decl_tys,)*> {
+            mod __private_macro_gen_props {
+                pub(super) struct __PrivateMacroGenProps<#(#struct_decl_tys,)*> {
                     #(#struct_decl_fvs,)*
                 }
 
-                impl<#(#impl_decl_tys,)*> __Props<#(#impl_struct_tys,)*> {
+                impl<#(#impl_decl_tys,)*> __PrivateMacroGenProps<#(#impl_struct_tys,)*> {
                     pub(super) fn __new(
                         #(#new_decl_args,)*
                     ) -> Self {
-                        __Props {
+                        __PrivateMacroGenProps {
                             #(#new_fvs,)*
                         }
                     }
@@ -297,7 +297,7 @@ impl Props {
 
                 #single_impls
 
-                impl<#(#impl_decl_tys,)*> emit::Props for __Props<#(#impl_struct_tys,)*> {
+                impl<#(#impl_decl_tys,)*> emit::Props for __PrivateMacroGenProps<#(#impl_struct_tys,)*> {
                     fn for_each<
                         'kv,
                         F: emit::__private::core::ops::FnMut(emit::Str<'kv>, emit::Value<'kv>) -> emit::__private::core::ops::ControlFlow<()>,
@@ -315,7 +315,7 @@ impl Props {
 
             #(#let_bindings;)*
 
-            __props::__Props::__new(#(#new_ctor_args,)*)
+            __private_macro_gen_props::__PrivateMacroGenProps::__new(#(#new_ctor_args,)*)
         }))
     }
 
