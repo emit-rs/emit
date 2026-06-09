@@ -772,6 +772,15 @@ pub trait __PrivateClose {
     }
 }
 
+#[track_caller]
+#[cfg(feature = "alloc")]
+pub fn __private_format(tpl: Template, props: impl Props) -> alloc::string::String {
+    let mut s = alloc::string::String::new();
+    tpl.render(props).write(&mut s).expect("infallible write");
+
+    s
+}
+
 struct FirstDefined<A, B>(Option<A>, B);
 
 impl<A: Filter, B: Filter> Filter for FirstDefined<A, B> {

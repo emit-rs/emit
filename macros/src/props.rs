@@ -280,6 +280,10 @@ impl Props {
 
                     emit::__private::core::ops::ControlFlow::Continue(())
                 }
+
+                fn is_unique(&self) -> bool {
+                    true
+                }
             }
 
             #(#let_bindings;)*
