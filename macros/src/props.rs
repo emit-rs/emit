@@ -171,16 +171,21 @@ impl Props {
 
         let mut let_bindings = Vec::new();
 
-        let mut struct_ctor_fvs = Vec::new();
+        let mut new_decl_args = Vec::new();
+        let mut new_fvs = Vec::new();
+        let mut new_ctor_args = Vec::new();
 
         for kv in self.key_values.values() {
+            let input_field = kv.fv.key_ident()?;
+
             let input_ident = Ident::new(&format!("__i{}", kv.idx), kv.span());
             let fn_ident = Ident::new(&format!("__f{}", kv.idx), kv.span());
 
             let input_ty = Ident::new(&format!("__I{}", kv.idx), kv.span());
             let fn_ty = Ident::new(&format!("__F{}", kv.idx), kv.span());
 
-            let cfg_attr = &kv.cfg_attr;
+            let cfg_attr = kv.cfg_attr.as_ref();
+            let invert_cfg_attr = cfg_attr.and_then(|cfg_attr| cfg_attr.invert_cfg());
 
             struct_decl_tys.push(quote!(#input_ty));
             struct_decl_tys.push(quote!(#fn_ty));
@@ -191,13 +196,17 @@ impl Props {
             impl_struct_tys.push(quote!(#input_ty));
             impl_struct_tys.push(quote!(#fn_ty));
 
-            struct_decl_fvs.push(quote!(#input_ident: #input_ty));
+            struct_decl_fvs.push(quote!(#cfg_attr pub(super) #input_field: #input_ty));
+            if let Some(invert_cfg_attr) = &invert_cfg_attr {
+                struct_decl_fvs.push(quote!(#invert_cfg_attr #input_field: #input_ty));
+            }
+
             struct_decl_fvs.push(quote!(#fn_ident: #fn_ty));
             struct_decl_markers.push(quote!(#input_ty));
             struct_decl_markers.push(quote!(#fn_ty));
 
             let value = &kv.fv.expr;
-            let value = maybe_cfg(cfg_attr.as_ref(), kv.span(), quote!({#value}));
+            let value = maybe_cfg(cfg_attr, kv.span(), quote!({#value}));
 
             let_bindings.push(quote!(let #input_ident = { #value }));
 
@@ -214,40 +223,46 @@ impl Props {
 
             let fn_body = quote!((#key_tokens, #value_tokens));
             let fn_body = maybe_cfg_else(
-                cfg_attr.as_ref(),
+                cfg_attr,
                 kv.span(),
                 fn_body,
                 quote!(emit::__private::core::unreachable!()),
             )?;
 
-            struct_ctor_fvs.push(quote!(
-                #fn_ident: (&#input_ident).__private_infer_input(|#input_ident| #fn_body)
-            ));
-            struct_ctor_fvs.push(quote!(#input_ident));
+            new_decl_args.push(quote!(#fn_ident: #fn_ty));
+            new_decl_args.push(quote!(#input_ident: #input_ty));
 
-            impl_for_each.push(maybe_cfg(
-                cfg_attr.as_ref(),
+            new_fvs.push(quote!(#fn_ident));
+            new_fvs.push(quote!(#input_field: #input_ident));
+
+            new_ctor_args
+                .push(quote!((&#input_ident).__private_infer_input(|#input_ident| #fn_body)));
+            new_ctor_args.push(quote!(#input_ident));
+
+            impl_for_each.push(maybe_cfg_else(
+                cfg_attr,
                 kv.span(),
                 quote!(
                     {
-                        match (self.#fn_ident)(&self.#input_ident) {
+                        match (self.#fn_ident)(&self.#input_field) {
                             (k, emit::__private::core::option::Option::Some(v)) => for_each(k, v)?,
                             _ => (),
                         }
                     }
                 ),
-            ));
+                quote!({ let _ = self.#input_field; }),
+            )?);
 
             impl_to_value.push(maybe_cfg_else(
-                cfg_attr.as_ref(),
+                cfg_attr,
                 kv.span(),
-                quote!({ (self.#fn_ident)(&self.#input_ident).1.unwrap_or(emit::Value::null()) }),
+                quote!({ (self.#fn_ident)(&self.#input_field).1.unwrap_or(emit::Value::null()) }),
                 quote!({ emit::Value::null() }),
             )?);
         }
 
         struct_decl_fvs.push(quote!(__marker: emit::__private::core::marker::PhantomData<(#(#struct_decl_markers,)*)>));
-        struct_ctor_fvs.push(quote!(__marker: emit::__private::core::marker::PhantomData));
+        new_fvs.push(quote!(__marker: emit::__private::core::marker::PhantomData));
 
         let single_impls = if self.key_values.len() == 1 {
             Some(quote!(
@@ -265,32 +280,42 @@ impl Props {
             #[allow(unused_imports)]
             use emit::__private::__PrivateInferInput;
 
-            struct __Props<#(#struct_decl_tys,)*> {
-                #(#struct_decl_fvs,)*
-            }
-
-            #single_impls
-
-            impl<#(#impl_decl_tys,)*> emit::Props for __Props<#(#impl_struct_tys,)*> {
-                fn for_each<
-                    'kv,
-                    F: emit::__private::core::ops::FnMut(emit::Str<'kv>, emit::Value<'kv>) -> emit::__private::core::ops::ControlFlow<()>,
-                >(&'kv self, mut for_each: F) -> emit::__private::core::ops::ControlFlow<()> {
-                    #(#impl_for_each)*
-
-                    emit::__private::core::ops::ControlFlow::Continue(())
+            mod __props {
+                pub(super) struct __Props<#(#struct_decl_tys,)*> {
+                    #(#struct_decl_fvs,)*
                 }
 
-                fn is_unique(&self) -> bool {
-                    true
+                impl<#(#impl_decl_tys,)*> __Props<#(#impl_struct_tys,)*> {
+                    pub(super) fn __new(
+                        #(#new_decl_args,)*
+                    ) -> Self {
+                        __Props {
+                            #(#new_fvs,)*
+                        }
+                    }
+                }
+
+                #single_impls
+
+                impl<#(#impl_decl_tys,)*> emit::Props for __Props<#(#impl_struct_tys,)*> {
+                    fn for_each<
+                        'kv,
+                        F: emit::__private::core::ops::FnMut(emit::Str<'kv>, emit::Value<'kv>) -> emit::__private::core::ops::ControlFlow<()>,
+                    >(&'kv self, mut for_each: F) -> emit::__private::core::ops::ControlFlow<()> {
+                        #(#impl_for_each)*
+
+                        emit::__private::core::ops::ControlFlow::Continue(())
+                    }
+
+                    fn is_unique(&self) -> bool {
+                        true
+                    }
                 }
             }
 
             #(#let_bindings;)*
 
-            __Props {
-                #(#struct_ctor_fvs,)*
-            }
+            __props::__Props::__new(#(#new_ctor_args,)*)
         }))
     }
 

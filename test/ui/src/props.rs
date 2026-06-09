@@ -15,6 +15,11 @@ fn props_basic() {
 
     assert!(props.is_unique());
 
+    assert_eq!(1, props.b);
+    assert_eq!(true, props.a);
+    assert_eq!(2.0, props.c);
+    assert_eq!("text", props.d);
+
     assert_eq!(1, props.pull::<i32, _>("b").unwrap());
     assert_eq!(true, props.pull::<bool, _>("a").unwrap());
     assert_eq!(2.0, props.pull::<f64, _>("c").unwrap());
