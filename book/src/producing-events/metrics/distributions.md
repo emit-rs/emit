@@ -129,6 +129,8 @@ emit::count_sample!(
 );
 ```
 
+The above example demonstrates the data model in its most direct form. See [Building exponential histograms](#building-exponential-histograms) for details on how to compute midpoints.
+
 ### Exponential histogram data model
 
 `emit`'s exponential histograms are a pair of well-known properties:

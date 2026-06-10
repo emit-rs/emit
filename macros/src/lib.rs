@@ -831,6 +831,19 @@ where
 # Returns
 
 An `impl emit::Props`.
+
+# Fields
+
+Each identifier in the macro input is available as a field on the returned value:
+
+```ignore
+let my_props = props! {
+    a: 1,
+    b: 2,
+};
+
+assert_eq!(1, my_props.a);
+```
 */
 #[proc_macro]
 pub fn props(item: proc_macro::TokenStream) -> proc_macro::TokenStream {

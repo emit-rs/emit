@@ -147,7 +147,9 @@ Properties on spans have two visibility levels:
 # extern crate emit;
 #[emit::span(
     guard: span,
-    evt_props: [("private_1", i)],
+    evt_props: emit::props! {
+        private_1: i,
+    },
     "checking {public_1: i}",
     public_2: i,
 )]
