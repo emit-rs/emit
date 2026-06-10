@@ -32,7 +32,7 @@ In `emit`, span links are expressed through the `span_links` [well-known propert
         #[emit::as_serde]
         span_links: [
             "0a85ccaf666e11aaca6bd5d469e2850d-2b9caa35eaefed3a",
-        ].
+        ],
     },
     "wait a bit",
     sleep_ms,
