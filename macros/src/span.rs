@@ -533,29 +533,23 @@ fn span_guard_tokens(
     default_completion_tokens: &TokenStream,
     default_lvl_tokens: &TokenStream,
 ) -> Result<TokenStream, syn::Error> {
-    let ctxt_props_match_input_tokens = ctxt_props.match_input_tokens();
-    let ctxt_props_match_binding_tokens = ctxt_props.match_binding_tokens();
-    let ctxt_props_tokens = ctxt_props.match_bound_tokens().to_ref_tokens();
-
     // We use type-preserving props here because they may span across await points
-    let macro_evt_props_tokens = macro_evt_props.raw_props_tokens()?;
+    let macro_evt_props_tokens = macro_evt_props.gen_bound_props_tokens()?;
 
     let evt_props_tokens = quote!(emit::__private::__PrivateSpanEventMacroProps::new(#user_evt_props_tokens, #macro_evt_props_tokens));
 
-    Ok(quote!(match (#(#ctxt_props_match_input_tokens),*) {
-        (#(#ctxt_props_match_binding_tokens),*) => {
-            emit::__private::__private_begin_span(
-                #rt_tokens,
-                #mdl_tokens,
-                #span_name_tokens,
-                #default_lvl_tokens,
-                #when_tokens,
-                #ctxt_props_tokens,
-                #evt_props_tokens,
-                #default_completion_tokens,
-            )
-        }
-    }))
+    ctxt_props.match_bound_props_tokens(|ctxt_props_tokens| {
+        Ok(quote!(emit::__private::__private_begin_span(
+            #rt_tokens,
+            #mdl_tokens,
+            #span_name_tokens,
+            #default_lvl_tokens,
+            #when_tokens,
+            #ctxt_props_tokens,
+            #evt_props_tokens,
+            #default_completion_tokens,
+        )))
+    })
 }
 
 struct SpanGuardBinding {
@@ -888,36 +882,40 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
         .map(|when| when.to_ref_tokens())
         .to_option_tokens(quote!(&emit::Empty));
 
-    let ctxt_props_tokens = ctxt_props.props_tokens().to_ref_tokens();
-    let template_tokens = template.template_tokens();
-    let span_name_tokens = name
-        .map(|name| quote!(#name))
-        .unwrap_or_else(|| template.template_literal_tokens());
+    let span_tokens = ctxt_props.match_bound_props_tokens(|ctxt_props_tokens| {
+        let template_tokens = template.template_tokens();
+        let span_name_tokens = name
+            .map(|name| quote!(#name))
+            .unwrap_or_else(|| template.template_literal_tokens());
 
-    let evt_props_tokens = evt_props.unwrap_or_else(|| quote!(emit::Empty));
+        let evt_props_tokens = evt_props.unwrap_or_else(|| quote!(emit::Empty));
 
-    let panic_lvl_tokens = lvl_tokens(
-        panic_lvl_tokens.as_ref(),
-        default_lvl_tokens.as_ref(),
-        emit_core::well_known::LVL_ERROR,
-    );
-    let lvl_tokens = optional_lvl_tokens(default_lvl_tokens.as_ref(), default_lvl_tokens.as_ref());
+        let panic_lvl_tokens = lvl_tokens(
+            panic_lvl_tokens.as_ref(),
+            default_lvl_tokens.as_ref(),
+            emit_core::well_known::LVL_ERROR,
+        );
+        let lvl_tokens =
+            optional_lvl_tokens(default_lvl_tokens.as_ref(), default_lvl_tokens.as_ref());
 
-    Ok(quote!(
-        emit::__private::__private_begin_span(
-            #rt_tokens,
-            #mdl_tokens,
-            #span_name_tokens,
-            #lvl_tokens,
-            #when_tokens,
-            #ctxt_props_tokens,
-            #evt_props_tokens,
-            emit::__private::__private_complete_span(
+        Ok(quote!(
+            emit::__private::__private_begin_span(
                 #rt_tokens,
-                #template_tokens,
+                #mdl_tokens,
+                #span_name_tokens,
                 #lvl_tokens,
-                #panic_lvl_tokens,
-            ),
-        )
-    ))
+                #when_tokens,
+                #ctxt_props_tokens,
+                #evt_props_tokens,
+                emit::__private::__private_complete_span(
+                    #rt_tokens,
+                    #template_tokens,
+                    #lvl_tokens,
+                    #panic_lvl_tokens,
+                ),
+            )
+        ))
+    })?;
+
+    Ok(quote!(emit::__private::__must_use_span_guard(#span_tokens)))
 }

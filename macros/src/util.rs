@@ -107,12 +107,35 @@ impl AttributeCfg for Attribute {
 pub fn maybe_cfg(cfg_attr: Option<&Attribute>, span: Span, wrap: TokenStream) -> TokenStream {
     match cfg_attr {
         Some(cfg_attr) => quote_spanned!(span=>
-            #cfg_attr
-            {
-                #wrap
-            }
+            #cfg_attr #wrap
         ),
         None => wrap,
+    }
+}
+
+pub fn maybe_cfg_else(
+    cfg_attr: Option<&Attribute>,
+    span: Span,
+    if_true: TokenStream,
+    if_false: TokenStream,
+) -> Result<TokenStream, syn::Error> {
+    if let Some(cfg_attr) = cfg_attr {
+        let invert_cfg_attr = cfg_attr
+            .invert_cfg()
+            .ok_or_else(|| syn::Error::new(cfg_attr.span(), "attribute is not a #[cfg]"))?;
+
+        Ok(quote_spanned!(span=> {
+            #cfg_attr
+            {
+                #if_true
+            }
+            #invert_cfg_attr
+            {
+                #if_false
+            }
+        }))
+    } else {
+        Ok(quote_spanned!(span=> #if_true))
     }
 }
 

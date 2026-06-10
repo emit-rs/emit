@@ -71,12 +71,9 @@ fn worker<T>(queue: Weak<MessageQueue<T>>, mut process: impl FnMut(T)) {
         // 2. Create a span for the worker that will include the span link
         //    This is an inline alternative to creating a function with `#[emit::span]`
         //    on it, which we could also use
-        let (span, frame) = emit::span_guard!("worker");
+        let (mut span, frame) = emit::span_guard!(evt_props: emit::props! { span_links }, "worker");
 
         frame.call(move || {
-            // 3. Add the link as a property on the span
-            let mut span = span.push_prop("span_links", span_links);
-
             span.start();
 
             // Invoke the worker closure in the context of the span

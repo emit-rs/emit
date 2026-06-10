@@ -1,10 +1,12 @@
+use emit::value::ToValue as _;
+
 #[test]
 fn metric() {
     let my_metric = 42;
 
     match emit::metric!(value: my_metric) {
         evt => {
-            assert_eq!(42, evt.value().by_ref().cast::<usize>().unwrap());
+            assert_eq!(42, evt.value().to_value().cast::<usize>().unwrap());
             assert_eq!("my_metric", evt.name());
             assert_eq!("last", evt.agg());
         }

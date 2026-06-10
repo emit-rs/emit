@@ -1,5 +1,4 @@
 use ::std::fmt;
-
 use emit::Props;
 
 #[allow(unused_imports)]
@@ -15,6 +14,11 @@ fn props_basic() {
     };
 
     assert!(props.is_unique());
+
+    assert_eq!(1, props.b);
+    assert_eq!(true, props.a);
+    assert_eq!(2.0, props.c);
+    assert_eq!("text", props.d);
 
     assert_eq!(1, props.pull::<i32, _>("b").unwrap());
     assert_eq!(true, props.pull::<bool, _>("a").unwrap());
@@ -67,23 +71,29 @@ fn props_cfg() {
 }
 
 #[test]
+fn props_cfg_single() {
+    let props = emit::props! {
+        #[cfg(emit_disabled)]
+        disabled: "disabled",
+    };
+
+    assert!(props.get("disabled").is_none());
+}
+
+#[test]
 #[cfg(feature = "std")]
 fn props_capture_err() {
     use ::std::{error, io};
 
-    let err = io::Error::new(io::ErrorKind::Other, "Some error");
+    let props = emit::props! {
+        err: io::Error::new(io::ErrorKind::Other, "Some error"),
+    };
 
-    match emit::props! {
-        err,
-    } {
-        props => {
-            let err = props
-                .pull::<&(dyn error::Error + 'static), _>("err")
-                .unwrap();
+    let err = props
+        .pull::<&(dyn error::Error + 'static), _>("err")
+        .unwrap();
 
-            assert_eq!("Some error", err.to_string());
-        }
-    }
+    assert_eq!("Some error", err.to_string());
 }
 
 #[test]
@@ -104,17 +114,15 @@ fn props_capture_err_anyhow() {
 
     let err = anyhow::Error::msg("Some error");
 
-    match emit::props! {
+    let props = emit::props! {
         err: emit::err::as_ref(&err),
-    } {
-        props => {
-            let err = props
-                .pull::<&(dyn error::Error + 'static), _>("err")
-                .unwrap();
+    };
 
-            assert_eq!("Some error", err.to_string());
-        }
-    }
+    let err = props
+        .pull::<&(dyn error::Error + 'static), _>("err")
+        .unwrap();
+
+    assert_eq!("Some error", err.to_string());
 }
 
 #[test]
@@ -386,20 +394,22 @@ fn props_as_display() {
 
 #[test]
 #[cfg(feature = "std")]
+fn props_move() {
+    let a = ::std::string::String::from("short lived");
+
+    let props = emit::props! { a };
+
+    assert_eq!("short lived", props.pull::<&str, _>("a").unwrap());
+}
+
+#[test]
+#[cfg(feature = "std")]
 fn props_ref() {
     let a = ::std::string::String::from("short lived");
 
-    // NOTE: `a` worked inline on 2021 edition, but doesn't anymore
-    // We've fixed this for macros like `emit!()` that don't return values
-    match emit::props! {
-        a,
-    } {
-        props => {
-            assert_eq!("short lived", props.pull::<&str, _>("a").unwrap());
-        }
-    }
+    let props = emit::props! { a: &a };
 
-    drop(a);
+    assert_eq!("short lived", props.pull::<&str, _>("a").unwrap());
 }
 
 #[test]
@@ -407,17 +417,14 @@ fn props_ref() {
 fn props_as_error() {
     use ::std::{error, io};
 
-    let a = io::Error::new(io::ErrorKind::Other, "Some error");
+    let props = emit::props! {
+        #[emit::as_error]
+        a: io::Error::new(io::ErrorKind::Other, "Some error"),
+    };
 
-    match emit::props! {
-        #[emit::as_error] a,
-    } {
-        props => {
-            let err = props.pull::<&(dyn error::Error + 'static), _>("a").unwrap();
+    let err = props.pull::<&(dyn error::Error + 'static), _>("a").unwrap();
 
-            assert_eq!("Some error", err.to_string());
-        }
-    }
+    assert_eq!("Some error", err.to_string());
 }
 
 #[test]

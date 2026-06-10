@@ -26,18 +26,18 @@ In `emit`, span links are expressed through the `span_links` [well-known propert
 ```rust
 # extern crate emit;
 #[emit::span(
-    guard: span,
+    // Add span links to the guard rather than as props in the macro so they aren't
+    // also added to any child spans or events
+    evt_props: emit::props! {
+        #[emit::as_serde]
+        span_links: [
+            "0a85ccaf666e11aaca6bd5d469e2850d-2b9caa35eaefed3a",
+        ],
+    },
     "wait a bit",
     sleep_ms,
 )]
 fn wait_a_bit(sleep_ms: u64) {
-    // Add span links to the guard rather than as props in the macro so they aren't
-    // also added to any child spans or events
-    let span_links = [
-        "0a85ccaf666e11aaca6bd5d469e2850d-2b9caa35eaefed3a",
-    ];
-    let _span = span.push_prop("span_links", emit::Value::capture_serde(&span_links));
-
     std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
 
     emit::emit!("waiting a bit longer");
@@ -53,19 +53,20 @@ Since the expected type of `span_links` is a sequence, you'll need to use either
 ```rust
 # extern crate emit;
 #[emit::span(
-    guard: span,
+    // Add span links to the guard rather than as props in the macro so they aren't
+    // also added to any child spans or events
+    evt_props: emit::props! {
+        span_links: emit::span::SpanLinkSet::from_iter([
+            (
+                emit::span::TraceId::from_u128(0x0a85ccaf666e11aaca6bd5d469e2850d).unwrap(),
+                emit::span::SpanId::from_u64(0x2b9caa35eaefed3a).unwrap()
+            ),
+        ]),
+    },
     "wait a bit",
     sleep_ms,
 )]
 fn wait_a_bit(sleep_ms: u64) {
-    // Add span links to the guard rather than as props in the macro so they aren't
-    // also added to any child spans or events
-    let span_links = emit::span::SpanLinkSet::from_iter([
-        (emit::span::TraceId::from_u128(0x0a85ccaf666e11aaca6bd5d469e2850d).unwrap(), emit::span::SpanId::from_u64(0x2b9caa35eaefed3a).unwrap()),
-    ]);
-
-    let _span = span.push_prop("span_links", span_links);
-
     std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
 
     emit::emit!("waiting a bit longer");

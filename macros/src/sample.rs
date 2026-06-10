@@ -173,23 +173,17 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
 
     let value_props = args.value.to_props()?;
 
-    let value_props_match_input_tokens = value_props.match_input_tokens();
-    let value_props_match_binding_tokens = value_props.match_binding_tokens();
-    let value_props_tokens = value_props.match_bound_tokens();
-
     let agg = args.agg.or(opts.agg).unwrap_or_else(|| {
         let agg = emit_core::well_known::METRIC_AGG_LAST;
 
         quote!(#agg)
     });
 
-    Ok(quote!({
-        match (#(#value_props_match_input_tokens),*) {
-            (#(#value_props_match_binding_tokens),*) => {
-                emit::__private::__private_sample(#sampler_tokens, #mdl_tokens, #extent_tokens, #props_tokens, #name, #agg, #value_props_tokens.into_value())
-            }
-        }
-    }))
+    value_props.match_bound_props_tokens(|value_props_tokens| {
+        let value_props_tokens = value_props_tokens.to_ref_tokens();
+
+        Ok(quote!(emit::__private::__private_sample(#sampler_tokens, #mdl_tokens, #extent_tokens, #props_tokens, #name, #agg, #value_props_tokens)))
+    })
 }
 
 pub fn expand_metric_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
@@ -199,7 +193,7 @@ pub fn expand_metric_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Erro
     args::ensure_missing("rt", args.sampler.map(|arg| arg.span()))?;
 
     let extent_tokens = args.extent.to_tokens().to_ref_tokens();
-    let props_tokens = args.props.to_tokens().to_ref_tokens();
+    let props_tokens = args.props.to_tokens();
     let mdl_tokens = args.mdl.to_tokens();
     let name = if let Some(name) = args.name {
         name
@@ -207,7 +201,7 @@ pub fn expand_metric_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Erro
         args.value.infer_name()?
     };
     let value_props = args.value.to_props()?;
-    let value_props_tokens = value_props.props_tokens();
+    let value_props_tokens = value_props.gen_bound_props_tokens()?;
 
     let agg = args.agg.or(opts.agg).unwrap_or_else(|| {
         let agg = emit_core::well_known::METRIC_AGG_LAST;
@@ -216,6 +210,6 @@ pub fn expand_metric_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Erro
     });
 
     Ok(
-        quote!(emit::__private::__private_metric(#mdl_tokens, #extent_tokens, #props_tokens, #name, #agg, #value_props_tokens.into_value())),
+        quote!(emit::__private::__must_use_metric(emit::__private::__private_metric(#mdl_tokens, #extent_tokens, #props_tokens, #name, #agg, #value_props_tokens))),
     )
 }
