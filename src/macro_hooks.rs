@@ -1195,42 +1195,22 @@ pub fn __must_use_metric<T>(value: T) -> T {
 }
 
 #[track_caller]
-pub fn __private_metric<'a, V: ToValue, P: Props>(
+pub fn __private_metric<'a, P: Props>(
     mdl: impl Into<Path<'a>>,
     extent: impl ToExtent,
     props: P,
-    metric_name: impl Into<Str<'a>>,
-    metric_agg: impl Into<Str<'a>>,
-    metric_value: V,
-) -> Metric<'a, V, P> {
-    Metric::new(
-        mdl.into(),
-        metric_name,
-        metric_agg,
-        extent.to_extent(),
-        metric_value,
-        props,
-    )
+) -> Metric<'a, P> {
+    Metric::new(mdl.into(), extent.to_extent(), props)
 }
 
 #[track_caller]
-pub fn __private_sample<'a, S: Sampler, V: ToValue + ?Sized, P: Props + ?Sized>(
+pub fn __private_sample<'a, S: Sampler, P: Props + ?Sized>(
     sampler: S,
     mdl: impl Into<Path<'a>>,
     extent: impl ToExtent,
     props: &'a P,
-    metric_name: impl Into<Str<'a>>,
-    metric_agg: impl Into<Str<'a>>,
-    metric_value: &'a V,
 ) {
-    sampler.metric(__private_metric(
-        mdl,
-        extent,
-        props,
-        metric_name,
-        metric_agg,
-        metric_value,
-    ));
+    sampler.metric(__private_metric(mdl, extent, props));
 }
 
 #[track_caller]

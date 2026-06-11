@@ -713,22 +713,18 @@ impl<T: Channel> emit::metric::Source for ChannelMetrics<T> {
     fn sample_metrics<S: emit::metric::sampler::Sampler>(&self, sampler: S) {
         let queue_length = { self.shared.state.lock().unwrap().next_batch.channel.len() };
 
-        let metrics = self
-            .shared
-            .metrics
-            .sample()
-            .chain(Some(emit::metric::Metric::new(
-                emit::pkg!(),
-                "queue_length",
-                emit::well_known::METRIC_AGG_LAST,
-                emit::empty::Empty,
-                queue_length,
-                emit::empty::Empty,
-            )));
+        self.shared.metrics.sample_metrics(&sampler);
 
-        for metric in metrics {
-            sampler.metric(metric);
-        }
+        emit::metric::Metric::new(
+            emit::pkg!(),
+            emit::Empty,
+            emit::props! {
+                metric_name: "queue_length",
+                metric_agg: "last",
+                metric_value: queue_length,
+            },
+        )
+        .sample_metrics(&sampler);
     }
 }
 
