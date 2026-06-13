@@ -906,7 +906,7 @@ pub fn __private_begin_span<
 >(
     rt: &'a Runtime<E, F, C, T, R>,
     mdl: impl Into<Path<'static>>,
-    lvl: Option<&'b (impl CaptureLevel + ?Sized)>,
+    completion_lvl: Option<&'b (impl CaptureLevel + ?Sized)>,
     when: Option<&'b (impl Filter + ?Sized)>,
     span_ctxt_props: impl Props,
     span_evt_props: P,
@@ -915,7 +915,11 @@ pub fn __private_begin_span<
     let mdl = mdl.into();
 
     SpanGuard::new(
-        __PrivateBeginSpanFilter { rt, when, lvl },
+        __PrivateBeginSpanFilter {
+            rt,
+            when,
+            completion_lvl,
+        },
         rt.ctxt(),
         rt.clock(),
         rt.rng(),
@@ -929,7 +933,7 @@ pub fn __private_begin_span<
 pub struct __PrivateBeginSpanFilter<'a, 'b, E, F, C, T, R, W: ?Sized, CL: ?Sized> {
     rt: &'a Runtime<E, F, C, T, R>,
     when: Option<&'b W>,
-    lvl: Option<&'b CL>,
+    completion_lvl: Option<&'b CL>,
 }
 
 impl<'a, 'b, E, F: Filter, C, T, R, W: Filter + ?Sized, CL: CaptureLevel + ?Sized> Filter
@@ -939,9 +943,9 @@ impl<'a, 'b, E, F: Filter, C, T, R, W: Filter + ?Sized, CL: CaptureLevel + ?Size
         let evt = evt.to_event();
 
         let lvl_prop = self
-            .lvl
-            .and_then(|lvl| lvl.capture())
-            .map(|lvl| (KEY_LVL, lvl));
+            .completion_lvl
+            .and_then(|completion_lvl| completion_lvl.capture())
+            .map(|completion_lvl| (KEY_LVL, completion_lvl));
 
         FirstDefined(self.when, self.rt.filter())
             .matches(evt.map_props(|props| lvl_prop.and_props(props)))

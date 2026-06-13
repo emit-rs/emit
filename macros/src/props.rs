@@ -439,12 +439,6 @@ pub fn check_span_props(props: &Props) -> Result<(), syn::Error> {
                     "the `evt_kind` property is always given the value `\"span\"`",
                 ));
             }
-            emit_core::well_known::KEY_SPAN_NAME => {
-                return Err(syn::Error::new(
-                    v.span(),
-                    "specify the span name using the `name` control parameter before the template",
-                ));
-            }
             _ => (),
         }
     }

@@ -7,17 +7,12 @@ It instead constructs a `SpanGuard` directly, which is what the `emit::span_guar
 use std::time::Duration;
 
 fn example(i: i32) {
-    let (mut span, frame) = emit::span::SpanGuard::new(
-        emit::filter(),
-        emit::ctxt(),
-        emit::clock(),
-        emit::rng(),
-        emit::span::completion::default(emit::emitter(), emit::ctxt()),
+    let (mut span, frame) = emit::span::SpanGuard::from_runtime(
+        emit::runtime::shared(),
         emit::props! {
             // Properties that will be shared by all events emitted within this span
         },
         emit::mdl!(),
-        "example",
         emit::props! {
             // Properties that will appear just on this span event
         },

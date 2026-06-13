@@ -28,9 +28,10 @@ fn example(i: i32) {
             emit::error!(
                 evt: emit::Span::new(
                     emit::mdl!(),
-                    "example",
                     timer,
-                    emit::props! {},
+                    emit::props! {
+                        span_name: "example",
+                    },
                 ),
                 "Running an example failed with {r}",
             );
@@ -39,9 +40,10 @@ fn example(i: i32) {
             emit::info!(
                 evt: emit::Span::new(
                     emit::mdl!(),
-                    "example",
                     timer,
-                    emit::props! {},
+                    emit::props! {
+                        span_name: "example",
+                    },
                 ),
                 "Running an example produced {r}",
             );
