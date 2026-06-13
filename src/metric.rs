@@ -1231,6 +1231,12 @@ pub mod sampler {
 
             assert!(called.get());
         }
+
+        #[test]
+        fn from_runtime_sampler() {
+            // TODO: `impl Sampler for Runtime`
+            todo!()
+        }
     }
 }
 

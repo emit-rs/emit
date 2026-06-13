@@ -906,7 +906,6 @@ pub fn __private_begin_span<
 >(
     rt: &'a Runtime<E, F, C, T, R>,
     mdl: impl Into<Path<'static>>,
-    name: impl Into<Str<'static>>,
     lvl: Option<&'b (impl CaptureLevel + ?Sized)>,
     when: Option<&'b (impl Filter + ?Sized)>,
     span_ctxt_props: impl Props,
@@ -914,7 +913,6 @@ pub fn __private_begin_span<
     default_complete: S,
 ) -> (SpanGuard<'static, &'a T, P, S>, Frame<&'a C>) {
     let mdl = mdl.into();
-    let name = name.into();
 
     SpanGuard::new(
         __PrivateBeginSpanFilter { rt, when, lvl },
@@ -924,7 +922,6 @@ pub fn __private_begin_span<
         default_complete,
         span_ctxt_props,
         mdl,
-        name,
         span_evt_props,
     )
 }
