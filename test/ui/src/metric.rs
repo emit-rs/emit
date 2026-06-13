@@ -4,41 +4,23 @@ use emit::value::ToValue as _;
 fn metric() {
     let my_metric = 42;
 
-    match emit::metric!(value: my_metric) {
-        evt => {
-            assert_eq!(42, evt.value().to_value().cast::<usize>().unwrap());
-            assert_eq!("my_metric", evt.name());
-            assert_eq!("last", evt.agg());
-        }
-    }
+    let evt = emit::metric!(value: my_metric);
+    assert_eq!(42, evt.value().to_value().cast::<usize>().unwrap());
+    assert_eq!("my_metric", evt.name().unwrap());
+    assert_eq!("last", evt.agg().unwrap());
 
-    match emit::count_metric!(value: my_metric) {
-        evt => {
-            assert_eq!("count", evt.agg());
-        }
-    }
+    let evt = emit::count_metric!(value: my_metric);
+    assert_eq!("count", evt.agg().unwrap());
 
-    match emit::sum_metric!(value: my_metric) {
-        evt => {
-            assert_eq!("sum", evt.agg());
-        }
-    }
+    let evt = emit::sum_metric!(value: my_metric);
+    assert_eq!("sum", evt.agg().unwrap());
 
-    match emit::min_metric!(value: my_metric) {
-        evt => {
-            assert_eq!("min", evt.agg());
-        }
-    }
+    let evt = emit::min_metric!(value: my_metric);
+    assert_eq!("min", evt.agg().unwrap());
 
-    match emit::max_metric!(value: my_metric) {
-        evt => {
-            assert_eq!("max", evt.agg());
-        }
-    }
+    let evt = emit::max_metric!(value: my_metric);
+    assert_eq!("max", evt.agg().unwrap());
 
-    match emit::last_metric!(value: my_metric) {
-        evt => {
-            assert_eq!("last", evt.agg());
-        }
-    }
+    let evt = emit::last_metric!(value: my_metric);
+    assert_eq!("last", evt.agg().unwrap());
 }

@@ -536,7 +536,7 @@ fn span_guard_tokens(
     // We use type-preserving props here because they may span across await points
     let macro_evt_props_tokens = macro_evt_props.gen_bound_props_tokens()?;
 
-    let evt_props_tokens = quote!(emit::__private::__PrivateSpanEventMacroProps::new(#user_evt_props_tokens, #macro_evt_props_tokens));
+    let evt_props_tokens = quote!(emit::__private::__PrivateMacroExtendedProps::new(#user_evt_props_tokens, #macro_evt_props_tokens));
 
     ctxt_props.match_bound_props_tokens(|ctxt_props_tokens| {
         Ok(quote!(emit::__private::__private_begin_span(

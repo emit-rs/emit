@@ -60,14 +60,6 @@ impl MetricValueArg {
     fn span(&self) -> Span {
         self.0.expr.span()
     }
-
-    pub fn to_props(&self) -> syn::Result<Props> {
-        let mut props = Props::new();
-
-        props.push(&self.0, capture::default_fn_name(&self.0), false, true)?;
-
-        Ok(props)
-    }
 }
 
 impl Parse for Args {
@@ -163,26 +155,23 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     };
 
     let extent_tokens = args.extent.to_tokens().to_ref_tokens();
-    let props_tokens = args.props.to_tokens().to_ref_tokens();
+    let base_props_tokens = args.props.to_tokens().to_ref_tokens();
     let mdl_tokens = args.mdl.to_tokens();
-    let name = if let Some(name) = args.name {
-        name
-    } else {
-        args.value.infer_name()?
-    };
 
-    let value_props = args.value.to_props()?;
+    let props = metric_props(
+        if let Some(name) = args.name {
+            name
+        } else {
+            args.value.infer_name()?
+        },
+        args.agg.or(opts.agg),
+        args.value.0,
+    )?;
 
-    let agg = args.agg.or(opts.agg).unwrap_or_else(|| {
-        let agg = emit_core::well_known::METRIC_AGG_LAST;
+    props.match_bound_props_tokens(|props_tokens| {
+        let props_tokens = quote!(emit::__private::__PrivateMacroExtendedProps::new(#props_tokens, #base_props_tokens)).to_ref_tokens();
 
-        quote!(#agg)
-    });
-
-    value_props.match_bound_props_tokens(|value_props_tokens| {
-        let value_props_tokens = value_props_tokens.to_ref_tokens();
-
-        Ok(quote!(emit::__private::__private_sample(#sampler_tokens, #mdl_tokens, #extent_tokens, #props_tokens, #name, #agg, #value_props_tokens)))
+        Ok(quote!(emit::__private::__private_sample(#sampler_tokens, #mdl_tokens, #extent_tokens, #props_tokens)))
     })
 }
 
@@ -193,23 +182,66 @@ pub fn expand_metric_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Erro
     args::ensure_missing("rt", args.sampler.map(|arg| arg.span()))?;
 
     let extent_tokens = args.extent.to_tokens().to_ref_tokens();
-    let props_tokens = args.props.to_tokens();
+    let base_props_tokens = args.props.to_tokens();
     let mdl_tokens = args.mdl.to_tokens();
-    let name = if let Some(name) = args.name {
-        name
-    } else {
-        args.value.infer_name()?
-    };
-    let value_props = args.value.to_props()?;
-    let value_props_tokens = value_props.gen_bound_props_tokens()?;
 
-    let agg = args.agg.or(opts.agg).unwrap_or_else(|| {
+    let props = metric_props(
+        if let Some(name) = args.name {
+            name
+        } else {
+            args.value.infer_name()?
+        },
+        args.agg.or(opts.agg),
+        args.value.0,
+    )?;
+
+    let props_tokens = props.gen_bound_props_tokens()?;
+    let props_tokens = quote!(emit::__private::__PrivateMacroExtendedProps::new(#props_tokens, #base_props_tokens));
+
+    Ok(
+        quote!(emit::__private::__must_use_metric(emit::__private::__private_metric(#mdl_tokens, #extent_tokens, #props_tokens))),
+    )
+}
+
+fn metric_props(
+    name: TokenStream,
+    agg: Option<TokenStream>,
+    value: FieldValue,
+) -> Result<Props, syn::Error> {
+    let mut props = Props::new();
+
+    let agg = agg.unwrap_or_else(|| {
         let agg = emit_core::well_known::METRIC_AGG_LAST;
 
         quote!(#agg)
     });
 
-    Ok(
-        quote!(emit::__private::__must_use_metric(emit::__private::__private_metric(#mdl_tokens, #extent_tokens, #props_tokens, #name, #agg, #value_props_tokens))),
-    )
+    let metric_name: FieldValue = parse_quote!(metric_name: #name);
+    let metric_agg: FieldValue = parse_quote!(metric_agg: #agg);
+
+    let value_attrs = &value.attrs;
+    let value_expr = &value.expr;
+
+    let metric_value: FieldValue = parse_quote!(#(#value_attrs)* metric_value: #value_expr);
+
+    props.push(
+        &metric_name,
+        capture::default_fn_name(&metric_name),
+        false,
+        true,
+    )?;
+    props.push(
+        &metric_agg,
+        capture::default_fn_name(&metric_agg),
+        false,
+        true,
+    )?;
+    props.push(
+        &metric_value,
+        capture::default_fn_name(&metric_value),
+        false,
+        true,
+    )?;
+
+    Ok(props)
 }
