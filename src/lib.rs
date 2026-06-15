@@ -285,7 +285,7 @@ This method will use [`runtime::shared()`] as the source, emitting samples as ev
 */
 #[cfg(feature = "implicit_rt")]
 pub fn sample(source: impl metric::Source) {
-    source.sample_metrics(metric::sampler::from_emitter(runtime::shared()))
+    source.sample_metrics(metric::sampler::from_runtime(runtime::shared()))
 }
 
 #[doc(hidden)]

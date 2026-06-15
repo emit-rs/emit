@@ -521,74 +521,18 @@ impl<'a, P: Props> Span<'a, P> {
     /**
     Get the ctxt of the executing operation.
 
-    This method returns `Some` if the span has at least a trace id ([`KEY_TRACE_ID`]) and span id ([`KEY_SPAN_ID`]) present.
+    This method accepts a [`Ctxt`], which will be used to pull the [`SpanCtxt`] if this span doesn't carry them in its own local props.
     */
-    pub fn ctxt(&self) -> Option<SpanCtxt> {
-        let trace_id = self.props.pull(KEY_TRACE_ID)?;
-        let span_id = self.props.pull(KEY_SPAN_ID)?;
-        let span_parent = self.props.pull(KEY_SPAN_PARENT);
+    pub fn ctxt(&self, ctxt: impl Ctxt) -> SpanCtxt {
+        ctxt.with_current(|props| {
+            let props = (&self.props).and_props(props);
 
-        Some(SpanCtxt::new(Some(trace_id), span_parent, Some(span_id)))
-    }
+            let trace_id = props.pull(KEY_TRACE_ID);
+            let span_id = props.pull(KEY_SPAN_ID);
+            let span_parent = props.pull(KEY_SPAN_PARENT);
 
-    /**
-    Set the ctxt of the executing operation.
-    */
-    pub fn with_ctxt(self, ctxt: impl Into<SpanCtxt>) -> Span<'a, And<SpanCtxt, P>> {
-        let ctxt = ctxt.into();
-
-        self.map_props(|props| ctxt.and_props(props))
-    }
-
-    /**
-    Get the trace id of the executing operation.
-    */
-    pub fn trace_id(&self) -> Option<TraceId> {
-        self.props.pull(KEY_TRACE_ID)
-    }
-
-    /**
-    Set the trace id of the executing operation.
-    */
-    pub fn with_trace_id(
-        self,
-        trace_id: impl Into<TraceId>,
-    ) -> Span<'a, And<(&'static str, TraceId), P>> {
-        self.map_props(|props| (KEY_TRACE_ID, trace_id.into()).and_props(props))
-    }
-
-    /**
-    Get the parent span id of the executing operation.
-    */
-    pub fn span_parent(&self) -> Option<SpanId> {
-        self.props.pull(KEY_SPAN_PARENT)
-    }
-
-    /**
-    Set the parent span id of the executing operation.
-    */
-    pub fn with_span_parent(
-        self,
-        span_parent: impl Into<SpanId>,
-    ) -> Span<'a, And<(&'static str, SpanId), P>> {
-        self.map_props(|props| (KEY_SPAN_PARENT, span_parent.into()).and_props(props))
-    }
-
-    /**
-    Get the span id of the executing operation.
-    */
-    pub fn span_id(&self) -> Option<SpanId> {
-        self.props.pull(KEY_SPAN_ID)
-    }
-
-    /**
-    Set the span id of the executing operation.
-    */
-    pub fn with_span_id(
-        self,
-        span_id: impl Into<SpanId>,
-    ) -> Span<'a, And<(&'static str, SpanId), P>> {
-        self.map_props(|props| (KEY_SPAN_ID, span_id.into()).and_props(props))
+            SpanCtxt::new(trace_id, span_parent, span_id)
+        })
     }
 
     /**
@@ -2615,6 +2559,10 @@ impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
 
     /**
     Set the default completion that will be called when the span is dropped or [`SpanGuard::complete`] is called.
+
+    Note that the [`Span`] passed to the [`Completion`] *will not* include properties from the ambient context.
+    This means getting the [`SpanCtxt`] via [`Span::ctxt`] will likely return `None`.
+    You can pull the [`SpanCtxt`] from the ambient [`Ctxt`]
     */
     #[must_use = "this method returns a new `SpanGuard` that will be immediately dropped unless used"]
     pub fn with_completion<U: Completion>(mut self, completion: U) -> SpanGuard<'a, T, P, U> {
@@ -3803,31 +3751,12 @@ mod tests {
         assert_eq!("my span", span.name().unwrap());
         assert_eq!(SpanKind::Internal, span.kind().unwrap());
         assert_eq!(true, span.props().pull::<bool, _>("span_prop").unwrap());
-        assert_eq!(ctxt, span.ctxt().unwrap());
+        assert_eq!(ctxt, span.ctxt(Empty));
 
-        let ctxt = SpanCtxt::new(
-            TraceId::from_u128(2),
-            SpanId::from_u64(3),
-            SpanId::from_u64(4),
-        );
-
-        let span = span
-            .with_name("my span 2")
-            .with_kind(SpanKind::Consumer)
-            .with_ctxt(ctxt);
+        let span = span.with_name("my span 2").with_kind(SpanKind::Consumer);
 
         assert_eq!("my span 2", span.name().unwrap());
         assert_eq!(SpanKind::Consumer, span.kind().unwrap());
-        assert_eq!(ctxt, span.ctxt().unwrap());
-
-        let span = span
-            .with_trace_id(TraceId::from_u128(3).unwrap())
-            .with_span_parent(SpanId::from_u64(4).unwrap())
-            .with_span_id(SpanId::from_u64(5).unwrap());
-
-        assert_eq!(TraceId::from_u128(3).unwrap(), span.trace_id().unwrap());
-        assert_eq!(SpanId::from_u64(4).unwrap(), span.span_parent().unwrap());
-        assert_eq!(SpanId::from_u64(5).unwrap(), span.span_id().unwrap());
 
         #[cfg(feature = "alloc")]
         {

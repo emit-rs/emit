@@ -12,16 +12,17 @@
 let metric = emit::Metric::new(
     // The module that owns the metric
     emit::mdl!(),
-    // The name of the metric
-    "my_metric",
-    // The aggregation used to produce the sample
-    "count",
     // The time when the sample was produced, or the span of time it covers
     emit::clock().now(),
-    // The metric sample itself
-    42,
     // Additional properties for the metric
-    emit::Empty,
+    emit::props! {
+        // The name of the metric
+        metric_name: "my_metric",
+        // The aggregation used to produce the sample
+        metric_agg: "count",
+        // The metric sample itself
+        metric_value: 42,
+    },
 );
 ```
 
