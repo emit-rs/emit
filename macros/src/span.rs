@@ -145,8 +145,6 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     check_evt_props(&ctxt_props)?;
     check_span_props(&ctxt_props)?;
 
-    let mut macro_evt_props = Props::new();
-
     let span_guard = args.guard;
 
     let default_lvl_tokens = opts.level;
@@ -169,32 +167,16 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
 
     let mut item = syn::parse2::<Stmt>(opts.item)?;
 
-    let fn_name_tokens =
+    let (fn_name_prop, fn_name_tokens) =
         if let Some(fn_name) = fn_name(args.fn_name.as_ref(), item.fn_name().as_ref())? {
             let fn_name_prop = fn_name.to_prop();
 
-            macro_evt_props.push(
-                &fn_name_prop,
-                capture::default_fn_name(&fn_name_prop),
-                false,
-                true,
-            )?;
-
-            Some(fn_name.binding_tokens())
+            (Some(fn_name_prop), Some(fn_name.binding_tokens()))
         } else {
-            None
+            (None, None)
         };
 
-    let span_name_prop = span_name_prop(args.name, &template);
-    macro_evt_props.push(
-        &span_name_prop,
-        capture::default_fn_name(&span_name_prop),
-        false,
-        true,
-    )?;
-
-    check_evt_props(&macro_evt_props)?;
-    check_span_props(&macro_evt_props)?;
+    let macro_evt_props = macro_evt_props(fn_name_prop, span_name_prop(args.name, &template))?;
 
     match &mut item {
         // A synchronous function
@@ -656,6 +638,34 @@ fn span_name_prop(name: Option<TokenStream>, template: &Template) -> FieldValue 
     }
 }
 
+fn macro_evt_props(
+    fn_name_prop: Option<FieldValue>,
+    span_name_prop: FieldValue,
+) -> Result<Props, syn::Error> {
+    let mut macro_evt_props = Props::new();
+
+    macro_evt_props.push(
+        &span_name_prop,
+        capture::default_fn_name(&span_name_prop),
+        false,
+        true,
+    )?;
+
+    if let Some(fn_name_prop) = fn_name_prop {
+        macro_evt_props.push(
+            &fn_name_prop,
+            capture::default_fn_name(&fn_name_prop),
+            false,
+            true,
+        )?;
+    }
+
+    check_evt_props(&macro_evt_props)?;
+    check_span_props(&macro_evt_props)?;
+
+    Ok(macro_evt_props)
+}
+
 struct Completion {
     body_tokens: TokenStream,
     default_lvl_tokens: TokenStream,
@@ -892,20 +902,9 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
         .map(|when| when.to_ref_tokens())
         .to_option_tokens(quote!(&emit::Empty));
 
-    // TODO: Share more of the event props construction with `#[span]`
-    let mut macro_evt_props = Props::new();
     let user_evt_props_tokens = evt_props.unwrap_or_else(|| quote!(emit::Empty));
 
-    let span_name_prop = span_name_prop(name, &template);
-    macro_evt_props.push(
-        &span_name_prop,
-        capture::default_fn_name(&span_name_prop),
-        false,
-        true,
-    )?;
-
-    check_evt_props(&macro_evt_props)?;
-    check_span_props(&macro_evt_props)?;
+    let macro_evt_props = macro_evt_props(None, span_name_prop(name, &template))?;
 
     let macro_evt_props_tokens = macro_evt_props.gen_bound_props_tokens()?;
 
