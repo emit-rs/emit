@@ -2651,6 +2651,29 @@ impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
     }
 
     /**
+    Set the kind of the span.
+    */
+    #[must_use = "this method returns a new `SpanGuard` that will be immediately dropped unless used"]
+    pub fn with_kind(
+        self,
+        kind: impl Into<SpanKind>,
+    ) -> SpanGuard<'a, T, And<(&'static str, SpanKind), P>, F> {
+        self.map_props(|props| (KEY_SPAN_KIND, kind.into()).and_props(props))
+    }
+
+    /**
+    Set the links of the span.
+    */
+    #[must_use = "this method returns a new `SpanGuard` that will be immediately dropped unless used"]
+    #[cfg(feature = "alloc")]
+    pub fn with_links(
+        self,
+        links: impl Into<SpanLinkSet>,
+    ) -> SpanGuard<'a, T, And<(&'static str, SpanLinkSet), P>, F> {
+        self.map_props(|props| (KEY_SPAN_LINKS, links.into()).and_props(props))
+    }
+
+    /**
     Set the properties of the span.
 
     If the span is disabled then this method is a no-op.
@@ -4062,6 +4085,30 @@ mod tests {
             &rng,
             completion::from_fn(|evt| {
                 assert_eq!(2, evt.props().pull::<usize, _>("event_prop").unwrap());
+                assert_eq!("test 2", evt.props().pull::<&str, _>("span_name").unwrap());
+                assert_eq!(
+                    SpanKind::Consumer,
+                    evt.props().pull::<SpanKind, _>("span_kind").unwrap()
+                );
+
+                #[cfg(feature = "alloc")]
+                {
+                    let set = SpanLinkSet::from_iter([
+                        SpanLink::new(
+                            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                        ),
+                        SpanLink::new(
+                            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                        ),
+                    ]);
+
+                    assert_eq!(
+                        set,
+                        evt.props().pull::<SpanLinkSet, _>("span_links").unwrap()
+                    );
+                }
 
                 complete_called.set(true);
             }),
@@ -4073,7 +4120,32 @@ mod tests {
         frame.call(move || {
             guard.start();
 
-            let guard = guard.with_props(("event_prop", 2));
+            let guard = guard
+                .with_props(("event_prop", 2))
+                .with_name("test 2")
+                .with_kind(SpanKind::Consumer);
+
+            let guard = {
+                #[cfg(feature = "alloc")]
+                {
+                    let set = SpanLinkSet::from_iter([
+                        SpanLink::new(
+                            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                        ),
+                        SpanLink::new(
+                            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                        ),
+                    ]);
+
+                    guard.with_links(set)
+                }
+                #[cfg(not(feature = "alloc"))]
+                {
+                    guard
+                }
+            };
 
             drop(guard);
         });
@@ -4084,6 +4156,29 @@ mod tests {
     #[test]
     #[cfg(all(feature = "std", feature = "rand", not(miri)))]
     fn span_guard_from_runtime() {
-        todo!()
+        use emit_core::emitter;
+
+        let complete_called = Cell::new(false);
+
+        let rt = Runtime::default()
+            .with_emitter(emitter::from_fn(|_| {
+                complete_called.set(true);
+            }))
+            .with_ctxt(crate::platform::DefaultCtxt::new())
+            .with_clock(MyClock(Cell::new(0)))
+            .with_rng(crate::platform::DefaultRng::new());
+
+        let (mut guard, frame) =
+            SpanGuard::from_runtime(&rt, Empty, Path::new_raw("test"), ("event_prop", 1));
+
+        assert!(guard.is_enabled());
+
+        frame.call(move || {
+            guard.start();
+
+            drop(guard);
+        });
+
+        assert!(complete_called.get());
     }
 }
