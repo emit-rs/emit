@@ -989,10 +989,7 @@ mod alloc_support {
             reporter.add_source(source::from_fn(|sampler| {
                 sampler.metric(Metric::new(
                     Path::new_raw("test"),
-                    "metric 1",
-                    "count",
                     crate::Empty,
-                    42,
                     crate::Empty,
                 ));
             }));
