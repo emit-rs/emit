@@ -17,10 +17,13 @@ use emit_core::{
     timestamp::Timestamp,
     value::{ToValue, Value},
     well_known::{
-        KEY_EVT_KIND, KEY_METRIC_AGG, KEY_METRIC_DESCRIPTION, KEY_METRIC_NAME, KEY_METRIC_UNIT,
-        KEY_METRIC_VALUE,
+        KEY_DIST_COUNT, KEY_DIST_EXP_SCALE, KEY_DIST_MAX, KEY_DIST_MIN, KEY_DIST_SUM, KEY_EVT_KIND,
+        KEY_METRIC_AGG, KEY_METRIC_DESCRIPTION, KEY_METRIC_NAME, KEY_METRIC_UNIT, KEY_METRIC_VALUE,
     },
 };
+
+#[cfg(feature = "alloc")]
+use emit_core::well_known::KEY_DIST_EXP_BUCKETS;
 
 use crate::kind::Kind;
 
@@ -249,6 +252,110 @@ impl<'a, P: Props> Metric<'a, P> {
         value: impl Into<Value<'a>>,
     ) -> Metric<'a, And<(&'static str, Value<'a>), P>> {
         self.map_props(|props| (KEY_METRIC_VALUE, value.into()).and_props(props))
+    }
+
+    /**
+    Get the minimum observed value.
+    */
+    pub fn dist_min(&self) -> Option<Value<'_>> {
+        self.props.get(KEY_DIST_MIN)
+    }
+
+    /**
+    Set the minimum observed value.
+    */
+    pub fn with_dist_min(
+        self,
+        dist_min: impl Into<Value<'a>>,
+    ) -> Metric<'a, And<(&'static str, Value<'a>), P>> {
+        self.map_props(|props| (KEY_DIST_MIN, dist_min.into()).and_props(props))
+    }
+
+    /**
+    Get the maximum observed value.
+    */
+    pub fn dist_max(&self) -> Option<Value<'_>> {
+        self.props.get(KEY_DIST_MAX)
+    }
+
+    /**
+    Set the maximum observed value.
+    */
+    pub fn with_dist_max(
+        self,
+        dist_max: impl Into<Value<'a>>,
+    ) -> Metric<'a, And<(&'static str, Value<'a>), P>> {
+        self.map_props(|props| (KEY_DIST_MAX, dist_max.into()).and_props(props))
+    }
+
+    /**
+    Get the count of observed values.
+    */
+    pub fn dist_count(&self) -> Option<Value<'_>> {
+        self.props.get(KEY_DIST_COUNT)
+    }
+
+    /**
+    Set the count of observed values.
+    */
+    pub fn with_dist_count(
+        self,
+        dist_count: impl Into<Value<'a>>,
+    ) -> Metric<'a, And<(&'static str, Value<'a>), P>> {
+        self.map_props(|props| (KEY_DIST_COUNT, dist_count.into()).and_props(props))
+    }
+
+    /**
+    Get the sum of observed values.
+    */
+    pub fn dist_sum(&self) -> Option<Value<'_>> {
+        self.props.get(KEY_DIST_SUM)
+    }
+
+    /**
+    Set the sum of observed values.
+    */
+    pub fn with_dist_sum(
+        self,
+        dist_sum: impl Into<Value<'a>>,
+    ) -> Metric<'a, And<(&'static str, Value<'a>), P>> {
+        self.map_props(|props| (KEY_DIST_SUM, dist_sum.into()).and_props(props))
+    }
+
+    /**
+    Get the scale of exponential histogram buckets.
+    */
+    pub fn dist_exp_scale(&self) -> Option<i32> {
+        self.props.pull(KEY_DIST_EXP_SCALE)
+    }
+
+    /**
+    Set the scale of exponential histogram buckets.
+    */
+    pub fn with_dist_exp_scale(
+        self,
+        dist_exp_scale: impl Into<i32>,
+    ) -> Metric<'a, And<(&'static str, i32), P>> {
+        self.map_props(|props| (KEY_DIST_EXP_SCALE, dist_exp_scale.into()).and_props(props))
+    }
+
+    /**
+    Get the exponential histogram buckets.
+    */
+    #[cfg(feature = "alloc")]
+    pub fn dist_exp_buckets(&self) -> Option<exp::BucketSet> {
+        self.props.pull(KEY_DIST_EXP_BUCKETS)
+    }
+
+    /**
+    Set the exponential histogram buckets.
+    */
+    #[cfg(feature = "alloc")]
+    pub fn with_dist_exp_buckets(
+        self,
+        dist_exp_buckets: impl Into<exp::BucketSet>,
+    ) -> Metric<'a, And<(&'static str, exp::BucketSet), P>> {
+        self.map_props(|props| (KEY_DIST_EXP_BUCKETS, dist_exp_buckets.into()).and_props(props))
     }
 }
 
@@ -996,7 +1103,10 @@ pub mod sampler {
     A [`Sampler`] is a visitor for a [`Source`] that receives [`Metric`]s when the source is sampled.
     */
 
-    use emit_core::empty::Empty;
+    use emit_core::{
+        clock::Clock, ctxt::Ctxt, emitter::Emitter, empty::Empty, filter::Filter, rng::Rng,
+        runtime::Runtime,
+    };
 
     use super::*;
 
@@ -1104,6 +1214,43 @@ pub mod sampler {
     }
 
     /**
+    A [`Sampler`] from a [`Runtime`].
+
+    On completion, a [`Metric`] will be emitted as an event using [`Metric::to_event`].
+
+    This type can be created directly, or via [`from_runtime`].
+    */
+    pub struct FromRuntime<'a, E, F, C, T, R>(&'a Runtime<E, F, C, T, R>);
+
+    impl<'a, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng> Sampler
+        for FromRuntime<'a, E, F, C, T, R>
+    {
+        fn metric<P: Props>(&self, metric: Metric<P>) {
+            self.0.emit(metric)
+        }
+    }
+
+    impl<'a, E, F, C, T, R> FromRuntime<'a, E, F, C, T, R> {
+        /**
+        Wrap the given emitter.
+        */
+        pub const fn new(rt: &'a Runtime<E, F, C, T, R>) -> Self {
+            FromRuntime(rt)
+        }
+    }
+
+    /**
+    A [`Sampler`] from a [`Runtime`].
+
+    On completion, a [`Metric`] will be emitted as an event using [`Metric::to_event`].
+    */
+    pub const fn from_runtime<'a, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
+        rt: &'a Runtime<E, F, C, T, R>,
+    ) -> FromRuntime<'a, E, F, C, T, R> {
+        FromRuntime(rt)
+    }
+
+    /**
     A [`Sampler`] from a function.
 
     This type can be created directly, or via [`from_fn`].
@@ -1194,6 +1341,9 @@ pub mod sampler {
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        use emit_core::{emitter, runtime::Runtime};
+
         use std::cell::Cell;
 
         #[test]
@@ -1234,8 +1384,21 @@ pub mod sampler {
 
         #[test]
         fn from_runtime_sampler() {
-            // TODO: `impl Sampler for Runtime`
-            todo!()
+            let called = Cell::new(false);
+
+            let rt = Runtime::default().with_emitter(emitter::from_fn(|_| {
+                called.set(true);
+            }));
+
+            let sampler = from_runtime(&rt);
+
+            sampler.metric(Metric::new(
+                Path::new_raw("test"),
+                crate::Empty,
+                crate::Empty,
+            ));
+
+            assert!(called.get());
         }
     }
 }
@@ -3393,13 +3556,48 @@ mod tests {
             metric.extent().unwrap().as_point()
         );
         assert_eq!("my metric", metric.name().unwrap());
+        assert_eq!("my description", metric.description().unwrap());
         assert_eq!("count", metric.agg().unwrap());
         assert_eq!(42, metric.value().to_value().cast::<i32>().unwrap());
         assert_eq!(true, metric.props().pull::<bool, _>("metric_prop").unwrap());
 
-        // `with_*`
-        // units, description
-        todo!()
+        let metric = metric
+            .with_name("my metric 2")
+            .with_description("my description 2")
+            .with_agg("last")
+            .with_value(17)
+            .with_unit("ms")
+            .with_dist_min(0)
+            .with_dist_max(100)
+            .with_dist_sum(1000)
+            .with_dist_count(42);
+
+        assert_eq!("my metric 2", metric.name().unwrap());
+        assert_eq!("my description 2", metric.description().unwrap());
+        assert_eq!("last", metric.agg().unwrap());
+        assert_eq!(17, metric.value().to_value().cast::<i32>().unwrap());
+        assert_eq!("ms", metric.unit().unwrap());
+
+        assert_eq!(0, metric.dist_min().to_value().cast::<i32>().unwrap());
+        assert_eq!(100, metric.dist_max().to_value().cast::<i32>().unwrap());
+        assert_eq!(1000, metric.dist_sum().to_value().cast::<i32>().unwrap());
+        assert_eq!(42, metric.dist_count().to_value().cast::<i32>().unwrap());
+
+        #[cfg(feature = "alloc")]
+        {
+            let set = exp::BucketSet::from_iter([
+                (exp::Point::new(0.0), 3),
+                (exp::Point::new(0.0), 2),
+                (exp::Point::new(1.0), 2),
+            ]);
+
+            let metric = metric
+                .with_dist_exp_scale(-1)
+                .with_dist_exp_buckets(set.clone());
+
+            assert_eq!(-1, metric.dist_exp_scale().unwrap());
+            assert_eq!(set, metric.dist_exp_buckets().unwrap());
+        }
     }
 
     #[test]

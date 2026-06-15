@@ -28,10 +28,14 @@ use emit_core::{
     timestamp::Timestamp,
     value::{FromValue, ToValue, Value},
     well_known::{
-        KEY_EVT_KIND, KEY_SPAN_ID, KEY_SPAN_NAME, KEY_SPAN_PARENT, KEY_TRACE_ID, SPAN_KIND_CLIENT,
-        SPAN_KIND_CONSUMER, SPAN_KIND_INTERNAL, SPAN_KIND_PRODUCER, SPAN_KIND_SERVER,
+        KEY_EVT_KIND, KEY_SPAN_ID, KEY_SPAN_KIND, KEY_SPAN_NAME, KEY_SPAN_PARENT, KEY_TRACE_ID,
+        SPAN_KIND_CLIENT, SPAN_KIND_CONSUMER, SPAN_KIND_INTERNAL, SPAN_KIND_PRODUCER,
+        SPAN_KIND_SERVER,
     },
 };
+
+#[cfg(feature = "alloc")]
+use emit_core::well_known::KEY_SPAN_LINKS;
 
 use crate::{kind::Kind, level::Level, Frame, Timer};
 use core::{
@@ -495,6 +499,115 @@ impl<'a, P: Props> Span<'a, P> {
     */
     pub fn with_name(self, name: impl Into<Str<'a>>) -> Span<'a, And<(&'static str, Str<'a>), P>> {
         self.map_props(|props| (KEY_SPAN_NAME, name.into()).and_props(props))
+    }
+
+    /**
+    Get the kind of the executing operation.
+    */
+    pub fn kind(&self) -> Option<SpanKind> {
+        self.props.pull(KEY_SPAN_KIND)
+    }
+
+    /**
+    Set the kind of the executing operation.
+    */
+    pub fn with_kind(
+        self,
+        kind: impl Into<SpanKind>,
+    ) -> Span<'a, And<(&'static str, SpanKind), P>> {
+        self.map_props(|props| (KEY_SPAN_KIND, kind.into()).and_props(props))
+    }
+
+    /**
+    Get the ctxt of the executing operation.
+
+    This method returns `Some` if the span has at least a trace id ([`KEY_TRACE_ID`]) and span id ([`KEY_SPAN_ID`]) present.
+    */
+    pub fn ctxt(&self) -> Option<SpanCtxt> {
+        let trace_id = self.props.pull(KEY_TRACE_ID)?;
+        let span_id = self.props.pull(KEY_SPAN_ID)?;
+        let span_parent = self.props.pull(KEY_SPAN_PARENT);
+
+        Some(SpanCtxt::new(Some(trace_id), span_parent, Some(span_id)))
+    }
+
+    /**
+    Set the ctxt of the executing operation.
+    */
+    pub fn with_ctxt(self, ctxt: impl Into<SpanCtxt>) -> Span<'a, And<SpanCtxt, P>> {
+        let ctxt = ctxt.into();
+
+        self.map_props(|props| ctxt.and_props(props))
+    }
+
+    /**
+    Get the trace id of the executing operation.
+    */
+    pub fn trace_id(&self) -> Option<TraceId> {
+        self.props.pull(KEY_TRACE_ID)
+    }
+
+    /**
+    Set the trace id of the executing operation.
+    */
+    pub fn with_trace_id(
+        self,
+        trace_id: impl Into<TraceId>,
+    ) -> Span<'a, And<(&'static str, TraceId), P>> {
+        self.map_props(|props| (KEY_TRACE_ID, trace_id.into()).and_props(props))
+    }
+
+    /**
+    Get the parent span id of the executing operation.
+    */
+    pub fn span_parent(&self) -> Option<SpanId> {
+        self.props.pull(KEY_SPAN_PARENT)
+    }
+
+    /**
+    Set the parent span id of the executing operation.
+    */
+    pub fn with_span_parent(
+        self,
+        span_parent: impl Into<SpanId>,
+    ) -> Span<'a, And<(&'static str, SpanId), P>> {
+        self.map_props(|props| (KEY_SPAN_PARENT, span_parent.into()).and_props(props))
+    }
+
+    /**
+    Get the span id of the executing operation.
+    */
+    pub fn span_id(&self) -> Option<SpanId> {
+        self.props.pull(KEY_SPAN_PARENT)
+    }
+
+    /**
+    Set the span id of the executing operation.
+    */
+    pub fn with_span_id(
+        self,
+        span_id: impl Into<SpanId>,
+    ) -> Span<'a, And<(&'static str, SpanId), P>> {
+        self.map_props(|props| (KEY_SPAN_ID, span_id.into()).and_props(props))
+    }
+
+    /**
+    Get the set of spans linked to the executing operation.
+    */
+    #[cfg(feature = "alloc")]
+    pub fn links(&self) -> Option<SpanLinkSet> {
+        self.props.pull(KEY_SPAN_LINKS)
+    }
+
+    /**
+    Set the set of spans linked to the executing operation.
+    */
+    #[cfg(feature = "alloc")]
+    pub fn with_links(
+        self,
+        links: impl Into<SpanLinkSet>,
+    ) -> Span<'a, And<(&'static str, SpanLinkSet), P>> {
+        self.map_props(|props| (KEY_SPAN_LINKS, links.into()).and_props(props))
     }
 
     /**
@@ -3056,8 +3169,17 @@ pub mod completion {
 
         #[test]
         fn default_completion_from_runtime() {
-            // TODO: `impl Completion for Runtime`
-            todo!()
+            let called = Cell::new(false);
+
+            let rt = Runtime::default().with_emitter(emitter::from_fn(|_| {
+                called.set(true);
+            }));
+
+            let completion = default_from_runtime(&rt);
+
+            completion.complete(Span::new(Path::new_raw("test"), Empty, Empty));
+
+            assert!(called.get());
         }
 
         #[test]
@@ -3629,13 +3751,63 @@ mod tests {
             ("span_prop", true),
         );
 
+        let ctxt = SpanCtxt::new(
+            TraceId::from_u128(1),
+            SpanId::from_u64(2),
+            SpanId::from_u64(3),
+        );
+
         assert_eq!("test", span.mdl());
         assert_eq!(
             Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
             span.extent().unwrap().as_point()
         );
         assert_eq!("my span", span.name().unwrap());
+        assert_eq!(SpanKind::Internal, span.kind().unwrap());
         assert_eq!(true, span.props().pull::<bool, _>("span_prop").unwrap());
+        assert_eq!(ctxt, span.ctxt().unwrap());
+
+        let ctxt = SpanCtxt::new(
+            TraceId::from_u128(2),
+            SpanId::from_u64(3),
+            SpanId::from_u64(4),
+        );
+
+        let span = span
+            .with_name("my span 2")
+            .with_kind(SpanKind::Consumer)
+            .with_ctxt(ctxt);
+
+        assert_eq!("my span 2", span.name().unwrap());
+        assert_eq!(SpanKind::Internal, span.kind().unwrap());
+        assert_eq!(ctxt, span.ctxt().unwrap());
+
+        let span = span
+            .with_trace_id(TraceId::from_u128(3).unwrap())
+            .with_span_parent(SpanId::from_u64(4).unwrap())
+            .with_span_id(SpanId::from_u64(5).unwrap());
+
+        assert_eq!(TraceId::from_u128(3).unwrap(), span.trace_id().unwrap());
+        assert_eq!(SpanId::from_u64(4).unwrap(), span.span_parent().unwrap());
+        assert_eq!(SpanId::from_u64(5).unwrap(), span.span_id().unwrap());
+
+        #[cfg(feature = "alloc")]
+        {
+            let set = SpanLinkSet::from_iter([
+                SpanLink::new(
+                    TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                    SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                ),
+                SpanLink::new(
+                    TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                    SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                ),
+            ]);
+
+            let span = span.with_links(set.clone());
+
+            assert_eq!(set, span.links().unwrap());
+        }
     }
 
     #[test]
