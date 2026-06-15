@@ -578,7 +578,7 @@ impl<'a, P: Props> Span<'a, P> {
     Get the span id of the executing operation.
     */
     pub fn span_id(&self) -> Option<SpanId> {
-        self.props.pull(KEY_SPAN_PARENT)
+        self.props.pull(KEY_SPAN_ID)
     }
 
     /**
@@ -3152,7 +3152,11 @@ pub mod completion {
                 called.set(true);
             });
 
-            completion.complete(Span::new(Path::new_raw("test"), Empty, Empty));
+            completion.complete(Span::new(
+                Path::new_raw("test"),
+                Empty,
+                ("span_name", "test"),
+            ));
 
             assert!(called.get());
         }
@@ -3169,7 +3173,11 @@ pub mod completion {
 
             let completion = &completion as &dyn ErasedCompletion;
 
-            completion.complete(Span::new(Path::new_raw("test"), Empty, Empty));
+            completion.complete(Span::new(
+                Path::new_raw("test"),
+                Empty,
+                ("span_name", "test"),
+            ));
 
             assert!(called.get());
         }
@@ -3771,7 +3779,14 @@ mod tests {
         let span = Span::new(
             Path::new_raw("test"),
             Timestamp::from_unix(Duration::from_secs(1)),
-            ("span_prop", true),
+            [
+                ("span_prop", Value::from(true)),
+                ("span_name", Value::from("my span")),
+                ("span_kind", Value::from("internal")),
+                ("trace_id", Value::from("00000000000000000000000000000001")),
+                ("span_parent", Value::from("0000000000000002")),
+                ("span_id", Value::from("0000000000000003")),
+            ],
         );
 
         let ctxt = SpanCtxt::new(
@@ -3802,7 +3817,7 @@ mod tests {
             .with_ctxt(ctxt);
 
         assert_eq!("my span 2", span.name().unwrap());
-        assert_eq!(SpanKind::Internal, span.kind().unwrap());
+        assert_eq!(SpanKind::Consumer, span.kind().unwrap());
         assert_eq!(ctxt, span.ctxt().unwrap());
 
         let span = span
@@ -3838,7 +3853,10 @@ mod tests {
         let span = Span::new(
             Path::new_raw("test"),
             Timestamp::from_unix(Duration::from_secs(1)),
-            ("span_prop", true),
+            [
+                ("span_prop", Value::from(true)),
+                ("span_name", Value::from("my span")),
+            ],
         );
 
         let evt = span.to_event();
@@ -3958,7 +3976,10 @@ mod tests {
             }),
             ("ctxt_prop", 2),
             Path::new_raw("test"),
-            ("event_prop", 1),
+            [
+                ("event_prop", Value::from(1)),
+                ("span_name", Value::from("span")),
+            ],
         );
 
         assert!(guard.is_enabled());

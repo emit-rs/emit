@@ -705,7 +705,11 @@ pub mod source {
                 assert_eq!("count", metric.agg().unwrap().to_string());
             });
 
-            let metric = Metric::new(Path::new_raw("test"), crate::Empty, crate::Empty);
+            let metric = Metric::new(
+                Path::new_raw("test"),
+                crate::Empty,
+                [("metric_name", "metric"), ("metric_agg", "count")],
+            );
 
             metric.sample_metrics(sampler);
         }
@@ -1356,7 +1360,11 @@ pub mod sampler {
                 called.set(true);
             });
 
-            sampler.metric(Metric::new(Path::new_raw("test"), Empty, Empty));
+            sampler.metric(Metric::new(
+                Path::new_raw("test"),
+                Empty,
+                ("metric_name", "test"),
+            ));
 
             assert!(called.get());
         }
@@ -1376,7 +1384,7 @@ pub mod sampler {
             sampler.metric(Metric::new(
                 Path::new_raw("test"),
                 crate::Empty,
-                crate::Empty,
+                ("metric_name", "test"),
             ));
 
             assert!(called.get());
@@ -3540,14 +3548,20 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
-    use crate::Timestamp;
+    use crate::{Timestamp, Value};
 
     #[test]
     fn metric_new() {
         let metric = Metric::new(
             Path::new_raw("test"),
             Timestamp::from_unix(Duration::from_secs(1)),
-            ("metric_prop", true),
+            [
+                ("metric_prop", Value::from(true)),
+                ("metric_name", Value::from("my metric")),
+                ("metric_value", Value::from(42)),
+                ("metric_description", Value::from("my description")),
+                ("metric_agg", Value::from("count")),
+            ],
         );
 
         assert_eq!("test", metric.mdl());
@@ -3605,7 +3619,12 @@ mod tests {
         let metric = Metric::new(
             Path::new_raw("test"),
             Timestamp::from_unix(Duration::from_secs(1)),
-            ("metric_prop", true),
+            [
+                ("metric_prop", Value::from(true)),
+                ("metric_name", Value::from("my metric")),
+                ("metric_agg", Value::from("count")),
+                ("metric_value", Value::from(42)),
+            ],
         );
 
         let evt = metric.to_event();
