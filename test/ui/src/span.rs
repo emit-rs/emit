@@ -1777,6 +1777,10 @@ fn span_props_precedence() {
                 evt.props().pull::<&str, _>("inner_ctxt").unwrap()
             );
 
+            assert_eq!(
+                "inner_name",
+                evt.props().pull::<&str, _>("span_name").unwrap()
+            );
             assert_eq!("span", evt.props().pull::<&str, _>("lvl").unwrap());
         },
         |evt| {
@@ -1796,6 +1800,10 @@ fn span_props_precedence() {
                 evt.props().pull::<&str, _>("inner_ctxt").unwrap()
             );
 
+            assert_eq!(
+                "inner_name",
+                evt.props().pull::<&str, _>("span_name").unwrap()
+            );
             assert_eq!("inner_ctxt", evt.props().pull::<&str, _>("lvl").unwrap());
 
             true
@@ -1805,6 +1813,9 @@ fn span_props_precedence() {
     #[emit::span(
         rt: RT,
         ok_lvl: "span",
+        evt_props: emit::props! {
+            span_name: "inner_name",
+        },
         "test",
         outer_ctxt_inner_ctxt: "inner_ctxt",
         inner_ctxt: "inner_ctxt",
@@ -1817,6 +1828,7 @@ fn span_props_precedence() {
     emit::Frame::push(
         RT.ctxt(),
         emit::props! {
+            span_name: "outer_name",
             outer_ctxt_inner_ctxt: "outer_ctxt",
             outer_ctxt: "outer_ctxt",
             lvl: "outer_ctxt",
