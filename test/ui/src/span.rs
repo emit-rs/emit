@@ -405,6 +405,31 @@ fn span_name_escape() {
 }
 
 #[test]
+fn span_kind() {
+    static RT: StaticRuntime = static_runtime(
+        |evt| {
+            assert_eq!(
+                emit::SpanKind::Server,
+                evt.props().pull("span_kind").unwrap(),
+            );
+        },
+        |evt| {
+            assert_eq!(
+                emit::SpanKind::Server,
+                evt.props().pull("span_kind").unwrap(),
+            );
+            true
+        },
+    );
+
+    #[emit::span(rt: RT, kind: "server", "handling request")]
+    fn exec() {}
+
+    exec();
+    RT.emitter().blocking_flush(Duration::from_secs(1));
+}
+
+#[test]
 fn span_mdl() {
     static RT: StaticRuntime = static_runtime(
         |evt| {

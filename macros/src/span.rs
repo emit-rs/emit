@@ -13,7 +13,7 @@ use crate::{
     util::{ToOptionTokens, ToRefTokens},
 };
 
-use emit_core::well_known::KEY_SPAN_NAME;
+use emit_core::well_known::{KEY_SPAN_KIND, KEY_SPAN_NAME};
 
 pub struct ExpandTokens {
     pub level: Option<TokenStream>,
@@ -32,6 +32,7 @@ struct Args {
     evt_props: Option<TokenStream>,
     fn_name: Option<Ident>,
     name: Option<TokenStream>,
+    kind: Option<TokenStream>,
     catch_unwind: Option<bool>,
     setup: Option<TokenStream>,
     ok_lvl: Option<TokenStream>,
@@ -94,6 +95,11 @@ impl Parse for Args {
 
             Ok(quote_spanned!(expr.span()=> #expr))
         });
+        let mut kind = Arg::token_stream("kind", |fv| {
+            let expr = &fv.expr;
+
+            Ok(quote_spanned!(expr.span()=> #expr))
+        });
         let mut catch_unwind = Arg::bool("catch_unwind");
 
         args::set_from_field_values(
@@ -104,6 +110,7 @@ impl Parse for Args {
                 &mut evt_props,
                 &mut fn_name,
                 &mut name,
+                &mut kind,
                 &mut rt,
                 &mut when,
                 &mut ok_lvl,
@@ -129,6 +136,7 @@ impl Parse for Args {
             evt_props: evt_props.take(),
             fn_name: fn_name.take(),
             name: name.take(),
+            kind: kind.take(),
         })
     }
 }
@@ -176,7 +184,11 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
             (None, None)
         };
 
-    let macro_evt_props = macro_evt_props(fn_name_prop, span_name_prop(args.name, &template))?;
+    let macro_evt_props = macro_evt_props(
+        fn_name_prop,
+        span_name_prop(args.name, &template),
+        span_kind_prop(args.kind),
+    )?;
 
     match &mut item {
         // A synchronous function
@@ -638,9 +650,21 @@ fn span_name_prop(name: Option<TokenStream>, template: &Template) -> FieldValue 
     }
 }
 
+fn span_kind_prop(kind: Option<TokenStream>) -> Option<FieldValue> {
+    let expr = kind?;
+
+    Some(FieldValue {
+        attrs: vec![],
+        member: Member::Named(Ident::new(KEY_SPAN_KIND, expr.span())),
+        colon_token: Some(Token![:](expr.span())),
+        expr: parse_quote_spanned!(expr.span()=> #expr),
+    })
+}
+
 fn macro_evt_props(
     fn_name_prop: Option<FieldValue>,
     span_name_prop: FieldValue,
+    kind_prop: Option<FieldValue>,
 ) -> Result<Props, syn::Error> {
     let mut macro_evt_props = Props::new();
 
@@ -655,6 +679,15 @@ fn macro_evt_props(
         macro_evt_props.push(
             &fn_name_prop,
             capture::default_fn_name(&fn_name_prop),
+            false,
+            true,
+        )?;
+    }
+
+    if let Some(kind_prop) = kind_prop {
+        macro_evt_props.push(
+            &kind_prop,
+            capture::default_fn_name(&kind_prop),
             false,
             true,
         )?;
@@ -877,6 +910,7 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
         setup,
         fn_name,
         name,
+        kind,
         ok_lvl,
         err_lvl,
         panic_lvl,
@@ -904,7 +938,8 @@ pub fn expand_new_tokens(opts: ExpandNewTokens) -> Result<TokenStream, syn::Erro
 
     let user_evt_props_tokens = evt_props.unwrap_or_else(|| quote!(emit::Empty));
 
-    let macro_evt_props = macro_evt_props(None, span_name_prop(name, &template))?;
+    let macro_evt_props =
+        macro_evt_props(None, span_name_prop(name, &template), span_kind_prop(kind))?;
 
     let macro_evt_props_tokens = macro_evt_props.gen_bound_props_tokens()?;
 
