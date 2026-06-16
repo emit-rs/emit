@@ -1,6 +1,10 @@
 use proc_macro2::{Ident, Span, TokenStream};
 
-use syn::{Expr, FieldValue, parse::Parse, spanned::Spanned};
+use syn::{Expr, FieldValue, Member, parse::Parse, spanned::Spanned};
+
+use emit_core::well_known::{
+    KEY_METRIC_AGG, KEY_METRIC_DESCRIPTION, KEY_METRIC_NAME, KEY_METRIC_UNIT, KEY_METRIC_VALUE,
+};
 
 use crate::{
     args::{self, Arg},
@@ -177,19 +181,17 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     let mdl_tokens = args.mdl.to_tokens();
 
     let macro_props = metric_props(
-        if let Some(name) = args.name {
-            name
-        } else {
-            args.value.infer_name()?
-        },
+        args.name
+            .map(Ok)
+            .unwrap_or_else(|| args.value.infer_name())?,
         args.agg.or(opts.agg),
         args.description,
         args.unit,
         args.value.0,
     )?;
 
-    macro_props.match_bound_props_tokens(|macro_props| {
-        let props_tokens = quote!(emit::__private::__PrivateMacroExtendedProps::new(#user_props_tokens, #macro_props)).to_ref_tokens();
+    macro_props.match_bound_props_tokens(|macro_props_tokens| {
+        let props_tokens = quote!(emit::__private::__PrivateMacroExtendedProps::new(#user_props_tokens, #macro_props_tokens)).to_ref_tokens();
 
         Ok(quote!(emit::__private::__private_sample(#sampler_tokens, #mdl_tokens, #extent_tokens, #props_tokens)))
     })
@@ -206,11 +208,9 @@ pub fn expand_metric_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Erro
     let mdl_tokens = args.mdl.to_tokens();
 
     let macro_props = metric_props(
-        if let Some(name) = args.name {
-            name
-        } else {
-            args.value.infer_name()?
-        },
+        args.name
+            .map(Ok)
+            .unwrap_or_else(|| args.value.infer_name())?,
         args.agg.or(opts.agg),
         args.description,
         args.unit,
@@ -234,32 +234,23 @@ fn metric_props(
 ) -> Result<Props, syn::Error> {
     let mut props = Props::new();
 
-    let agg = agg.unwrap_or_else(|| {
-        let agg = emit_core::well_known::METRIC_AGG_LAST;
-
-        quote!(#agg)
-    });
-
-    let metric_name: FieldValue = parse_quote!(metric_name: #name);
-    let metric_agg: FieldValue = parse_quote!(metric_agg: #agg);
-
-    let value_attrs = &value.attrs;
-    let value_expr = &value.expr;
-
-    let metric_value: FieldValue = parse_quote!(#(#value_attrs)* metric_value: #value_expr);
-
+    let metric_name = metric_name_prop(name);
     props.push(
         &metric_name,
         capture::default_fn_name(&metric_name),
         false,
         true,
     )?;
+
+    let metric_agg = metric_agg_prop(agg);
     props.push(
         &metric_agg,
         capture::default_fn_name(&metric_agg),
         false,
         true,
     )?;
+
+    let metric_value = metric_value_prop(value);
     props.push(
         &metric_value,
         capture::default_fn_name(&metric_value),
@@ -267,8 +258,7 @@ fn metric_props(
         true,
     )?;
 
-    if let Some(description) = description {
-        let metric_description: FieldValue = parse_quote!(metric_description: #description);
+    if let Some(metric_description) = metric_description_prop(description) {
         props.push(
             &metric_description,
             capture::default_fn_name(&metric_description),
@@ -277,8 +267,7 @@ fn metric_props(
         )?;
     }
 
-    if let Some(unit) = unit {
-        let metric_unit: FieldValue = parse_quote!(metric_unit: #unit);
+    if let Some(metric_unit) = metric_unit_prop(unit) {
         props.push(
             &metric_unit,
             capture::default_fn_name(&metric_unit),
@@ -288,4 +277,63 @@ fn metric_props(
     }
 
     Ok(props)
+}
+
+fn metric_name_prop(name: TokenStream) -> FieldValue {
+    let expr = name;
+
+    FieldValue {
+        attrs: vec![],
+        member: Member::Named(Ident::new(KEY_METRIC_NAME, expr.span())),
+        colon_token: Some(Token![:](expr.span())),
+        expr: parse_quote_spanned!(expr.span()=> #expr),
+    }
+}
+
+fn metric_agg_prop(agg: Option<TokenStream>) -> FieldValue {
+    let expr = agg.unwrap_or_else(|| {
+        let agg = emit_core::well_known::METRIC_AGG_LAST;
+
+        quote!(#agg)
+    });
+
+    FieldValue {
+        attrs: vec![],
+        member: Member::Named(Ident::new(KEY_METRIC_AGG, expr.span())),
+        colon_token: Some(Token![:](expr.span())),
+        expr: parse_quote_spanned!(expr.span()=> #expr),
+    }
+}
+
+fn metric_value_prop(value_prop: FieldValue) -> FieldValue {
+    let span = value_prop.span();
+
+    FieldValue {
+        attrs: value_prop.attrs,
+        member: Member::Named(Ident::new(KEY_METRIC_VALUE, span)),
+        colon_token: Some(Token![:](span)),
+        expr: value_prop.expr,
+    }
+}
+
+fn metric_description_prop(description: Option<TokenStream>) -> Option<FieldValue> {
+    let expr = description?;
+
+    Some(FieldValue {
+        attrs: vec![],
+        member: Member::Named(Ident::new(KEY_METRIC_DESCRIPTION, expr.span())),
+        colon_token: Some(Token![:](expr.span())),
+        expr: parse_quote_spanned!(expr.span()=> #expr),
+    })
+}
+
+fn metric_unit_prop(unit: Option<TokenStream>) -> Option<FieldValue> {
+    let expr = unit?;
+
+    Some(FieldValue {
+        attrs: vec![],
+        member: Member::Named(Ident::new(KEY_METRIC_UNIT, expr.span())),
+        colon_token: Some(Token![:](expr.span())),
+        expr: parse_quote_spanned!(expr.span()=> #expr),
+    })
 }

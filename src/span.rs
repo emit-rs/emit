@@ -3778,6 +3778,47 @@ mod tests {
     }
 
     #[test]
+    #[cfg(all(feature = "std", feature = "rand", not(miri)))]
+    fn span_ctxt() {
+        let rng = crate::platform::DefaultRng::new();
+        let ctxt = crate::platform::DefaultCtxt::new();
+
+        let span = Span::new(
+            Path::new_raw("test"),
+            Timestamp::from_unix(Duration::from_secs(1)),
+            Empty,
+        );
+
+        let root = SpanCtxt::new_root(&rng);
+
+        let mut frame = ctxt.open_push(root);
+
+        ctxt.enter(&mut frame);
+
+        let current = SpanCtxt::current(&ctxt);
+
+        let span_current = span.ctxt(&ctxt);
+
+        assert_eq!(root, span_current);
+        assert_eq!(current, span_current);
+
+        assert_eq!(SpanCtxt::empty(), span.ctxt(Empty));
+
+        let unrelated_ctxt = SpanCtxt::new_root(&rng);
+        let span = Span::new(
+            Path::new_raw("test"),
+            Timestamp::from_unix(Duration::from_secs(1)),
+            unrelated_ctxt,
+        );
+
+        assert_eq!(unrelated_ctxt, span.ctxt(&ctxt));
+        assert_eq!(unrelated_ctxt, span.ctxt(Empty));
+
+        ctxt.exit(&mut frame);
+        ctxt.close(frame);
+    }
+
+    #[test]
     fn span_to_event() {
         let span = Span::new(
             Path::new_raw("test"),
