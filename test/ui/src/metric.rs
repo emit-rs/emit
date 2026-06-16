@@ -1,7 +1,7 @@
 use emit::value::ToValue as _;
 
 #[test]
-fn metric() {
+fn metric_basic() {
     let my_metric = 42;
 
     let evt = emit::metric!(value: my_metric);
@@ -40,13 +40,15 @@ fn metric_unit() {
 }
 
 #[test]
-fn metric_description_and_unit() {
+fn metric_props() {
     let my_metric = 42;
+
     let evt = emit::metric!(
         value: my_metric,
-        description: "The response time",
-        unit: "milliseconds"
+        props: emit::props! {
+            file: "./my_file",
+        }
     );
-    assert_eq!("The response time", evt.description().unwrap());
-    assert_eq!("milliseconds", evt.unit().unwrap());
+
+    assert_eq!("./my_file", evt.props().file);
 }

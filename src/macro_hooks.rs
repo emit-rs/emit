@@ -8,7 +8,6 @@ use core::{
 
 use emit_core::event::Event;
 use emit_core::{
-    and::And,
     clock::Clock,
     ctxt::Ctxt,
     emitter::Emitter,
@@ -871,19 +870,13 @@ pub fn __must_use_evt<T>(value: T) -> T {
 
 #[track_caller]
 #[must_use = "this macro returns an `Event` without emitting it; send it through an `emit::Emitter`, or use the `emit::emit!` macro instead"]
-pub fn __private_evt<'a, B: Props, P: Props>(
+pub fn __private_evt<'a, P: Props>(
     mdl: impl Into<Path<'a>>,
     tpl: impl Into<Template<'a>>,
     extent: impl ToExtent,
-    base_props: B,
     props: P,
-) -> Event<'a, And<P, B>> {
-    Event::new(
-        mdl.into(),
-        tpl.into(),
-        extent.to_extent(),
-        props.and_props(base_props),
-    )
+) -> Event<'a, P> {
+    Event::new(mdl.into(), tpl.into(), extent.to_extent(), props)
 }
 
 #[track_caller]
@@ -1340,8 +1333,8 @@ impl<P: Props, T: Props> Props for __PrivateMacroExtendedProps<P, T> {
         &'kv self,
         mut for_each: F,
     ) -> ControlFlow<()> {
-        self.0.for_each(&mut for_each)?;
         self.1.for_each(&mut for_each)?;
+        self.0.for_each(&mut for_each)?;
 
         ControlFlow::Continue(())
     }
@@ -1349,6 +1342,6 @@ impl<P: Props, T: Props> Props for __PrivateMacroExtendedProps<P, T> {
     fn get<'v, K: ToStr>(&'v self, key: K) -> Option<Value<'v>> {
         let key = key.to_str();
 
-        self.0.get(key.by_ref()).or_else(|| self.1.get(key))
+        self.1.get(key.by_ref()).or_else(|| self.0.get(key))
     }
 }

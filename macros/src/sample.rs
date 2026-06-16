@@ -173,10 +173,10 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
     };
 
     let extent_tokens = args.extent.to_tokens().to_ref_tokens();
-    let base_props_tokens = args.props.to_tokens().to_ref_tokens();
+    let user_props_tokens = args.props.to_tokens().to_ref_tokens();
     let mdl_tokens = args.mdl.to_tokens();
 
-    let props = metric_props(
+    let macro_props = metric_props(
         if let Some(name) = args.name {
             name
         } else {
@@ -188,8 +188,8 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
         args.value.0,
     )?;
 
-    props.match_bound_props_tokens(|props_tokens| {
-        let props_tokens = quote!(emit::__private::__PrivateMacroExtendedProps::new(#props_tokens, #base_props_tokens)).to_ref_tokens();
+    macro_props.match_bound_props_tokens(|macro_props| {
+        let props_tokens = quote!(emit::__private::__PrivateMacroExtendedProps::new(#user_props_tokens, #macro_props)).to_ref_tokens();
 
         Ok(quote!(emit::__private::__private_sample(#sampler_tokens, #mdl_tokens, #extent_tokens, #props_tokens)))
     })
@@ -202,10 +202,10 @@ pub fn expand_metric_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Erro
     args::ensure_missing("rt", args.sampler.map(|arg| arg.span()))?;
 
     let extent_tokens = args.extent.to_tokens().to_ref_tokens();
-    let base_props_tokens = args.props.to_tokens();
+    let user_props_tokens = args.props.to_tokens();
     let mdl_tokens = args.mdl.to_tokens();
 
-    let props = metric_props(
+    let macro_props = metric_props(
         if let Some(name) = args.name {
             name
         } else {
@@ -217,8 +217,8 @@ pub fn expand_metric_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Erro
         args.value.0,
     )?;
 
-    let props_tokens = props.gen_bound_props_tokens()?;
-    let props_tokens = quote!(emit::__private::__PrivateMacroExtendedProps::new(#props_tokens, #base_props_tokens));
+    let macro_props_tokens = macro_props.gen_bound_props_tokens()?;
+    let props_tokens = quote!(emit::__private::__PrivateMacroExtendedProps::new(#user_props_tokens, #macro_props_tokens));
 
     Ok(
         quote!(emit::__private::__must_use_metric(emit::__private::__private_metric(#mdl_tokens, #extent_tokens, #props_tokens))),

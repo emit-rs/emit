@@ -98,6 +98,48 @@ fn sample_name() {
 }
 
 #[test]
+fn sample_description() {
+    let called = Called::new();
+
+    let rt = simple_runtime(
+        |evt| {
+            assert_eq!(
+                "The number of requests",
+                evt.props().pull::<Str, _>("metric_description").unwrap()
+            );
+
+            called.record();
+        },
+        |_| true,
+    );
+
+    emit::sample!(rt, name: "my_metric", value: 42, description: "The number of requests");
+
+    assert!(called.was_called());
+}
+
+#[test]
+fn sample_unit() {
+    let called = Called::new();
+
+    let rt = simple_runtime(
+        |evt| {
+            assert_eq!(
+                "milliseconds",
+                evt.props().pull::<Str, _>("metric_unit").unwrap()
+            );
+
+            called.record();
+        },
+        |_| true,
+    );
+
+    emit::sample!(rt, name: "my_metric", value: 42, unit: "milliseconds");
+
+    assert!(called.was_called());
+}
+
+#[test]
 fn sample_props() {
     let called = Called::new();
 
@@ -194,79 +236,6 @@ fn sample_agg_specific() {
     emit::min_sample!(rt, name: "my_metric", value: 42, props: emit::props! { expected_agg: "min" });
     emit::max_sample!(rt, name: "my_metric", value: 42, props: emit::props! { expected_agg: "max" });
     emit::last_sample!(rt, name: "my_metric", value: 42, props: emit::props! { expected_agg: "last" });
-
-    assert!(called.was_called());
-}
-
-#[test]
-fn sample_description() {
-    let called = Called::new();
-
-    let rt = simple_runtime(
-        |evt| {
-            assert_eq!(
-                "The number of requests",
-                evt.props().pull::<Str, _>("metric_description").unwrap()
-            );
-
-            called.record();
-        },
-        |_| true,
-    );
-
-    emit::sample!(rt, name: "my_metric", value: 42, description: "The number of requests");
-
-    assert!(called.was_called());
-}
-
-#[test]
-fn sample_unit() {
-    let called = Called::new();
-
-    let rt = simple_runtime(
-        |evt| {
-            assert_eq!(
-                "milliseconds",
-                evt.props().pull::<Str, _>("metric_unit").unwrap()
-            );
-
-            called.record();
-        },
-        |_| true,
-    );
-
-    emit::sample!(rt, name: "my_metric", value: 42, unit: "milliseconds");
-
-    assert!(called.was_called());
-}
-
-#[test]
-fn sample_description_and_unit() {
-    let called = Called::new();
-
-    let rt = simple_runtime(
-        |evt| {
-            assert_eq!(
-                "The response time",
-                evt.props().pull::<Str, _>("metric_description").unwrap()
-            );
-            assert_eq!(
-                "milliseconds",
-                evt.props().pull::<Str, _>("metric_unit").unwrap()
-            );
-
-            called.record();
-        },
-        |_| true,
-    );
-
-    emit::sample!(
-        rt,
-        name: "my_metric",
-        value: 42,
-        description: "The response time",
-        unit: "milliseconds"
-    );
 
     assert!(called.was_called());
 }
