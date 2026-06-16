@@ -26,6 +26,8 @@ pub struct Args {
     value: MetricValueArg,
     name: Option<TokenStream>,
     agg: Option<TokenStream>,
+    description: Option<TokenStream>,
+    unit: Option<TokenStream>,
 }
 
 struct MetricValueArg(FieldValue);
@@ -100,6 +102,16 @@ impl Parse for Args {
 
             Ok(quote_spanned!(expr.span()=> #expr))
         });
+        let mut description = Arg::token_stream("description", |fv| {
+            let expr = &fv.expr;
+
+            Ok(quote_spanned!(expr.span()=> #expr))
+        });
+        let mut unit = Arg::token_stream("unit", |fv| {
+            let expr = &fv.expr;
+
+            Ok(quote_spanned!(expr.span()=> #expr))
+        });
 
         args::set_from_field_values(
             input.parse_terminated(FieldValue::parse, Token![,])?.iter(),
@@ -112,6 +124,8 @@ impl Parse for Args {
                 &mut value,
                 &mut name,
                 &mut agg,
+                &mut description,
+                &mut unit,
             ],
         )?;
 
@@ -122,6 +136,8 @@ impl Parse for Args {
         let extent = extent.take_or_default();
 
         let agg = agg.take();
+        let description = description.take();
+        let unit = unit.take();
 
         let value = value.take().ok_or_else(|| {
             syn::Error::new(Span::call_site(), "the `value` parameter is required")
@@ -138,6 +154,8 @@ impl Parse for Args {
             value,
             name,
             agg,
+            description,
+            unit,
         })
     }
 }
@@ -165,6 +183,8 @@ pub fn expand_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Error> {
             args.value.infer_name()?
         },
         args.agg.or(opts.agg),
+        args.description,
+        args.unit,
         args.value.0,
     )?;
 
@@ -192,6 +212,8 @@ pub fn expand_metric_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Erro
             args.value.infer_name()?
         },
         args.agg.or(opts.agg),
+        args.description,
+        args.unit,
         args.value.0,
     )?;
 
@@ -206,6 +228,8 @@ pub fn expand_metric_tokens(opts: ExpandTokens) -> Result<TokenStream, syn::Erro
 fn metric_props(
     name: TokenStream,
     agg: Option<TokenStream>,
+    description: Option<TokenStream>,
+    unit: Option<TokenStream>,
     value: FieldValue,
 ) -> Result<Props, syn::Error> {
     let mut props = Props::new();
@@ -242,6 +266,26 @@ fn metric_props(
         false,
         true,
     )?;
+
+    if let Some(description) = description {
+        let metric_description: FieldValue = parse_quote!(metric_description: #description);
+        props.push(
+            &metric_description,
+            capture::default_fn_name(&metric_description),
+            false,
+            true,
+        )?;
+    }
+
+    if let Some(unit) = unit {
+        let metric_unit: FieldValue = parse_quote!(metric_unit: #unit);
+        props.push(
+            &metric_unit,
+            capture::default_fn_name(&metric_unit),
+            false,
+            true,
+        )?;
+    }
 
     Ok(props)
 }

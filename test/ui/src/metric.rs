@@ -24,3 +24,29 @@ fn metric() {
     let evt = emit::last_metric!(value: my_metric);
     assert_eq!("last", evt.agg().unwrap());
 }
+
+#[test]
+fn metric_description() {
+    let my_metric = 42;
+    let evt = emit::metric!(value: my_metric, description: "The number of requests");
+    assert_eq!("The number of requests", evt.description().unwrap());
+}
+
+#[test]
+fn metric_unit() {
+    let my_metric = 42;
+    let evt = emit::metric!(value: my_metric, unit: "milliseconds");
+    assert_eq!("milliseconds", evt.unit().unwrap());
+}
+
+#[test]
+fn metric_description_and_unit() {
+    let my_metric = 42;
+    let evt = emit::metric!(
+        value: my_metric,
+        description: "The response time",
+        unit: "milliseconds"
+    );
+    assert_eq!("The response time", evt.description().unwrap());
+    assert_eq!("milliseconds", evt.unit().unwrap());
+}
