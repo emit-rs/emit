@@ -6,7 +6,7 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/emit-rs/emit"
 description = "Batch processing infrastructure for emit."
-edition = "2021"
+edition = "2024"
 
 [package.metadata.docs.rs]
 features = ["tokio"]

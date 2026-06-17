@@ -2,7 +2,7 @@
 name = "emit_otlp_gen"
 version = "0.0.0"
 publish = false
-edition = "2021"
+edition = "2024"
 
 [[bin]]
 name = "gen"
