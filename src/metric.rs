@@ -1695,7 +1695,7 @@ pub mod exp {
             use emit_core::value::{FromValue, ToValue, Value};
 
             use crate::{
-                alloc::collections::{btree_map, BTreeMap},
+                alloc::collections::{BTreeMap, btree_map},
                 buf::{find, trim, trim_start},
                 core::{
                     fmt::{self, Write as _},

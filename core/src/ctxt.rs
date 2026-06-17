@@ -327,8 +327,9 @@ mod alloc_support {
             // SAFETY: `ErasedCurrent` must not outlive `&v`
             pub(super) unsafe fn new<'a>(v: &'a impl Props) -> Self {
                 let v: &'a dyn ErasedProps = v;
-                let v: &'a (dyn ErasedProps + 'static) =
-                    mem::transmute::<&'a dyn ErasedProps, &'a (dyn ErasedProps + 'static)>(v);
+                let v: &'a (dyn ErasedProps + 'static) = unsafe {
+                    mem::transmute::<&'a dyn ErasedProps, &'a (dyn ErasedProps + 'static)>(v)
+                };
 
                 ErasedCurrent(v as *const dyn ErasedProps, PhantomData)
             }
@@ -401,7 +402,7 @@ mod alloc_support {
 
                     unsafe fn vdrop<T>(data: &mut RawErasedFrame) {
                         // SAFETY: This frame is storing `T` inline
-                        ptr::drop_in_place(data.inline.as_mut_ptr() as *mut T)
+                        unsafe { ptr::drop_in_place(data.inline.as_mut_ptr() as *mut T) }
                     }
 
                     let vtable = RawErasedFrameVTable { drop: vdrop::<T> };
@@ -426,21 +427,21 @@ mod alloc_support {
             // SAFETY: This frame must have been created from `T`
             pub(super) unsafe fn get_mut<T: Send + 'static>(&mut self) -> &mut T {
                 if Self::inline::<T>() {
-                    &mut *(self.data.inline.as_mut_ptr() as *mut T)
+                    unsafe { &mut *(self.data.inline.as_mut_ptr() as *mut T) }
                 } else {
-                    &mut *(self.data.boxed as *mut T)
+                    unsafe { &mut *(self.data.boxed as *mut T) }
                 }
             }
 
             // SAFETY: This frame must have been created from `T`
             pub(super) unsafe fn into_inner<T: Send + 'static>(mut self) -> T {
                 if Self::inline::<T>() {
-                    let data = ptr::read(self.data.inline.as_mut_ptr() as *mut T);
+                    let data = unsafe { ptr::read(self.data.inline.as_mut_ptr() as *mut T) };
                     mem::forget(self);
 
                     data
                 } else {
-                    let data = Box::from_raw(self.data.boxed as *mut T);
+                    let data = unsafe { Box::from_raw(self.data.boxed as *mut T) };
                     mem::forget(self);
 
                     *data

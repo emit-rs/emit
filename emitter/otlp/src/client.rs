@@ -5,12 +5,12 @@ This module is a consumer of `data`, using it to encode incoming events. These a
 */
 
 use crate::{
+    Error, OtlpMetrics,
     data::{
-        self, logs::LogsEventEncoder, metrics::MetricsEventEncoder, traces::TracesEventEncoder,
-        EncodedEvent, EncodedPayload, EncodedScopeItems, RawEncoder,
+        self, EncodedEvent, EncodedPayload, EncodedScopeItems, RawEncoder, logs::LogsEventEncoder,
+        metrics::MetricsEventEncoder, traces::TracesEventEncoder,
     },
     internal_metrics::InternalMetrics,
-    Error, OtlpMetrics,
 };
 use emit_batcher::BatchError;
 use std::{collections::HashMap, sync::Arc, time::Duration};
@@ -417,7 +417,7 @@ impl OtlpTransportBuilder {
                             content_type => {
                                 return Err(Error::msg(format_args!(
                                     "unsupported content type '{content_type}'"
-                                )))
+                                )));
                             }
                         };
 
@@ -436,7 +436,7 @@ impl OtlpTransportBuilder {
                                         compression => {
                                             return Err(Error::msg(format_args!(
                                                 "unsupported compression '{compression}'"
-                                            )))
+                                            )));
                                         }
                                     })
                                     .with_content_frame([1, len[0], len[1], len[2], len[3]])
@@ -508,9 +508,9 @@ impl<R: data::RequestEncoder> OtlpTransport<R> {
     pub(crate) async fn send(&self, mut channel: Channel) -> Result<(), BatchError<Channel>> {
         match self {
             OtlpTransport::Http {
-                ref http,
-                ref resource,
-                ref request_encoder,
+                http,
+                resource,
+                request_encoder,
             } => {
                 // Process each request in the batch
                 while let Some(batch) = channel.requests.last() {

@@ -37,10 +37,10 @@ use emit_core::{
 #[cfg(feature = "alloc")]
 use emit_core::well_known::KEY_SPAN_LINKS;
 
-use crate::{kind::Kind, level::Level, Frame, Timer};
+use crate::{Frame, Timer, kind::Kind, level::Level};
 use core::{
     fmt, mem,
-    num::{NonZeroU128, NonZeroU64},
+    num::{NonZeroU64, NonZeroU128},
     ops::ControlFlow,
     str::{self, FromStr},
 };
@@ -1144,9 +1144,9 @@ pub mod span_link_set {
     use super::*;
 
     #[cfg(not(feature = "std"))]
-    use alloc::collections::{btree_set as set, BTreeSet as Set};
+    use alloc::collections::{BTreeSet as Set, btree_set as set};
     #[cfg(feature = "std")]
-    use std::collections::{hash_set as set, HashSet as Set};
+    use std::collections::{HashSet as Set, hash_set as set};
 
     use core::{fmt::Write, str::FromStr};
 
@@ -2244,23 +2244,21 @@ pub mod span_link_set {
 
         #[test]
         fn span_link_set_from_value_string() {
-            for (case, expected) in [
-                (
-                    "[0123456789abcdef0123456789abcdef-0123456789abcdef,fedcba9876543210fedcba9876543210-fedcba9876543210]",
-                    {
-                        let mut set = SpanLinkSet::new();
-                        set.insert(SpanLink::new(
-                            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
-                            SpanId::from_u64(0x0123456789abcdef).unwrap(),
-                        ));
-                        set.insert(SpanLink::new(
-                            TraceId::from_u128(0xfedcba9876543210fedcba9876543210).unwrap(),
-                            SpanId::from_u64(0xfedcba9876543210).unwrap(),
-                        ));
-                        set
-                    },
-                ),
-            ] {
+            for (case, expected) in [(
+                "[0123456789abcdef0123456789abcdef-0123456789abcdef,fedcba9876543210fedcba9876543210-fedcba9876543210]",
+                {
+                    let mut set = SpanLinkSet::new();
+                    set.insert(SpanLink::new(
+                        TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                        SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                    ));
+                    set.insert(SpanLink::new(
+                        TraceId::from_u128(0xfedcba9876543210fedcba9876543210).unwrap(),
+                        SpanId::from_u64(0xfedcba9876543210).unwrap(),
+                    ));
+                    set
+                },
+            )] {
                 assert_eq!(expected, Value::from(case).cast().unwrap());
             }
         }

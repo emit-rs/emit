@@ -8,7 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{sync, BatchError, Channel, Receiver, Sender};
+use crate::{BatchError, Channel, Receiver, Sender, sync};
 
 /**
 Run [`Receiver::exec`] on a `tokio` runtime in a dedicated background thread.
@@ -157,7 +157,7 @@ mod tests {
     use super::*;
 
     use std::sync::{Arc, Mutex};
-    use tokio::sync::{broadcast, Barrier, Semaphore};
+    use tokio::sync::{Barrier, Semaphore, broadcast};
 
     use crate::TestBarriers;
 

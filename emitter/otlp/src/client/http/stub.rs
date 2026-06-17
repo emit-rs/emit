@@ -3,10 +3,10 @@ compile_error!("unsupported target");
 use std::{fmt, future::Future, sync::Arc, time::Duration};
 
 use crate::{
+    Error,
     client::http::{HttpContent, HttpVersion},
     data::EncodedPayload,
     internal_metrics::InternalMetrics,
-    Error,
 };
 
 pub(crate) struct HttpConnection {}

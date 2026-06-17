@@ -795,18 +795,10 @@ mod pow {
                     1.0
                 } else if ix >= 0x3ff00000 {
                     /* (|x|>1)**+-inf = inf,0 */
-                    if hy >= 0 {
-                        y
-                    } else {
-                        0.0
-                    }
+                    if hy >= 0 { y } else { 0.0 }
                 } else {
                     /* (|x|<1)**+-inf = 0,inf */
-                    if hy >= 0 {
-                        0.0
-                    } else {
-                        -y
-                    }
+                    if hy >= 0 { 0.0 } else { -y }
                 };
             }
 

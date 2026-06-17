@@ -265,12 +265,14 @@ mod tests {
     ) -> (mpsc::Sender<SenderCommand<T>>, thread::JoinHandle<()>) {
         let (tx, rx) = mpsc::channel();
 
-        let handle = thread::spawn(move || loop {
-            match rx.recv().unwrap() {
-                SenderCommand::BlockingSend(msg, timeout) => {
-                    let _ = blocking_send(&sender, msg, timeout);
+        let handle = thread::spawn(move || {
+            loop {
+                match rx.recv().unwrap() {
+                    SenderCommand::BlockingSend(msg, timeout) => {
+                        let _ = blocking_send(&sender, msg, timeout);
+                    }
+                    SenderCommand::Stop => return,
                 }
-                SenderCommand::Stop => return,
             }
         });
 

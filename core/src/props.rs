@@ -963,7 +963,7 @@ mod alloc_support {
 
                 fn insert(&mut self, key: Str<'a>, value: Value<'a>) {
                     match self {
-                        Filter::Inline(ref mut inline) => match inline.insert(key, value) {
+                        Filter::Inline(inline) => match inline.insert(key, value) {
                             Ok(()) => (),
                             Err((key, value)) => {
                                 let mut spilled = Spilled::spill(inline.take());
@@ -972,7 +972,7 @@ mod alloc_support {
                                 *self = Filter::Spilled(spilled);
                             }
                         },
-                        Filter::Spilled(ref mut spilled) => spilled.insert(key, value),
+                        Filter::Spilled(spilled) => spilled.insert(key, value),
                     }
                 }
 
@@ -994,8 +994,8 @@ mod alloc_support {
                     }
 
                     match self {
-                        Filter::Inline(ref mut inline) => Either::A(inline.take()),
-                        Filter::Spilled(ref mut spilled) => Either::B(spilled.take()),
+                        Filter::Inline(inline) => Either::A(inline.take()),
+                        Filter::Spilled(spilled) => Either::B(spilled.take()),
                     }
                 }
             }

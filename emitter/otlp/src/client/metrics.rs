@@ -1,13 +1,13 @@
 use std::{fmt, sync::Arc};
 
 use crate::{
+    Encoding, Error, OtlpTransportBuilder,
     data::metrics::{self, MetricsEventEncoder, MetricsRequestEncoder},
     internal_metrics::InternalMetrics,
-    Encoding, Error, OtlpTransportBuilder,
 };
 
 use super::{
-    encode_resource, ClientEventEncoder, ClientRequestEncoder, OtlpTransport, Protocol, Resource,
+    ClientEventEncoder, ClientRequestEncoder, OtlpTransport, Protocol, Resource, encode_resource,
 };
 
 /**
@@ -84,12 +84,12 @@ impl OtlpMetricsBuilder {
     pub fn name(
         mut self,
         writer: impl Fn(
-                &emit::event::Event<&dyn emit::props::ErasedProps>,
-                &mut fmt::Formatter,
-            ) -> fmt::Result
-            + Send
-            + Sync
-            + 'static,
+            &emit::event::Event<&dyn emit::props::ErasedProps>,
+            &mut fmt::Formatter,
+        ) -> fmt::Result
+        + Send
+        + Sync
+        + 'static,
     ) -> Self {
         self.event_encoder.name = Box::new(writer);
         self

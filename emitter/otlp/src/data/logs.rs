@@ -6,9 +6,8 @@ use crate::Error;
 pub use self::{export_logs_service::*, log_record::*};
 
 use super::{
-    stream_encoded_scope_items, AnyValue, EncodedEvent, EncodedPayload, EncodedScopeItems,
-    EventEncoder, InstrumentationScope, MessageFormatter, MessageRenderer, RawEncoder,
-    RequestEncoder,
+    AnyValue, EncodedEvent, EncodedPayload, EncodedScopeItems, EventEncoder, InstrumentationScope,
+    MessageFormatter, MessageRenderer, RawEncoder, RequestEncoder, stream_encoded_scope_items,
 };
 
 pub(crate) struct LogsEventEncoder {
@@ -138,7 +137,9 @@ mod tests {
 
                 assert_eq!(0, de.attributes.len());
                 assert_eq!(
-                    vec![75u8, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54],
+                    vec![
+                        75u8, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54
+                    ],
                     de.trace_id
                 );
             },

@@ -13,18 +13,19 @@ use std::{
 };
 
 use hyper::{
+    Method, Request,
     body::{self, Body, Frame, SizeHint},
     client::conn::{http1, http2},
-    Method, Request,
 };
 
 use crate::{
+    Error,
     client::http::{
-        outgoing_traceparent_header, HttpContent, HttpContentCursor, HttpUri, HttpVersion,
+        HttpContent, HttpContentCursor, HttpUri, HttpVersion, outgoing_traceparent_header,
     },
     data::EncodedPayload,
     internal_metrics::InternalMetrics,
-    telemetry_sdk_name, telemetry_sdk_version, Error,
+    telemetry_sdk_name, telemetry_sdk_version,
 };
 
 static USER_AGENT: LazyLock<String> =
@@ -71,7 +72,7 @@ async fn tls_handshake(
     uri: &HttpUri,
 ) -> Result<impl tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin + 'static, Error>
 {
-    use tokio_native_tls::{native_tls, TlsConnector};
+    use tokio_native_tls::{TlsConnector, native_tls};
 
     let domain = uri.host();
 
@@ -102,7 +103,7 @@ async fn tls_handshake(
     uri: &HttpUri,
 ) -> Result<impl tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin + 'static, Error>
 {
-    use tokio_rustls::{rustls, TlsConnector};
+    use tokio_rustls::{TlsConnector, rustls};
 
     let domain = uri.host().to_owned().try_into().map_err(|e| {
         metrics.transport_conn_tls_failed.increment();

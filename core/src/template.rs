@@ -57,7 +57,7 @@ enum TemplateKind<'a> {
 impl<'a> TemplateKind<'a> {
     fn parts(&self) -> &[Part<'a>] {
         match self {
-            TemplateKind::Literal(ref parts) => parts,
+            TemplateKind::Literal(parts) => parts,
             TemplateKind::Parts(parts) => parts,
             #[cfg(feature = "alloc")]
             TemplateKind::Owned(parts) => parts,
@@ -231,11 +231,11 @@ impl<'a, 'b> PartialEq<Template<'b>> for Template<'a> {
                 // Compare text fragments
                 (
                     PartKind::Text {
-                        value: ref a,
+                        value: a,
                         needs_escaping: _,
                     },
                     PartKind::Text {
-                        value: ref b,
+                        value: b,
                         needs_escaping: _,
                     },
                 ) => {
@@ -277,7 +277,7 @@ impl<'a, 'b> PartialEq<Template<'b>> for Template<'a> {
                     continue;
                 }
                 // Compare hole fragments
-                (PartKind::Hole { label: ref a, .. }, PartKind::Hole { label: ref b, .. }) => {
+                (PartKind::Hole { label: a, .. }, PartKind::Hole { label: b, .. }) => {
                     // Holes are not partial, so must be exactly equal
                     if a != b {
                         return false;
@@ -289,16 +289,12 @@ impl<'a, 'b> PartialEq<Template<'b>> for Template<'a> {
                     continue;
                 }
                 // Ignore empty fragments
-                (PartKind::Text { value: ref a, .. }, PartKind::Hole { .. })
-                    if a.get().is_empty() =>
-                {
+                (PartKind::Text { value: a, .. }, PartKind::Hole { .. }) if a.get().is_empty() => {
                     ai += 1;
 
                     continue;
                 }
-                (PartKind::Hole { .. }, PartKind::Text { value: ref b, .. })
-                    if b.get().is_empty() =>
-                {
+                (PartKind::Hole { .. }, PartKind::Text { value: b, .. }) if b.get().is_empty() => {
                     bi += 1;
 
                     continue;

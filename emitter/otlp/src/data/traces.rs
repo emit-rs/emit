@@ -2,8 +2,8 @@ mod export_trace_service;
 mod span;
 
 use emit::{
-    well_known::{KEY_SPAN_KIND, KEY_SPAN_NAME},
     Filter, Props,
+    well_known::{KEY_SPAN_KIND, KEY_SPAN_NAME},
 };
 
 use crate::Error;
@@ -11,8 +11,8 @@ use crate::Error;
 pub use self::{export_trace_service::*, span::*};
 
 use super::{
-    stream_encoded_scope_items, EncodedEvent, EncodedPayload, EncodedScopeItems, EventEncoder,
-    InstrumentationScope, MessageFormatter, MessageRenderer, RawEncoder, RequestEncoder,
+    EncodedEvent, EncodedPayload, EncodedScopeItems, EventEncoder, InstrumentationScope,
+    MessageFormatter, MessageRenderer, RawEncoder, RequestEncoder, stream_encoded_scope_items,
 };
 
 pub(crate) struct TracesEventEncoder {

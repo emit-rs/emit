@@ -15,7 +15,7 @@ use std::{
 
 use js_sys::Promise;
 use wasm_bindgen::prelude::*;
-use wasm_bindgen_futures::{future_to_promise, JsFuture};
+use wasm_bindgen_futures::{JsFuture, future_to_promise};
 
 use crate::{BatchError, Channel, Receiver, Sender};
 

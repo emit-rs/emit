@@ -209,7 +209,7 @@ mod macro_hooks;
 #[cfg(feature = "std")]
 pub mod setup;
 #[cfg(feature = "std")]
-pub use setup::{setup, Setup};
+pub use setup::{Setup, setup};
 
 /**
 Get the shared emitter.

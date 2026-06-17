@@ -106,10 +106,10 @@ use std::{
 };
 
 use emit::{
+    Ctxt, Empty, Filter, Frame, Props, Str, Value,
     event::ToEvent,
     span::{SpanCtxt, SpanId, TraceId},
     well_known::{KEY_SPAN_ID, KEY_SPAN_PARENT, KEY_TRACE_ID},
-    Ctxt, Empty, Filter, Frame, Props, Str, Value,
 };
 
 /**
@@ -1095,13 +1095,13 @@ mod tests {
     use super::*;
 
     use emit::{
+        Empty, Rng,
         and::And,
         emitter, filter,
         platform::{
             rand_rng::RandRng, system_clock::SystemClock, thread_local_ctxt::ThreadLocalCtxt,
         },
         runtime::Runtime,
-        Empty, Rng,
     };
 
     use std::sync::atomic::{AtomicUsize, Ordering};

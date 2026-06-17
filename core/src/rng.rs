@@ -188,7 +188,7 @@ mod tests {
     }
 
     #[test]
-    fn gen() {
+    fn rng_gen() {
         for (rng, expected_u64, expected_u128) in [
             (MyRng { fill: 0 }, 0u64, 0u128),
             (MyRng { fill: u8::MAX }, u64::MAX, u128::MAX),

@@ -3,6 +3,7 @@ compile_error!("unsupported target");
 use std::{sync::Arc, time::Duration};
 
 use crate::{
+    Error,
     client::{Channel, ClientEventEncoder, OtlpBuilder, OtlpInner, OtlpTransport},
     data::{
         logs::{LogsEventEncoder, LogsRequestEncoder},
@@ -10,7 +11,6 @@ use crate::{
         traces::{TracesEventEncoder, TracesRequestEncoder},
     },
     internal_metrics::InternalMetrics,
-    Error,
 };
 
 pub(super) type Handle = ();

@@ -1,7 +1,7 @@
 use crate::client::Channel;
 use std::sync::{
-    atomic::{AtomicUsize, Ordering},
     Arc,
+    atomic::{AtomicUsize, Ordering},
 };
 
 macro_rules! metrics {

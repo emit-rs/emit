@@ -220,9 +220,9 @@ The `writer` may finish each event with the separator. If it doesn't, then it wi
 pub fn set_with_writer(
     file_set: impl AsRef<Path>,
     writer: impl Fn(&mut FileBuf, &emit::Event<&dyn emit::props::ErasedProps>) -> io::Result<()>
-        + Send
-        + Sync
-        + 'static,
+    + Send
+    + Sync
+    + 'static,
     separator: &'static [u8],
 ) -> FileSetBuilder {
     FileSetBuilder::new_with_writer(file_set.as_ref(), writer, separator)
@@ -293,9 +293,9 @@ impl FileSetBuilder {
     pub fn new_with_writer(
         file_set: impl Into<PathBuf>,
         writer: impl Fn(&mut FileBuf, &emit::Event<&dyn emit::props::ErasedProps>) -> io::Result<()>
-            + Send
-            + Sync
-            + 'static,
+        + Send
+        + Sync
+        + 'static,
         separator: &'static [u8],
     ) -> Self {
         FileSetBuilder {
@@ -375,9 +375,9 @@ impl FileSetBuilder {
     pub fn writer(
         mut self,
         writer: impl Fn(&mut FileBuf, &emit::Event<&dyn emit::props::ErasedProps>) -> io::Result<()>
-            + Send
-            + Sync
-            + 'static,
+        + Send
+        + Sync
+        + 'static,
         separator: &'static [u8],
     ) -> Self {
         self.writer = Box::new(writer);
@@ -578,8 +578,8 @@ fn default_writer(
     use std::ops::ControlFlow;
 
     use emit::{
-        well_known::{KEY_MDL, KEY_MSG, KEY_TPL, KEY_TS, KEY_TS_START},
         Props as _,
+        well_known::{KEY_MDL, KEY_MSG, KEY_TPL, KEY_TS, KEY_TS_START},
     };
 
     struct EventValue<'a, P>(&'a emit::Event<'a, P>);
