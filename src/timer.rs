@@ -8,7 +8,7 @@ Timers are used by [`crate::Span`]s to produce the [`Extent`] on their events.
 
 use core::time::Duration;
 
-use crate::{extent::ToExtent, Clock, Extent, Timestamp};
+use crate::{Clock, Extent, Timestamp, extent::ToExtent};
 
 /**
 A timer that measures the point when an operation started and ended.

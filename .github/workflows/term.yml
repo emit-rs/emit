@@ -62,7 +62,7 @@ jobs:
 
       - name: All
         working-directory: ./emitter/term
-        run: cargo test --target wasm32-wasip2 --all-features
+        run: cargo test --target wasm32-wasip2 --all-features --lib
 
       - name: Build powerset
         working-directory: ./emitter/term

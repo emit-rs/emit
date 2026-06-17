@@ -14,8 +14,9 @@ use std::{borrow::Cow, collections::HashMap, env, ops::ControlFlow, sync::LazyLo
 use sval_derive::Value;
 
 use crate::{
-    baggage, telemetry_sdk_language, telemetry_sdk_name, telemetry_sdk_version, Error, OtlpBuilder,
-    OtlpLogsBuilder, OtlpMetricsBuilder, OtlpTracesBuilder, OtlpTransportBuilder,
+    Error, OtlpBuilder, OtlpLogsBuilder, OtlpMetricsBuilder, OtlpTracesBuilder,
+    OtlpTransportBuilder, baggage, telemetry_sdk_language, telemetry_sdk_name,
+    telemetry_sdk_version,
 };
 
 const OTEL_EXPORTER_OTLP_PROTOCOL: &'static str = "OTEL_EXPORTER_OTLP_PROTOCOL";
@@ -479,9 +480,10 @@ mod tests {
 
     #[test]
     fn config_from_env_resource() {
-        let env = vec![
-            ("OTEL_RESOURCE_ATTRIBUTES", "service.namespace=tutorial,service.version=1.0,service.instance.id=46D99F44-27AB-4006-9F57-3B7C9032827B,host.name=myhost,host.type=arm64,os.name=linux,os.version=6.0"),
-        ];
+        let env = vec![(
+            "OTEL_RESOURCE_ATTRIBUTES",
+            "service.namespace=tutorial,service.version=1.0,service.instance.id=46D99F44-27AB-4006-9F57-3B7C9032827B,host.name=myhost,host.type=arm64,os.name=linux,os.version=6.0",
+        )];
 
         let config = OtlpConfig::from_env(env.into_iter());
 
@@ -520,9 +522,10 @@ mod tests {
 
     #[test]
     fn config_from_env_resource_ignores_list_valued_properties() {
-        let env = vec![
-            ("OTEL_RESOURCE_ATTRIBUTES", "service.namespace=tutorial;service.version=1.0;service.instance.id=46D99F44-27AB-4006-9F57-3B7C9032827B,host.name=myhost"),
-        ];
+        let env = vec![(
+            "OTEL_RESOURCE_ATTRIBUTES",
+            "service.namespace=tutorial;service.version=1.0;service.instance.id=46D99F44-27AB-4006-9F57-3B7C9032827B,host.name=myhost",
+        )];
 
         let config = OtlpConfig::from_env(env.into_iter());
 
@@ -690,12 +693,10 @@ mod tests {
 
     #[test]
     fn config_from_env_headers_ignores_list_valued_properties() {
-        let env = vec![
-            (
-                "OTEL_EXPORTER_OTLP_HEADERS",
-                "X-ApiKey=Api-46D99F4427AB40069F573B7C9032827B;X-ApiEndpoint=localhost,X-Service=myhost",
-            ),
-        ];
+        let env = vec![(
+            "OTEL_EXPORTER_OTLP_HEADERS",
+            "X-ApiKey=Api-46D99F4427AB40069F573B7C9032827B;X-ApiEndpoint=localhost,X-Service=myhost",
+        )];
 
         let config = OtlpConfig::from_env(env.into_iter());
 

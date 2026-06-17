@@ -1,6 +1,6 @@
 use sval_derive::Value;
 
-use super::{stream_attributes, stream_field, AnyValue, KeyValue};
+use super::{AnyValue, KeyValue, stream_attributes, stream_field};
 
 #[derive(Value)]
 pub struct Resource<'a, A: ?Sized = InlineResourceAttributes<'a>> {

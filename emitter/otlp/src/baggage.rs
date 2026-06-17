@@ -300,19 +300,49 @@ mod tests {
             ("", Vec::<(&str, Value)>::new()),
             ("a=b", vec![("a", Value::Single(Cow::Borrowed("b")))]),
             ("a = b", vec![("a", Value::Single(Cow::Borrowed("b")))]),
-            ("a=b,c=d", vec![("a", Value::Single(Cow::Borrowed("b"))), ("c", Value::Single(Cow::Borrowed("d")))]),
+            (
+                "a=b,c=d",
+                vec![
+                    ("a", Value::Single(Cow::Borrowed("b"))),
+                    ("c", Value::Single(Cow::Borrowed("d"))),
+                ],
+            ),
             ("a=b,", vec![("a", Value::Single(Cow::Borrowed("b")))]),
-            ("a=b=c", vec![("a", Value::List(vec![("b", Property::Single(Cow::Borrowed("c")))]))]),
+            (
+                "a=b=c",
+                vec![(
+                    "a",
+                    Value::List(vec![("b", Property::Single(Cow::Borrowed("c")))]),
+                )],
+            ),
             (
                 "a=b;c=d",
-                vec![("a", Value::List(vec![("b", Property::None), ("c", Property::Single(Cow::Borrowed("d")))]))],
+                vec![(
+                    "a",
+                    Value::List(vec![
+                        ("b", Property::None),
+                        ("c", Property::Single(Cow::Borrowed("d"))),
+                    ]),
+                )],
             ),
             (
                 "a = b; c = d",
-                vec![("a", Value::List(vec![("b", Property::None), ("c", Property::Single(Cow::Borrowed("d")))]))],
+                vec![(
+                    "a",
+                    Value::List(vec![
+                        ("b", Property::None),
+                        ("c", Property::Single(Cow::Borrowed("d"))),
+                    ]),
+                )],
             ),
-            ("a=b;", vec![("a", Value::List(vec![("b", Property::None)]))]),
-            ("a=b%20", vec![("a", Value::Single(Cow::Owned("b ".into())))]),
+            (
+                "a=b;",
+                vec![("a", Value::List(vec![("b", Property::None)]))],
+            ),
+            (
+                "a=b%20",
+                vec![("a", Value::Single(Cow::Owned("b ".into())))],
+            ),
             (
                 "key1=value1;property1;property2 , key2 = value2, key3=value3; propertyKey=property%20Value",
                 vec![
@@ -329,7 +359,10 @@ mod tests {
                         "key3",
                         Value::List(vec![
                             ("value3", Property::None),
-                            ("propertyKey", Property::Single(Cow::Owned("property Value".into()))),
+                            (
+                                "propertyKey",
+                                Property::Single(Cow::Owned("property Value".into())),
+                            ),
                         ]),
                     ),
                 ],

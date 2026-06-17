@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use sval_derive::Value;
 
 use crate::data::{
-    stream_attributes, stream_field, AnyValue, EmitValue, KeyValue, Stacktrace, TextValue,
+    AnyValue, EmitValue, KeyValue, Stacktrace, TextValue, stream_attributes, stream_field,
 };
 
 #[derive(Value)]
@@ -124,10 +124,10 @@ impl<T, S, P> PropsSpanAttributes<T, S, P> {
 }
 
 impl<
-        TR: From<emit::TraceId> + sval::Value,
-        SP: From<emit::SpanId> + sval::Value,
-        P: emit::props::Props,
-    > sval::Value for PropsSpanAttributes<TR, SP, P>
+    TR: From<emit::TraceId> + sval::Value,
+    SP: From<emit::SpanId> + sval::Value,
+    P: emit::props::Props,
+> sval::Value for PropsSpanAttributes<TR, SP, P>
 {
     fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(&'sval self, stream: &mut S) -> sval::Result {
         let mut trace_id = None;
@@ -320,11 +320,8 @@ struct PropsLinks<TR, SP, V> {
     _marker: PhantomData<(TR, SP)>,
 }
 
-impl<
-        TR: From<emit::TraceId> + sval::Value,
-        SP: From<emit::SpanId> + sval::Value,
-        V: sval::Value,
-    > sval::Value for PropsLinks<TR, SP, V>
+impl<TR: From<emit::TraceId> + sval::Value, SP: From<emit::SpanId> + sval::Value, V: sval::Value>
+    sval::Value for PropsLinks<TR, SP, V>
 {
     fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(&self, stream: &mut S) -> sval::Result {
         // Map a sequence of formatted span links like:
@@ -340,13 +337,13 @@ impl<
         }
 
         impl<
-                'sval,
-                'a,
-                'b,
-                TR: From<emit::TraceId> + sval::Value,
-                SP: From<emit::SpanId> + sval::Value,
-                S: sval::Stream<'b> + ?Sized,
-            > sval::Stream<'sval> for TextToLinkElements<'a, TR, SP, S>
+            'sval,
+            'a,
+            'b,
+            TR: From<emit::TraceId> + sval::Value,
+            SP: From<emit::SpanId> + sval::Value,
+            S: sval::Stream<'b> + ?Sized,
+        > sval::Stream<'sval> for TextToLinkElements<'a, TR, SP, S>
         {
             fn null(&mut self) -> sval::Result {
                 sval::error()

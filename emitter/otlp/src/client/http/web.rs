@@ -7,14 +7,14 @@ This transport supports HTTP1.
 use std::{borrow::Cow, error, fmt, future::Future, pin::Pin, sync::Arc, time::Duration};
 
 use bytes::Buf;
-use js_sys::{Map, Object, Reflect, Uint8Array, JSON};
+use js_sys::{JSON, Map, Object, Reflect, Uint8Array};
 use wasm_bindgen::prelude::*;
 
 use crate::{
-    client::http::{outgoing_traceparent_header, HttpContent, HttpUri, HttpVersion},
+    Error,
+    client::http::{HttpContent, HttpUri, HttpVersion, outgoing_traceparent_header},
     data::EncodedPayload,
     internal_metrics::InternalMetrics,
-    Error,
 };
 
 pub(crate) struct HttpConnection {

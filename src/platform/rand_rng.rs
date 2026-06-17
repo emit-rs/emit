@@ -43,7 +43,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn gen() {
+    fn rng_gen() {
         assert_ne!(RandRng::new().gen_u128(), RandRng::new().gen_u128());
         assert_ne!(RandRng::new().gen_u64(), RandRng::new().gen_u64());
         assert_ne!(RandRng::new().fill([0; 32]), RandRng::new().fill([0; 32]));

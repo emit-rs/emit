@@ -2,7 +2,7 @@
 name = "emit_otlp_test_integration"
 version = "0.0.0"
 publish = false
-edition = "2021"
+edition = "2024"
 
 [features]
 tls-native = ["emit_otlp/tls-native"]

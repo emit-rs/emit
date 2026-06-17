@@ -119,8 +119,8 @@ mod span_elapsed {
             .observe(elapsed.as_secs_f64());
     }
 
-    pub fn take(
-    ) -> impl IntoIterator<Item = (emit::Template<'static>, emit::metric::exp::Distribution)> {
+    pub fn take()
+    -> impl IntoIterator<Item = (emit::Template<'static>, emit::metric::exp::Distribution)> {
         let mut guard = SPAN_ELAPSED_SECS.lock().unwrap();
         std::mem::take(&mut *guard)
     }

@@ -12,9 +12,9 @@ use emit::{Filter as _, Props as _};
 use sval::{Stream, Value};
 
 use super::{
-    any_value, stream_encoded_scope_items, EncodedEvent, EncodedPayload, EncodedScopeItems,
-    EventEncoder, InstrumentationScope, KeyValue, MessageFormatter, MessageRenderer, RawEncoder,
-    RequestEncoder,
+    EncodedEvent, EncodedPayload, EncodedScopeItems, EventEncoder, InstrumentationScope, KeyValue,
+    MessageFormatter, MessageRenderer, RawEncoder, RequestEncoder, any_value,
+    stream_encoded_scope_items,
 };
 
 pub(crate) struct MetricsEventEncoder {

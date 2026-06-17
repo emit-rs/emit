@@ -24,22 +24,22 @@ use emit_core::{
     well_known::{KEY_ERR, KEY_LVL},
 };
 
-use crate::{frame::Frame, span::Span, Metric};
+use crate::{Metric, frame::Frame, span::Span};
 
 #[cfg(feature = "std")]
 use std::{
     boxed::Box,
     error::Error,
     future::Future,
-    panic::{catch_unwind, resume_unwind, AssertUnwindSafe},
+    panic::{AssertUnwindSafe, catch_unwind, resume_unwind},
     pin::Pin,
     task::{Context, Poll},
 };
 
-use crate::metric::{sampler, Sampler};
+use crate::metric::{Sampler, sampler};
 use crate::{
-    span::{self, Completion, SpanGuard, SpanId, TraceId},
     Level,
+    span::{self, Completion, SpanGuard, SpanId, TraceId},
 };
 
 #[diagnostic::on_unimplemented(

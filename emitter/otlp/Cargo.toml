@@ -8,7 +8,7 @@ repository = "https://github.com/emit-rs/emit"
 description = "Emit diagnostic events to an OpenTelemetry-compatible collector."
 keywords = ["logging", "tracing", "metrics", "observability"]
 categories = ["development-tools::debugging"]
-edition = "2021"
+edition = "2024"
 exclude = ["test"]
 
 [features]

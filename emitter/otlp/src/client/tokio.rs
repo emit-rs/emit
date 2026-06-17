@@ -1,8 +1,9 @@
 use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 
-use futures_util::{stream::FuturesUnordered, StreamExt};
+use futures_util::{StreamExt, stream::FuturesUnordered};
 
 use crate::{
+    Error,
     client::{Channel, ClientEventEncoder, OtlpBuilder, OtlpInner, OtlpTransport},
     data::{
         logs::{LogsEventEncoder, LogsRequestEncoder},
@@ -10,7 +11,6 @@ use crate::{
         traces::{TracesEventEncoder, TracesRequestEncoder},
     },
     internal_metrics::InternalMetrics,
-    Error,
 };
 
 pub(super) type Handle = std::thread::JoinHandle<()>;

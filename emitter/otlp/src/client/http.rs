@@ -32,10 +32,10 @@ use bytes::Buf;
 use emit::{Ctxt as _, Props as _};
 
 use crate::{
+    Error,
     client::Encoding,
     data::{EncodedPayload, PreEncodedCursor},
     internal_metrics::InternalMetrics,
-    Error,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

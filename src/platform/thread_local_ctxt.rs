@@ -4,7 +4,7 @@ The [`ThreadLocalCtxt`] type.
 
 use std::{
     cell::RefCell,
-    collections::{hash_map, HashMap},
+    collections::{HashMap, hash_map},
     mem,
     ops::ControlFlow,
     sync::{Arc, Mutex},

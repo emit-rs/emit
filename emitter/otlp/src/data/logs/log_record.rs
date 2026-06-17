@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use sval_derive::Value;
 
-use crate::data::{stream_attributes, stream_field, AnyValue, KeyValue, Stacktrace, TextValue};
+use crate::data::{AnyValue, KeyValue, Stacktrace, TextValue, stream_attributes, stream_field};
 
 #[derive(Value)]
 #[repr(i32)]
@@ -78,10 +78,10 @@ impl<T, S, P> PropsLogRecordAttributes<T, S, P> {
 }
 
 impl<
-        TR: From<emit::TraceId> + sval::Value,
-        SP: From<emit::SpanId> + sval::Value,
-        P: emit::props::Props,
-    > sval::Value for PropsLogRecordAttributes<TR, SP, P>
+    TR: From<emit::TraceId> + sval::Value,
+    SP: From<emit::SpanId> + sval::Value,
+    P: emit::props::Props,
+> sval::Value for PropsLogRecordAttributes<TR, SP, P>
 {
     fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(&'sval self, stream: &mut S) -> sval::Result {
         let mut trace_id = None;

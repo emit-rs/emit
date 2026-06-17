@@ -337,12 +337,12 @@ impl<TEmitter: Emitter, TFilter: Filter, TCtxt: Ctxt, TClock: Clock, TRng: Rng>
 }
 
 impl<
-        TEmitter: Emitter + Send + Sync + 'static,
-        TFilter: Filter + Send + Sync + 'static,
-        TCtxt: Ctxt + Send + Sync + 'static,
-        TClock: Clock + Send + Sync + 'static,
-        TRng: Rng + Send + Sync + 'static,
-    > Setup<TEmitter, TFilter, TCtxt, TClock, TRng>
+    TEmitter: Emitter + Send + Sync + 'static,
+    TFilter: Filter + Send + Sync + 'static,
+    TCtxt: Ctxt + Send + Sync + 'static,
+    TClock: Clock + Send + Sync + 'static,
+    TRng: Rng + Send + Sync + 'static,
+> Setup<TEmitter, TFilter, TCtxt, TClock, TRng>
 where
     TCtxt::Frame: Send + 'static,
 {
@@ -478,12 +478,12 @@ where
 }
 
 impl<
-        TEmitter: InternalEmitter + Send + Sync + 'static,
-        TFilter: InternalFilter + Send + Sync + 'static,
-        TCtxt: InternalCtxt + Send + Sync + 'static,
-        TClock: InternalClock + Send + Sync + 'static,
-        TRng: InternalRng + Send + Sync + 'static,
-    > Setup<TEmitter, TFilter, TCtxt, TClock, TRng>
+    TEmitter: InternalEmitter + Send + Sync + 'static,
+    TFilter: InternalFilter + Send + Sync + 'static,
+    TCtxt: InternalCtxt + Send + Sync + 'static,
+    TClock: InternalClock + Send + Sync + 'static,
+    TRng: InternalRng + Send + Sync + 'static,
+> Setup<TEmitter, TFilter, TCtxt, TClock, TRng>
 where
     TCtxt::Frame: Send + 'static,
 {
