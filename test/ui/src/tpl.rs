@@ -19,7 +19,7 @@ fn tpl_event_meta() {
 #[test]
 fn tpl_cfg() {
     assert_eq!(
-        "Hello, {user}",
+        "Hello, {user}{ignored}",
         emit::tpl!("Hello, {#[cfg(not(emit_disabled))] user}{#[cfg(emit_disabled)]ignored}")
             .to_string()
     );
