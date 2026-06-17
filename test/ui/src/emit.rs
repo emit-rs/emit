@@ -83,7 +83,7 @@ fn emit_interpolation() {
 fn emit_cfg() {
     let rt = simple_runtime(
         |evt| {
-            assert_eq!("Hello, , true", evt.msg().to_string());
+            assert_eq!("Hello, {disabled}, true", evt.msg().to_string());
         },
         |_| true,
     );
