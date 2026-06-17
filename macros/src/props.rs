@@ -148,8 +148,8 @@ impl Props {
             match_bound_tokens.push(kv_match_bound_tokens);
         }
 
-        let props_tokens =
-            quote!(emit::__private::__PrivateMacroProps::from_array([#(#match_bound_tokens),*]));
+        // TODO: Detect `is_sorted` through `key_as()` calls
+        let props_tokens = quote!(emit::__private::__PrivateMacroProps::from_array([#(#match_bound_tokens),*], false));
         let body_tokens = match_arm(props_tokens)?;
 
         Ok(quote!({
@@ -307,9 +307,7 @@ impl Props {
                         emit::__private::core::ops::ControlFlow::Continue(())
                     }
 
-                    fn is_unique(&self) -> bool {
-                        true
-                    }
+                    // TODO: detect `is_sorted` through `key_as()` calls
                 }
             }
 
