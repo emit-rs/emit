@@ -8,7 +8,6 @@ use core::{
 
 use emit_core::event::Event;
 use emit_core::{
-    and::And,
     clock::Clock,
     ctxt::Ctxt,
     emitter::Emitter,
@@ -871,19 +870,13 @@ pub fn __must_use_evt<T>(value: T) -> T {
 
 #[track_caller]
 #[must_use = "this macro returns an `Event` without emitting it; send it through an `emit::Emitter`, or use the `emit::emit!` macro instead"]
-pub fn __private_evt<'a, B: Props, P: Props>(
+pub fn __private_evt<'a, P: Props>(
     mdl: impl Into<Path<'a>>,
     tpl: impl Into<Template<'a>>,
     extent: impl ToExtent,
-    base_props: B,
     props: P,
-) -> Event<'a, And<P, B>> {
-    Event::new(
-        mdl.into(),
-        tpl.into(),
-        extent.to_extent(),
-        props.and_props(base_props),
-    )
+) -> Event<'a, P> {
+    Event::new(mdl.into(), tpl.into(), extent.to_extent(), props)
 }
 
 #[track_caller]
@@ -906,25 +899,26 @@ pub fn __private_begin_span<
 >(
     rt: &'a Runtime<E, F, C, T, R>,
     mdl: impl Into<Path<'static>>,
-    name: impl Into<Str<'static>>,
-    lvl: Option<&'b (impl CaptureLevel + ?Sized)>,
+    completion_lvl: Option<&'b (impl CaptureLevel + ?Sized)>,
     when: Option<&'b (impl Filter + ?Sized)>,
     span_ctxt_props: impl Props,
     span_evt_props: P,
     default_complete: S,
 ) -> (SpanGuard<'static, &'a T, P, S>, Frame<&'a C>) {
     let mdl = mdl.into();
-    let name = name.into();
 
     SpanGuard::new(
-        __PrivateBeginSpanFilter { rt, when, lvl },
+        __PrivateBeginSpanFilter {
+            rt,
+            when,
+            completion_lvl,
+        },
         rt.ctxt(),
         rt.clock(),
         rt.rng(),
         default_complete,
         span_ctxt_props,
         mdl,
-        name,
         span_evt_props,
     )
 }
@@ -932,7 +926,7 @@ pub fn __private_begin_span<
 pub struct __PrivateBeginSpanFilter<'a, 'b, E, F, C, T, R, W: ?Sized, CL: ?Sized> {
     rt: &'a Runtime<E, F, C, T, R>,
     when: Option<&'b W>,
-    lvl: Option<&'b CL>,
+    completion_lvl: Option<&'b CL>,
 }
 
 impl<'a, 'b, E, F: Filter, C, T, R, W: Filter + ?Sized, CL: CaptureLevel + ?Sized> Filter
@@ -942,9 +936,9 @@ impl<'a, 'b, E, F: Filter, C, T, R, W: Filter + ?Sized, CL: CaptureLevel + ?Size
         let evt = evt.to_event();
 
         let lvl_prop = self
-            .lvl
-            .and_then(|lvl| lvl.capture())
-            .map(|lvl| (KEY_LVL, lvl));
+            .completion_lvl
+            .and_then(|completion_lvl| completion_lvl.capture())
+            .map(|completion_lvl| (KEY_LVL, completion_lvl));
 
         FirstDefined(self.when, self.rt.filter())
             .matches(evt.map_props(|props| lvl_prop.and_props(props)))
@@ -1195,42 +1189,22 @@ pub fn __must_use_metric<T>(value: T) -> T {
 }
 
 #[track_caller]
-pub fn __private_metric<'a, V: ToValue, P: Props>(
+pub fn __private_metric<'a, P: Props>(
     mdl: impl Into<Path<'a>>,
     extent: impl ToExtent,
     props: P,
-    metric_name: impl Into<Str<'a>>,
-    metric_agg: impl Into<Str<'a>>,
-    metric_value: V,
-) -> Metric<'a, V, P> {
-    Metric::new(
-        mdl.into(),
-        metric_name,
-        metric_agg,
-        extent.to_extent(),
-        metric_value,
-        props,
-    )
+) -> Metric<'a, P> {
+    Metric::new(mdl.into(), extent.to_extent(), props)
 }
 
 #[track_caller]
-pub fn __private_sample<'a, S: Sampler, V: ToValue + ?Sized, P: Props + ?Sized>(
+pub fn __private_sample<'a, S: Sampler, P: Props + ?Sized>(
     sampler: S,
     mdl: impl Into<Path<'a>>,
     extent: impl ToExtent,
     props: &'a P,
-    metric_name: impl Into<Str<'a>>,
-    metric_agg: impl Into<Str<'a>>,
-    metric_value: &'a V,
 ) {
-    sampler.metric(__private_metric(
-        mdl,
-        extent,
-        props,
-        metric_name,
-        metric_agg,
-        metric_value,
-    ));
+    sampler.metric(__private_metric(mdl, extent, props));
 }
 
 #[track_caller]
@@ -1332,15 +1306,15 @@ impl_private_tuple_macro_props!(
     (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5 6 P6 7 P7 8 P8 9 P9 10 P10 11 P11 12 P12 13 P13 14 P14 15 P15),
 );
 
-pub struct __PrivateSpanEventMacroProps<P, T>(P, T);
+pub struct __PrivateMacroExtendedProps<P, T>(P, T);
 
-impl<P, T> __PrivateSpanEventMacroProps<P, T> {
+impl<P, T> __PrivateMacroExtendedProps<P, T> {
     pub fn new(user_props: P, macro_props: T) -> Self {
-        __PrivateSpanEventMacroProps(user_props, macro_props)
+        __PrivateMacroExtendedProps(user_props, macro_props)
     }
 }
 
-impl<P, T> Deref for __PrivateSpanEventMacroProps<P, T> {
+impl<P, T> Deref for __PrivateMacroExtendedProps<P, T> {
     type Target = P;
 
     fn deref(&self) -> &P {
@@ -1348,19 +1322,19 @@ impl<P, T> Deref for __PrivateSpanEventMacroProps<P, T> {
     }
 }
 
-impl<P, T> DerefMut for __PrivateSpanEventMacroProps<P, T> {
+impl<P, T> DerefMut for __PrivateMacroExtendedProps<P, T> {
     fn deref_mut(&mut self) -> &mut P {
         &mut self.0
     }
 }
 
-impl<P: Props, T: Props> Props for __PrivateSpanEventMacroProps<P, T> {
+impl<P: Props, T: Props> Props for __PrivateMacroExtendedProps<P, T> {
     fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
         &'kv self,
         mut for_each: F,
     ) -> ControlFlow<()> {
-        self.0.for_each(&mut for_each)?;
         self.1.for_each(&mut for_each)?;
+        self.0.for_each(&mut for_each)?;
 
         ControlFlow::Continue(())
     }
@@ -1368,6 +1342,6 @@ impl<P: Props, T: Props> Props for __PrivateSpanEventMacroProps<P, T> {
     fn get<'v, K: ToStr>(&'v self, key: K) -> Option<Value<'v>> {
         let key = key.to_str();
 
-        self.0.get(key.by_ref()).or_else(|| self.1.get(key))
+        self.1.get(key.by_ref()).or_else(|| self.0.get(key))
     }
 }

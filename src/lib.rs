@@ -192,13 +192,16 @@ pub use self::{
     path::Path,
     props::Props,
     rng::Rng,
-    span::{Span, SpanCtxt, SpanId, TraceId},
+    span::{Span, SpanCtxt, SpanId, SpanKind, TraceId},
     str::Str,
     template::Template,
     timer::Timer,
     timestamp::Timestamp,
     value::Value,
 };
+
+#[cfg(feature = "alloc")]
+pub use self::span::SpanLinkSet;
 
 mod buf;
 mod macro_hooks;
@@ -285,7 +288,7 @@ This method will use [`runtime::shared()`] as the source, emitting samples as ev
 */
 #[cfg(feature = "implicit_rt")]
 pub fn sample(source: impl metric::Source) {
-    source.sample_metrics(metric::sampler::from_emitter(runtime::shared()))
+    source.sample_metrics(metric::sampler::from_runtime(runtime::shared()))
 }
 
 #[doc(hidden)]

@@ -62,7 +62,7 @@ fn main() {
     // do this regularly instead of just once at the end.
     for (tpl, distribution) in span_elapsed::take() {
         emit::count_sample!(
-            name: &tpl.to_string(),
+            name: tpl.to_string(),
             value: distribution.count(),
             props: distribution,
         );

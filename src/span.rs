@@ -14,6 +14,7 @@ use emit_core::{
     and::And,
     clock::Clock,
     ctxt::Ctxt,
+    emitter::Emitter,
     empty::Empty,
     event::{Event, ToEvent},
     extent::{Extent, ToExtent},
@@ -21,17 +22,22 @@ use emit_core::{
     path::Path,
     props::{ErasedProps, Props},
     rng::Rng,
+    runtime::Runtime,
     str::{Str, ToStr},
     template::{self, Template},
     timestamp::Timestamp,
     value::{FromValue, ToValue, Value},
     well_known::{
-        KEY_EVT_KIND, KEY_SPAN_ID, KEY_SPAN_NAME, KEY_SPAN_PARENT, KEY_TRACE_ID, SPAN_KIND_CLIENT,
-        SPAN_KIND_CONSUMER, SPAN_KIND_INTERNAL, SPAN_KIND_PRODUCER, SPAN_KIND_SERVER,
+        KEY_EVT_KIND, KEY_SPAN_ID, KEY_SPAN_KIND, KEY_SPAN_NAME, KEY_SPAN_PARENT, KEY_TRACE_ID,
+        SPAN_KIND_CLIENT, SPAN_KIND_CONSUMER, SPAN_KIND_INTERNAL, SPAN_KIND_PRODUCER,
+        SPAN_KIND_SERVER,
     },
 };
 
-use crate::{kind::Kind, Frame, Timer};
+#[cfg(feature = "alloc")]
+use emit_core::well_known::KEY_SPAN_LINKS;
+
+use crate::{kind::Kind, level::Level, Frame, Timer};
 use core::{
     fmt, mem,
     num::{NonZeroU128, NonZeroU64},
@@ -442,7 +448,6 @@ A `SpanEvent` can be converted into an [`Event`] through its [`ToEvent`] impleme
 */
 pub struct Span<'a, P> {
     mdl: Path<'a>,
-    name: Str<'a>,
     extent: Option<Extent>,
     tpl: Option<Template<'a>>,
     props: P,
@@ -455,20 +460,13 @@ impl<'a, P: Props> Span<'a, P> {
     Each span consists of:
 
     - `mdl`: The module that executed the operation the span is tracking.
-    - `name`: The name of the operation the span is tracking.
     - `extent`: The time the operation spent executing. The extent should be a span.
     - `props`: Additional [`Props`] to associate with the span. These may include the [`SpanCtxt`] with the trace and span ids for the span, or they may be part of the ambient context.
     */
-    pub fn new(
-        mdl: impl Into<Path<'a>>,
-        name: impl Into<Str<'a>>,
-        extent: impl ToExtent,
-        props: P,
-    ) -> Self {
+    pub fn new(mdl: impl Into<Path<'a>>, extent: impl ToExtent, props: P) -> Self {
         Span {
             mdl: mdl.into(),
             extent: extent.to_extent(),
-            name: name.into(),
             tpl: None,
             props,
         }
@@ -490,18 +488,70 @@ impl<'a, P: Props> Span<'a, P> {
     }
 
     /**
-    Get the name of the operation.
+    Get the name of the executing operation.
     */
-    pub fn name(&self) -> &Str<'a> {
-        &self.name
+    pub fn name(&self) -> Option<Str<'_>> {
+        self.props.pull(KEY_SPAN_NAME)
     }
 
     /**
-    Set the name of the span.
+    Set the name of the executing operation.
     */
-    pub fn with_name(mut self, name: impl Into<Str<'a>>) -> Self {
-        self.name = name.into();
-        self
+    pub fn with_name(self, name: impl Into<Str<'a>>) -> Span<'a, And<(&'static str, Str<'a>), P>> {
+        self.map_props(|props| (KEY_SPAN_NAME, name.into()).and_props(props))
+    }
+
+    /**
+    Get the kind of the executing operation.
+    */
+    pub fn kind(&self) -> Option<SpanKind> {
+        self.props.pull(KEY_SPAN_KIND)
+    }
+
+    /**
+    Set the kind of the executing operation.
+    */
+    pub fn with_kind(
+        self,
+        kind: impl Into<SpanKind>,
+    ) -> Span<'a, And<(&'static str, SpanKind), P>> {
+        self.map_props(|props| (KEY_SPAN_KIND, kind.into()).and_props(props))
+    }
+
+    /**
+    Get the ctxt of the executing operation.
+
+    This method accepts a [`Ctxt`], which will be used to pull the [`SpanCtxt`] if this span doesn't carry them in its own local props.
+    */
+    pub fn ctxt(&self, ctxt: impl Ctxt) -> SpanCtxt {
+        ctxt.with_current(|props| {
+            let props = (&self.props).and_props(props);
+
+            let trace_id = props.pull(KEY_TRACE_ID);
+            let span_id = props.pull(KEY_SPAN_ID);
+            let span_parent = props.pull(KEY_SPAN_PARENT);
+
+            SpanCtxt::new(trace_id, span_parent, span_id)
+        })
+    }
+
+    /**
+    Get the set of spans linked to the executing operation.
+    */
+    #[cfg(feature = "alloc")]
+    pub fn links(&self) -> Option<SpanLinkSet> {
+        self.props.pull(KEY_SPAN_LINKS)
+    }
+
+    /**
+    Set the set of spans linked to the executing operation.
+    */
+    #[cfg(feature = "alloc")]
+    pub fn with_links(
+        self,
+        links: impl Into<SpanLinkSet>,
+    ) -> Span<'a, And<(&'static str, SpanLinkSet), P>> {
+        self.map_props(|props| (KEY_SPAN_LINKS, links.into()).and_props(props))
     }
 
     /**
@@ -561,7 +611,6 @@ impl<'a, P: Props> Span<'a, P> {
         Span {
             mdl: self.mdl,
             extent: self.extent,
-            name: self.name,
             tpl: self.tpl,
             props,
         }
@@ -574,7 +623,6 @@ impl<'a, P: Props> Span<'a, P> {
         Span {
             mdl: self.mdl,
             extent: self.extent,
-            name: self.name,
             tpl: self.tpl,
             props: map(self.props),
         }
@@ -602,7 +650,6 @@ impl<'a, P: Props> Span<'a, P> {
         Span {
             mdl: self.mdl.by_ref(),
             extent: self.extent.clone(),
-            name: self.name.by_ref(),
             tpl: self.tpl.as_ref().map(|tpl| tpl.by_ref()),
             props: &self.props,
         }
@@ -659,7 +706,6 @@ impl<'a, P: Props> Props for Span<'a, P> {
         mut for_each: F,
     ) -> ControlFlow<()> {
         for_each(KEY_EVT_KIND.to_str(), Kind::Span.to_value())?;
-        for_each(KEY_SPAN_NAME.to_str(), self.name.to_value())?;
 
         self.props.for_each(&mut for_each)
     }
@@ -2355,7 +2401,6 @@ pub struct SpanGuard<'a, T: Clock, P: Props, F: Completion> {
 
 struct SpanGuardData<'a, P: Props> {
     mdl: Path<'a>,
-    name: Str<'a>,
     ctxt: SpanCtxt,
     props: P,
 }
@@ -2378,6 +2423,33 @@ impl<'a, T: Clock, P: Props, F: Completion> Drop for SpanGuard<'a, T, P, F> {
     }
 }
 
+impl<'a, 'b, P: Props, E: Emitter, C: Ctxt, T: Clock>
+    SpanGuard<'a, &'b T, P, completion::Default<'a, &'b E, &'b C, Level>>
+{
+    /**
+    Create a new active span.
+
+    This method defers to [`SpanGuard::new`], using the components of the given [`Runtime`]. See the docs for [`SpanGuard::new`] for details on using the returned [`SpanGuard`] and [`Frame`].
+    */
+    pub fn from_runtime<F: Filter, R: Rng>(
+        rt: &'b Runtime<E, F, C, T, R>,
+        ctxt_props: impl Props,
+        span_mdl: impl Into<Path<'a>>,
+        span_props: P,
+    ) -> (Self, Frame<&'b C>) {
+        Self::new(
+            rt.filter(),
+            rt.ctxt(),
+            rt.clock(),
+            rt.rng(),
+            completion::default(rt.emitter(), rt.ctxt()),
+            ctxt_props,
+            span_mdl,
+            span_props,
+        )
+    }
+}
+
 impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
     /**
     Create a new active span.
@@ -2387,7 +2459,7 @@ impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
     - `filter`, `ctxt`, `clock`, `rng`: These typically come from a [`crate::runtime::Runtime`], like [`crate::runtime::shared`].
     - `completion`: A [`Completion`] that will be used by default when the returned `SpanGuard` is completed.
     - `ctxt_props`: A set of [`Props`] that will be pushed to the ambient context.
-    - `span_mdl`, `span_name`, `span_props`: The input parameters to [`Span::new`] used to construct a span when the guard is completed.
+    - `span_mdl`, `span_props`: The input parameters to [`Span::new`] used to construct a span when the guard is completed.
 
     This method constructs a span based on the input properties and current context as follows:
 
@@ -2408,11 +2480,9 @@ impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
         completion: F,
         ctxt_props: impl Props,
         span_mdl: impl Into<Path<'a>>,
-        span_name: impl Into<Str<'a>>,
         span_props: P,
     ) -> (Self, Frame<C>) {
         let span_mdl = span_mdl.into();
-        let span_name = span_name.into();
 
         let span_ctxt = SpanCtxt::current(&ctxt).new_child(rng);
 
@@ -2421,7 +2491,6 @@ impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
             filter.matches(
                 Span::new(
                     span_mdl.by_ref(),
-                    span_name.by_ref(),
                     Empty,
                     (&span_props)
                         .and_props(&ctxt_props)
@@ -2441,7 +2510,6 @@ impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
             data: Some(SpanGuardData {
                 mdl: span_mdl,
                 ctxt: span_ctxt,
-                name: span_name,
                 props: span_props,
             }),
             completion: if is_enabled { Some(completion) } else { None },
@@ -2491,6 +2559,10 @@ impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
 
     /**
     Set the default completion that will be called when the span is dropped or [`SpanGuard::complete`] is called.
+
+    Note that the [`Span`] passed to the [`Completion`] *will not* include properties from the ambient context.
+    This means getting the [`SpanCtxt`] via [`Span::ctxt`] will likely return `None`.
+    You can pull the [`SpanCtxt`] from the ambient [`Ctxt`]
     */
     #[must_use = "this method returns a new `SpanGuard` that will be immediately dropped unless used"]
     pub fn with_completion<U: Completion>(mut self, completion: U) -> SpanGuard<'a, T, P, U> {
@@ -2519,11 +2591,34 @@ impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
     Set the name of the span.
     */
     #[must_use = "this method returns a new `SpanGuard` that will be immediately dropped unless used"]
-    pub fn with_name(mut self, name: impl Into<Str<'a>>) -> Self {
-        if let Some(ref mut data) = self.data {
-            data.name = name.into();
-        }
-        self
+    pub fn with_name(
+        self,
+        name: impl Into<Str<'a>>,
+    ) -> SpanGuard<'a, T, And<(&'static str, Str<'a>), P>, F> {
+        self.map_props(|props| (KEY_SPAN_NAME, name.into()).and_props(props))
+    }
+
+    /**
+    Set the kind of the span.
+    */
+    #[must_use = "this method returns a new `SpanGuard` that will be immediately dropped unless used"]
+    pub fn with_kind(
+        self,
+        kind: impl Into<SpanKind>,
+    ) -> SpanGuard<'a, T, And<(&'static str, SpanKind), P>, F> {
+        self.map_props(|props| (KEY_SPAN_KIND, kind.into()).and_props(props))
+    }
+
+    /**
+    Set the links of the span.
+    */
+    #[must_use = "this method returns a new `SpanGuard` that will be immediately dropped unless used"]
+    #[cfg(feature = "alloc")]
+    pub fn with_links(
+        self,
+        links: impl Into<SpanLinkSet>,
+    ) -> SpanGuard<'a, T, And<(&'static str, SpanLinkSet), P>, F> {
+        self.map_props(|props| (KEY_SPAN_LINKS, links.into()).and_props(props))
     }
 
     /**
@@ -2545,7 +2640,6 @@ impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
     pub fn map_props<U: Props>(mut self, map: impl FnOnce(P) -> U) -> SpanGuard<'a, T, U, F> {
         let data = self.data.take().map(|data| SpanGuardData {
             mdl: data.mdl,
-            name: data.name,
             ctxt: data.ctxt,
             props: map(data.props),
         });
@@ -2599,7 +2693,7 @@ impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
         if let (SpanGuardState::Started(timer), Some(data), Some(completion)) =
             (self.state.take(), self.data.take(), self.completion.take())
         {
-            completion.complete(Span::new(data.mdl, data.name, timer, data.props));
+            completion.complete(Span::new(data.mdl, timer, data.props));
 
             true
         } else {
@@ -2616,7 +2710,7 @@ impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
         if let (SpanGuardState::Started(timer), Some(data), Some(_)) =
             (self.state.take(), self.data.take(), self.completion.take())
         {
-            completion.complete(Span::new(data.mdl, data.name, timer, data.props));
+            completion.complete(Span::new(data.mdl, timer, data.props));
 
             true
         } else {
@@ -2638,6 +2732,7 @@ pub mod completion {
         empty::Empty,
         event::ToEvent,
         props::{ErasedProps, Props},
+        runtime::Runtime,
         template::Template,
         value::{ToValue, Value},
         well_known::{KEY_ERR, KEY_LVL},
@@ -2728,6 +2823,15 @@ pub mod completion {
         }
     }
 
+    impl<'a, 'b, E: Emitter, C: Ctxt, L> Default<'a, &'b E, &'b C, L> {
+        /**
+        Create a default completion from the given runtime.
+        */
+        pub fn from_runtime<F, T, R>(rt: &'b Runtime<E, F, C, T, R>) -> Self {
+            Self::new(rt.emitter(), rt.ctxt())
+        }
+    }
+
     impl<'a, E, C, L> Default<'a, E, C, L> {
         /**
         Wrap the given emitter and context.
@@ -2793,6 +2897,19 @@ pub mod completion {
     */
     pub const fn default<'a, E: Emitter, C: Ctxt>(emitter: E, ctxt: C) -> Default<'a, E, C> {
         Default::new(emitter, ctxt)
+    }
+
+    /**
+    Create a default [`Completion`] from a [`Runtime`].
+
+    On completion, a [`Span`] will be emitted as an event using [`Span::to_event`].
+
+    If the completion is called during a panic, it will attach an error to the span.
+    */
+    pub fn default_from_runtime<'a, 'b, E: Emitter, F, C: Ctxt, T, R>(
+        rt: &'b Runtime<E, F, C, T, R>,
+    ) -> Default<'a, &'b E, &'b C> {
+        Default::from_runtime(rt)
     }
 
     pub(crate) struct PanicError {
@@ -2978,12 +3095,16 @@ pub mod completion {
             let called = Cell::new(false);
 
             let completion = from_fn(|span| {
-                assert_eq!("test", span.name());
+                assert_eq!("test", span.name().unwrap());
 
                 called.set(true);
             });
 
-            completion.complete(Span::new(Path::new_raw("test"), "test", Empty, Empty));
+            completion.complete(Span::new(
+                Path::new_raw("test"),
+                Empty,
+                ("span_name", "test"),
+            ));
 
             assert!(called.get());
         }
@@ -2993,14 +3114,18 @@ pub mod completion {
             let called = Cell::new(false);
 
             let completion = from_fn(|span| {
-                assert_eq!("test", span.name());
+                assert_eq!("test", span.name().unwrap());
 
                 called.set(true);
             });
 
             let completion = &completion as &dyn ErasedCompletion;
 
-            completion.complete(Span::new(Path::new_raw("test"), "test", Empty, Empty));
+            completion.complete(Span::new(
+                Path::new_raw("test"),
+                Empty,
+                ("span_name", "test"),
+            ));
 
             assert!(called.get());
         }
@@ -3016,7 +3141,22 @@ pub mod completion {
                 Empty,
             );
 
-            completion.complete(Span::new(Path::new_raw("test"), "test", Empty, Empty));
+            completion.complete(Span::new(Path::new_raw("test"), Empty, Empty));
+
+            assert!(called.get());
+        }
+
+        #[test]
+        fn default_completion_from_runtime() {
+            let called = Cell::new(false);
+
+            let rt = Runtime::default().with_emitter(emitter::from_fn(|_| {
+                called.set(true);
+            }));
+
+            let completion = default_from_runtime(&rt);
+
+            completion.complete(Span::new(Path::new_raw("test"), Empty, Empty));
 
             assert!(called.get());
         }
@@ -3035,7 +3175,7 @@ pub mod completion {
             )
             .with_lvl(Level::Info);
 
-            completion.complete(Span::new(Path::new_raw("test"), "test", Empty, Empty));
+            completion.complete(Span::new(Path::new_raw("test"), Empty, Empty));
 
             assert!(called.get());
         }
@@ -3055,7 +3195,7 @@ pub mod completion {
             .with_lvl(Level::Info)
             .with_tpl(Template::literal("test template"));
 
-            completion.complete(Span::new(Path::new_raw("test"), "test", Empty, Empty));
+            completion.complete(Span::new(Path::new_raw("test"), Empty, Empty));
 
             assert!(called.get());
         }
@@ -3069,7 +3209,7 @@ pub mod completion {
         impl<T: Completion> Drop for Guard<T> {
             fn drop(&mut self) {
                 self.0
-                    .complete(Span::new(Path::new_raw("test"), "test", Empty, Empty));
+                    .complete(Span::new(Path::new_raw("test"), Empty, Empty));
             }
         }
 
@@ -3586,9 +3726,21 @@ mod tests {
     fn span_new() {
         let span = Span::new(
             Path::new_raw("test"),
-            "my span",
             Timestamp::from_unix(Duration::from_secs(1)),
-            ("span_prop", true),
+            [
+                ("span_prop", Value::from(true)),
+                ("span_name", Value::from("my span")),
+                ("span_kind", Value::from("internal")),
+                ("trace_id", Value::from("00000000000000000000000000000001")),
+                ("span_parent", Value::from("0000000000000002")),
+                ("span_id", Value::from("0000000000000003")),
+            ],
+        );
+
+        let ctxt = SpanCtxt::new(
+            TraceId::from_u128(1),
+            SpanId::from_u64(2),
+            SpanId::from_u64(3),
         );
 
         assert_eq!("test", span.mdl());
@@ -3596,17 +3748,85 @@ mod tests {
             Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
             span.extent().unwrap().as_point()
         );
-        assert_eq!("my span", span.name());
+        assert_eq!("my span", span.name().unwrap());
+        assert_eq!(SpanKind::Internal, span.kind().unwrap());
         assert_eq!(true, span.props().pull::<bool, _>("span_prop").unwrap());
+        assert_eq!(ctxt, span.ctxt(Empty));
+
+        let span = span.with_name("my span 2").with_kind(SpanKind::Consumer);
+
+        assert_eq!("my span 2", span.name().unwrap());
+        assert_eq!(SpanKind::Consumer, span.kind().unwrap());
+
+        #[cfg(feature = "alloc")]
+        {
+            let set = SpanLinkSet::from_iter([
+                SpanLink::new(
+                    TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                    SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                ),
+                SpanLink::new(
+                    TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                    SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                ),
+            ]);
+
+            let span = span.with_links(set.clone());
+
+            assert_eq!(set, span.links().unwrap());
+        }
+    }
+
+    #[test]
+    #[cfg(all(feature = "std", feature = "rand", not(miri)))]
+    fn span_ctxt() {
+        let rng = crate::platform::DefaultRng::new();
+        let ctxt = crate::platform::DefaultCtxt::new();
+
+        let span = Span::new(
+            Path::new_raw("test"),
+            Timestamp::from_unix(Duration::from_secs(1)),
+            Empty,
+        );
+
+        let root = SpanCtxt::new_root(&rng);
+
+        let mut frame = ctxt.open_push(root);
+
+        ctxt.enter(&mut frame);
+
+        let current = SpanCtxt::current(&ctxt);
+
+        let span_current = span.ctxt(&ctxt);
+
+        assert_eq!(root, span_current);
+        assert_eq!(current, span_current);
+
+        assert_eq!(SpanCtxt::empty(), span.ctxt(Empty));
+
+        let unrelated_ctxt = SpanCtxt::new_root(&rng);
+        let span = Span::new(
+            Path::new_raw("test"),
+            Timestamp::from_unix(Duration::from_secs(1)),
+            unrelated_ctxt,
+        );
+
+        assert_eq!(unrelated_ctxt, span.ctxt(&ctxt));
+        assert_eq!(unrelated_ctxt, span.ctxt(Empty));
+
+        ctxt.exit(&mut frame);
+        ctxt.close(frame);
     }
 
     #[test]
     fn span_to_event() {
         let span = Span::new(
             Path::new_raw("test"),
-            "my span",
             Timestamp::from_unix(Duration::from_secs(1)),
-            ("span_prop", true),
+            [
+                ("span_prop", Value::from(true)),
+                ("span_name", Value::from("my span")),
+            ],
         );
 
         let evt = span.to_event();
@@ -3634,7 +3854,6 @@ mod tests {
             "test",
             Span::new(
                 Path::new_raw("test"),
-                "my span",
                 Timestamp::from_unix(Duration::from_secs(1)),
                 ("span_prop", true),
             )
@@ -3656,7 +3875,7 @@ mod tests {
             ),
             (None, None),
         ] {
-            let span = Span::new(Path::new_raw("test"), "my span", case, ("span_prop", true));
+            let span = Span::new(Path::new_raw("test"), case, ("span_prop", true));
 
             let extent = span.to_extent();
 
@@ -3681,7 +3900,7 @@ mod tests {
 
     #[test]
     #[cfg(all(feature = "std", feature = "rand", not(miri)))]
-    fn active_span_new() {
+    fn span_guard_new() {
         let clock = MyClock(Cell::new(0));
         let rng = crate::platform::DefaultRng::new();
         let ctxt = crate::platform::DefaultCtxt::new();
@@ -3711,7 +3930,7 @@ mod tests {
                 );
 
                 assert_eq!("test", evt.mdl());
-                assert_eq!("span", evt.name());
+                assert_eq!("span", evt.name().unwrap());
 
                 assert_eq!(1, evt.props().pull::<usize, _>("event_prop").unwrap());
 
@@ -3727,8 +3946,10 @@ mod tests {
             }),
             ("ctxt_prop", 2),
             Path::new_raw("test"),
-            "span",
-            ("event_prop", 1),
+            [
+                ("event_prop", Value::from(1)),
+                ("span_name", Value::from("span")),
+            ],
         );
 
         assert!(guard.is_enabled());
@@ -3744,7 +3965,7 @@ mod tests {
 
     #[test]
     #[cfg(all(feature = "std", feature = "rand", not(miri)))]
-    fn active_span_unstarted_complete() {
+    fn span_guard_unstarted_complete() {
         let clock = MyClock(Cell::new(0));
         let rng = crate::platform::DefaultRng::new();
         let ctxt = crate::platform::DefaultCtxt::new();
@@ -3759,7 +3980,6 @@ mod tests {
             completion::from_fn(|_| {}),
             Empty,
             Path::new_raw("test"),
-            "span",
             Empty,
         );
 
@@ -3774,7 +3994,7 @@ mod tests {
 
     #[test]
     #[cfg(all(feature = "std", feature = "rand", not(miri)))]
-    fn active_span_new_disabled() {
+    fn span_guard_new_disabled() {
         let rng = crate::platform::DefaultRng::new();
         let clock = crate::platform::DefaultClock::new();
         let ctxt = crate::platform::DefaultCtxt::new();
@@ -3791,7 +4011,6 @@ mod tests {
             }),
             Empty,
             Path::new_raw("test"),
-            "span",
             Empty,
         );
 
@@ -3808,7 +4027,7 @@ mod tests {
 
     #[test]
     #[cfg(all(feature = "std", feature = "rand", not(miri)))]
-    fn active_span_custom_complete() {
+    fn span_guard_custom_complete() {
         let ctxt = crate::platform::DefaultCtxt::new();
         let clock = crate::platform::DefaultClock::new();
         let rng = crate::platform::DefaultRng::new();
@@ -3826,7 +4045,6 @@ mod tests {
             }),
             Empty,
             Path::new_raw("test"),
-            "span",
             Empty,
         );
 
@@ -3844,7 +4062,7 @@ mod tests {
 
     #[test]
     #[cfg(all(feature = "std", feature = "rand", not(miri)))]
-    fn active_span_with_props() {
+    fn span_guard_with_props() {
         let clock = MyClock(Cell::new(0));
         let rng = crate::platform::DefaultRng::new();
         let ctxt = crate::platform::DefaultCtxt::new();
@@ -3858,19 +4076,96 @@ mod tests {
             &rng,
             completion::from_fn(|evt| {
                 assert_eq!(2, evt.props().pull::<usize, _>("event_prop").unwrap());
+                assert_eq!("test 2", evt.props().pull::<&str, _>("span_name").unwrap());
+                assert_eq!(
+                    SpanKind::Consumer,
+                    evt.props().pull::<SpanKind, _>("span_kind").unwrap()
+                );
+
+                #[cfg(feature = "alloc")]
+                {
+                    let set = SpanLinkSet::from_iter([
+                        SpanLink::new(
+                            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                        ),
+                        SpanLink::new(
+                            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                        ),
+                    ]);
+
+                    assert_eq!(
+                        set,
+                        evt.props().pull::<SpanLinkSet, _>("span_links").unwrap()
+                    );
+                }
 
                 complete_called.set(true);
             }),
             Empty,
             Path::new_raw("test"),
-            "span",
             ("event_prop", 1),
         );
 
         frame.call(move || {
             guard.start();
 
-            let guard = guard.with_props(("event_prop", 2));
+            let guard = guard
+                .with_props(("event_prop", 2))
+                .with_name("test 2")
+                .with_kind(SpanKind::Consumer);
+
+            let guard = {
+                #[cfg(feature = "alloc")]
+                {
+                    let set = SpanLinkSet::from_iter([
+                        SpanLink::new(
+                            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                        ),
+                        SpanLink::new(
+                            TraceId::from_u128(0x0123456789abcdef0123456789abcdef).unwrap(),
+                            SpanId::from_u64(0x0123456789abcdef).unwrap(),
+                        ),
+                    ]);
+
+                    guard.with_links(set)
+                }
+                #[cfg(not(feature = "alloc"))]
+                {
+                    guard
+                }
+            };
+
+            drop(guard);
+        });
+
+        assert!(complete_called.get());
+    }
+
+    #[test]
+    #[cfg(all(feature = "std", feature = "rand", not(miri)))]
+    fn span_guard_from_runtime() {
+        use emit_core::emitter;
+
+        let complete_called = Cell::new(false);
+
+        let rt = Runtime::default()
+            .with_emitter(emitter::from_fn(|_| {
+                complete_called.set(true);
+            }))
+            .with_ctxt(crate::platform::DefaultCtxt::new())
+            .with_clock(MyClock(Cell::new(0)))
+            .with_rng(crate::platform::DefaultRng::new());
+
+        let (mut guard, frame) =
+            SpanGuard::from_runtime(&rt, Empty, Path::new_raw("test"), ("event_prop", 1));
+
+        assert!(guard.is_enabled());
+
+        frame.call(move || {
+            guard.start();
 
             drop(guard);
         });

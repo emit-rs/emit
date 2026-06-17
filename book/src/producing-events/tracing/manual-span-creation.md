@@ -96,20 +96,17 @@ std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
 let span = emit::Span::new(
     // The module that created the span
     emit::mdl!(),
-    // The name of the span
-    "wait a bit",
     // The extent of the span
     timer,
     // Additional properties for the span
-    // In this case, we're just attaching the generic span context
-    emit::SpanCtxt::new(
-        // The id of the trace this span belongs to
-        emit::TraceId::from_u128(0x4bf92f3577b34da6a3ce929d0e0e4736),
-        // The id of the parent of this span
-        None,
-        // The id of this span
-        emit::SpanId::from_u64(0x00f067aa0ba902b7),
-    ),
+    emit::props! {
+        // The name of the span
+        span_name: "wait a bit",
+        // The trace id the span belongs to
+        trace_id: 0x4bf92f3577b34da6a3ce929d0e0e4736,
+        // The id of the span itself
+        span_id: 0x00f067aa0ba902b7,
+    },
 );
 
 emit::emit! { evt: span };

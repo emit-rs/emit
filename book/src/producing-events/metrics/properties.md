@@ -41,12 +41,14 @@ emit::emit!(
     evt: emit::Metric::new(
         // Metadata
         emit::mdl!(),
-        "bytes_written",
-        "count",
         emit::clock().now(),
-        591,
         // Additional properties
         emit::props! {
+            // Well-known metric properties
+            metric_name: "bytes_written",
+            metric_agg: "count",
+            metric_value: 591,
+            // Additional properties
             file: "./log.1.txt",
             version: "1.2.3-dev",
         },

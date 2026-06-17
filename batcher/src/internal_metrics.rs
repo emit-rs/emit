@@ -7,21 +7,23 @@ macro_rules! metrics {
         #[derive(Default)]
         pub(crate) struct $container { $(pub(crate) $name: $ty),* }
 
-        impl $container {
-            pub fn sample(&self) -> impl Iterator<Item = emit::metric::Metric<'static, usize, emit::empty::Empty>> + 'static {
+        impl emit::metric::Source for $container {
+            fn sample_metrics<S: emit::metric::Sampler>(&self, sampler: S) {
                 let $container { $($name),* } = self;
 
-                [$(
-                    emit::metric::Metric::new(
-                        emit::pkg!(),
-                        stringify!($name),
-                        <$ty>::AGG,
-                        emit::empty::Empty,
-                        $name.sample(),
-                        emit::empty::Empty,
-                    )
-                ),*]
-                .into_iter()
+                $(
+                    sampler.metric(
+                        emit::metric::Metric::new(
+                            emit::pkg!(),
+                            emit::Empty,
+                            emit::props! {
+                                metric_name: stringify!($name),
+                                metric_agg: <$ty>::AGG,
+                                metric_value: $name.sample(),
+                            },
+                        ),
+                    );
+                )*
             }
         }
     };

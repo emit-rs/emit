@@ -22,21 +22,23 @@ macro_rules! metrics {
             )*
         }
 
-        impl $internal_container {
-            pub fn sample(&self) -> impl Iterator<Item = emit::metric::Metric<'static, usize, emit::empty::Empty>> + 'static {
+        impl emit::metric::Source for $internal_container {
+            fn sample_metrics<S: emit::metric::Sampler>(&self, sampler: S) {
                 let $internal_container { $($metric),* } = self;
 
-                [$(
-                    emit::metric::Metric::new(
-                        emit::pkg!(),
-                        stringify!($metric),
-                        <$ty>::AGG,
-                        emit::empty::Empty,
-                        $metric.sample(),
-                        emit::empty::Empty,
-                    ),
-                )*]
-                .into_iter()
+                $(
+                    sampler.metric(
+                        emit::metric::Metric::new(
+                            emit::pkg!(),
+                            emit::Empty,
+                            emit::props! {
+                                metric_name: stringify!($metric),
+                                metric_agg: <$ty>::AGG,
+                                metric_value: $metric.sample(),
+                            },
+                        ),
+                    );
+                )*
             }
         }
 
@@ -134,13 +136,11 @@ impl emit::metric::Source for FileSetMetrics {
                 sampler.metric(
                     metric
                         .by_ref()
-                        .with_name(&format!("file_{}", metric.name()))
+                        .with_name(&format!("file_{}", metric.name().unwrap()))
                         .with_mdl(emit::pkg!()),
                 );
             }));
 
-        for metric in self.metrics.sample() {
-            sampler.metric(metric);
-        }
+        self.metrics.sample_metrics(sampler);
     }
 }

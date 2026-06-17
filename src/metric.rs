@@ -16,8 +16,14 @@ use emit_core::{
     template::{self, Template},
     timestamp::Timestamp,
     value::{ToValue, Value},
-    well_known::{KEY_EVT_KIND, KEY_METRIC_AGG, KEY_METRIC_NAME, KEY_METRIC_VALUE},
+    well_known::{
+        KEY_DIST_COUNT, KEY_DIST_EXP_SCALE, KEY_DIST_MAX, KEY_DIST_MIN, KEY_DIST_SUM, KEY_EVT_KIND,
+        KEY_METRIC_AGG, KEY_METRIC_DESCRIPTION, KEY_METRIC_NAME, KEY_METRIC_UNIT, KEY_METRIC_VALUE,
+    },
 };
+
+#[cfg(feature = "alloc")]
+use emit_core::well_known::KEY_DIST_EXP_BUCKETS;
 
 use crate::kind::Kind;
 
@@ -30,17 +36,14 @@ Metrics are an extension of [`Event`]s that explicitly take the well-known prope
 
 A `Metric` can be converted into an [`Event`] through its [`ToEvent`] implemenation, or passed directly to an [`Emitter`] to emit it.
 */
-pub struct Metric<'a, V, P> {
+pub struct Metric<'a, P> {
     mdl: Path<'a>,
-    name: Str<'a>,
-    agg: Str<'a>,
     extent: Option<Extent>,
     tpl: Option<Template<'a>>,
     props: P,
-    value: V,
 }
 
-impl<'a, V, P> Metric<'a, V, P> {
+impl<'a, P> Metric<'a, P> {
     /**
     Create a new metric from its properties.
 
@@ -48,26 +51,13 @@ impl<'a, V, P> Metric<'a, V, P> {
 
     - `mdl`: The module that owns the underlying data source.
     - `extent`: The [`Extent`] that the sample covers.
-    - `name`: The name of the underlying data source.
-    - `agg`: The aggregation applied to the underlying data source to produce the sample. See the [`mod@crate::metric`] module for details.
-    - `value`: The value of the sample itself.
     - `props`: Additional [`Props`] to associate with the sample.
     */
-    pub fn new(
-        mdl: impl Into<Path<'a>>,
-        name: impl Into<Str<'a>>,
-        agg: impl Into<Str<'a>>,
-        extent: impl ToExtent,
-        value: V,
-        props: P,
-    ) -> Self {
+    pub fn new(mdl: impl Into<Path<'a>>, extent: impl ToExtent, props: P) -> Self {
         Metric {
             mdl: mdl.into(),
             extent: extent.to_extent(),
             tpl: None,
-            name: name.into(),
-            agg: agg.into(),
-            value: value.into(),
             props,
         }
     }
@@ -85,62 +75,6 @@ impl<'a, V, P> Metric<'a, V, P> {
     pub fn with_mdl(mut self, mdl: impl Into<Path<'a>>) -> Self {
         self.mdl = mdl.into();
         self
-    }
-
-    /**
-    Get the name of the underlying data source.
-    */
-    pub fn name(&self) -> &Str<'a> {
-        &self.name
-    }
-
-    /**
-    Set the name of the underlying data source to a new value.
-    */
-    pub fn with_name(mut self, name: impl Into<Str<'a>>) -> Self {
-        self.name = name.into();
-        self
-    }
-
-    /**
-    Get the aggregation applied to the underlying data source to produce the sample.
-
-    The value of the aggregation should be one of the [`crate::well_known`] aggregation types.
-    */
-    pub fn agg(&self) -> &Str<'a> {
-        &self.agg
-    }
-
-    /**
-    Set the aggregation to a new value.
-
-    The value of the aggregation should be one of the [`crate::well_known`] aggregation types.
-    */
-    pub fn with_agg(mut self, agg: impl Into<Str<'a>>) -> Self {
-        self.agg = agg.into();
-        self
-    }
-
-    /**
-    Get the value of the sample itself.
-    */
-    pub fn value(&self) -> &V {
-        &self.value
-    }
-
-    /**
-    Set the sample to a new value.
-    */
-    pub fn with_value<U>(self, value: U) -> Metric<'a, U, P> {
-        Metric {
-            mdl: self.mdl,
-            extent: self.extent,
-            tpl: self.tpl,
-            name: self.name,
-            agg: self.agg,
-            props: self.props,
-            value,
-        }
     }
 
     /**
@@ -211,14 +145,11 @@ impl<'a, V, P> Metric<'a, V, P> {
     /**
     Set the additional properties associated with the sample to a new value.
     */
-    pub fn with_props<U>(self, props: U) -> Metric<'a, V, U> {
+    pub fn with_props<U>(self, props: U) -> Metric<'a, U> {
         Metric {
             mdl: self.mdl,
             extent: self.extent,
             tpl: self.tpl,
-            name: self.name,
-            agg: self.agg,
-            value: self.value,
             props,
         }
     }
@@ -226,26 +157,215 @@ impl<'a, V, P> Metric<'a, V, P> {
     /**
     Map the properties of the metric.
     */
-    pub fn map_props<U>(self, map: impl FnOnce(P) -> U) -> Metric<'a, V, U> {
+    pub fn map_props<U>(self, map: impl FnOnce(P) -> U) -> Metric<'a, U> {
         Metric {
             mdl: self.mdl,
             extent: self.extent,
             tpl: self.tpl,
-            name: self.name,
-            agg: self.agg,
-            value: self.value,
             props: map(self.props),
         }
     }
 }
 
-impl<'a, V: ToValue, P: Props> fmt::Debug for Metric<'a, V, P> {
+impl<'a, P: Props> Metric<'a, P> {
+    /**
+    Get the name of the underlying data source.
+    */
+    pub fn name(&self) -> Option<Str<'_>> {
+        self.props.pull(KEY_METRIC_NAME)
+    }
+
+    /**
+    Set the name of the underlying data source.
+    */
+    pub fn with_name(
+        self,
+        name: impl Into<Str<'a>>,
+    ) -> Metric<'a, And<(&'static str, Str<'a>), P>> {
+        self.map_props(|props| (KEY_METRIC_NAME, name.into()).and_props(props))
+    }
+
+    /**
+    Get a description of the underlying data source.
+    */
+    pub fn description(&self) -> Option<Str<'_>> {
+        self.props.pull(KEY_METRIC_DESCRIPTION)
+    }
+
+    /**
+    Set the description of the underlying data source.
+    */
+    pub fn with_description(
+        self,
+        description: impl Into<Str<'a>>,
+    ) -> Metric<'a, And<(&'static str, Str<'a>), P>> {
+        self.map_props(|props| (KEY_METRIC_DESCRIPTION, description.into()).and_props(props))
+    }
+
+    /**
+    Get the aggregation applied to the underlying data source to produce the sample.
+
+    The value of the aggregation should be one of the [`crate::well_known`] aggregation types.
+    */
+    pub fn agg(&self) -> Option<Str<'_>> {
+        self.props.pull(KEY_METRIC_AGG)
+    }
+
+    /**
+    Set the aggregation applied to the underyling data source to produce the sample.
+
+    The value of the aggregation should be one of the [`crate::well_known`] aggregation types.
+    */
+    pub fn with_agg(self, agg: impl Into<Str<'a>>) -> Metric<'a, And<(&'static str, Str<'a>), P>> {
+        self.map_props(|props| (KEY_METRIC_AGG, agg.into()).and_props(props))
+    }
+
+    /**
+    Get the unit of the sample value.
+    */
+    pub fn unit(&self) -> Option<Str<'_>> {
+        self.props.pull(KEY_METRIC_UNIT)
+    }
+
+    /**
+    Set the unit of the sample value.
+    */
+    pub fn with_unit(
+        self,
+        unit: impl Into<Str<'a>>,
+    ) -> Metric<'a, And<(&'static str, Str<'a>), P>> {
+        self.map_props(|props| (KEY_METRIC_UNIT, unit.into()).and_props(props))
+    }
+
+    /**
+    Get the value of the sample itself.
+    */
+    pub fn value(&self) -> Option<Value<'_>> {
+        self.props.get(KEY_METRIC_VALUE)
+    }
+
+    /**
+    Set the value of the sample itself.
+    */
+    pub fn with_value(
+        self,
+        value: impl Into<Value<'a>>,
+    ) -> Metric<'a, And<(&'static str, Value<'a>), P>> {
+        self.map_props(|props| (KEY_METRIC_VALUE, value.into()).and_props(props))
+    }
+
+    /**
+    Get the minimum observed value.
+    */
+    pub fn dist_min(&self) -> Option<Value<'_>> {
+        self.props.get(KEY_DIST_MIN)
+    }
+
+    /**
+    Set the minimum observed value.
+    */
+    pub fn with_dist_min(
+        self,
+        dist_min: impl Into<Value<'a>>,
+    ) -> Metric<'a, And<(&'static str, Value<'a>), P>> {
+        self.map_props(|props| (KEY_DIST_MIN, dist_min.into()).and_props(props))
+    }
+
+    /**
+    Get the maximum observed value.
+    */
+    pub fn dist_max(&self) -> Option<Value<'_>> {
+        self.props.get(KEY_DIST_MAX)
+    }
+
+    /**
+    Set the maximum observed value.
+    */
+    pub fn with_dist_max(
+        self,
+        dist_max: impl Into<Value<'a>>,
+    ) -> Metric<'a, And<(&'static str, Value<'a>), P>> {
+        self.map_props(|props| (KEY_DIST_MAX, dist_max.into()).and_props(props))
+    }
+
+    /**
+    Get the count of observed values.
+    */
+    pub fn dist_count(&self) -> Option<Value<'_>> {
+        self.props.get(KEY_DIST_COUNT)
+    }
+
+    /**
+    Set the count of observed values.
+    */
+    pub fn with_dist_count(
+        self,
+        dist_count: impl Into<Value<'a>>,
+    ) -> Metric<'a, And<(&'static str, Value<'a>), P>> {
+        self.map_props(|props| (KEY_DIST_COUNT, dist_count.into()).and_props(props))
+    }
+
+    /**
+    Get the sum of observed values.
+    */
+    pub fn dist_sum(&self) -> Option<Value<'_>> {
+        self.props.get(KEY_DIST_SUM)
+    }
+
+    /**
+    Set the sum of observed values.
+    */
+    pub fn with_dist_sum(
+        self,
+        dist_sum: impl Into<Value<'a>>,
+    ) -> Metric<'a, And<(&'static str, Value<'a>), P>> {
+        self.map_props(|props| (KEY_DIST_SUM, dist_sum.into()).and_props(props))
+    }
+
+    /**
+    Get the scale of exponential histogram buckets.
+    */
+    pub fn dist_exp_scale(&self) -> Option<i32> {
+        self.props.pull(KEY_DIST_EXP_SCALE)
+    }
+
+    /**
+    Set the scale of exponential histogram buckets.
+    */
+    pub fn with_dist_exp_scale(
+        self,
+        dist_exp_scale: impl Into<i32>,
+    ) -> Metric<'a, And<(&'static str, i32), P>> {
+        self.map_props(|props| (KEY_DIST_EXP_SCALE, dist_exp_scale.into()).and_props(props))
+    }
+
+    /**
+    Get the exponential histogram buckets.
+    */
+    #[cfg(feature = "alloc")]
+    pub fn dist_exp_buckets(&self) -> Option<exp::BucketSet> {
+        self.props.pull(KEY_DIST_EXP_BUCKETS)
+    }
+
+    /**
+    Set the exponential histogram buckets.
+    */
+    #[cfg(feature = "alloc")]
+    pub fn with_dist_exp_buckets(
+        self,
+        dist_exp_buckets: impl Into<exp::BucketSet>,
+    ) -> Metric<'a, And<(&'static str, exp::BucketSet), P>> {
+        self.map_props(|props| (KEY_DIST_EXP_BUCKETS, dist_exp_buckets.into()).and_props(props))
+    }
+}
+
+impl<'a, P: Props> fmt::Debug for Metric<'a, P> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(&self.to_event(), f)
     }
 }
 
-impl<'a, V: ToValue, P: Props> ToEvent for Metric<'a, V, P> {
+impl<'a, P: Props> ToEvent for Metric<'a, P> {
     type Props<'b>
         = &'b Self
     where
@@ -261,18 +381,15 @@ impl<'a, V: ToValue, P: Props> ToEvent for Metric<'a, V, P> {
     }
 }
 
-impl<'a, V: ToValue, P: Props> Metric<'a, V, P> {
+impl<'a, P: Props> Metric<'a, P> {
     /**
     Get a new metric sample, borrowing data from this one.
     */
-    pub fn by_ref<'b>(&'b self) -> Metric<'b, &'b V, &'b P> {
+    pub fn by_ref<'b>(&'b self) -> Metric<'b, &'b P> {
         Metric {
             mdl: self.mdl.by_ref(),
             extent: self.extent.clone(),
             tpl: self.tpl.as_ref().map(|tpl| tpl.by_ref()),
-            name: self.name.by_ref(),
-            agg: self.agg.by_ref(),
-            value: &self.value,
             props: &self.props,
         }
     }
@@ -280,34 +397,28 @@ impl<'a, V: ToValue, P: Props> Metric<'a, V, P> {
     /**
     Get a type-erased metric sample, borrowing data from this one.
     */
-    pub fn erase<'b>(&'b self) -> Metric<'b, Value<'b>, &'b dyn ErasedProps> {
+    pub fn erase<'b>(&'b self) -> Metric<'b, &'b dyn ErasedProps> {
         Metric {
             mdl: self.mdl.by_ref(),
             extent: self.extent.clone(),
             tpl: self.tpl.as_ref().map(|tpl| tpl.by_ref()),
-            name: self.name.by_ref(),
-            agg: self.agg.by_ref(),
-            value: self.value.to_value(),
             props: &self.props,
         }
     }
 }
 
-impl<'a, V, P> ToExtent for Metric<'a, V, P> {
+impl<'a, P> ToExtent for Metric<'a, P> {
     fn to_extent(&self) -> Option<Extent> {
         self.extent.clone()
     }
 }
 
-impl<'a, V: ToValue, P: Props> Props for Metric<'a, V, P> {
+impl<'a, P: Props> Props for Metric<'a, P> {
     fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(
         &'kv self,
         mut for_each: F,
     ) -> ControlFlow<()> {
         for_each(KEY_EVT_KIND.to_str(), Kind::Metric.to_value())?;
-        for_each(KEY_METRIC_NAME.to_str(), self.name.to_value())?;
-        for_each(KEY_METRIC_AGG.to_str(), self.agg.to_value())?;
-        for_each(KEY_METRIC_VALUE.to_str(), self.value.to_value())?;
 
         self.props.for_each(for_each)
     }
@@ -397,7 +508,7 @@ pub mod source {
         }
     }
 
-    impl<'a, V: ToValue, P: Props> Source for Metric<'a, V, P> {
+    impl<'a, P: Props> Source for Metric<'a, P> {
         fn sample_metrics<S: Sampler>(&self, sampler: S) {
             sampler.metric(self.by_ref());
         }
@@ -490,19 +601,13 @@ pub mod source {
                 fn sample_metrics<S: Sampler>(&self, sampler: S) {
                     sampler.metric(Metric::new(
                         Path::new_raw("test"),
-                        "metric 1",
-                        "count",
                         crate::Empty,
-                        42,
                         crate::Empty,
                     ));
 
                     sampler.metric(Metric::new(
                         Path::new_raw("test"),
-                        "metric 2",
-                        "count",
                         crate::Empty,
-                        42,
                         crate::Empty,
                     ));
                 }
@@ -524,20 +629,14 @@ pub mod source {
             from_fn(|sampler| {
                 sampler.metric(Metric::new(
                     Path::new_raw("test"),
-                    "metric 1",
-                    "count",
                     crate::Empty,
-                    42,
                     crate::Empty,
                 ));
             })
             .and_sample(from_fn(|sampler| {
                 sampler.metric(Metric::new(
                     Path::new_raw("test"),
-                    "metric 2",
-                    "count",
                     crate::Empty,
-                    42,
                     crate::Empty,
                 ));
             }))
@@ -555,19 +654,13 @@ pub mod source {
             from_fn(|sampler| {
                 sampler.metric(Metric::new(
                     Path::new_raw("test"),
-                    "metric 1",
-                    "count",
                     crate::Empty,
-                    42,
                     crate::Empty,
                 ));
 
                 sampler.metric(Metric::new(
                     Path::new_raw("test"),
-                    "metric 2",
-                    "count",
                     crate::Empty,
-                    42,
                     crate::Empty,
                 ));
             })
@@ -583,19 +676,13 @@ pub mod source {
             let source = from_fn(|sampler| {
                 sampler.metric(Metric::new(
                     Path::new_raw("test"),
-                    "metric 1",
-                    "count",
                     crate::Empty,
-                    42,
                     crate::Empty,
                 ));
 
                 sampler.metric(Metric::new(
                     Path::new_raw("test"),
-                    "metric 2",
-                    "count",
                     crate::Empty,
-                    42,
                     crate::Empty,
                 ));
             });
@@ -614,17 +701,14 @@ pub mod source {
         #[test]
         fn metric_as_source() {
             let sampler = sampler::from_fn(|metric| {
-                assert_eq!("metric", metric.name().to_string());
-                assert_eq!("count", metric.agg().to_string());
+                assert_eq!("metric", metric.name().unwrap().to_string());
+                assert_eq!("count", metric.agg().unwrap().to_string());
             });
 
             let metric = Metric::new(
                 Path::new_raw("test"),
-                "metric",
-                "count",
                 crate::Empty,
-                42,
-                crate::Empty,
+                [("metric_name", "metric"), ("metric_agg", "count")],
             );
 
             metric.sample_metrics(sampler);
@@ -750,7 +834,7 @@ mod alloc_support {
     }
 
     impl<S: Sampler> Sampler for TimeNormalizer<S> {
-        fn metric<V: ToValue, P: Props>(&self, metric: Metric<V, P>) {
+        fn metric<P: Props>(&self, metric: Metric<P>) {
             if let Some(now) = self.now {
                 let extent = metric.extent();
 
@@ -837,20 +921,14 @@ mod alloc_support {
                 .add_source(source::from_fn(|sampler| {
                     sampler.metric(Metric::new(
                         Path::new_raw("test"),
-                        "metric 1",
-                        "count",
                         crate::Empty,
-                        42,
                         crate::Empty,
                     ));
                 }))
                 .add_source(source::from_fn(|sampler| {
                     sampler.metric(Metric::new(
                         Path::new_raw("test"),
-                        "metric 2",
-                        "count",
                         crate::Empty,
-                        42,
                         crate::Empty,
                     ));
                 }));
@@ -888,10 +966,7 @@ mod alloc_support {
             reporter.add_source(source::from_fn(|sampler| {
                 sampler.metric(Metric::new(
                     Path::new_raw("test"),
-                    "metric 1",
-                    "count",
                     crate::Empty,
-                    42,
                     crate::Empty,
                 ));
             }));
@@ -914,10 +989,7 @@ mod alloc_support {
             reporter.add_source(source::from_fn(|sampler| {
                 sampler.metric(Metric::new(
                     Path::new_raw("test"),
-                    "metric 1",
-                    "count",
                     crate::Empty,
-                    42,
                     crate::Empty,
                 ));
             }));
@@ -944,10 +1016,7 @@ mod alloc_support {
             reporter.add_source(source::from_fn(|sampler| {
                 sampler.metric(Metric::new(
                     Path::new_raw("test"),
-                    "metric 1",
-                    "count",
                     crate::Empty,
-                    42,
                     crate::Empty,
                 ));
             }));
@@ -976,10 +1045,7 @@ mod alloc_support {
             reporter.add_source(source::from_fn(|sampler| {
                 sampler.metric(Metric::new(
                     Path::new_raw("test"),
-                    "metric 1",
-                    "count",
-                    Timestamp::from_unix(Duration::from_secs(100)).unwrap(),
-                    42,
+                    crate::Empty,
                     crate::Empty,
                 ));
             }));
@@ -1011,11 +1077,8 @@ mod alloc_support {
             reporter.add_source(source::from_fn(|sampler| {
                 sampler.metric(Metric::new(
                     Path::new_raw("test"),
-                    "metric 1",
-                    "count",
                     Timestamp::from_unix(Duration::from_secs(100)).unwrap()
                         ..Timestamp::from_unix(Duration::from_secs(200)).unwrap(),
-                    42,
                     crate::Empty,
                 ));
             }));
@@ -1041,7 +1104,10 @@ pub mod sampler {
     A [`Sampler`] is a visitor for a [`Source`] that receives [`Metric`]s when the source is sampled.
     */
 
-    use emit_core::empty::Empty;
+    use emit_core::{
+        clock::Clock, ctxt::Ctxt, emitter::Emitter, empty::Empty, filter::Filter, rng::Rng,
+        runtime::Runtime,
+    };
 
     use super::*;
 
@@ -1052,7 +1118,7 @@ pub mod sampler {
         /**
         Receive a metric sample.
         */
-        fn metric<V: ToValue, P: Props>(&self, metric: Metric<V, P>);
+        fn metric<P: Props>(&self, metric: Metric<P>);
 
         /**
         A value for the point in time that the sample was requested.
@@ -1075,7 +1141,7 @@ pub mod sampler {
     }
 
     impl<'a, T: Sampler + ?Sized> Sampler for &'a T {
-        fn metric<V: ToValue, P: Props>(&self, metric: Metric<V, P>) {
+        fn metric<P: Props>(&self, metric: Metric<P>) {
             (**self).metric(metric)
         }
 
@@ -1085,7 +1151,7 @@ pub mod sampler {
     }
 
     impl Sampler for Empty {
-        fn metric<V: ToValue, P: Props>(&self, _: Metric<V, P>) {}
+        fn metric<P: Props>(&self, _: Metric<P>) {}
     }
 
     /**
@@ -1106,7 +1172,7 @@ pub mod sampler {
     }
 
     impl<S: Sampler> Sampler for WithSampledAt<S> {
-        fn metric<V: ToValue, P: Props>(&self, metric: Metric<V, P>) {
+        fn metric<P: Props>(&self, metric: Metric<P>) {
             self.sampler.metric(metric)
         }
 
@@ -1125,7 +1191,7 @@ pub mod sampler {
     pub struct FromEmitter<E>(E);
 
     impl<E: Emitter> Sampler for FromEmitter<E> {
-        fn metric<V: ToValue, P: Props>(&self, metric: Metric<V, P>) {
+        fn metric<P: Props>(&self, metric: Metric<P>) {
             self.0.emit(metric)
         }
     }
@@ -1149,16 +1215,53 @@ pub mod sampler {
     }
 
     /**
+    A [`Sampler`] from a [`Runtime`].
+
+    On completion, a [`Metric`] will be emitted as an event using [`Metric::to_event`].
+
+    This type can be created directly, or via [`from_runtime`].
+    */
+    pub struct FromRuntime<'a, E, F, C, T, R>(&'a Runtime<E, F, C, T, R>);
+
+    impl<'a, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng> Sampler
+        for FromRuntime<'a, E, F, C, T, R>
+    {
+        fn metric<P: Props>(&self, metric: Metric<P>) {
+            self.0.emit(metric)
+        }
+    }
+
+    impl<'a, E, F, C, T, R> FromRuntime<'a, E, F, C, T, R> {
+        /**
+        Wrap the given emitter.
+        */
+        pub const fn new(rt: &'a Runtime<E, F, C, T, R>) -> Self {
+            FromRuntime(rt)
+        }
+    }
+
+    /**
+    A [`Sampler`] from a [`Runtime`].
+
+    On completion, a [`Metric`] will be emitted as an event using [`Metric::to_event`].
+    */
+    pub const fn from_runtime<'a, E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rng>(
+        rt: &'a Runtime<E, F, C, T, R>,
+    ) -> FromRuntime<'a, E, F, C, T, R> {
+        FromRuntime(rt)
+    }
+
+    /**
     A [`Sampler`] from a function.
 
     This type can be created directly, or via [`from_fn`].
     */
-    pub struct FromFn<F = fn(Metric<Value, &dyn ErasedProps>)>(F);
+    pub struct FromFn<F = fn(Metric<&dyn ErasedProps>)>(F);
 
     /**
     Create a [`Sampler`] from a function.
     */
-    pub const fn from_fn<F: Fn(Metric<Value, &dyn ErasedProps>)>(f: F) -> FromFn<F> {
+    pub const fn from_fn<F: Fn(Metric<&dyn ErasedProps>)>(f: F) -> FromFn<F> {
         FromFn(f)
     }
 
@@ -1171,8 +1274,8 @@ pub mod sampler {
         }
     }
 
-    impl<F: Fn(Metric<Value, &dyn ErasedProps>)> Sampler for FromFn<F> {
-        fn metric<V: ToValue, P: Props>(&self, metric: Metric<V, P>) {
+    impl<F: Fn(Metric<&dyn ErasedProps>)> Sampler for FromFn<F> {
+        fn metric<P: Props>(&self, metric: Metric<P>) {
             (self.0)(metric.erase())
         }
     }
@@ -1181,7 +1284,7 @@ pub mod sampler {
         use super::*;
 
         pub trait DispatchSampler {
-            fn dispatch_metric(&self, metric: Metric<Value, &dyn ErasedProps>);
+            fn dispatch_metric(&self, metric: Metric<&dyn ErasedProps>);
 
             fn dispatch_sampled_at(&self) -> Option<Timestamp>;
         }
@@ -1207,7 +1310,7 @@ pub mod sampler {
     }
 
     impl<T: Sampler> internal::DispatchSampler for T {
-        fn dispatch_metric(&self, metric: Metric<Value, &dyn ErasedProps>) {
+        fn dispatch_metric(&self, metric: Metric<&dyn ErasedProps>) {
             self.metric(metric)
         }
 
@@ -1217,7 +1320,7 @@ pub mod sampler {
     }
 
     impl<'a> Sampler for dyn ErasedSampler + 'a {
-        fn metric<V: ToValue, P: Props>(&self, metric: Metric<V, P>) {
+        fn metric<P: Props>(&self, metric: Metric<P>) {
             self.erase_sampler().0.dispatch_metric(metric.erase())
         }
 
@@ -1227,7 +1330,7 @@ pub mod sampler {
     }
 
     impl<'a> Sampler for dyn ErasedSampler + Send + Sync + 'a {
-        fn metric<V: ToValue, P: Props>(&self, metric: Metric<V, P>) {
+        fn metric<P: Props>(&self, metric: Metric<P>) {
             (self as &(dyn ErasedSampler + 'a)).metric(metric)
         }
 
@@ -1239,6 +1342,9 @@ pub mod sampler {
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        use emit_core::{emitter, runtime::Runtime};
+
         use std::cell::Cell;
 
         #[test]
@@ -1246,18 +1352,15 @@ pub mod sampler {
             let called = Cell::new(false);
 
             let sampler = from_fn(|metric| {
-                assert_eq!("test", metric.name());
+                assert_eq!("test", metric.name().unwrap());
 
                 called.set(true);
             });
 
             sampler.metric(Metric::new(
                 Path::new_raw("test"),
-                "test",
-                "count",
                 Empty,
-                1,
-                Empty,
+                ("metric_name", "test"),
             ));
 
             assert!(called.get());
@@ -1268,7 +1371,7 @@ pub mod sampler {
             let called = Cell::new(false);
 
             let sampler = from_fn(|metric| {
-                assert_eq!("test", metric.name());
+                assert_eq!("test", metric.name().unwrap());
 
                 called.set(true);
             });
@@ -1277,11 +1380,27 @@ pub mod sampler {
 
             sampler.metric(Metric::new(
                 Path::new_raw("test"),
-                "test",
-                "count",
-                Empty,
-                1,
-                Empty,
+                crate::Empty,
+                ("metric_name", "test"),
+            ));
+
+            assert!(called.get());
+        }
+
+        #[test]
+        fn from_runtime_sampler() {
+            let called = Cell::new(false);
+
+            let rt = Runtime::default().with_emitter(emitter::from_fn(|_| {
+                called.set(true);
+            }));
+
+            let sampler = from_runtime(&rt);
+
+            sampler.metric(Metric::new(
+                Path::new_raw("test"),
+                crate::Empty,
+                crate::Empty,
             ));
 
             assert!(called.get());
@@ -3426,17 +3545,20 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
-    use crate::Timestamp;
+    use crate::{Timestamp, Value};
 
     #[test]
     fn metric_new() {
         let metric = Metric::new(
             Path::new_raw("test"),
-            "my metric",
-            "count",
             Timestamp::from_unix(Duration::from_secs(1)),
-            42,
-            ("metric_prop", true),
+            [
+                ("metric_prop", Value::from(true)),
+                ("metric_name", Value::from("my metric")),
+                ("metric_value", Value::from(42)),
+                ("metric_description", Value::from("my description")),
+                ("metric_agg", Value::from("count")),
+            ],
         );
 
         assert_eq!("test", metric.mdl());
@@ -3444,21 +3566,62 @@ mod tests {
             Timestamp::from_unix(Duration::from_secs(1)).unwrap(),
             metric.extent().unwrap().as_point()
         );
-        assert_eq!("my metric", metric.name());
-        assert_eq!("count", metric.agg());
+        assert_eq!("my metric", metric.name().unwrap());
+        assert_eq!("my description", metric.description().unwrap());
+        assert_eq!("count", metric.agg().unwrap());
         assert_eq!(42, metric.value().to_value().cast::<i32>().unwrap());
         assert_eq!(true, metric.props().pull::<bool, _>("metric_prop").unwrap());
+
+        let metric = metric
+            .with_name("my metric 2")
+            .with_description("my description 2")
+            .with_agg("last")
+            .with_value(17)
+            .with_unit("ms")
+            .with_dist_min(0)
+            .with_dist_max(100)
+            .with_dist_sum(1000)
+            .with_dist_count(42);
+
+        assert_eq!("my metric 2", metric.name().unwrap());
+        assert_eq!("my description 2", metric.description().unwrap());
+        assert_eq!("last", metric.agg().unwrap());
+        assert_eq!(17, metric.value().to_value().cast::<i32>().unwrap());
+        assert_eq!("ms", metric.unit().unwrap());
+
+        assert_eq!(0, metric.dist_min().to_value().cast::<i32>().unwrap());
+        assert_eq!(100, metric.dist_max().to_value().cast::<i32>().unwrap());
+        assert_eq!(1000, metric.dist_sum().to_value().cast::<i32>().unwrap());
+        assert_eq!(42, metric.dist_count().to_value().cast::<i32>().unwrap());
+
+        #[cfg(feature = "alloc")]
+        {
+            let set = exp::BucketSet::from_iter([
+                (exp::Point::new(0.0), 3),
+                (exp::Point::new(0.0), 2),
+                (exp::Point::new(1.0), 2),
+            ]);
+
+            let metric = metric
+                .with_dist_exp_scale(-1)
+                .with_dist_exp_buckets(set.clone());
+
+            assert_eq!(-1, metric.dist_exp_scale().unwrap());
+            assert_eq!(set, metric.dist_exp_buckets().unwrap());
+        }
     }
 
     #[test]
     fn metric_to_event() {
         let metric = Metric::new(
             Path::new_raw("test"),
-            "my metric",
-            "count",
             Timestamp::from_unix(Duration::from_secs(1)),
-            42,
-            ("metric_prop", true),
+            [
+                ("metric_prop", Value::from(true)),
+                ("metric_name", Value::from("my metric")),
+                ("metric_agg", Value::from("count")),
+                ("metric_value", Value::from(42)),
+            ],
         );
 
         let evt = metric.to_event();
@@ -3488,10 +3651,7 @@ mod tests {
             "test",
             Metric::new(
                 Path::new_raw("test"),
-                "my metric",
-                "count",
                 Timestamp::from_unix(Duration::from_secs(1)),
-                42,
                 ("metric_prop", true),
             )
             .with_tpl(Template::literal("test"))
@@ -3512,14 +3672,7 @@ mod tests {
             ),
             (None, None),
         ] {
-            let metric = Metric::new(
-                Path::new_raw("test"),
-                "my metric",
-                "count",
-                case,
-                42,
-                ("metric_prop", true),
-            );
+            let metric = Metric::new(Path::new_raw("test"), case, ("metric_prop", true));
 
             let extent = metric.to_extent();
 

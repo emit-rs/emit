@@ -40,7 +40,7 @@ fn event_extent() {
 }
 
 #[test]
-fn event_base_props() {
+fn event_props() {
     let evt = emit::evt!(
         props: emit::props! {
             a: "base",
@@ -48,6 +48,8 @@ fn event_base_props() {
         "template",
         b: "evt",
     );
+
+    assert_eq!("base", evt.props().a);
 
     assert_eq!("base", evt.props().pull::<&str, _>("a").unwrap());
     assert_eq!("evt", evt.props().pull::<&str, _>("b").unwrap());

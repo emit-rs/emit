@@ -92,6 +92,10 @@ name = "span_name"
 path = "span_name.rs"
 
 [[example]]
+name = "span_kind"
+path = "span_kind.rs"
+
+[[example]]
 name = "span_additional_props"
 path = "span_additional_props.rs"
 

@@ -17,11 +17,12 @@ fn main() {
     // Emit a metric sample with the current value of `metric_a`
     emit::sample(emit::Metric::new(
         emit::mdl!(),
-        "metric_a",
-        "count",
         emit::Empty,
-        metric_a.load(Ordering::Relaxed),
-        emit::Empty,
+        emit::props! {
+            metric_name: "metric_a",
+            metric_agg: "count",
+            metric_value: metric_a.load(Ordering::Relaxed),
+        },
     ));
 
     // Emit a metric sample with the current value of `metric_a`
@@ -32,11 +33,12 @@ fn main() {
     // Emit another sample for `metric_a`
     emit::sample(emit::Metric::new(
         emit::mdl!(),
-        "metric_a",
-        "count",
         emit::Empty,
-        metric_a.load(Ordering::Relaxed),
-        emit::Empty,
+        emit::props! {
+            metric_name: "metric_a",
+            metric_agg: "count",
+            metric_value: metric_a.load(Ordering::Relaxed),
+        },
     ));
 
     rt.blocking_flush(Duration::from_secs(5));

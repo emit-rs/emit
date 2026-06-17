@@ -1,5 +1,0 @@
-error: specify the span name using the `name` control parameter before the template
- --> src/compile_fail/std/span_name.rs:1:22
-  |
-1 | #[emit::span("test", span_name: "custom")]
-  |                      ^^^^^^^^^^^^^^^^^^^

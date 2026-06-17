@@ -98,6 +98,48 @@ fn sample_name() {
 }
 
 #[test]
+fn sample_description() {
+    let called = Called::new();
+
+    let rt = simple_runtime(
+        |evt| {
+            assert_eq!(
+                "The number of requests",
+                evt.props().pull::<Str, _>("metric_description").unwrap()
+            );
+
+            called.record();
+        },
+        |_| true,
+    );
+
+    emit::sample!(rt, name: "my_metric", value: 42, description: "The number of requests");
+
+    assert!(called.was_called());
+}
+
+#[test]
+fn sample_unit() {
+    let called = Called::new();
+
+    let rt = simple_runtime(
+        |evt| {
+            assert_eq!(
+                "milliseconds",
+                evt.props().pull::<Str, _>("metric_unit").unwrap()
+            );
+
+            called.record();
+        },
+        |_| true,
+    );
+
+    emit::sample!(rt, name: "my_metric", value: 42, unit: "milliseconds");
+
+    assert!(called.was_called());
+}
+
+#[test]
 fn sample_props() {
     let called = Called::new();
 
@@ -140,6 +182,14 @@ fn sample_well_known_props_precedence() {
                 evt.props().pull::<Str, _>("metric_name").unwrap()
             );
             assert_eq!("count", evt.props().pull::<Str, _>("metric_agg").unwrap());
+            assert_eq!(
+                "control description",
+                evt.props().pull::<Str, _>("metric_description").unwrap()
+            );
+            assert_eq!(
+                "control_unit",
+                evt.props().pull::<Str, _>("metric_unit").unwrap()
+            );
 
             called.record();
         },
@@ -151,11 +201,15 @@ fn sample_well_known_props_precedence() {
         name: "my_metric",
         value: 42,
         agg: "count",
+        description: "control description",
+        unit: "control_unit",
         props: emit::props! {
             metric_name: "my_other_metric",
             metric_agg: "sum",
             metric_value: 13,
             evt_kind: "custom_kind",
+            metric_description: "props description",
+            metric_unit: "props_unit",
         },
     );
 

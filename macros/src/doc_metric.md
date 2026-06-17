@@ -20,6 +20,8 @@ This macro accepts the following optional control parameters:
 | `value` (**required**)                                | `impl emit::ToValue`    | The value of the metric sample. If the value is an identifier then `name` will be inferred to be that identifier.                        |
 | `name` (**required** if `value` is not an identifier) | `impl emit::ToStr`      | The name of the metric being sampled. If unspecified, and `value` is an identifier, then the stringified identifier is used as the name. |
 | `agg`                                                 | `impl emit::ToStr`      | The aggregation of the metric sample. If unspecified, the default for the macro is used.                                                 |
+| `description`                                         | `impl emit::ToStr`      | A description of the underlying data source. If unspecified the description is left empty.                                               |
+| `unit`                                                | `impl emit::ToStr`      | The measurement unit of the sample value. If unspecified the unit is left empty.                                                         |
 
 # Returns
 
