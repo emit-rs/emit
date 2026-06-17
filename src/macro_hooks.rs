@@ -1214,18 +1214,20 @@ pub fn __private_default_sampler<E: Emitter, F: Filter, C: Ctxt, T: Clock, R: Rn
     sampler::from_emitter(rt)
 }
 
-#[repr(transparent)]
-pub struct __PrivateMacroProps<'a, const N: usize>([(Str<'a>, Option<Value<'a>>); N]);
+pub struct __PrivateMacroProps<'a, const N: usize> {
+    props: [(Str<'a>, Option<Value<'a>>); N],
+    is_sorted: bool,
+}
 
 impl<'a, const N: usize> __PrivateMacroProps<'a, N> {
-    pub fn from_array(props: [(Str<'a>, Option<Value<'a>>); N]) -> Self {
-        __PrivateMacroProps(props)
+    pub fn from_array(props: [(Str<'a>, Option<Value<'a>>); N], is_sorted: bool) -> Self {
+        __PrivateMacroProps { props, is_sorted }
     }
 }
 
 impl<'a> ToValue for __PrivateMacroProps<'a, 1> {
     fn to_value(&self) -> Value<'_> {
-        self.0[0]
+        self.props[0]
             .1
             .as_ref()
             .map(|v| v.by_ref())
@@ -1238,7 +1240,7 @@ impl<'a, const N: usize> Props for __PrivateMacroProps<'a, N> {
         &'kv self,
         mut for_each: F,
     ) -> ControlFlow<()> {
-        for kv in &self.0 {
+        for kv in &self.props {
             let k = &kv.0;
 
             if let Some(ref v) = kv.1 {
@@ -1252,59 +1254,29 @@ impl<'a, const N: usize> Props for __PrivateMacroProps<'a, N> {
     fn get<'v, K: ToStr>(&'v self, key: K) -> Option<Value<'v>> {
         let key = key.to_str();
 
-        self.0
-            .binary_search_by(|(k, _)| k.cmp(&key))
-            .ok()
-            .and_then(|i| self.0[i].1.as_ref().map(|v| v.by_ref()))
+        if self.is_sorted {
+            self.props
+                .binary_search_by(|(k, _)| k.cmp(&key))
+                .ok()
+                .and_then(|i| self.props[i].1.as_ref().map(|v| v.by_ref()))
+        } else {
+            self.props
+                .iter()
+                .filter(|(k, _)| k == &key)
+                .filter_map(|(_, v)| v.as_ref())
+                .map(|v| v.by_ref())
+                .next()
+        }
     }
 
     fn is_unique(&self) -> bool {
-        true
+        self.is_sorted
     }
 
     fn size(&self) -> Option<usize> {
-        Some(self.0.len())
+        Some(self.props.len())
     }
 }
-
-#[repr(transparent)]
-pub struct __PrivateTupleMacroProps<T>(T);
-
-macro_rules! impl_private_tuple_macro_props {
-    (
-        $(($($idx:tt $T:tt)+),)+
-    ) => {
-        $(
-            impl<$($T: Props),*> Props for __PrivateTupleMacroProps<($($T),*)> {
-                fn for_each<'kv, F: FnMut(Str<'kv>, Value<'kv>) -> ControlFlow<()>>(&'kv self, mut for_each: F) -> ControlFlow<()> {
-                    $(
-                        self.0.$idx.for_each(&mut for_each)?;
-                    )*
-
-                    ControlFlow::Continue(())
-                }
-            }
-        )+
-    };
-}
-
-impl_private_tuple_macro_props!(
-    (0 P0 1 P1),
-    (0 P0 1 P1 2 P2),
-    (0 P0 1 P1 2 P2 3 P3),
-    (0 P0 1 P1 2 P2 3 P3 4 P4),
-    (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5),
-    (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5 6 P6),
-    (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5 6 P6 7 P7),
-    (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5 6 P6 7 P7 8 P8),
-    (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5 6 P6 7 P7 8 P8 9 P9),
-    (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5 6 P6 7 P7 8 P8 9 P9 10 P10),
-    (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5 6 P6 7 P7 8 P8 9 P9 10 P10 11 P11),
-    (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5 6 P6 7 P7 8 P8 9 P9 10 P10 11 P11 12 P12),
-    (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5 6 P6 7 P7 8 P8 9 P9 10 P10 11 P11 12 P12 13 P13),
-    (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5 6 P6 7 P7 8 P8 9 P9 10 P10 11 P11 12 P12 13 P13 14 P14),
-    (0 P0 1 P1 2 P2 3 P3 4 P4 5 P5 6 P6 7 P7 8 P8 9 P9 10 P10 11 P11 12 P12 13 P13 14 P14 15 P15),
-);
 
 pub struct __PrivateMacroExtendedProps<P, T>(P, T);
 

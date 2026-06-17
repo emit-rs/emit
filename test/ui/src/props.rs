@@ -13,7 +13,8 @@ fn props_basic() {
         d: "text",
     };
 
-    assert!(props.is_unique());
+    // NOTE: We could mark these as unique because there's no `#[emit::key]`
+    assert!(!props.is_unique());
 
     assert_eq!(1, props.b);
     assert_eq!(true, props.a);
@@ -24,6 +25,32 @@ fn props_basic() {
     assert_eq!(true, props.pull::<bool, _>("a").unwrap());
     assert_eq!(2.0, props.pull::<f64, _>("c").unwrap());
     assert_eq!("text", props.pull::<&str, _>("d").unwrap());
+}
+
+#[test]
+fn props_renamed() {
+    let props = emit::props! {
+        #[emit::key("c")]
+        b: 1,
+        #[emit::key("d")]
+        a: true,
+        #[emit::key("b")]
+        c: 2.0,
+        #[emit::key("a")]
+        d: "text",
+    };
+
+    assert!(!props.is_unique());
+
+    assert_eq!(1, props.b);
+    assert_eq!(true, props.a);
+    assert_eq!(2.0, props.c);
+    assert_eq!("text", props.d);
+
+    assert_eq!(1, props.pull::<i32, _>("c").unwrap());
+    assert_eq!(true, props.pull::<bool, _>("d").unwrap());
+    assert_eq!(2.0, props.pull::<f64, _>("b").unwrap());
+    assert_eq!("text", props.pull::<&str, _>("a").unwrap());
 }
 
 #[test]
