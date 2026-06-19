@@ -26,10 +26,10 @@ pub fn rename_hook_tokens(opts: RenameHookTokens) -> Result<TokenStream, syn::Er
         args: opts.args,
         expr: opts.expr,
         predicate: |ident: &str| {
-            ident.starts_with("__private_capture") || ident.starts_with("__private_captured")
+            ident.starts_with("__private_capture")
         },
         to: move |_: &Args, ident: &Ident, args: &Punctuated<Expr, Comma>| {
-            if ident.to_string().starts_with("__private_captured") {
+            if ident == "__private_captured" {
                 return None;
             }
 

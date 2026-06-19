@@ -143,10 +143,10 @@ pub fn rename_hook_tokens(
         args: opts.args,
         expr: opts.expr,
         predicate: |ident: &str| {
-            ident.starts_with("__private_capture") || ident.starts_with("__private_captured")
+            ident.starts_with("__private_capture")
         },
         to: move |hook_args: &Args, ident: &Ident, args: &Punctuated<Expr, Comma>| {
-            if ident.to_string().starts_with("__private_captured") {
+            if ident == "__private_captured" {
                 return None;
             }
 
