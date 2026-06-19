@@ -504,6 +504,83 @@ impl<'a, T> __PrivateOptionalHook<'a> for T {
     }
 }
 
+pub trait __PrivateNullableCaptureHook {
+    fn __private_nullable_capture_some(&self) -> &Self {
+        self
+    }
+
+    fn __private_nullable_capture_option_ref(self) -> Self
+    where
+        Self: Sized,
+    {
+        self
+    }
+}
+
+impl<T: ?Sized> __PrivateNullableCaptureHook for T {}
+
+#[diagnostic::on_unimplemented(
+    message = "capturing a nullable value requires `Option<&T>`. Try calling `.as_ref()`."
+)]
+pub trait Nullable<'a> {
+    type Value: ?Sized + 'a;
+
+    fn into_nullable(self) -> Option<&'a Self::Value>;
+
+    fn into_nullable_ref(&'a self) -> Option<&'a Self::Value>;
+}
+
+impl<'a, T: ?Sized> Nullable<'a> for Option<&'a T> {
+    type Value = T;
+
+    fn into_nullable(self) -> Option<&'a T> {
+        self
+    }
+
+    fn into_nullable_ref(&'a self) -> Option<&'a T> {
+        self.as_deref()
+    }
+}
+
+impl<'a, O: Nullable<'a> + ?Sized> Nullable<'a> for &'a O {
+    type Value = O::Value;
+
+    fn into_nullable(self) -> Option<&'a Self::Value> {
+        (*self).into_nullable_ref()
+    }
+
+    fn into_nullable_ref(&'a self) -> Option<&'a Self::Value> {
+        (*self).into_nullable_ref()
+    }
+}
+
+pub trait __PrivateNullableHook<'a> {
+    fn __private_nullable<F: FnOnce(&'a <Self as Nullable<'a>>::Value) -> Option<Value<'a>>>(
+        self,
+        map: F,
+    ) -> Option<Value<'a>>
+    where
+        Self: Nullable<'a>;
+}
+
+impl<'a, T> __PrivateNullableHook<'a> for T
+where
+    T: Nullable<'a>,
+{
+    fn __private_nullable<F: FnOnce(&'a <Self as Nullable<'a>>::Value) -> Option<Value<'a>>>(
+        self,
+        map: F,
+    ) -> Option<Value<'a>>
+    where
+        Self: Nullable<'a>,
+    {
+        match self.into_nullable() {
+            Some(v) => map(v).or(Some(Value::null())),
+            None => Some(Value::null()),
+        }
+    }
+}
+
 pub trait __PrivateInterpolatedHook {
     fn __private_interpolated(self) -> Self;
     fn __private_uninterpolated(self) -> Self;

@@ -391,6 +391,43 @@ fn props_optional_multi_attr() {
 }
 
 #[test]
+fn props_nullable() {
+    let props = emit::props! {
+        #[emit::nullable] some: ::std::option::Option::Some(&1),
+        #[emit::nullable] none: ::std::option::Option::None::<&i32>,
+    };
+
+    assert_eq!(1, props.pull::<i32, _>("some").unwrap());
+    let none_value = props.get("none").unwrap();
+    assert!(none_value.is_null());
+}
+
+#[test]
+fn props_nullable_ref() {
+    let s = ::std::string::String::from("short lived");
+
+    let some: Option<&str> = ::std::option::Option::Some(&s);
+
+    let props = emit::props! {
+        #[emit::nullable] some,
+    };
+
+    assert_eq!("short lived", props.pull::<&str, _>("some").unwrap());
+}
+
+#[test]
+fn props_nullable_multi_attr() {
+    let props = emit::props! {
+        #[emit::nullable] #[emit::as_debug] some: ::std::option::Option::Some(&1),
+        #[emit::as_debug] #[emit::nullable] none: ::std::option::Option::None::<&i32>,
+    };
+
+    assert!(props.get("some").is_some());
+    let none_value = props.get("none").unwrap();
+    assert!(none_value.is_null());
+}
+
+#[test]
 fn props_as_debug() {
     #[derive(Debug)]
     struct Data;
