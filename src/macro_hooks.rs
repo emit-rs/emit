@@ -519,62 +519,27 @@ pub trait __PrivateNullableCaptureHook {
 
 impl<T: ?Sized> __PrivateNullableCaptureHook for T {}
 
-#[diagnostic::on_unimplemented(
-    message = "capturing a nullable value requires `Option<&T>`. Try calling `.as_ref()`."
-)]
-pub trait Nullable<'a> {
-    type Value: ?Sized + 'a;
-
-    fn into_nullable(self) -> Option<&'a Self::Value>;
-
-    fn into_nullable_ref(&'a self) -> Option<&'a Self::Value>;
-}
-
-impl<'a, T: ?Sized> Nullable<'a> for Option<&'a T> {
-    type Value = T;
-
-    fn into_nullable(self) -> Option<&'a T> {
-        self
-    }
-
-    fn into_nullable_ref(&'a self) -> Option<&'a T> {
-        self.as_deref()
-    }
-}
-
-impl<'a, O: Nullable<'a> + ?Sized> Nullable<'a> for &'a O {
-    type Value = O::Value;
-
-    fn into_nullable(self) -> Option<&'a Self::Value> {
-        (*self).into_nullable_ref()
-    }
-
-    fn into_nullable_ref(&'a self) -> Option<&'a Self::Value> {
-        (*self).into_nullable_ref()
-    }
-}
-
 pub trait __PrivateNullableHook<'a> {
-    fn __private_nullable<F: FnOnce(&'a <Self as Nullable<'a>>::Value) -> Option<Value<'a>>>(
+    fn __private_nullable<F: FnOnce(&'a <Self as Optional<'a>>::Value) -> Option<Value<'a>>>(
         self,
         map: F,
     ) -> Option<Value<'a>>
     where
-        Self: Nullable<'a>;
+        Self: Optional<'a>;
 }
 
 impl<'a, T> __PrivateNullableHook<'a> for T
 where
-    T: Nullable<'a>,
+    T: Optional<'a>,
 {
-    fn __private_nullable<F: FnOnce(&'a <Self as Nullable<'a>>::Value) -> Option<Value<'a>>>(
+    fn __private_nullable<F: FnOnce(&'a <Self as Optional<'a>>::Value) -> Option<Value<'a>>>(
         self,
         map: F,
     ) -> Option<Value<'a>>
     where
-        Self: Nullable<'a>,
+        Self: Optional<'a>,
     {
-        match self.into_nullable() {
+        match self.into_option() {
             Some(v) => map(v).or(Some(Value::null())),
             None => Some(Value::null()),
         }

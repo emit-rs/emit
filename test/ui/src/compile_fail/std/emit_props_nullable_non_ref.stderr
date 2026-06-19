@@ -1,18 +1,13 @@
-error[E0599]: capturing a nullable value requires `Option<&T>`. Try calling `.as_ref()`.
+error[E0277]: capturing an optional value requires `Option<&T>`. Try calling `.as_ref()`.
  --> src/compile_fail/std/emit_props_nullable_non_ref.rs:2:29
   |
 2 |     emit::emit!("template", #[emit::nullable] some: Some(1));
-  |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `emit::__private::Optional<'_>` is not implemented for `Option<{integer}>`
   |
- ::: $RUST/core/src/option.rs
+help: the trait `emit::__private::Optional<'_>` is not implemented for `Option<{integer}>`
+      but it is implemented for `Option<&_>`
+ --> $WORKSPACE/src/macro_hooks.rs
   |
-  | pub enum Option<T> {
-  | ------------------ doesn't satisfy `Option<{integer}>: emit::__private::Nullable<'_>` or `_: __PrivateNullableHook<'_>`
-  |
-  = note: the following trait bounds were not satisfied:
-          `Option<{integer}>: emit::__private::Nullable<'_>`
-          which is required by `Option<{integer}>: emit::__private::__PrivateNullableHook<'_>`
-          `&Option<{integer}>: emit::__private::Nullable<'_>`
-          which is required by `&Option<{integer}>: emit::__private::__PrivateNullableHook<'_>`
-          `&mut Option<{integer}>: emit::__private::Nullable<'_>`
-          which is required by `&mut Option<{integer}>: emit::__private::__PrivateNullableHook<'_>`
+  | impl<'a, T: ?Sized> Optional<'a> for Option<&'a T> {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  = help: for that trait implementation, expected `&_`, found `{integer}`
