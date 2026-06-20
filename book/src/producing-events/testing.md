@@ -1,6 +1,6 @@
 # In tests
 
-`emit` can be configured in `#[test]` functions using the [`#[span]`](https://docs.rs/emit/1.20.1/emit/attr.span.html) attribute. There are several useful [control parameters](../reference/control-parameters.md) you can use to improve diagnostics in tests:
+`emit` can be configured in `#[test]` functions using the [`#[span]`](https://docs.rs/emit/2.21.0/emit/attr.span.html) attribute. There are several useful [control parameters](../reference/control-parameters.md) you can use to improve diagnostics in tests:
 
 - `setup`: Run some code at the start of the annotated function. We can use `setup` in tests to configure the `emit` runtime. When multiple tests share the same setup the first to execute will initialize the runtime.
 - `fn_name`: Include a property with the name of the annotated function. We can use `fn_name` to distinguish tests in the output.
@@ -49,7 +49,7 @@ fn add_1_1() {
 }
 ```
 
-The `setup` function in the above example uses [`emit_term`](https://docs.rs/emit_term/1.20.1/emit_term/index.html) as its emitter. Since it uses `stdout` directly, it bypasses Rust's default test harness behavior of capturing output for passing tests. To preserve the default capturing, you can instead emit events with `println!`s:
+The `setup` function in the above example uses [`emit_term`](https://docs.rs/emit_term/2.21.0/emit_term/index.html) as its emitter. Since it uses `stdout` directly, it bypasses Rust's default test harness behavior of capturing output for passing tests. To preserve the default capturing, you can instead emit events with `println!`s:
 
 ```rust
 # extern crate emit;
