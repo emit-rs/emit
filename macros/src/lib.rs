@@ -42,6 +42,7 @@ mod fmt;
 mod format;
 mod hook;
 mod key;
+mod nullable;
 mod optional;
 mod props;
 mod sample;
@@ -77,6 +78,13 @@ fn hooks() -> HashMap<&'static str, fn(TokenStream, TokenStream) -> syn::Result<
         "optional",
         (|args: TokenStream, expr: TokenStream| {
             optional::rename_hook_tokens(optional::RenameHookTokens { args, expr })
+        }) as fn(TokenStream, TokenStream) -> syn::Result<TokenStream>,
+    );
+
+    map.insert(
+        "nullable",
+        (|args: TokenStream, expr: TokenStream| {
+            nullable::rename_hook_tokens(nullable::RenameHookTokens { args, expr })
         }) as fn(TokenStream, TokenStream) -> syn::Result<TokenStream>,
     );
 
@@ -932,6 +940,26 @@ pub fn optional(
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     (hook::get("optional").unwrap())(TokenStream::from(args), TokenStream::from(item))
+        .unwrap_or_compile_error()
+}
+
+/**
+Specify that a property value of `None` should be captured as `null`, instead of being omitted.
+
+# Syntax
+
+This macro doesn't accept any arguments.
+
+# Applicable to
+
+This attribute can be applied to properties where the type is `Option<&T>`.
+*/
+#[proc_macro_attribute]
+pub fn nullable(
+    args: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    (hook::get("nullable").unwrap())(TokenStream::from(args), TokenStream::from(item))
         .unwrap_or_compile_error()
 }
 

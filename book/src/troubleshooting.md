@@ -93,3 +93,13 @@ let x = Some(42);
 
 emit::emit!("template {#[emit::optional] x: x.as_ref()}");
 ```
+
+Alternatively, use [`#[emit::nullable]`](./reference/property-attributes.md#nullable) if you want the property to be present with a `null` value when `None`, rather than omitted entirely:
+
+```rust,ignore
+let x: Option<&str> = None;
+
+emit::emit!("template {#[emit::nullable] x}");
+```
+
+This produces an event where `"x": null` appears in `props`, instead of the key being absent.

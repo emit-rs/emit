@@ -171,3 +171,115 @@ The structure of properties captured this way is fully preserved:
 ```
 
 See [Property capturing](./property-capturing.md) for more details.
+
+## `#[optional]`
+
+The [`#[optional]`](https://docs.rs/emit/1.20.1/emit/attr.optional.html) attribute captures an `Option<&T>` property, omitting the property entirely when the value is `None`:
+
+```rust
+# extern crate emit;
+let x = Some("some data");
+
+emit::emit!("template {x}", #[emit::optional] x);
+```
+
+```text
+Event {
+    mdl: "my_app",
+    tpl: "template {x}",
+    extent: Some(
+        "2024-10-02T22:06:00.000000000Z",
+    ),
+    props: {
+        "x": "some data",
+    },
+}
+```
+
+When `x` is `None`, the property is omitted from the event:
+
+```rust
+# extern crate emit;
+let x: Option<&str> = None;
+
+emit::emit!("template {x}", #[emit::optional] x);
+```
+
+```text
+Event {
+    mdl: "my_app",
+    tpl: "template {x}",
+    extent: Some(
+        "2024-10-02T22:06:00.000000000Z",
+    ),
+    props: {},
+}
+```
+
+The value must be `Option<&T>`. If you have an `Option<T>`, call `.as_ref()`:
+
+```rust
+# extern crate emit;
+let x = Some(42);
+
+emit::emit!("template {x}", #[emit::optional] x: x.as_ref());
+```
+
+See also [`#[nullable]`](#nullable) if you want the property to be present with a `null` value instead of omitted.
+
+## `#[nullable]`
+
+The [`#[nullable]`](https://docs.rs/emit/1.20.1/emit/attr.nullable.html) attribute captures an `Option<&T>` property, emitting a `null` value when the value is `None`:
+
+```rust
+# extern crate emit;
+let x = Some("some data");
+
+emit::emit!("template {x}", #[emit::nullable] x);
+```
+
+```text
+Event {
+    mdl: "my_app",
+    tpl: "template {x}",
+    extent: Some(
+        "2024-10-02T22:07:00.000000000Z",
+    ),
+    props: {
+        "x": "some data",
+    },
+}
+```
+
+When `x` is `None`, the property is present with a `null` value:
+
+```rust
+# extern crate emit;
+let x: Option<&str> = None;
+
+emit::emit!("template {x}", #[emit::nullable] x);
+```
+
+```text
+Event {
+    mdl: "my_app",
+    tpl: "template {x}",
+    extent: Some(
+        "2024-10-02T22:07:00.000000000Z",
+    ),
+    props: {
+        "x": null,
+    },
+}
+```
+
+The value must be `Option<&T>`. If you have an `Option<T>`, call `.as_ref()`:
+
+```rust
+# extern crate emit;
+let x = Some(42);
+
+emit::emit!("template {x}", #[emit::nullable] x: x.as_ref());
+```
+
+This differs from [`#[optional]`](#optional), which omits the property entirely when `None`. Use `#[nullable]` when the presence of the key matters (e.g., to distinguish "not set" from "explicitly null" in downstream systems).

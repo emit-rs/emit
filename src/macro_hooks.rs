@@ -504,6 +504,48 @@ impl<'a, T> __PrivateOptionalHook<'a> for T {
     }
 }
 
+pub trait __PrivateNullableCaptureHook {
+    fn __private_nullable_capture_some(&self) -> &Self {
+        self
+    }
+
+    fn __private_nullable_capture_option_ref(self) -> Self
+    where
+        Self: Sized,
+    {
+        self
+    }
+}
+
+impl<T: ?Sized> __PrivateNullableCaptureHook for T {}
+
+pub trait __PrivateNullableHook<'a> {
+    fn __private_nullable<F: FnOnce(&'a <Self as Optional<'a>>::Value) -> Option<Value<'a>>>(
+        self,
+        map: F,
+    ) -> Option<Value<'a>>
+    where
+        Self: Optional<'a>;
+}
+
+impl<'a, T> __PrivateNullableHook<'a> for T
+where
+    T: Optional<'a>,
+{
+    fn __private_nullable<F: FnOnce(&'a <Self as Optional<'a>>::Value) -> Option<Value<'a>>>(
+        self,
+        map: F,
+    ) -> Option<Value<'a>>
+    where
+        Self: Optional<'a>,
+    {
+        match self.into_option() {
+            Some(v) => map(v).or(Some(Value::null())),
+            None => Some(Value::null()),
+        }
+    }
+}
+
 pub trait __PrivateInterpolatedHook {
     fn __private_interpolated(self) -> Self;
     fn __private_uninterpolated(self) -> Self;

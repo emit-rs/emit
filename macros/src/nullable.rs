@@ -21,7 +21,7 @@ pub struct RenameHookTokens {
 
 pub fn rename_hook_tokens(opts: RenameHookTokens) -> Result<TokenStream, syn::Error> {
     hook::rename_hook_tokens(hook::RenameHookTokens {
-        name: "optional",
+        name: "nullable",
         target: "values in `emit` macros",
         args: opts.args,
         expr: opts.expr,
@@ -33,13 +33,13 @@ pub fn rename_hook_tokens(opts: RenameHookTokens) -> Result<TokenStream, syn::Er
                 return None;
             }
 
-            let mut optional_args = Punctuated::<Expr, Comma>::new();
+            let mut nullable_args = Punctuated::<Expr, Comma>::new();
 
-            optional_args.push(parse_quote_spanned!(ident.span()=> |v| v.#ident(#args)));
+            nullable_args.push(parse_quote_spanned!(ident.span()=> |v| v.#ident(#args)));
 
-            let optional_ident = Ident::new("__private_optional", ident.span());
+            let nullable_ident = Ident::new("__private_nullable", ident.span());
 
-            Some((quote!(#optional_ident), quote!(#optional_args)))
+            Some((quote!(#nullable_ident), quote!(#nullable_args)))
         },
     })
 }
