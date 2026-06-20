@@ -57,16 +57,16 @@ To learn more about `emit`'s macro syntax, see [Template syntax and rendering](.
 There are two major design decisions in `emit`'s tracing support that you'll likely encounter when you integrate it into your applications:
 
 1. There is no built-in concept of sampling. `emit` uses filters to determine whether to create a span or not, but needs to be extended to support sampling and propagation. See [Sampling and filtering traces](./tracing/sampling.md) for details.
-2. Properties in [`#[span]`](https://docs.rs/emit/1.20.1/emit/attr.span.html) templates are added to ambient context, so are also present on all child spans and log events. See [Visibility of properties on spans](./tracing/properties.md#visibility-of-properties-on-spans) for details.
+2. Properties in [`#[span]`](https://docs.rs/emit/2.21.0/emit/attr.span.html) templates are added to ambient context, so are also present on all child spans and log events. See [Visibility of properties on spans](./tracing/properties.md#visibility-of-properties-on-spans) for details.
 
 ## Spans with levels
 
 `emit` also defines macros for emitting spans at different levels for filtering:
 
-- [`#[debug_span]`](https://docs.rs/emit/1.20.1/emit/attr.debug_span.html)
-- [`#[info_span]`](https://docs.rs/emit/1.20.1/emit/attr.info_span.html)
-- [`#[warn_span]`](https://docs.rs/emit/1.20.1/emit/attr.warn_span.html)
-- [`#[error_span]`](https://docs.rs/emit/1.20.1/emit/attr.error_span.html)
+- [`#[debug_span]`](https://docs.rs/emit/2.21.0/emit/attr.debug_span.html)
+- [`#[info_span]`](https://docs.rs/emit/2.21.0/emit/attr.info_span.html)
+- [`#[warn_span]`](https://docs.rs/emit/2.21.0/emit/attr.warn_span.html)
+- [`#[error_span]`](https://docs.rs/emit/2.21.0/emit/attr.error_span.html)
 
 The level of a span may also depend on its execution. See [Fallible functions](./tracing/fallible-functions.md) and [Manual span completion](./tracing/manual-span-completion.md) for details.
 
