@@ -25,9 +25,7 @@ pub fn rename_hook_tokens(opts: RenameHookTokens) -> Result<TokenStream, syn::Er
         target: "values in `emit` macros",
         args: opts.args,
         expr: opts.expr,
-        predicate: |ident: &str| {
-            ident.starts_with("__private_capture")
-        },
+        predicate: |ident: &str| ident.starts_with("__private_capture"),
         to: move |_: &Args, ident: &Ident, args: &Punctuated<Expr, Comma>| {
             if ident == "__private_captured" {
                 return None;

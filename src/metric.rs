@@ -6,7 +6,6 @@ use core::{fmt, ops::ControlFlow};
 
 use emit_core::{
     and::And,
-    emitter::Emitter,
     event::{Event, ToEvent},
     extent::{Extent, ToExtent},
     or::Or,
@@ -725,6 +724,7 @@ mod alloc_support {
 
     use crate::{
         clock::{Clock, ErasedClock},
+        emitter::Emitter,
         metric::source::{ErasedSource, Source},
     };
 

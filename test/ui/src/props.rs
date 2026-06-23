@@ -28,6 +28,20 @@ fn props_basic() {
 }
 
 #[test]
+fn props_multi_scope() {
+    let a = emit::props! {
+        a: 1,
+    };
+
+    let b = emit::props! {
+        b: 2,
+    };
+
+    assert_eq!(1, a.a);
+    assert_eq!(2, b.b);
+}
+
+#[test]
 fn props_renamed() {
     let props = emit::props! {
         #[emit::key("c")]
