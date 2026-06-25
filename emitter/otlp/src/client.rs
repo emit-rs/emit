@@ -6,12 +6,10 @@ This module is a consumer of `data`, using it to encode incoming events. These a
 
 use crate::{
     Error, OtlpMetrics,
-    data::{
-        self, EncodedEvent, EncodedPayload, EncodedScopeItems, RawEncoder, logs::LogsEventEncoder,
-        metrics::MetricsEventEncoder, traces::TracesEventEncoder,
-    },
+    data::{self, EncodedEvent, EncodedPayload, EncodedScopeItems, RawEncoder},
     internal_metrics::InternalMetrics,
 };
+use emit::Filter;
 use emit_batcher::BatchError;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
@@ -46,11 +44,13 @@ mod imp;
 #[path = "client/stub.rs"]
 mod imp;
 
+mod channel;
 mod http;
 mod logs;
 mod metrics;
 mod traces;
 
+pub(crate) use self::channel::{Channel, ChannelItem, SignalWorker};
 pub use self::{logs::*, metrics::*, traces::*};
 
 const DEFAULT_MAX_REQUEST_SIZE_BYTES: usize = 1024 * 1024; // 1MiB
@@ -69,20 +69,51 @@ pub struct Otlp {
 }
 
 struct OtlpInner {
-    otlp_logs: Option<(
-        ClientEventEncoder<LogsEventEncoder>,
-        emit_batcher::Sender<Channel>,
-    )>,
-    otlp_traces: Option<(
-        ClientEventEncoder<TracesEventEncoder>,
-        emit_batcher::Sender<Channel>,
-    )>,
-    otlp_metrics: Option<(
-        ClientEventEncoder<MetricsEventEncoder>,
-        emit_batcher::Sender<Channel>,
-    )>,
+    signals: SignalSenders,
     metrics: Arc<InternalMetrics>,
-    _handle: Handle,
+    #[allow(dead_code)]
+    handle: Option<Handle>,
+}
+
+/** Manages the senders for all configured OTLP signals. */
+pub(crate) struct SignalSenders {
+    logs: Option<emit_batcher::Sender<Channel>>,
+    traces: Option<emit_batcher::Sender<Channel>>,
+    metrics: Option<emit_batcher::Sender<Channel>>,
+}
+
+impl SignalSenders {
+    fn new(
+        logs: Option<emit_batcher::Sender<Channel>>,
+        traces: Option<emit_batcher::Sender<Channel>>,
+        metrics: Option<emit_batcher::Sender<Channel>>,
+    ) -> Self {
+        SignalSenders {
+            logs,
+            traces,
+            metrics,
+        }
+    }
+
+    fn configured_count(&self) -> u32 {
+        self.logs.as_ref().map(|_| 1).unwrap_or_default()
+            + self.traces.as_ref().map(|_| 1).unwrap_or_default()
+            + self.metrics.as_ref().map(|_| 1).unwrap_or_default()
+    }
+
+    fn metric_sources(
+        &self,
+    ) -> (
+        Option<emit_batcher::ChannelMetrics<Channel>>,
+        Option<emit_batcher::ChannelMetrics<Channel>>,
+        Option<emit_batcher::ChannelMetrics<Channel>>,
+    ) {
+        (
+            self.logs.as_ref().map(|s| s.metric_source()),
+            self.traces.as_ref().map(|s| s.metric_source()),
+            self.metrics.as_ref().map(|s| s.metric_source()),
+        )
+    }
 }
 
 impl Otlp {
@@ -101,22 +132,15 @@ impl Otlp {
     These metrics can be used to monitor the running health of your diagnostic pipeline.
     */
     pub fn metric_source(&self) -> OtlpMetrics {
+        let (logs, traces, metrics) = self
+            .inner
+            .as_ref()
+            .map(|i| i.signals.metric_sources())
+            .unwrap_or((None, None, None));
         OtlpMetrics {
-            logs_channel_metrics: self
-                .inner
-                .as_ref()
-                .and_then(|otlp| otlp.otlp_logs.as_ref())
-                .map(|(_, sender)| sender.metric_source()),
-            traces_channel_metrics: self
-                .inner
-                .as_ref()
-                .and_then(|otlp| otlp.otlp_traces.as_ref())
-                .map(|(_, sender)| sender.metric_source()),
-            metrics_channel_metrics: self
-                .inner
-                .as_ref()
-                .and_then(|otlp| otlp.otlp_metrics.as_ref())
-                .map(|(_, sender)| sender.metric_source()),
+            logs_channel_metrics: logs,
+            traces_channel_metrics: traces,
+            metrics_channel_metrics: metrics,
             metrics: self.metrics.clone(),
         }
     }
@@ -229,49 +253,46 @@ impl OtlpBuilder {
     }
 
     fn try_spawn_inner(self, metrics: Arc<InternalMetrics>) -> Result<OtlpInner, Error> {
-        let (otlp_logs, process_otlp_logs) = match self.otlp_logs {
+        let (otlp_logs, worker_logs) = match self.otlp_logs {
             Some(builder) => {
                 let (encoder, transport) =
                     builder.build(metrics.clone(), self.resource.as_ref())?;
-
                 let (sender, receiver) = emit_batcher::bounded(10_000);
-
-                (Some((encoder, sender)), Some((transport, receiver)))
+                let worker = SignalWorker::new(encoder, transport, receiver);
+                (Some(sender), Some(worker))
             }
             None => (None, None),
         };
 
-        let (otlp_traces, process_otlp_traces) = match self.otlp_traces {
+        let (otlp_traces, worker_traces) = match self.otlp_traces {
             Some(builder) => {
                 let (encoder, transport) =
                     builder.build(metrics.clone(), self.resource.as_ref())?;
-
                 let (sender, receiver) = emit_batcher::bounded(10_000);
-
-                (Some((encoder, sender)), Some((transport, receiver)))
+                let worker = SignalWorker::new(encoder, transport, receiver);
+                (Some(sender), Some(worker))
             }
             None => (None, None),
         };
 
-        let (otlp_metrics, process_otlp_metrics) = match self.otlp_metrics {
+        let (otlp_metrics, worker_metrics) = match self.otlp_metrics {
             Some(builder) => {
                 let (encoder, transport) =
                     builder.build(metrics.clone(), self.resource.as_ref())?;
-
                 let (sender, receiver) = emit_batcher::bounded(10_000);
-
-                (Some((encoder, sender)), Some((transport, receiver)))
+                let worker = SignalWorker::new(encoder, transport, receiver);
+                (Some(sender), Some(worker))
             }
             None => (None, None),
         };
 
         Self::try_spawn_inner_imp(
             otlp_logs,
-            process_otlp_logs,
+            worker_logs,
             otlp_traces,
-            process_otlp_traces,
+            worker_traces,
             otlp_metrics,
-            process_otlp_metrics,
+            worker_metrics,
             metrics,
         )
     }
@@ -496,7 +517,7 @@ impl OtlpTransportBuilder {
     }
 }
 
-enum OtlpTransport<R> {
+pub(crate) enum OtlpTransport<R> {
     Http {
         http: HttpConnection,
         resource: Option<EncodedPayload>,
@@ -505,30 +526,27 @@ enum OtlpTransport<R> {
 }
 
 impl<R: data::RequestEncoder> OtlpTransport<R> {
-    pub(crate) async fn send(&self, mut channel: Channel) -> Result<(), BatchError<Channel>> {
+    pub(crate) async fn send<E: data::EventEncoder>(
+        &self,
+        event_encoder: &ClientEventEncoder<E>,
+        channel: Channel,
+    ) -> Result<(), BatchError<Channel>> {
         match self {
             OtlpTransport::Http {
                 http,
                 resource,
                 request_encoder,
-            } => {
-                // Process each request in the batch
-                while let Some(batch) = channel.requests.last() {
-                    match Self::send_batch(http, resource, request_encoder, batch).await {
-                        Ok(()) => {
-                            channel.requests.pop();
-                        }
-                        Err(e) => {
-                            return Err(e.map_retryable(|r| r.map(|_| channel)));
-                        }
-                    }
-
-                    channel.requests.pop();
-                }
-            }
+            } => channel::execute(
+                channel,
+                DEFAULT_MAX_REQUEST_SIZE_BYTES,
+                |event| event_encoder.encode_event(event),
+                |batch| {
+                    let batch = batch.clone();
+                    async move { Self::send_batch(http, resource, request_encoder, &batch).await }
+                },
+            )
+            .await,
         }
-
-        Ok(())
     }
 
     #[emit::span(rt: emit::runtime::internal(), guard: span, "send OTLP batch of {batch_size} events", batch_size: batch.total_items())]
@@ -606,31 +624,26 @@ impl emit::Emitter for Otlp {
 
 impl OtlpInner {
     fn configured_signals(&self) -> u32 {
-        self.otlp_logs.as_ref().map(|_| 1).unwrap_or_default()
-            + self.otlp_traces.as_ref().map(|_| 1).unwrap_or_default()
-            + self.otlp_metrics.as_ref().map(|_| 1).unwrap_or_default()
+        self.signals.configured_count()
     }
 
     async fn flush(&self, timeout: Duration) -> bool {
-        // Same impl as `blocking_flush` below
-        let configured_signals = self.configured_signals();
-        let timeout = timeout / configured_signals;
-
+        let timeout = timeout / self.configured_signals();
         let mut fully_flushed = true;
 
-        if let Some((_, ref sender)) = self.otlp_logs {
+        if let Some(ref sender) = self.signals.logs {
             if !imp::flush(sender, timeout).await {
                 fully_flushed = false;
             }
         }
 
-        if let Some((_, ref sender)) = self.otlp_traces {
+        if let Some(ref sender) = self.signals.traces {
             if !imp::flush(sender, timeout).await {
                 fully_flushed = false;
             }
         }
 
-        if let Some((_, ref sender)) = self.otlp_metrics {
+        if let Some(ref sender) = self.signals.metrics {
             if !imp::flush(sender, timeout).await {
                 fully_flushed = false;
             }
@@ -638,37 +651,39 @@ impl OtlpInner {
 
         fully_flushed
     }
+
+    /** Take the background handle, consuming the inner.
+    Used by tests to verify the worker thread shuts down cleanly. */
+    #[allow(dead_code)]
+    fn take_handle(&mut self) -> Handle {
+        self.handle.take().expect("handle already taken")
+    }
 }
 
 impl emit::Emitter for OtlpInner {
     fn emit<E: emit::event::ToEvent>(&self, evt: E) {
-        let evt = evt.to_event();
+        let owned = evt.to_event().to_owned();
 
-        if let Some((ref encoder, ref sender)) = self.otlp_metrics {
-            if let Some(event) = encoder.encode_event(&evt) {
-                return sender.send(ChannelItem {
-                    max_request_size_bytes: DEFAULT_MAX_REQUEST_SIZE_BYTES,
-                    event,
-                });
+        // Check metrics first (highest priority)
+        if let Some(ref sender) = self.signals.metrics {
+            if emit::kind::is_metric_filter().matches(&owned) {
+                sender.send(ChannelItem { event: owned });
+                return;
             }
         }
 
-        if let Some((ref encoder, ref sender)) = self.otlp_traces {
-            if let Some(event) = encoder.encode_event(&evt) {
-                return sender.send(ChannelItem {
-                    max_request_size_bytes: DEFAULT_MAX_REQUEST_SIZE_BYTES,
-                    event,
-                });
+        // Check traces second
+        if let Some(ref sender) = self.signals.traces {
+            if emit::kind::is_span_filter().matches(&owned) {
+                sender.send(ChannelItem { event: owned });
+                return;
             }
         }
 
-        if let Some((ref encoder, ref sender)) = self.otlp_logs {
-            if let Some(event) = encoder.encode_event(&evt) {
-                return sender.send(ChannelItem {
-                    max_request_size_bytes: DEFAULT_MAX_REQUEST_SIZE_BYTES,
-                    event,
-                });
-            }
+        // Logs is the fallback — accepts all events
+        if let Some(ref sender) = self.signals.logs {
+            sender.send(ChannelItem { event: owned });
+            return;
         }
 
         self.metrics.event_discarded.increment();
@@ -678,87 +693,28 @@ impl emit::Emitter for OtlpInner {
     Wait for up to `timeout` for any pending events to be sent to the backend OTLP service.
     */
     fn blocking_flush(&self, timeout: Duration) -> bool {
-        let configured_signals = self.configured_signals();
-        let timeout = timeout / configured_signals;
+        let timeout = timeout / self.configured_signals();
         let mut fully_flushed = true;
 
-        if let Some((_, ref sender)) = self.otlp_logs {
+        if let Some(ref sender) = self.signals.logs {
             if !emit_batcher::blocking_flush(sender, timeout) {
                 fully_flushed = false;
             }
         }
 
-        if let Some((_, ref sender)) = self.otlp_traces {
+        if let Some(ref sender) = self.signals.traces {
             if !emit_batcher::blocking_flush(sender, timeout) {
                 fully_flushed = false;
             }
         }
 
-        if let Some((_, ref sender)) = self.otlp_metrics {
+        if let Some(ref sender) = self.signals.metrics {
             if !emit_batcher::blocking_flush(sender, timeout) {
                 fully_flushed = false;
             }
         }
 
         fully_flushed
-    }
-}
-
-#[derive(Default)]
-pub(crate) struct Channel {
-    requests: Vec<EncodedScopeItems>,
-    current_request_size_bytes: usize,
-    total_items: usize,
-}
-
-pub(crate) struct ChannelItem {
-    max_request_size_bytes: usize,
-    event: EncodedEvent,
-}
-
-impl emit_batcher::Channel for Channel {
-    type Item = ChannelItem;
-
-    fn new() -> Self {
-        Channel::default()
-    }
-
-    fn push(&mut self, item: Self::Item) {
-        let incoming_size_bytes = item.event.payload.len();
-
-        // If the channel is empty or the current request is over its size limit then begin a new one
-        if self.requests.len() == 0
-            || self.current_request_size_bytes >= item.max_request_size_bytes
-        {
-            let mut request = EncodedScopeItems::new();
-            request.push(item.event);
-
-            self.requests.push(request);
-            self.current_request_size_bytes = incoming_size_bytes;
-        }
-        // If the current request still has capacity then push onto it
-        else {
-            self.requests.last_mut().unwrap().push(item.event);
-            self.current_request_size_bytes += incoming_size_bytes;
-        }
-
-        self.total_items += 1;
-    }
-
-    fn len(&self) -> usize {
-        self.total_items
-    }
-
-    fn clear(&mut self) {
-        let Channel {
-            requests,
-            total_items,
-            current_request_size_bytes,
-        } = self;
-
-        requests.clear();
-        *total_items = 0;
-        *current_request_size_bytes = 0;
     }
 }
 
@@ -786,7 +742,7 @@ impl Encoding {
     }
 }
 
-struct ClientEventEncoder<E> {
+pub(crate) struct ClientEventEncoder<E> {
     encoding: Encoding,
     encoder: E,
 }
@@ -809,7 +765,7 @@ impl<E: data::EventEncoder> ClientEventEncoder<E> {
     }
 }
 
-struct ClientRequestEncoder<R> {
+pub(crate) struct ClientRequestEncoder<R> {
     encoding: Encoding,
     encoder: R,
 }
@@ -866,9 +822,8 @@ mod tests {
         let mut otlp = Otlp::builder().spawn();
 
         let handle = {
-            let inner = otlp.inner.take().unwrap();
-
-            inner._handle
+            let mut inner = otlp.inner.take().unwrap();
+            inner.take_handle()
         };
 
         drop(otlp);
@@ -891,41 +846,13 @@ mod tests {
             .spawn();
 
         let handle = {
-            let inner = otlp.inner.take().unwrap();
-
-            inner._handle
+            let mut inner = otlp.inner.take().unwrap();
+            inner.take_handle()
         };
 
         drop(otlp);
 
         // Ensure the background thread is torn down
         handle.join().unwrap();
-    }
-
-    #[test]
-    fn otlp_channel_splits_requests_by_size() {
-        use emit_batcher::Channel as _;
-
-        for (max_request_size_bytes, expected_len) in [(0, 100), (1, 100), (10, 20)] {
-            let mut channel = Channel::new();
-
-            for _ in 0..100 {
-                channel.push(ChannelItem {
-                    max_request_size_bytes,
-                    event: EncodedEvent {
-                        scope: emit::path!("a"),
-                        payload: EncodedPayload::Json(sval_json::JsonStr::boxed("{}")),
-                    },
-                });
-            }
-
-            assert_eq!(100, channel.total_items);
-
-            assert_eq!(
-                expected_len,
-                channel.requests.len(),
-                "{max_request_size_bytes} did not produce {expected_len} items"
-            );
-        }
     }
 }

@@ -142,9 +142,7 @@ pub fn rename_hook_tokens(
         target: "values in `emit` macros",
         args: opts.args,
         expr: opts.expr,
-        predicate: |ident: &str| {
-            ident.starts_with("__private_capture")
-        },
+        predicate: |ident: &str| ident.starts_with("__private_capture"),
         to: move |hook_args: &Args, ident: &Ident, args: &Punctuated<Expr, Comma>| {
             if ident == "__private_captured" {
                 return None;

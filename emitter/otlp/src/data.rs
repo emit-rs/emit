@@ -32,6 +32,7 @@ use crate::Error;
 
 pub use self::{any_value::*, instrumentation_scope::*, resource::*};
 
+#[derive(Clone)]
 pub(crate) struct EncodedEvent {
     pub scope: emit::Path<'static>,
     pub payload: EncodedPayload,
@@ -59,7 +60,7 @@ pub(crate) trait RawEncoder {
     fn encode<V: sval::Value>(value: V) -> EncodedPayload;
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct EncodedScopeItems {
     items: HashMap<emit::Path<'static>, Vec<EncodedPayload>>,
 }
