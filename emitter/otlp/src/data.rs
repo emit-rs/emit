@@ -34,14 +34,20 @@ pub use self::{any_value::*, instrumentation_scope::*, resource::*};
 
 #[derive(Clone)]
 pub(crate) struct EncodedEvent {
-    pub scope: emit::Path<'static>,
-    pub payload: EncodedPayload,
+    scope: emit::Path<'static>,
+    payload: EncodedPayload,
+}
+
+impl EncodedEvent {
+    pub fn size_bytes(&self) -> usize {
+        self.payload.len()
+    }
 }
 
 pub(crate) trait EventEncoder {
     fn encode_event<E: RawEncoder>(
         &self,
-        evt: &emit::event::Event<impl emit::props::Props>,
+        evt: &emit::Event<impl emit::Props>,
     ) -> Option<EncodedEvent>;
 }
 
@@ -63,17 +69,21 @@ pub(crate) trait RawEncoder {
 #[derive(Default, Clone)]
 pub(crate) struct EncodedScopeItems {
     items: HashMap<emit::Path<'static>, Vec<EncodedPayload>>,
+    size_bytes: usize,
 }
 
 impl EncodedScopeItems {
     pub fn new() -> Self {
         EncodedScopeItems {
             items: HashMap::new(),
+            size_bytes: 0,
         }
     }
 
     pub fn push(&mut self, evt: EncodedEvent) {
         let entry = self.items.entry(evt.scope).or_default();
+
+        self.size_bytes += evt.payload.len();
         entry.push(evt.payload);
     }
 
@@ -87,6 +97,10 @@ impl EncodedScopeItems {
 
     pub fn items(&self) -> impl Iterator<Item = (emit::Path<'_>, &[EncodedPayload])> {
         self.items.iter().map(|(k, v)| (k.by_ref(), &**v))
+    }
+
+    pub fn total_size_bytes(&self) -> usize {
+        self.size_bytes
     }
 }
 
@@ -338,7 +352,7 @@ pub(crate) fn stream_field<'sval, S: sval::Stream<'sval> + ?Sized>(
 
 pub(crate) fn stream_attributes<'sval, S: sval::Stream<'sval> + ?Sized>(
     stream: &mut S,
-    props: &'sval impl emit::props::Props,
+    props: &'sval impl emit::Props,
     mut for_each: impl FnMut(
         AttributeStream<'_, S>,
         emit::str::Str<'sval>,
@@ -396,16 +410,16 @@ impl<'a, 'sval, S: sval::Stream<'sval> + ?Sized> AttributeStream<'a, S> {
     }
 }
 
-pub(crate) type MessageFormatter = dyn Fn(&emit::event::Event<&dyn emit::props::ErasedProps>, &mut fmt::Formatter) -> fmt::Result
+pub(crate) type MessageFormatter = dyn Fn(&emit::Event<&dyn emit::props::ErasedProps>, &mut fmt::Formatter) -> fmt::Result
     + Send
     + Sync;
 
 pub(crate) struct MessageRenderer<'a, P> {
     pub fmt: &'a MessageFormatter,
-    pub evt: &'a emit::event::Event<'a, P>,
+    pub evt: &'a emit::Event<'a, P>,
 }
 
-impl<'a, P: emit::props::Props> fmt::Display for MessageRenderer<'a, P> {
+impl<'a, P: emit::Props> fmt::Display for MessageRenderer<'a, P> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         (self.fmt)(&self.evt.erase(), f)
     }

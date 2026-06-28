@@ -11,7 +11,7 @@ use crate::{
 };
 use emit::Filter;
 use emit_batcher::BatchError;
-use std::{collections::HashMap, fmt, future::Future, sync::Arc, time::Duration};
+use std::{cmp, collections::HashMap, fmt, future::Future, sync::Arc, time::Duration};
 
 use self::{
     http::{HttpConnection, HttpVersion},
@@ -50,11 +50,12 @@ mod logs;
 mod metrics;
 mod traces;
 
-pub(crate) use self::channel::{Channel, ChannelItem, SignalWorker};
+pub(crate) use self::channel::{Channel, ChannelItem};
 pub use self::{logs::*, metrics::*, traces::*};
 
 const DEFAULT_MAX_REQUEST_SIZE_BYTES: usize = 1024 * 1024; // 1MiB
 const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const DEFAULT_CHANNEL_SIZE_EVENTS: usize = 10_000;
 
 /**
 An [`emit::Emitter`] that sends diagnostic events via the OpenTelemetry Protocol (OTLP).
@@ -69,51 +70,17 @@ pub struct Otlp {
 }
 
 struct OtlpInner {
-    signals: SignalSenders,
     metrics: Arc<InternalMetrics>,
+    otlp_logs: Option<emit_batcher::Sender<Channel>>,
+    otlp_traces: Option<emit_batcher::Sender<Channel>>,
+    otlp_metrics: Option<emit_batcher::Sender<Channel>>,
     #[allow(dead_code)]
     handle: Option<Handle>,
 }
 
-/** Manages the senders for all configured OTLP signals. */
-pub(crate) struct SignalSenders {
-    logs: Option<emit_batcher::Sender<Channel>>,
-    traces: Option<emit_batcher::Sender<Channel>>,
-    metrics: Option<emit_batcher::Sender<Channel>>,
-}
-
-impl SignalSenders {
-    fn new(
-        logs: Option<emit_batcher::Sender<Channel>>,
-        traces: Option<emit_batcher::Sender<Channel>>,
-        metrics: Option<emit_batcher::Sender<Channel>>,
-    ) -> Self {
-        SignalSenders {
-            logs,
-            traces,
-            metrics,
-        }
-    }
-
-    fn configured_count(&self) -> u32 {
-        self.logs.as_ref().map(|_| 1).unwrap_or_default()
-            + self.traces.as_ref().map(|_| 1).unwrap_or_default()
-            + self.metrics.as_ref().map(|_| 1).unwrap_or_default()
-    }
-
-    fn metric_sources(
-        &self,
-    ) -> (
-        Option<emit_batcher::ChannelMetrics<Channel>>,
-        Option<emit_batcher::ChannelMetrics<Channel>>,
-        Option<emit_batcher::ChannelMetrics<Channel>>,
-    ) {
-        (
-            self.logs.as_ref().map(|s| s.metric_source()),
-            self.traces.as_ref().map(|s| s.metric_source()),
-            self.metrics.as_ref().map(|s| s.metric_source()),
-        )
-    }
+struct SignalWorker<S, E, R> {
+    pub(crate) transport: Arc<OtlpTransport<S, E, R>>,
+    pub(crate) receiver: emit_batcher::Receiver<Channel>,
 }
 
 impl Otlp {
@@ -132,15 +99,22 @@ impl Otlp {
     These metrics can be used to monitor the running health of your diagnostic pipeline.
     */
     pub fn metric_source(&self) -> OtlpMetrics {
-        let (logs, traces, metrics) = self
-            .inner
-            .as_ref()
-            .map(|i| i.signals.metric_sources())
-            .unwrap_or((None, None, None));
         OtlpMetrics {
-            logs_channel_metrics: logs,
-            traces_channel_metrics: traces,
-            metrics_channel_metrics: metrics,
+            logs_channel_metrics: self
+                .inner
+                .as_ref()
+                .and_then(|inner| inner.otlp_logs.as_ref())
+                .map(|signal| signal.metric_source()),
+            traces_channel_metrics: self
+                .inner
+                .as_ref()
+                .and_then(|inner| inner.otlp_traces.as_ref())
+                .map(|signal| signal.metric_source()),
+            metrics_channel_metrics: self
+                .inner
+                .as_ref()
+                .and_then(|inner| inner.otlp_metrics.as_ref())
+                .map(|signal| signal.metric_source()),
             metrics: self.metrics.clone(),
         }
     }
@@ -211,7 +185,7 @@ impl OtlpBuilder {
 
     Some OTLP receivers accept data without a resource but the OpenTelemetry specification itself mandates it.
     */
-    pub fn resource(mut self, attributes: impl emit::props::Props) -> Self {
+    pub fn resource(mut self, attributes: impl emit::Props) -> Self {
         let mut resource = Resource {
             attributes: HashMap::new(),
         };
@@ -255,9 +229,13 @@ impl OtlpBuilder {
     fn try_spawn_inner(self, metrics: Arc<InternalMetrics>) -> Result<OtlpInner, Error> {
         let (otlp_logs, worker_logs) = match self.otlp_logs {
             Some(builder) => {
-                let transport = builder.build(metrics.clone(), self.resource.as_ref())?;
-                let (sender, receiver) = emit_batcher::bounded(10_000);
-                let worker = SignalWorker::new(transport, receiver);
+                let transport = Arc::new(builder.build(metrics.clone(), self.resource.as_ref())?);
+                let (sender, receiver) = emit_batcher::bounded(DEFAULT_CHANNEL_SIZE_EVENTS);
+                let worker = SignalWorker {
+                    transport,
+                    receiver,
+                };
+
                 (Some(sender), Some(worker))
             }
             None => (None, None),
@@ -265,9 +243,13 @@ impl OtlpBuilder {
 
         let (otlp_traces, worker_traces) = match self.otlp_traces {
             Some(builder) => {
-                let transport = builder.build(metrics.clone(), self.resource.as_ref())?;
-                let (sender, receiver) = emit_batcher::bounded(10_000);
-                let worker = SignalWorker::new(transport, receiver);
+                let transport = Arc::new(builder.build(metrics.clone(), self.resource.as_ref())?);
+                let (sender, receiver) = emit_batcher::bounded(DEFAULT_CHANNEL_SIZE_EVENTS);
+                let worker = SignalWorker {
+                    transport,
+                    receiver,
+                };
+
                 (Some(sender), Some(worker))
             }
             None => (None, None),
@@ -275,9 +257,13 @@ impl OtlpBuilder {
 
         let (otlp_metrics, worker_metrics) = match self.otlp_metrics {
             Some(builder) => {
-                let transport = builder.build(metrics.clone(), self.resource.as_ref())?;
-                let (sender, receiver) = emit_batcher::bounded(10_000);
-                let worker = SignalWorker::new(transport, receiver);
+                let transport = Arc::new(builder.build(metrics.clone(), self.resource.as_ref())?);
+                let (sender, receiver) = emit_batcher::bounded(DEFAULT_CHANNEL_SIZE_EVENTS);
+                let worker = SignalWorker {
+                    transport,
+                    receiver,
+                };
+
                 (Some(sender), Some(worker))
             }
             None => (None, None),
@@ -620,27 +606,33 @@ impl emit::Emitter for Otlp {
 }
 
 impl OtlpInner {
-    fn configured_signals(&self) -> u32 {
-        self.signals.configured_count()
+    fn timeout_per_signal(&self, timeout: Duration) -> Duration {
+        let logs = self.otlp_logs.as_ref().map(|_| 1).unwrap_or(0);
+        let traces = self.otlp_traces.as_ref().map(|_| 1).unwrap_or(0);
+        let metrics = self.otlp_metrics.as_ref().map(|_| 1).unwrap_or(0);
+
+        let budget = cmp::max(1, logs + traces + metrics);
+
+        timeout / budget
     }
 
     async fn flush(&self, timeout: Duration) -> bool {
-        let timeout = timeout / self.configured_signals();
+        let timeout = self.timeout_per_signal(timeout);
         let mut fully_flushed = true;
 
-        if let Some(ref sender) = self.signals.logs {
+        if let Some(ref sender) = self.otlp_logs {
             if !imp::flush(sender, timeout).await {
                 fully_flushed = false;
             }
         }
 
-        if let Some(ref sender) = self.signals.traces {
+        if let Some(ref sender) = self.otlp_traces {
             if !imp::flush(sender, timeout).await {
                 fully_flushed = false;
             }
         }
 
-        if let Some(ref sender) = self.signals.metrics {
+        if let Some(ref sender) = self.otlp_metrics {
             if !imp::flush(sender, timeout).await {
                 fully_flushed = false;
             }
@@ -659,27 +651,30 @@ impl OtlpInner {
 
 impl emit::Emitter for OtlpInner {
     fn emit<E: emit::event::ToEvent>(&self, evt: E) {
-        let owned = evt.to_event().to_owned();
+        let evt = evt.to_event();
 
-        // Check metrics first (highest priority)
-        if let Some(ref sender) = self.signals.metrics {
-            if emit::kind::is_metric_filter().matches(&owned) {
-                sender.send(ChannelItem { event: owned });
+        if let Some(ref sender) = self.otlp_metrics {
+            if emit::kind::is_metric_filter().matches(&evt) {
+                sender.send(ChannelItem {
+                    event: evt.to_owned(),
+                });
                 return;
             }
         }
 
-        // Check traces second
-        if let Some(ref sender) = self.signals.traces {
-            if emit::kind::is_span_filter().matches(&owned) {
-                sender.send(ChannelItem { event: owned });
+        if let Some(ref sender) = self.otlp_traces {
+            if emit::kind::is_span_filter().matches(&evt) {
+                sender.send(ChannelItem {
+                    event: evt.to_owned(),
+                });
                 return;
             }
         }
 
-        // Logs is the fallback — accepts all events
-        if let Some(ref sender) = self.signals.logs {
-            sender.send(ChannelItem { event: owned });
+        if let Some(ref sender) = self.otlp_logs {
+            sender.send(ChannelItem {
+                event: evt.to_owned(),
+            });
             return;
         }
 
@@ -690,22 +685,22 @@ impl emit::Emitter for OtlpInner {
     Wait for up to `timeout` for any pending events to be sent to the backend OTLP service.
     */
     fn blocking_flush(&self, timeout: Duration) -> bool {
-        let timeout = timeout / self.configured_signals();
+        let timeout = self.timeout_per_signal(timeout);
         let mut fully_flushed = true;
 
-        if let Some(ref sender) = self.signals.logs {
+        if let Some(ref sender) = self.otlp_logs {
             if !emit_batcher::blocking_flush(sender, timeout) {
                 fully_flushed = false;
             }
         }
 
-        if let Some(ref sender) = self.signals.traces {
+        if let Some(ref sender) = self.otlp_traces {
             if !emit_batcher::blocking_flush(sender, timeout) {
                 fully_flushed = false;
             }
         }
 
-        if let Some(ref sender) = self.signals.metrics {
+        if let Some(ref sender) = self.otlp_metrics {
             if !emit_batcher::blocking_flush(sender, timeout) {
                 fully_flushed = false;
             }
@@ -751,10 +746,7 @@ impl<E> ClientEventEncoder<E> {
 }
 
 impl<E: data::EventEncoder> ClientEventEncoder<E> {
-    pub fn encode_event(
-        &self,
-        evt: &emit::event::Event<impl emit::props::Props>,
-    ) -> Option<EncodedEvent> {
+    pub fn encode_event(&self, evt: &emit::event::Event<impl emit::Props>) -> Option<EncodedEvent> {
         match self.encoding {
             Encoding::Proto => self.encoder.encode_event::<data::Proto>(evt),
             Encoding::Json => self.encoder.encode_event::<data::Json>(evt),

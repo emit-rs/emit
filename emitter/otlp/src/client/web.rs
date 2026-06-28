@@ -33,27 +33,24 @@ impl OtlpBuilder {
         let _ = metrics;
 
         if let Some(worker) = worker_logs {
-            let (transport, receiver) = worker.into_receiver();
-            emit_batcher::web::spawn(receiver, move |batch| {
-                let transport = transport.clone();
+            emit_batcher::web::spawn(worker.receiver, move |batch| {
+                let transport = worker.transport.clone();
                 async move { transport.send(batch).await }
             })
             .map_err(|e| Error::new("failed to spawn logs transport", e))?;
         }
 
         if let Some(worker) = worker_traces {
-            let (transport, receiver) = worker.into_receiver();
-            emit_batcher::web::spawn(receiver, move |batch| {
-                let transport = transport.clone();
+            emit_batcher::web::spawn(worker.receiver, move |batch| {
+                let transport = worker.transport.clone();
                 async move { transport.send(batch).await }
             })
             .map_err(|e| Error::new("failed to spawn traces transport", e))?;
         }
 
         if let Some(worker) = worker_metrics {
-            let (transport, receiver) = worker.into_receiver();
-            emit_batcher::web::spawn(receiver, move |batch| {
-                let transport = transport.clone();
+            emit_batcher::web::spawn(worker.receiver, move |batch| {
+                let transport = worker.transport.clone();
                 async move { transport.send(batch).await }
             })
             .map_err(|e| Error::new("failed to spawn metrics transport", e))?;

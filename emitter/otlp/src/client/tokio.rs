@@ -5,7 +5,7 @@ use futures_util::{StreamExt, stream::FuturesUnordered};
 use crate::{
     Error,
     client::http::HttpConnection,
-    client::{Channel, OtlpBuilder, OtlpInner, SignalSenders, SignalWorker},
+    client::{Channel, OtlpBuilder, OtlpInner, SignalWorker},
     data::{
         logs::{LogsEventEncoder, LogsRequestEncoder},
         metrics::{MetricsEventEncoder, MetricsRequestEncoder},
@@ -35,33 +35,30 @@ impl OtlpBuilder {
                 FuturesUnordered::<Pin<Box<dyn Future<Output = ()> + Send + 'static>>>::new();
 
             if let Some(worker) = worker_logs {
-                let (transport, receiver) = worker.into_receiver();
                 processors.push(Box::pin(emit_batcher::tokio::exec(
-                    receiver,
+                    worker.receiver,
                     move |batch| {
-                        let transport = transport.clone();
+                        let transport = worker.transport.clone();
                         async move { transport.send(batch).await }
                     },
                 )));
             }
 
             if let Some(worker) = worker_traces {
-                let (transport, receiver) = worker.into_receiver();
                 processors.push(Box::pin(emit_batcher::tokio::exec(
-                    receiver,
+                    worker.receiver,
                     move |batch| {
-                        let transport = transport.clone();
+                        let transport = worker.transport.clone();
                         async move { transport.send(batch).await }
                     },
                 )));
             }
 
             if let Some(worker) = worker_metrics {
-                let (transport, receiver) = worker.into_receiver();
                 processors.push(Box::pin(emit_batcher::tokio::exec(
-                    receiver,
+                    worker.receiver,
                     move |batch| {
-                        let transport = transport.clone();
+                        let transport = worker.transport.clone();
                         async move { transport.send(batch).await }
                     },
                 )));
@@ -82,7 +79,9 @@ impl OtlpBuilder {
             .map_err(|e| Error::new("failed to spawn background worker", e))?;
 
         Ok(OtlpInner {
-            signals: SignalSenders::new(otlp_logs, otlp_traces, otlp_metrics),
+            otlp_logs,
+            otlp_traces,
+            otlp_metrics,
             metrics,
             handle: Some(handle),
         })
