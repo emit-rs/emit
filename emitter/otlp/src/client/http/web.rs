@@ -12,7 +12,9 @@ use wasm_bindgen::prelude::*;
 
 use crate::{
     Error,
-    client::http::{HttpContent, HttpUri, HttpVersion, outgoing_traceparent_header},
+    client::http::{
+        ClientRequestSender, HttpContent, HttpUri, HttpVersion, outgoing_traceparent_header,
+    },
     data::EncodedPayload,
     internal_metrics::InternalMetrics,
 };
@@ -31,7 +33,7 @@ pub(crate) struct HttpConnection {
 }
 
 impl HttpConnection {
-    pub fn new<F: Future<Output = Result<(), Error>> + Send + 'static>(
+    pub(crate) fn new<F: Future<Output = Result<(), Error>> + Send + 'static>(
         version: HttpVersion,
         metrics: Arc<InternalMetrics>,
         url: impl AsRef<str>,
@@ -56,11 +58,11 @@ impl HttpConnection {
         })
     }
 
-    pub fn uri(&self) -> &HttpUri {
+    fn uri(&self) -> &HttpUri {
         &self.uri
     }
 
-    pub async fn send(&self, body: EncodedPayload, timeout: Duration) -> Result<(), Error> {
+    async fn send(&self, body: EncodedPayload, timeout: Duration) -> Result<(), Error> {
         let resource = self.uri.to_string();
 
         let content = HttpContent::new(self.allow_compression, &self.request, &self.metrics, body)?;
@@ -92,6 +94,20 @@ impl HttpConnection {
             status: js_status(&res)?,
         })
         .await
+    }
+}
+
+impl ClientRequestSender for HttpConnection {
+    fn uri(&self) -> &(impl fmt::Display + 'static) {
+        self.uri()
+    }
+
+    fn send(
+        &self,
+        body: EncodedPayload,
+        timeout: Duration,
+    ) -> impl Future<Output = Result<(), Error>> + Send {
+        self.send(body, timeout)
     }
 }
 

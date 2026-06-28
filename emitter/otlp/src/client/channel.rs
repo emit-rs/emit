@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use emit_batcher::BatchError;
 
-use super::{ClientEventEncoder, OtlpTransport};
+use super::OtlpTransport;
 use crate::data::{EncodedEvent, EncodedScopeItems};
 
 /**
@@ -204,45 +204,31 @@ impl emit_batcher::Channel for Channel {
 }
 
 /**
-Bundles the event encoder, transport, and batcher receiver for a single signal.
+Bundles the transport and batcher receiver for a single signal.
 
-The encoder and transport are shared via [`Arc`] so the batcher callback
-can access them without requiring `Clone` on either. The receiver is
+The transport is shared via [`Arc`] so the batcher callback
+can access it without requiring `Clone`. The receiver is
 consumed by [`SignalWorker::into_receiver`].
 */
-pub(crate) struct SignalWorker<E, R> {
-    inner: Arc<SignalWorkerInner<E, R>>,
+pub(crate) struct SignalWorker<S, E, R> {
+    transport: Arc<OtlpTransport<S, E, R>>,
     receiver: emit_batcher::Receiver<Channel>,
 }
 
-pub(crate) struct SignalWorkerInner<E, R> {
-    pub event_encoder: ClientEventEncoder<E>,
-    pub transport: OtlpTransport<R>,
-}
-
-impl<E, R> SignalWorker<E, R> {
+impl<S, E, R> SignalWorker<S, E, R> {
     pub fn new(
-        event_encoder: ClientEventEncoder<E>,
-        transport: OtlpTransport<R>,
+        transport: OtlpTransport<S, E, R>,
         receiver: emit_batcher::Receiver<Channel>,
     ) -> Self {
         SignalWorker {
-            inner: Arc::new(SignalWorkerInner {
-                event_encoder,
-                transport,
-            }),
+            transport: Arc::new(transport),
             receiver,
         }
     }
 
-    /** Consume the worker, returning the `Arc` inner (for the callback) and the receiver (for the batcher). */
-    pub fn into_receiver(
-        self,
-    ) -> (
-        Arc<SignalWorkerInner<E, R>>,
-        emit_batcher::Receiver<Channel>,
-    ) {
-        (self.inner, self.receiver)
+    /** Consume the worker, returning the `Arc` transport (for the callback) and the receiver (for the batcher). */
+    pub fn into_receiver(self) -> (Arc<OtlpTransport<S, E, R>>, emit_batcher::Receiver<Channel>) {
+        (self.transport, self.receiver)
     }
 }
 

@@ -4,7 +4,7 @@ use std::{fmt, future::Future, sync::Arc, time::Duration};
 
 use crate::{
     Error,
-    client::http::{HttpContent, HttpVersion},
+    client::http::{ClientRequestSender, HttpContent, HttpVersion},
     data::EncodedPayload,
     internal_metrics::InternalMetrics,
 };
@@ -29,6 +29,20 @@ impl HttpConnection {
     }
 
     pub async fn send(&self, _body: EncodedPayload, _timeout: Duration) -> Result<(), Error> {
+        unreachable!()
+    }
+}
+
+impl ClientRequestSender for HttpConnection {
+    fn uri(&self) -> &(impl fmt::Display + 'static) {
+        unreachable!()
+    }
+
+    fn send(
+        &self,
+        _body: EncodedPayload,
+        _timeout: Duration,
+    ) -> impl Future<Output = Result<(), Error>> + Send {
         unreachable!()
     }
 }

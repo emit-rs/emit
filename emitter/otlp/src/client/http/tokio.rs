@@ -5,6 +5,7 @@ This transport supports HTTP1 and gRPC via HTTP2.
 */
 
 use std::{
+    fmt,
     future::Future,
     pin::Pin,
     sync::{Arc, LazyLock, Mutex},
@@ -21,7 +22,8 @@ use hyper::{
 use crate::{
     Error,
     client::http::{
-        HttpContent, HttpContentCursor, HttpUri, HttpVersion, outgoing_traceparent_header,
+        ClientRequestSender, HttpContent, HttpContentCursor, HttpUri, HttpVersion,
+        outgoing_traceparent_header,
     },
     data::EncodedPayload,
     internal_metrics::InternalMetrics,
@@ -268,7 +270,7 @@ pub(crate) struct HttpResponse {
 }
 
 impl HttpConnection {
-    pub fn new<F: Future<Output = Result<(), Error>> + Send + 'static>(
+    pub(crate) fn new<F: Future<Output = Result<(), Error>> + Send + 'static>(
         version: HttpVersion,
         metrics: Arc<InternalMetrics>,
         url: impl AsRef<str>,
@@ -299,11 +301,11 @@ impl HttpConnection {
         *self.sender.lock().unwrap() = Some(sender);
     }
 
-    pub fn uri(&self) -> &HttpUri {
+    fn uri(&self) -> &HttpUri {
         &self.uri
     }
 
-    pub async fn send(&self, body: EncodedPayload, timeout: Duration) -> Result<(), Error> {
+    async fn send(&self, body: EncodedPayload, timeout: Duration) -> Result<(), Error> {
         let res = tokio::time::timeout(timeout, async {
             let mut sender = match self.poison() {
                 Some(sender) => sender,
@@ -330,6 +332,20 @@ impl HttpConnection {
         .map_err(|e| Error::new("failed to send request within its timeout", e))?;
 
         res
+    }
+}
+
+impl ClientRequestSender for HttpConnection {
+    fn uri(&self) -> &(impl fmt::Display + 'static) {
+        self.uri()
+    }
+
+    fn send(
+        &self,
+        body: EncodedPayload,
+        timeout: Duration,
+    ) -> impl Future<Output = Result<(), Error>> + Send {
+        self.send(body, timeout)
     }
 }
 

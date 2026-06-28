@@ -11,7 +11,7 @@ use crate::{
 };
 use emit::Filter;
 use emit_batcher::BatchError;
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, fmt, future::Future, sync::Arc, time::Duration};
 
 use self::{
     http::{HttpConnection, HttpVersion},
@@ -255,10 +255,9 @@ impl OtlpBuilder {
     fn try_spawn_inner(self, metrics: Arc<InternalMetrics>) -> Result<OtlpInner, Error> {
         let (otlp_logs, worker_logs) = match self.otlp_logs {
             Some(builder) => {
-                let (encoder, transport) =
-                    builder.build(metrics.clone(), self.resource.as_ref())?;
+                let transport = builder.build(metrics.clone(), self.resource.as_ref())?;
                 let (sender, receiver) = emit_batcher::bounded(10_000);
-                let worker = SignalWorker::new(encoder, transport, receiver);
+                let worker = SignalWorker::new(transport, receiver);
                 (Some(sender), Some(worker))
             }
             None => (None, None),
@@ -266,10 +265,9 @@ impl OtlpBuilder {
 
         let (otlp_traces, worker_traces) = match self.otlp_traces {
             Some(builder) => {
-                let (encoder, transport) =
-                    builder.build(metrics.clone(), self.resource.as_ref())?;
+                let transport = builder.build(metrics.clone(), self.resource.as_ref())?;
                 let (sender, receiver) = emit_batcher::bounded(10_000);
-                let worker = SignalWorker::new(encoder, transport, receiver);
+                let worker = SignalWorker::new(transport, receiver);
                 (Some(sender), Some(worker))
             }
             None => (None, None),
@@ -277,10 +275,9 @@ impl OtlpBuilder {
 
         let (otlp_metrics, worker_metrics) = match self.otlp_metrics {
             Some(builder) => {
-                let (encoder, transport) =
-                    builder.build(metrics.clone(), self.resource.as_ref())?;
+                let transport = builder.build(metrics.clone(), self.resource.as_ref())?;
                 let (sender, receiver) = emit_batcher::bounded(10_000);
-                let worker = SignalWorker::new(encoder, transport, receiver);
+                let worker = SignalWorker::new(transport, receiver);
                 (Some(sender), Some(worker))
             }
             None => (None, None),
@@ -375,191 +372,191 @@ impl OtlpTransportBuilder {
         self
     }
 
-    fn build<R>(
+    fn build<E, R>(
         self,
         metrics: Arc<InternalMetrics>,
+        event_encoder: ClientEventEncoder<E>,
         resource: Option<EncodedPayload>,
         request_encoder: ClientRequestEncoder<R>,
-    ) -> Result<OtlpTransport<R>, Error> {
+    ) -> Result<OtlpTransport<HttpConnection, E, R>, Error> {
         let mut url = self.url_base;
 
         if let Some(path) = self.url_path {
             crate::push_path(&mut url, path);
         }
 
-        Ok(match self.protocol {
+        let request_sender = match self.protocol {
             // Configure the transport to use regular HTTP requests
-            Protocol::Http => OtlpTransport::Http {
-                http: HttpConnection::new(
-                    HttpVersion::Http1,
-                    metrics.clone(),
-                    url,
-                    self.allow_compression,
-                    self.headers,
-                    |req| Ok(req),
-                    move |res| {
-                        let metrics = metrics.clone();
+            Protocol::Http => HttpConnection::new(
+                HttpVersion::Http1,
+                metrics.clone(),
+                url,
+                self.allow_compression,
+                self.headers,
+                |req| Ok(req),
+                move |res| {
+                    let metrics = metrics.clone();
 
-                        async move {
-                            let status = res.http_status();
+                    async move {
+                        let status = res.http_status();
 
-                            // A request is considered successful if it returns 2xx status code
-                            if status >= 200 && status < 300 {
-                                metrics.http_batch_sent.increment();
+                        // A request is considered successful if it returns 2xx status code
+                        if status >= 200 && status < 300 {
+                            metrics.http_batch_sent.increment();
 
-                                Ok(())
-                            } else {
-                                metrics.http_batch_failed.increment();
+                            Ok(())
+                        } else {
+                            metrics.http_batch_failed.increment();
 
-                                Err(Error::msg(format_args!(
-                                    "OTLP HTTP server responded {status}"
-                                )))
-                            }
+                            Err(Error::msg(format_args!(
+                                "OTLP HTTP server responded {status}"
+                            )))
                         }
-                    },
-                )?,
-                resource,
-                request_encoder,
-            },
+                    }
+                },
+            )?,
             // Configure the transport to use gRPC requests
             // These are mostly the same as regular HTTP requests, but use
             // a simple message framing protocol and carry status codes in a trailer
             // instead of the response status
-            Protocol::Grpc => OtlpTransport::Http {
-                http: HttpConnection::new(
-                    HttpVersion::Http2,
-                    metrics.clone(),
-                    url,
-                    self.allow_compression,
-                    self.headers,
-                    |req| {
-                        let content_type_header = match req.content_type_header() {
-                            "application/x-protobuf" => "application/grpc+proto",
-                            content_type => {
-                                return Err(Error::msg(format_args!(
-                                    "unsupported content type '{content_type}'"
-                                )));
+            Protocol::Grpc => HttpConnection::new(
+                HttpVersion::Http2,
+                metrics.clone(),
+                url,
+                self.allow_compression,
+                self.headers,
+                |req| {
+                    let content_type_header = match req.content_type_header() {
+                        "application/x-protobuf" => "application/grpc+proto",
+                        content_type => {
+                            return Err(Error::msg(format_args!(
+                                "unsupported content type '{content_type}'"
+                            )));
+                        }
+                    };
+
+                    // Wrap the content in the gRPC frame protocol
+                    // This is a simple length-prefixed format that uses
+                    // 5 bytes to indicate the length and compression of the message
+                    let len = (u32::try_from(req.content_payload_len()).unwrap()).to_be_bytes();
+
+                    Ok(
+                        // If the content is compressed then set the gRPC compression header byte for it
+                        if let Some(compression) = req.content_encoding_header() {
+                            req.with_content_encoding_header(None)
+                                .with_content_type_header(content_type_header)
+                                .with_headers(match compression {
+                                    "gzip" => &[("grpc-encoding", "gzip")],
+                                    compression => {
+                                        return Err(Error::msg(format_args!(
+                                            "unsupported compression '{compression}'"
+                                        )));
+                                    }
+                                })
+                                .with_content_frame([1, len[0], len[1], len[2], len[3]])
+                        }
+                        // If the content is not compressed then leave the gRPC compression header byte unset
+                        else {
+                            req.with_content_type_header(content_type_header)
+                                .with_content_frame([0, len[0], len[1], len[2], len[3]])
+                        },
+                    )
+                },
+                move |res| {
+                    let metrics = metrics.clone();
+
+                    async move {
+                        let mut status = 0;
+                        let mut msg = String::new();
+
+                        res.stream_trailers(|k, v| match k {
+                            "grpc-status" => {
+                                status = v.parse().unwrap_or(0);
                             }
-                        };
-
-                        // Wrap the content in the gRPC frame protocol
-                        // This is a simple length-prefixed format that uses
-                        // 5 bytes to indicate the length and compression of the message
-                        let len = (u32::try_from(req.content_payload_len()).unwrap()).to_be_bytes();
-
-                        Ok(
-                            // If the content is compressed then set the gRPC compression header byte for it
-                            if let Some(compression) = req.content_encoding_header() {
-                                req.with_content_encoding_header(None)
-                                    .with_content_type_header(content_type_header)
-                                    .with_headers(match compression {
-                                        "gzip" => &[("grpc-encoding", "gzip")],
-                                        compression => {
-                                            return Err(Error::msg(format_args!(
-                                                "unsupported compression '{compression}'"
-                                            )));
-                                        }
-                                    })
-                                    .with_content_frame([1, len[0], len[1], len[2], len[3]])
+                            "grpc-message" => {
+                                msg = v.into();
                             }
-                            // If the content is not compressed then leave the gRPC compression header byte unset
-                            else {
-                                req.with_content_type_header(content_type_header)
-                                    .with_content_frame([0, len[0], len[1], len[2], len[3]])
-                            },
-                        )
-                    },
-                    move |res| {
-                        let metrics = metrics.clone();
+                            _ => {}
+                        })
+                        .await?;
 
-                        async move {
-                            let mut status = 0;
-                            let mut msg = String::new();
+                        // A request is considered successful if the grpc-status trailer is 0
+                        if status == 0 {
+                            metrics.grpc_batch_sent.increment();
 
-                            res.stream_trailers(|k, v| match k {
-                                "grpc-status" => {
-                                    status = v.parse().unwrap_or(0);
-                                }
-                                "grpc-message" => {
-                                    msg = v.into();
-                                }
-                                _ => {}
-                            })
-                            .await?;
+                            Ok(())
+                        }
+                        // In any other case the request failed and may carry some diagnostic message
+                        else {
+                            metrics.grpc_batch_failed.increment();
 
-                            // A request is considered successful if the grpc-status trailer is 0
-                            if status == 0 {
-                                metrics.grpc_batch_sent.increment();
-
-                                Ok(())
-                            }
-                            // In any other case the request failed and may carry some diagnostic message
-                            else {
-                                metrics.grpc_batch_failed.increment();
-
-                                if msg.len() > 0 {
-                                    Err(Error::msg(format_args!(
-                                        "OTLP gRPC server responded {status} {msg}"
-                                    )))
-                                } else {
-                                    Err(Error::msg(format_args!(
-                                        "OTLP gRPC server responded {status}"
-                                    )))
-                                }
+                            if msg.len() > 0 {
+                                Err(Error::msg(format_args!(
+                                    "OTLP gRPC server responded {status} {msg}"
+                                )))
+                            } else {
+                                Err(Error::msg(format_args!(
+                                    "OTLP gRPC server responded {status}"
+                                )))
                             }
                         }
-                    },
-                )?,
-                resource,
-                request_encoder,
-            },
+                    }
+                },
+            )?,
+        };
+
+        Ok(OtlpTransport {
+            event_encoder,
+            request_sender,
+            resource,
+            request_encoder,
         })
     }
 }
 
-pub(crate) enum OtlpTransport<R> {
-    Http {
-        http: HttpConnection,
-        resource: Option<EncodedPayload>,
-        request_encoder: ClientRequestEncoder<R>,
-    },
+pub(crate) struct OtlpTransport<S, E, R> {
+    event_encoder: ClientEventEncoder<E>,
+    request_sender: S,
+    resource: Option<EncodedPayload>,
+    request_encoder: ClientRequestEncoder<R>,
 }
 
-impl<R: data::RequestEncoder> OtlpTransport<R> {
-    pub(crate) async fn send<E: data::EventEncoder>(
-        &self,
-        event_encoder: &ClientEventEncoder<E>,
-        channel: Channel,
-    ) -> Result<(), BatchError<Channel>> {
-        match self {
-            OtlpTransport::Http {
-                http,
-                resource,
-                request_encoder,
-            } => channel::execute(
-                channel,
-                DEFAULT_MAX_REQUEST_SIZE_BYTES,
-                |event| event_encoder.encode_event(event),
-                |batch| {
-                    let batch = batch.clone();
-                    async move { Self::send_batch(http, resource, request_encoder, &batch).await }
-                },
-            )
-            .await,
-        }
+impl<S: ClientRequestSender, E: data::EventEncoder, R: data::RequestEncoder>
+    OtlpTransport<S, E, R>
+{
+    pub(crate) async fn send(&self, channel: Channel) -> Result<(), BatchError<Channel>> {
+        let event_encoder = &self.event_encoder;
+        channel::execute(
+            channel,
+            DEFAULT_MAX_REQUEST_SIZE_BYTES,
+            |event| event_encoder.encode_event(event),
+            |batch| {
+                let batch = batch.clone();
+                async move {
+                    Self::send_batch(
+                        &self.request_sender,
+                        &self.resource,
+                        &self.request_encoder,
+                        &batch,
+                    )
+                    .await
+                }
+            },
+        )
+        .await
     }
 
-    #[emit::span(rt: emit::runtime::internal(), guard: span, "send OTLP batch of {batch_size} events", batch_size: batch.total_items())]
+    #[emit::span(rt: emit::runtime::internal(), guard: span, "send OTLP batch of {batch_size} events to {uri}", batch_size: batch.total_items(), uri: request_sender.uri())]
     pub(crate) async fn send_batch(
-        http: &HttpConnection,
+        request_sender: &S,
         resource: &Option<EncodedPayload>,
         request_encoder: &ClientRequestEncoder<R>,
         batch: &EncodedScopeItems,
     ) -> Result<(), BatchError<()>> {
-        let uri = http.uri();
+        let uri = request_sender.uri();
         let batch_size = batch.total_items();
 
-        match http
+        match request_sender
             .send(
                 request_encoder.encode_request(resource.as_ref(), &batch)?,
                 DEFAULT_REQUEST_TIMEOUT,
@@ -763,6 +760,16 @@ impl<E: data::EventEncoder> ClientEventEncoder<E> {
             Encoding::Json => self.encoder.encode_event::<data::Json>(evt),
         }
     }
+}
+
+pub(crate) trait ClientRequestSender {
+    fn uri(&self) -> &(impl fmt::Display + 'static);
+
+    fn send(
+        &self,
+        body: EncodedPayload,
+        timeout: Duration,
+    ) -> impl Future<Output = Result<(), Error>> + Send;
 }
 
 pub(crate) struct ClientRequestEncoder<R> {

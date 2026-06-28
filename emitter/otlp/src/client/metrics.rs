@@ -6,6 +6,7 @@ use crate::{
     internal_metrics::InternalMetrics,
 };
 
+use super::http::HttpConnection;
 use super::{
     ClientEventEncoder, ClientRequestEncoder, OtlpTransport, Protocol, Resource, encode_resource,
 };
@@ -99,22 +100,15 @@ impl OtlpMetricsBuilder {
         self,
         metrics: Arc<InternalMetrics>,
         resource: Option<&Resource>,
-    ) -> Result<
-        (
-            ClientEventEncoder<MetricsEventEncoder>,
-            OtlpTransport<MetricsRequestEncoder>,
-        ),
-        Error,
-    > {
-        Ok((
+    ) -> Result<OtlpTransport<HttpConnection, MetricsEventEncoder, MetricsRequestEncoder>, Error>
+    {
+        self.transport.build(
+            metrics.clone(),
             ClientEventEncoder::new(self.encoding, self.event_encoder),
-            self.transport.build(
-                metrics.clone(),
-                resource
-                    .as_ref()
-                    .map(|resource| encode_resource(self.encoding, resource)),
-                ClientRequestEncoder::new(self.encoding, self.request_encoder),
-            )?,
-        ))
+            resource
+                .as_ref()
+                .map(|resource| encode_resource(self.encoding, resource)),
+            ClientRequestEncoder::new(self.encoding, self.request_encoder),
+        )
     }
 }
