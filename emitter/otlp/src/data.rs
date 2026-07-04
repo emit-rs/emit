@@ -96,11 +96,28 @@ impl EncodedScopeItems {
     }
 
     pub fn items(&self) -> impl Iterator<Item = (emit::Path<'_>, &[EncodedPayload])> {
-        self.items.iter().map(|(k, v)| (k.by_ref(), &**v))
+        self.items
+            .iter()
+            .filter(|(_, v)| v.len() > 0)
+            .map(|(k, v)| (k.by_ref(), &**v))
     }
 
     pub fn total_size_bytes(&self) -> usize {
         self.size_bytes
+    }
+
+    pub fn clear(&mut self) {
+        self.items.retain(|_, v| {
+            if v.len() == 0 {
+                // Remove any entries with no values in them
+                false
+            } else {
+                // Retain allocations of entries that had values
+                v.clear();
+                true
+            }
+        });
+        self.size_bytes = 0;
     }
 }
 

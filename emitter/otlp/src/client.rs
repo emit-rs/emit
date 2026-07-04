@@ -512,14 +512,62 @@ impl<S: ClientRequestSender, E: data::EventEncoder, R: data::RequestEncoder>
 {
     pub(crate) async fn send(&self, channel: Channel) -> Result<(), BatchError<Channel>> {
         let event_encoder = &self.event_encoder;
-        channel::execute(
+
+        channel::batch(
             channel,
             DEFAULT_MAX_REQUEST_SIZE_BYTES,
             |event| event_encoder.encode_event(event),
             |batch| {
                 let batch = batch.clone();
                 async move {
-                    Self::send_batch(
+                    #[emit::span(rt: emit::runtime::internal(), guard: span, "send OTLP batch of {batch_size} events to {uri}", batch_size: batch.total_items(), uri: request_sender.uri())]
+                    async fn send_batch<S: ClientRequestSender, R: data::RequestEncoder>(
+                        request_sender: &S,
+                        resource: &Option<EncodedPayload>,
+                        request_encoder: &ClientRequestEncoder<R>,
+                        batch: &EncodedScopeItems,
+                    ) -> Result<(), BatchError<()>> {
+                        let uri = request_sender.uri();
+                        let batch_size = batch.total_items();
+
+                        match request_sender
+                            .send(
+                                request_encoder.encode_request(resource.as_ref(), &batch)?,
+                                DEFAULT_REQUEST_TIMEOUT,
+                            )
+                            .await
+                        {
+                            Ok(res) => {
+                                span.complete_with(emit::span::completion::from_fn(|evt| {
+                                    emit::debug!(
+                                        rt: emit::runtime::internal(),
+                                        evt,
+                                        "OTLP batch of {batch_size} events to {uri}",
+                                        batch_size,
+                                    )
+                                }));
+
+                                res
+                            }
+                            Err(err) => {
+                                span.complete_with(emit::span::completion::from_fn(|evt| {
+                                    emit::warn!(
+                                        rt: emit::runtime::internal(),
+                                        evt,
+                                        "OTLP batch of {batch_size} events to {uri} failed: {err}",
+                                        batch_size,
+                                        err,
+                                    )
+                                }));
+
+                                return Err(BatchError::retry(err, ()));
+                            }
+                        };
+
+                        Ok(())
+                    }
+
+                    send_batch(
                         &self.request_sender,
                         &self.resource,
                         &self.request_encoder,
@@ -530,53 +578,6 @@ impl<S: ClientRequestSender, E: data::EventEncoder, R: data::RequestEncoder>
             },
         )
         .await
-    }
-
-    #[emit::span(rt: emit::runtime::internal(), guard: span, "send OTLP batch of {batch_size} events to {uri}", batch_size: batch.total_items(), uri: request_sender.uri())]
-    pub(crate) async fn send_batch(
-        request_sender: &S,
-        resource: &Option<EncodedPayload>,
-        request_encoder: &ClientRequestEncoder<R>,
-        batch: &EncodedScopeItems,
-    ) -> Result<(), BatchError<()>> {
-        let uri = request_sender.uri();
-        let batch_size = batch.total_items();
-
-        match request_sender
-            .send(
-                request_encoder.encode_request(resource.as_ref(), &batch)?,
-                DEFAULT_REQUEST_TIMEOUT,
-            )
-            .await
-        {
-            Ok(res) => {
-                span.complete_with(emit::span::completion::from_fn(|evt| {
-                    emit::debug!(
-                        rt: emit::runtime::internal(),
-                        evt,
-                        "OTLP batch of {batch_size} events to {uri}",
-                        batch_size,
-                    )
-                }));
-
-                res
-            }
-            Err(err) => {
-                span.complete_with(emit::span::completion::from_fn(|evt| {
-                    emit::warn!(
-                        rt: emit::runtime::internal(),
-                        evt,
-                        "OTLP batch of {batch_size} events to {uri} failed: {err}",
-                        batch_size,
-                        err,
-                    )
-                }));
-
-                return Err(BatchError::retry(err, ()));
-            }
-        };
-
-        Ok(())
     }
 }
 

@@ -5,13 +5,13 @@ Events are sent from the caller thread through a [`Channel`] to a background
 [`SignalWorker`], which serializes and ships them via HTTP.
 */
 
-use std::future::Future;
+use std::{collections::HashMap, future::Future, mem};
 
 use emit_batcher::BatchError;
 
 use crate::data::{EncodedEvent, EncodedScopeItems};
 
-pub(crate) async fn execute<F>(
+pub(crate) async fn batch<F>(
     mut channel: Channel,
     max_request_size: usize,
     mut encode_event: impl FnMut(&ChannelEvent) -> Option<EncodedEvent>,
@@ -20,15 +20,15 @@ pub(crate) async fn execute<F>(
 where
     F: Future<Output = Result<(), BatchError<()>>>,
 {
-    // TODO: Clear out events as they're processed
-    // TODO: Review this more thoroughly
+    let state = channel.state.draining_mut();
+
     let mut batch = EncodedScopeItems::new();
 
-    let mut scope_index = channel.cursor.scope_index;
-    let mut event_index = channel.cursor.event_index;
+    let mut scope_index = state.cursor.scope_index;
+    let mut event_index = state.cursor.event_index;
 
-    while scope_index < channel.scopes.len() {
-        let events = &channel.scopes[scope_index].1;
+    while scope_index < state.scopes.len() {
+        let events = &state.scopes[scope_index].1;
 
         while event_index < events.len() {
             let event = &events[event_index];
@@ -42,11 +42,11 @@ where
             if batch.total_items() > 0
                 && batch.total_size_bytes() + encoded.size_bytes() > max_request_size
             {
-                // We've reached the maximum size of a single batcg; send it then start a new one
+                // We've reached the maximum size of a single batch; send it then start a new one
                 match send_batch(&batch).await {
                     Ok(()) => {
-                        batch = EncodedScopeItems::new();
-                        channel.cursor = ChannelCursor {
+                        batch.clear();
+                        state.cursor = ChannelCursor {
                             scope_index,
                             event_index,
                         };
@@ -57,6 +57,9 @@ where
 
             batch.push(encoded);
         }
+
+        // Eagerly reclaim the completed scope's allocation
+        state.scopes[scope_index].1 = Vec::new();
 
         event_index = 0;
         scope_index += 1;
@@ -79,11 +82,83 @@ pub(crate) struct ChannelCursor {
     event_index: usize,
 }
 
-#[derive(Default)]
 pub(crate) struct Channel {
-    pub(crate) scopes: Vec<(emit::Path<'static>, Vec<ChannelEvent>)>,
-    pub(crate) total_items: usize,
-    pub(crate) cursor: ChannelCursor,
+    state: ChannelState,
+}
+
+impl Default for Channel {
+    fn default() -> Self {
+        Channel {
+            state: ChannelState::Filling(ChannelStateFilling {
+                scopes: HashMap::new(),
+                total_items: 0,
+            }),
+        }
+    }
+}
+
+enum ChannelState {
+    Filling(ChannelStateFilling),
+    Draining(ChannelStateDraining),
+    Poisoned,
+}
+
+struct ChannelStateFilling {
+    scopes: HashMap<emit::Path<'static>, Vec<ChannelEvent>>,
+    total_items: usize,
+}
+
+struct ChannelStateDraining {
+    scopes: Vec<(emit::Path<'static>, Vec<ChannelEvent>)>,
+    cursor: ChannelCursor,
+}
+
+impl ChannelState {
+    fn variant(&self) -> &'static str {
+        match self {
+            ChannelState::Filling(_) => "filling",
+            ChannelState::Draining(_) => "draining",
+            ChannelState::Poisoned => "poisoned",
+        }
+    }
+
+    fn filling(&self) -> &ChannelStateFilling {
+        let ChannelState::Filling(state) = self else {
+            panic!("invalid channel state: {:?}", self.variant());
+        };
+
+        state
+    }
+
+    fn filling_mut(&mut self) -> &mut ChannelStateFilling {
+        let ChannelState::Filling(state) = self else {
+            panic!("invalid channel state: {:?}", self.variant());
+        };
+
+        state
+    }
+
+    fn draining_mut(&mut self) -> &mut ChannelStateDraining {
+        match mem::replace(self, ChannelState::Poisoned) {
+            ChannelState::Filling(state) => {
+                // Convert a filling channel into a draining one
+                *self = ChannelState::Draining(ChannelStateDraining {
+                    scopes: state.scopes.into_iter().collect(),
+                    cursor: ChannelCursor::default(),
+                });
+            }
+            ChannelState::Draining(state) => {
+                *self = ChannelState::Draining(state);
+            }
+            ChannelState::Poisoned => panic!("invalid channel state: {:?}", self.variant()),
+        }
+
+        let ChannelState::Draining(state) = self else {
+            unreachable!()
+        };
+
+        state
+    }
 }
 
 pub(crate) struct ChannelItem {
@@ -100,43 +175,39 @@ impl emit_batcher::Channel for Channel {
     }
 
     fn push(&mut self, item: Self::Item) {
+        let state = self.state.filling_mut();
+
         let scope = item.event.mdl();
 
-        // TODO: Binary search or secondary hashmap
-        if let Some(entry) = self.scopes.iter_mut().find(|(s, _)| *s == scope) {
-            entry.1.push(item.event);
-        } else {
-            self.scopes.push((scope.to_owned(), vec![item.event]));
-        }
-
-        self.total_items += 1;
+        state
+            .scopes
+            .entry(scope.to_owned())
+            .or_insert_with(|| Vec::new())
+            .push(item.event);
+        state.total_items += 1;
     }
 
     fn len(&self) -> usize {
-        self.total_items
+        self.state.filling().total_items
     }
 
     fn clear(&mut self) {
-        let Channel {
-            scopes,
-            total_items,
-            cursor,
-        } = self;
+        if let ChannelState::Filling(state) = &mut self.state {
+            state.total_items = 0;
+            state.scopes.retain(|_, v| {
+                if v.len() == 0 {
+                    // Remove any entries with no values in them
+                    false
+                } else {
+                    // Retain allocations of entries that had values
+                    v.clear();
+                    true
+                }
+            });
 
-        scopes.clear();
-        *total_items = 0;
-        *cursor = ChannelCursor::default();
-    }
-}
+            return;
+        };
 
-#[cfg(test)]
-mod tests {
-    use emit_batcher::Channel as _;
-
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        todo!()
+        *self = Default::default();
     }
 }
