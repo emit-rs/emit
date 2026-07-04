@@ -22,10 +22,13 @@ where
 {
     let state = channel.state.draining_mut();
 
+    emit::debug!("processing channel: {#[emit::as_debug] state}");
+
     let mut batch = EncodedScopeItems::new();
 
     let mut scope_index = state.cursor.scope_index;
     let mut event_index = state.cursor.event_index;
+    let mut remaining_items = state.cursor.remaining_items;
 
     while scope_index < state.scopes.len() {
         let events = &state.scopes[scope_index].1;
@@ -33,6 +36,7 @@ where
         while event_index < events.len() {
             let event = &events[event_index];
             event_index += 1;
+            remaining_items -= 1;
 
             let Some(encoded) = encode_event(event) else {
                 // TODO: metric
@@ -49,6 +53,7 @@ where
                         state.cursor = ChannelCursor {
                             scope_index,
                             event_index,
+                            remaining_items,
                         };
                     }
                     Err(e) => return Err(e.map_retryable(|r| r.map(|_| channel))),
@@ -57,9 +62,6 @@ where
 
             batch.push(encoded);
         }
-
-        // Eagerly reclaim the completed scope's allocation
-        state.scopes[scope_index].1 = Vec::new();
 
         event_index = 0;
         scope_index += 1;
@@ -76,10 +78,11 @@ where
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ChannelCursor {
     scope_index: usize,
     event_index: usize,
+    remaining_items: usize,
 }
 
 pub(crate) struct Channel {
@@ -97,17 +100,20 @@ impl Default for Channel {
     }
 }
 
+#[derive(Debug)]
 enum ChannelState {
     Filling(ChannelStateFilling),
     Draining(ChannelStateDraining),
     Poisoned,
 }
 
+#[derive(Debug)]
 struct ChannelStateFilling {
     scopes: HashMap<emit::Path<'static>, Vec<ChannelEvent>>,
     total_items: usize,
 }
 
+#[derive(Debug)]
 struct ChannelStateDraining {
     scopes: Vec<(emit::Path<'static>, Vec<ChannelEvent>)>,
     cursor: ChannelCursor,
@@ -120,14 +126,6 @@ impl ChannelState {
             ChannelState::Draining(_) => "draining",
             ChannelState::Poisoned => "poisoned",
         }
-    }
-
-    fn filling(&self) -> &ChannelStateFilling {
-        let ChannelState::Filling(state) = self else {
-            panic!("invalid channel state: {:?}", self.variant());
-        };
-
-        state
     }
 
     fn filling_mut(&mut self) -> &mut ChannelStateFilling {
@@ -144,7 +142,11 @@ impl ChannelState {
                 // Convert a filling channel into a draining one
                 *self = ChannelState::Draining(ChannelStateDraining {
                     scopes: state.scopes.into_iter().collect(),
-                    cursor: ChannelCursor::default(),
+                    cursor: ChannelCursor {
+                        scope_index: 0,
+                        event_index: 0,
+                        remaining_items: state.total_items,
+                    },
                 });
             }
             ChannelState::Draining(state) => {
@@ -159,6 +161,14 @@ impl ChannelState {
 
         state
     }
+
+    fn remaining(&self) -> usize {
+        match self {
+            ChannelState::Filling(state) => state.total_items,
+            ChannelState::Draining(state) => state.cursor.remaining_items,
+            ChannelState::Poisoned => panic!("invalid channel state: {:?}", self.variant()),
+        }
+    }
 }
 
 pub(crate) struct ChannelItem {
@@ -171,7 +181,7 @@ impl emit_batcher::Channel for Channel {
     type Item = ChannelItem;
 
     fn new() -> Self {
-        Channel::default()
+        Default::default()
     }
 
     fn push(&mut self, item: Self::Item) {
@@ -188,26 +198,10 @@ impl emit_batcher::Channel for Channel {
     }
 
     fn len(&self) -> usize {
-        self.state.filling().total_items
+        self.state.remaining()
     }
 
     fn clear(&mut self) {
-        if let ChannelState::Filling(state) = &mut self.state {
-            state.total_items = 0;
-            state.scopes.retain(|_, v| {
-                if v.len() == 0 {
-                    // Remove any entries with no values in them
-                    false
-                } else {
-                    // Retain allocations of entries that had values
-                    v.clear();
-                    true
-                }
-            });
-
-            return;
-        };
-
         *self = Default::default();
     }
 }
