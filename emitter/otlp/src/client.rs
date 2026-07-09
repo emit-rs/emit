@@ -510,12 +510,17 @@ pub(crate) struct OtlpTransport<S, E, R> {
 impl<S: ClientRequestSender, E: data::EventEncoder, R: data::RequestEncoder>
     OtlpTransport<S, E, R>
 {
-    pub(crate) async fn send(&self, channel: Channel) -> Result<(), BatchError<Channel>> {
+    pub(crate) async fn send(
+        &self,
+        channel: Channel,
+        metrics: &InternalMetrics,
+    ) -> Result<(), BatchError<Channel>> {
         let event_encoder = &self.event_encoder;
 
         channel::batch(
             channel,
             DEFAULT_MAX_REQUEST_SIZE_BYTES,
+            metrics,
             |event| event_encoder.encode_event(event),
             |batch| {
                 let batch = batch.clone();

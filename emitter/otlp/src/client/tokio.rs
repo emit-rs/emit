@@ -30,41 +30,54 @@ impl OtlpBuilder {
         >,
         metrics: Arc<InternalMetrics>,
     ) -> Result<OtlpInner, Error> {
-        let receive = async move {
-            let processors =
-                FuturesUnordered::<Pin<Box<dyn Future<Output = ()> + Send + 'static>>>::new();
+        let receive = {
+            let metrics = metrics.clone();
 
-            if let Some(worker) = worker_logs {
-                processors.push(Box::pin(emit_batcher::tokio::exec(
-                    worker.receiver,
-                    move |batch| {
-                        let transport = worker.transport.clone();
-                        async move { transport.send(batch).await }
-                    },
-                )));
+            async move {
+                let processors =
+                    FuturesUnordered::<Pin<Box<dyn Future<Output = ()> + Send + 'static>>>::new();
+
+                if let Some(worker) = worker_logs {
+                    let metrics = metrics.clone();
+
+                    processors.push(Box::pin(emit_batcher::tokio::exec(worker.receiver, {
+                        move |batch| {
+                            let transport = worker.transport.clone();
+                            let metrics = metrics.clone();
+
+                            async move { transport.send(batch, &metrics).await }
+                        }
+                    })));
+                }
+
+                if let Some(worker) = worker_traces {
+                    let metrics = metrics.clone();
+
+                    processors.push(Box::pin(emit_batcher::tokio::exec(worker.receiver, {
+                        move |batch| {
+                            let transport = worker.transport.clone();
+                            let metrics = metrics.clone();
+
+                            async move { transport.send(batch, &metrics).await }
+                        }
+                    })));
+                }
+
+                if let Some(worker) = worker_metrics {
+                    let metrics = metrics.clone();
+
+                    processors.push(Box::pin(emit_batcher::tokio::exec(worker.receiver, {
+                        move |batch| {
+                            let transport = worker.transport.clone();
+                            let metrics = metrics.clone();
+
+                            async move { transport.send(batch, &metrics).await }
+                        }
+                    })));
+                }
+
+                let _ = processors.into_future().await;
             }
-
-            if let Some(worker) = worker_traces {
-                processors.push(Box::pin(emit_batcher::tokio::exec(
-                    worker.receiver,
-                    move |batch| {
-                        let transport = worker.transport.clone();
-                        async move { transport.send(batch).await }
-                    },
-                )));
-            }
-
-            if let Some(worker) = worker_metrics {
-                processors.push(Box::pin(emit_batcher::tokio::exec(
-                    worker.receiver,
-                    move |batch| {
-                        let transport = worker.transport.clone();
-                        async move { transport.send(batch).await }
-                    },
-                )));
-            }
-
-            let _ = processors.into_future().await;
         };
 
         let handle = std::thread::Builder::new()

@@ -5,33 +5,39 @@ Events are sent from the caller thread through a [`Channel`] to a background
 [`SignalWorker`], which serializes and ships them via HTTP.
 */
 
-use std::{collections::HashMap, future::Future, mem};
+use std::{
+    future::Future,
+    hash::{BuildHasher, Hash},
+};
+
+use fnv::FnvBuildHasher;
+use hashbrown::{HashTable, hash_table};
 
 use emit_batcher::BatchError;
 
-use crate::data::{EncodedEvent, EncodedScopeItems};
+use crate::{
+    InternalMetrics,
+    data::{EncodedEvent, EncodedScopeItems},
+};
 
 pub(crate) async fn batch<F>(
     mut channel: Channel,
     max_request_size: usize,
+    metrics: &InternalMetrics,
     mut encode_event: impl FnMut(&ChannelEvent) -> Option<EncodedEvent>,
     mut send_batch: impl FnMut(&EncodedScopeItems) -> F,
 ) -> Result<(), BatchError<Channel>>
 where
     F: Future<Output = Result<(), BatchError<()>>>,
 {
-    let state = channel.state.draining_mut();
-
-    emit::debug!("processing channel: {#[emit::as_debug] state}");
-
     let mut batch = EncodedScopeItems::new();
 
-    let mut scope_index = state.cursor.scope_index;
-    let mut event_index = state.cursor.event_index;
-    let mut remaining_items = state.cursor.remaining_items;
+    let mut scope_index = channel.cursor.scope_index;
+    let mut event_index = channel.cursor.event_index;
+    let mut remaining_items = channel.cursor.remaining_items;
 
-    while scope_index < state.scopes.len() {
-        let events = &state.scopes[scope_index].1;
+    while scope_index < channel.scopes.len() {
+        let events = &channel.scopes[scope_index].1;
 
         while event_index < events.len() {
             let event = &events[event_index];
@@ -39,7 +45,7 @@ where
             remaining_items -= 1;
 
             let Some(encoded) = encode_event(event) else {
-                // TODO: metric
+                metrics.event_encoding_failed.increment();
                 continue;
             };
 
@@ -50,7 +56,7 @@ where
                 match send_batch(&batch).await {
                     Ok(()) => {
                         batch.clear();
-                        state.cursor = ChannelCursor {
+                        channel.cursor = ChannelCursor {
                             scope_index,
                             event_index,
                             remaining_items,
@@ -86,87 +92,21 @@ pub(crate) struct ChannelCursor {
 }
 
 pub(crate) struct Channel {
-    state: ChannelState,
+    scopes: Vec<(emit::Path<'static>, Vec<ChannelEvent>)>,
+    scopes_by_key: HashTable<usize>,
+    cursor: ChannelCursor,
 }
 
 impl Default for Channel {
     fn default() -> Self {
         Channel {
-            state: ChannelState::Filling(ChannelStateFilling {
-                scopes: HashMap::new(),
-                total_items: 0,
-            }),
-        }
-    }
-}
-
-#[derive(Debug)]
-enum ChannelState {
-    Filling(ChannelStateFilling),
-    Draining(ChannelStateDraining),
-    Poisoned,
-}
-
-#[derive(Debug)]
-struct ChannelStateFilling {
-    scopes: HashMap<emit::Path<'static>, Vec<ChannelEvent>>,
-    total_items: usize,
-}
-
-#[derive(Debug)]
-struct ChannelStateDraining {
-    scopes: Vec<(emit::Path<'static>, Vec<ChannelEvent>)>,
-    cursor: ChannelCursor,
-}
-
-impl ChannelState {
-    fn variant(&self) -> &'static str {
-        match self {
-            ChannelState::Filling(_) => "filling",
-            ChannelState::Draining(_) => "draining",
-            ChannelState::Poisoned => "poisoned",
-        }
-    }
-
-    fn filling_mut(&mut self) -> &mut ChannelStateFilling {
-        let ChannelState::Filling(state) = self else {
-            panic!("invalid channel state: {:?}", self.variant());
-        };
-
-        state
-    }
-
-    fn draining_mut(&mut self) -> &mut ChannelStateDraining {
-        match mem::replace(self, ChannelState::Poisoned) {
-            ChannelState::Filling(state) => {
-                // Convert a filling channel into a draining one
-                *self = ChannelState::Draining(ChannelStateDraining {
-                    scopes: state.scopes.into_iter().collect(),
-                    cursor: ChannelCursor {
-                        scope_index: 0,
-                        event_index: 0,
-                        remaining_items: state.total_items,
-                    },
-                });
-            }
-            ChannelState::Draining(state) => {
-                *self = ChannelState::Draining(state);
-            }
-            ChannelState::Poisoned => panic!("invalid channel state: {:?}", self.variant()),
-        }
-
-        let ChannelState::Draining(state) = self else {
-            unreachable!()
-        };
-
-        state
-    }
-
-    fn remaining(&self) -> usize {
-        match self {
-            ChannelState::Filling(state) => state.total_items,
-            ChannelState::Draining(state) => state.cursor.remaining_items,
-            ChannelState::Poisoned => panic!("invalid channel state: {:?}", self.variant()),
+            scopes: Default::default(),
+            scopes_by_key: Default::default(),
+            cursor: ChannelCursor {
+                scope_index: 0,
+                event_index: 0,
+                remaining_items: 0,
+            },
         }
     }
 }
@@ -184,24 +124,55 @@ impl emit_batcher::Channel for Channel {
         Default::default()
     }
 
+    fn with_capacity(capacity_hint: usize) -> Self {
+        let mut channel = Self::new();
+
+        channel.scopes = Vec::with_capacity(capacity_hint);
+
+        channel
+    }
+
     fn push(&mut self, item: Self::Item) {
-        let state = self.state.filling_mut();
+        assert_eq!(
+            0, self.cursor.scope_index,
+            "attempt to push to a channel that's already being drained"
+        );
+        assert_eq!(
+            0, self.cursor.event_index,
+            "attempt to push to a channel that's already being drained"
+        );
 
         let scope = item.event.mdl();
 
-        state
-            .scopes
-            .entry(scope.to_owned())
-            .or_insert_with(|| Vec::new())
-            .push(item.event);
-        state.total_items += 1;
+        match self.scopes_by_key.entry(
+            hash(&scope),
+            |idx| self.scopes[*idx].0 == scope,
+            |idx| hash(&self.scopes[*idx].0),
+        ) {
+            hash_table::Entry::Occupied(entry) => {
+                self.scopes[*entry.get()].1.push(item.event);
+            }
+            hash_table::Entry::Vacant(entry) => {
+                let idx = self.scopes.len();
+
+                self.scopes.push((scope.to_owned(), vec![item.event]));
+                entry.insert(idx);
+            }
+        }
+
+        self.cursor.remaining_items += 1;
     }
 
     fn len(&self) -> usize {
-        self.state.remaining()
+        self.cursor.remaining_items
     }
 
     fn clear(&mut self) {
         *self = Default::default();
     }
+}
+
+#[inline]
+fn hash(v: &(impl Hash + ?Sized)) -> u64 {
+    FnvBuildHasher::default().hash_one(v)
 }

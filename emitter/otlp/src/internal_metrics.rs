@@ -81,6 +81,10 @@ metrics!(
             */
             event_discarded: Counter -> usize,
             /**
+            An event failed to encode so was discarded.
+            */
+            event_encoding_failed: Counter -> usize,
+            /**
             A connection to a remote OTLP receiver was established successfully.
             */
             transport_conn_established: Counter -> usize,
