@@ -5,7 +5,7 @@ use wasm_bindgen::prelude::*;
 use crate::{
     Error,
     client::http::HttpConnection,
-    client::{Channel, OtlpBuilder, OtlpInner, SignalSenders, SignalWorker},
+    client::{Channel, OtlpBuilder, OtlpInner, SignalWorker},
     data::{
         logs::{LogsEventEncoder, LogsRequestEncoder},
         metrics::{MetricsEventEncoder, MetricsRequestEncoder},
@@ -63,7 +63,9 @@ impl OtlpBuilder {
         }
 
         Ok(OtlpInner {
-            signals: SignalSenders::new(otlp_logs, otlp_traces, otlp_metrics),
+            otlp_logs,
+            otlp_traces,
+            otlp_metrics,
             metrics,
             handle: None,
         })

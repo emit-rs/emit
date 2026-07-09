@@ -106,7 +106,7 @@ impl ClientRequestSender for HttpConnection {
         &self,
         body: EncodedPayload,
         timeout: Duration,
-    ) -> impl Future<Output = Result<(), Error>> + Send {
+    ) -> impl Future<Output = Result<(), Error>> {
         self.send(body, timeout)
     }
 }

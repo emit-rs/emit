@@ -771,7 +771,7 @@ pub(crate) trait ClientRequestSender {
         &self,
         body: EncodedPayload,
         timeout: Duration,
-    ) -> impl Future<Output = Result<(), Error>> + Send;
+    ) -> impl Future<Output = Result<(), Error>>;
 }
 
 pub(crate) struct ClientRequestEncoder<R> {
@@ -819,8 +819,6 @@ fn encode_resource(encoding: Encoding, resource: &Resource) -> EncodedPayload {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     #[cfg(not(all(
         target_arch = "wasm32",
@@ -828,6 +826,8 @@ mod tests {
         target_os = "unknown"
     )))]
     fn otlp_empty_closes_bg_thread_on_drop() {
+        use super::*;
+
         let mut otlp = Otlp::builder().spawn();
 
         let handle = {
@@ -848,6 +848,8 @@ mod tests {
         target_os = "unknown"
     )))]
     fn otlp_non_empty_closes_bg_thread_on_drop() {
+        use super::*;
+
         let mut otlp = Otlp::builder()
             .logs(OtlpLogsBuilder::proto(OtlpTransportBuilder::http(
                 "http://localhost:4319",
