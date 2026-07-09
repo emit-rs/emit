@@ -6,6 +6,7 @@ Events are sent from the caller thread through a [`Channel`] to a background
 */
 
 use std::{
+    fmt,
     future::Future,
     hash::{BuildHasher, Hash},
 };
@@ -91,10 +92,19 @@ pub(crate) struct ChannelCursor {
     remaining_items: usize,
 }
 
+#[derive(Clone)]
 pub(crate) struct Channel {
     scopes: Vec<(emit::Path<'static>, Vec<ChannelEvent>)>,
     scopes_by_key: HashTable<usize>,
     cursor: ChannelCursor,
+}
+
+impl fmt::Debug for Channel {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Channel")
+            .field("cursor", &self.cursor)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Default for Channel {
@@ -175,4 +185,137 @@ impl emit_batcher::Channel for Channel {
 #[inline]
 fn hash(v: &(impl Hash + ?Sized)) -> u64 {
     FnvBuildHasher::default().hash_one(v)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::{
+        io,
+        sync::{Arc, Mutex},
+    };
+
+    use crate::data::{EventEncoder, Json, logs};
+
+    use emit_batcher::Channel as _;
+
+    #[tokio::test]
+    async fn channel_splits_batches_by_size() {
+        let mut channel = Channel::default();
+
+        channel.push(ChannelItem {
+            event: emit::evt!(mdl: emit::path!("a"), "Event 1").to_owned(),
+        });
+        channel.push(ChannelItem {
+            event: emit::evt!(mdl: emit::path!("a"), "Event 2").to_owned(),
+        });
+        channel.push(ChannelItem {
+            event: emit::evt!(mdl: emit::path!("b"), "Event 3").to_owned(),
+        });
+        channel.push(ChannelItem {
+            event: emit::evt!(mdl: emit::path!("c"), "Event 4").to_owned(),
+        });
+
+        assert_eq!(4, channel.len());
+
+        for (case, expected) in [
+            (0, 4),
+            (
+                {
+                    logs::LogsEventEncoder::default()
+                        .encode_event::<Json>(&emit::evt!(mdl: emit::path!("a"), "Event 1"))
+                        .unwrap()
+                        .size_bytes()
+                        * 2
+                },
+                2,
+            ),
+            (usize::MAX, 1),
+        ] {
+            let channel = channel.clone();
+
+            let calls = Arc::new(Mutex::new(0));
+
+            batch(
+                channel,
+                case,
+                &Default::default(),
+                |evt| logs::LogsEventEncoder::default().encode_event::<Json>(evt),
+                |_| async {
+                    *calls.lock().unwrap() += 1;
+
+                    Ok(())
+                },
+            )
+            .await
+            .unwrap();
+
+            assert_eq!(expected, *calls.lock().unwrap(), "max batch size {case}");
+        }
+    }
+
+    #[tokio::test]
+    async fn channel_retry_resumes_from_cursor() {
+        let mut channel = Channel::default();
+
+        channel.push(ChannelItem {
+            event: emit::evt!(mdl: emit::path!("a"), "Event 1").to_owned(),
+        });
+        channel.push(ChannelItem {
+            event: emit::evt!(mdl: emit::path!("a"), "Event 2").to_owned(),
+        });
+        channel.push(ChannelItem {
+            event: emit::evt!(mdl: emit::path!("b"), "Event 3").to_owned(),
+        });
+        channel.push(ChannelItem {
+            event: emit::evt!(mdl: emit::path!("c"), "Event 4").to_owned(),
+        });
+
+        assert_eq!(4, channel.len());
+
+        let calls = Arc::new(Mutex::new(0));
+
+        // This first call will fail
+        let channel = batch(
+            channel,
+            0,
+            &Default::default(),
+            |evt| logs::LogsEventEncoder::default().encode_event::<Json>(evt),
+            |_| async {
+                let mut calls = calls.lock().unwrap();
+
+                *calls += 1;
+
+                if *calls == 2 {
+                    return Err(BatchError::retry(
+                        io::Error::new(io::ErrorKind::Other, "explicit failure"),
+                        (),
+                    ));
+                }
+
+                Ok(())
+            },
+        )
+        .await
+        .unwrap_err()
+        .into_retryable()
+        .unwrap();
+
+        assert_eq!(0, channel.cursor.scope_index);
+        assert_eq!(2, channel.cursor.event_index);
+
+        assert_eq!(2, channel.len());
+
+        // This second call will succeed
+        batch(
+            channel,
+            0,
+            &Default::default(),
+            |evt| logs::LogsEventEncoder::default().encode_event::<Json>(evt),
+            |_| async { Ok(()) },
+        )
+        .await
+        .unwrap();
+    }
 }

@@ -81,6 +81,7 @@ struct OtlpInner {
 struct SignalWorker<S, E, R> {
     pub(crate) transport: Arc<OtlpTransport<S, E, R>>,
     pub(crate) receiver: emit_batcher::Receiver<Channel>,
+    pub(crate) metrics: Arc<InternalMetrics>,
 }
 
 impl Otlp {
@@ -234,6 +235,7 @@ impl OtlpBuilder {
                 let worker = SignalWorker {
                     transport,
                     receiver,
+                    metrics: metrics.clone(),
                 };
 
                 (Some(sender), Some(worker))
@@ -248,6 +250,7 @@ impl OtlpBuilder {
                 let worker = SignalWorker {
                     transport,
                     receiver,
+                    metrics: metrics.clone(),
                 };
 
                 (Some(sender), Some(worker))
@@ -262,6 +265,7 @@ impl OtlpBuilder {
                 let worker = SignalWorker {
                     transport,
                     receiver,
+                    metrics: metrics.clone(),
                 };
 
                 (Some(sender), Some(worker))

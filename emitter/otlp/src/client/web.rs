@@ -35,7 +35,9 @@ impl OtlpBuilder {
         if let Some(worker) = worker_logs {
             emit_batcher::web::spawn(worker.receiver, move |batch| {
                 let transport = worker.transport.clone();
-                async move { transport.send(batch).await }
+                let metrics = worker.metrics.clone();
+
+                async move { transport.send(batch, &metrics).await }
             })
             .map_err(|e| Error::new("failed to spawn logs transport", e))?;
         }
@@ -43,7 +45,9 @@ impl OtlpBuilder {
         if let Some(worker) = worker_traces {
             emit_batcher::web::spawn(worker.receiver, move |batch| {
                 let transport = worker.transport.clone();
-                async move { transport.send(batch).await }
+                let metrics = worker.metrics.clone();
+
+                async move { transport.send(batch, &metrics).await }
             })
             .map_err(|e| Error::new("failed to spawn traces transport", e))?;
         }
@@ -51,7 +55,9 @@ impl OtlpBuilder {
         if let Some(worker) = worker_metrics {
             emit_batcher::web::spawn(worker.receiver, move |batch| {
                 let transport = worker.transport.clone();
-                async move { transport.send(batch).await }
+                let metrics = worker.metrics.clone();
+
+                async move { transport.send(batch, &metrics).await }
             })
             .map_err(|e| Error::new("failed to spawn metrics transport", e))?;
         }

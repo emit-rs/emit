@@ -31,19 +31,15 @@ impl OtlpBuilder {
         metrics: Arc<InternalMetrics>,
     ) -> Result<OtlpInner, Error> {
         let receive = {
-            let metrics = metrics.clone();
-
             async move {
                 let processors =
                     FuturesUnordered::<Pin<Box<dyn Future<Output = ()> + Send + 'static>>>::new();
 
                 if let Some(worker) = worker_logs {
-                    let metrics = metrics.clone();
-
                     processors.push(Box::pin(emit_batcher::tokio::exec(worker.receiver, {
                         move |batch| {
                             let transport = worker.transport.clone();
-                            let metrics = metrics.clone();
+                            let metrics = worker.metrics.clone();
 
                             async move { transport.send(batch, &metrics).await }
                         }
@@ -51,12 +47,10 @@ impl OtlpBuilder {
                 }
 
                 if let Some(worker) = worker_traces {
-                    let metrics = metrics.clone();
-
                     processors.push(Box::pin(emit_batcher::tokio::exec(worker.receiver, {
                         move |batch| {
                             let transport = worker.transport.clone();
-                            let metrics = metrics.clone();
+                            let metrics = worker.metrics.clone();
 
                             async move { transport.send(batch, &metrics).await }
                         }
@@ -64,12 +58,10 @@ impl OtlpBuilder {
                 }
 
                 if let Some(worker) = worker_metrics {
-                    let metrics = metrics.clone();
-
                     processors.push(Box::pin(emit_batcher::tokio::exec(worker.receiver, {
                         move |batch| {
                             let transport = worker.transport.clone();
-                            let metrics = metrics.clone();
+                            let metrics = worker.metrics.clone();
 
                             async move { transport.send(batch, &metrics).await }
                         }
