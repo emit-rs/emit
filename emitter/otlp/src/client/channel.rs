@@ -42,6 +42,7 @@ where
 
         while event_index < events.len() {
             let event = &events[event_index];
+
             event_index += 1;
             remaining_items -= 1;
 
@@ -57,6 +58,7 @@ where
                 match send_batch(&batch).await {
                     Ok(()) => {
                         batch.clear();
+
                         channel.cursor = ChannelCursor {
                             scope_index,
                             event_index,
