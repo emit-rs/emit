@@ -175,6 +175,8 @@ impl Props {
         let mut new_fvs = Vec::new();
         let mut new_ctor_args = Vec::new();
 
+        let nprops = self.key_values.len();
+
         for kv in self.key_values.values() {
             let input_field = kv.fv.key_ident()?;
 
@@ -305,6 +307,10 @@ impl Props {
                         #(#impl_for_each)*
 
                         emit::__private::core::ops::ControlFlow::Continue(())
+                    }
+
+                    fn size(&self) -> Option<usize> {
+                        Some(#nprops)
                     }
 
                     // TODO: detect `is_sorted` through `key_as()` calls

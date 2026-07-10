@@ -485,7 +485,7 @@ mod alloc_support {
 
     use crate::value::OwnedValue;
 
-    use core::{cmp, iter, mem, ptr};
+    use core::{cell::UnsafeCell, cmp, mem, ptr};
 
     use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec::Vec};
 
@@ -500,7 +500,7 @@ mod alloc_support {
     The hash algorithm used is FNV-1a.
     */
     pub struct OwnedProps {
-        buckets: *const [OwnedPropsBucket],
+        buckets: *const [UnsafeCell<OwnedPropsBucket>],
         nprops: usize,
         owner: OwnedPropsOwner,
         head: Option<*const OwnedProp>,
@@ -514,14 +514,8 @@ mod alloc_support {
     impl Clone for OwnedProps {
         fn clone(&self) -> Self {
             match self.owner {
-                OwnedPropsOwner::Box(_) => {
-                    let (nprops, props, head) = OwnedProps::cloned(self);
-
-                    OwnedProps::new_owned(nprops, props, head)
-                }
-                OwnedPropsOwner::Shared(ref props) => {
-                    OwnedProps::new_shared(self.nprops, props.clone(), self.head)
-                }
+                OwnedPropsOwner::Box(_) => Self::collect_owned(self),
+                OwnedPropsOwner::Shared(_) => Self::collect_shared(self),
             }
         }
     }
@@ -530,7 +524,6 @@ mod alloc_support {
         fn drop(&mut self) {
             match self.owner {
                 OwnedPropsOwner::Box(boxed) => {
-                    // SAFETY: We're dropping the box through our exclusive reference
                     drop(unsafe { Box::from_raw(boxed) });
                 }
                 OwnedPropsOwner::Shared(_) => {
@@ -541,7 +534,7 @@ mod alloc_support {
     }
 
     struct OwnedPropsBucket {
-        head: *mut OwnedProp,
+        head: Option<UnsafeCell<OwnedProp>>,
         tail: Vec<*mut OwnedProp>,
     }
 
@@ -549,12 +542,10 @@ mod alloc_support {
         fn drop(&mut self) {
             let mut guard = SliceDropGuard::new(&mut self.tail);
 
-            if !self.head.is_null() {
-                // SAFETY: We're dropping the box through our exclusive reference
-                drop(unsafe { Box::from_raw(self.head) })
+            if let Some(head) = self.head.take() {
+                drop(head);
             }
 
-            // SAFETY: We're dropping the value through our exclusive reference
             unsafe {
                 guard.drop();
             }
@@ -568,128 +559,71 @@ mod alloc_support {
     }
 
     enum OwnedPropsOwner {
-        Box(*mut [OwnedPropsBucket]),
-        Shared(Arc<[OwnedPropsBucket]>),
+        Box(*mut [UnsafeCell<OwnedPropsBucket>]),
+        Shared(Arc<[UnsafeCell<OwnedPropsBucket>]>),
     }
 
     impl OwnedProps {
-        fn cloned(src: &Self) -> (usize, Box<[OwnedPropsBucket]>, Option<*const OwnedProp>) {
-            // NOTE: This could be better optimized
-            // We already know what size each bucket should be, we could store
-            // the index of the bucket on each entry to re-assemble them
-
-            let nbuckets = src.buckets.len();
-            let mut nprops = 0;
-            let mut buckets = iter::from_fn(|| Some(OwnedPropsBucket::new()))
-                .take(nbuckets)
-                .collect::<Vec<_>>()
-                .into_boxed_slice();
-            let mut head = None::<*const OwnedProp>;
-            let mut tail = None::<*mut OwnedProp>;
-
-            // This method creates an independent copy of a set of owned props
-            // We can't simply clone the underlying collections, because they hold
-            // internal pointers that would be invalidated
-            let _ = src.for_each(|prop| {
-                let bucket = &mut buckets[idx(nbuckets, &prop.key)];
-
-                // SAFETY: `head` and `tail` point to values in `collected`, which outlives this function call
-                let prop = unsafe {
-                    OwnedProp::new(&mut head, &mut tail, prop.key.clone(), prop.value.clone())
-                };
-
-                bucket.push(prop);
-                nprops += 1;
-
-                ControlFlow::Continue(())
-            });
-
-            (nprops, buckets, head)
-        }
-
-        fn new_owned(
-            nprops: usize,
-            buckets: Box<[OwnedPropsBucket]>,
-            head: Option<*const OwnedProp>,
-        ) -> Self {
-            let buckets = Box::into_raw(buckets);
-            let owner = OwnedPropsOwner::Box(buckets);
-
-            OwnedProps {
-                nprops,
-                buckets,
-                owner,
-                head,
-            }
-        }
-
-        fn new_shared(
-            nprops: usize,
-            buckets: Arc<[OwnedPropsBucket]>,
-            head: Option<*const OwnedProp>,
-        ) -> Self {
-            let ptr = Arc::as_ptr(&buckets);
-            let owner = OwnedPropsOwner::Shared(buckets);
-            let buckets = ptr;
-
-            OwnedProps {
-                nprops,
-                buckets,
-                owner,
-                head,
-            }
-        }
-
-        fn collect(
-            props: impl Props,
-            mut key: impl FnMut(Str) -> Str<'static>,
-            mut value: impl FnMut(Value) -> OwnedValue,
-        ) -> (usize, Box<[OwnedPropsBucket]>, Option<*const OwnedProp>) {
-            // We want a reasonable number of buckets to reduce the number of keys to scan
-            // We don't want to overallocate if `props.size()` returns a nonsense value though
-            let nbuckets = cmp::min(128, props.size().unwrap_or(32));
-            let mut nprops = 0;
-            let mut buckets = iter::from_fn(|| Some(OwnedPropsBucket::new()))
-                .take(nbuckets)
-                .collect::<Vec<_>>()
-                .into_boxed_slice();
-            let mut head = None::<*const OwnedProp>;
-            let mut tail = None::<*mut OwnedProp>;
-
-            let _ = props.for_each(|k, v| {
-                let bucket = &mut buckets[idx(nbuckets, &k)];
-
-                if bucket.get(&k).is_some() {
-                    ControlFlow::Continue(())
-                } else {
-                    // SAFETY: `head` and `tail` point to values in `collected`, which outlives this function call
-                    let prop = unsafe { OwnedProp::new(&mut head, &mut tail, key(k), value(v)) };
-
-                    bucket.push(prop);
-                    nprops += 1;
-
-                    ControlFlow::Continue(())
-                }
-            });
-
-            (nprops, buckets, head)
-        }
-
         /**
         Collect a set of [`Props`] into an owned collection.
 
         Cloning will involve cloning the collection.
         */
         pub fn collect_owned(props: impl Props) -> Self {
-            let (nprops, buckets, head) = Self::collect(props, |k| k.to_owned(), |v| v.to_owned());
+            // We want a reasonable number of buckets to reduce the number of keys to scan
+            // We don't want to overallocate if `props.size()` returns a nonsense value though
+            let nbuckets = cmp::min(128, props.size().unwrap_or(32));
 
-            let buckets = Box::into_raw(buckets);
-            let owner = OwnedPropsOwner::Box(buckets);
+            let buckets = {
+                let mut buckets = Box::new_uninit_slice(nbuckets);
+
+                for elem in buckets.iter_mut() {
+                    elem.write(UnsafeCell::new(OwnedPropsBucket::new()));
+                }
+
+                unsafe { buckets.assume_init() }
+            };
+
+            let mut guard = BoxDropGuard::new(buckets);
+
+            let buckets_ptr = guard.as_ptr();
+
+            let mut nprops = 0;
+            let mut head = None::<*const OwnedProp>;
+            let mut tail = None::<*mut OwnedProp>;
+
+            let _ = props.for_each(|k, v| {
+                let bucket_ptr = unsafe {
+                    let bucket_ptr =
+                        (buckets_ptr as *mut UnsafeCell<OwnedPropsBucket>).add(idx(nbuckets, &k));
+
+                    (&*bucket_ptr).get()
+                };
+
+                if unsafe { &*bucket_ptr }.get(&k).is_some() {
+                    ControlFlow::Continue(())
+                } else {
+                    let prop = OwnedProp {
+                        key: k.to_owned(),
+                        value: v.to_owned(),
+                        next: None,
+                    };
+
+                    unsafe {
+                        OwnedPropsBucket::push(bucket_ptr, &mut head, &mut tail, prop);
+                    }
+                    nprops += 1;
+
+                    ControlFlow::Continue(())
+                }
+            });
+
+            let buckets_ptr = guard.take();
 
             OwnedProps {
                 nprops,
-                buckets,
-                owner,
+                buckets: buckets_ptr,
+                owner: OwnedPropsOwner::Box(buckets_ptr),
                 head,
             }
         }
@@ -700,10 +634,58 @@ mod alloc_support {
         Cloning will involve cloning the `Arc`, which may be cheaper than cloning the collection itself.
         */
         pub fn collect_shared(props: impl Props) -> Self {
-            let (nprops, buckets, head) =
-                Self::collect(props, |k| k.to_shared(), |v| v.to_shared());
+            // We want a reasonable number of buckets to reduce the number of keys to scan
+            // We don't want to overallocate if `props.size()` returns a nonsense value though
+            let nbuckets = cmp::min(128, props.size().unwrap_or(32));
 
-            Self::new_shared(nprops, buckets.into(), head)
+            let buckets = {
+                let mut buckets = Arc::new_uninit_slice(nbuckets);
+
+                for elem in Arc::get_mut(&mut buckets).unwrap().iter_mut() {
+                    elem.write(UnsafeCell::new(OwnedPropsBucket::new()));
+                }
+
+                unsafe { buckets.assume_init() }
+            };
+
+            let buckets_ptr = Arc::as_ptr(&buckets);
+
+            let mut nprops = 0;
+            let mut head = None::<*const OwnedProp>;
+            let mut tail = None::<*mut OwnedProp>;
+
+            let _ = props.for_each(|k, v| {
+                let bucket_ptr = unsafe {
+                    let bucket_ptr =
+                        (buckets_ptr as *mut UnsafeCell<OwnedPropsBucket>).add(idx(nbuckets, &k));
+
+                    (&*bucket_ptr).get()
+                };
+
+                if unsafe { &*bucket_ptr }.get(&k).is_some() {
+                    ControlFlow::Continue(())
+                } else {
+                    let prop = OwnedProp {
+                        key: k.to_shared(),
+                        value: v.to_shared(),
+                        next: None,
+                    };
+
+                    unsafe {
+                        OwnedPropsBucket::push(bucket_ptr, &mut head, &mut tail, prop);
+                    }
+                    nprops += 1;
+
+                    ControlFlow::Continue(())
+                }
+            });
+
+            OwnedProps {
+                nprops,
+                buckets: buckets_ptr,
+                owner: OwnedPropsOwner::Shared(buckets),
+                head,
+            }
         }
 
         /**
@@ -713,15 +695,13 @@ mod alloc_support {
         */
         pub fn to_shared(&self) -> Self {
             match self.owner {
-                OwnedPropsOwner::Box(_) => {
-                    // We need to clone the data into new allocations, since we don't own them
-                    let (nprops, buckets, head) = OwnedProps::cloned(self);
-
-                    Self::new_shared(nprops, Arc::from(buckets), head)
-                }
-                OwnedPropsOwner::Shared(ref owner) => {
-                    OwnedProps::new_shared(self.nprops, owner.clone(), self.head)
-                }
+                OwnedPropsOwner::Box(_) => Self::collect_shared(self),
+                OwnedPropsOwner::Shared(ref owner) => OwnedProps {
+                    nprops: self.nprops,
+                    buckets: self.buckets,
+                    owner: OwnedPropsOwner::Shared(owner.clone()),
+                    head: self.head,
+                },
             }
         }
 
@@ -733,8 +713,6 @@ mod alloc_support {
             let mut next = self.head;
 
             while let Some(current) = next.take() {
-                // SAFETY: The data in `current` is owned by `self`,
-                // which outlives this dereference
                 let current = unsafe { &*current };
 
                 for_each(&current)?;
@@ -748,10 +726,10 @@ mod alloc_support {
         fn get<'v, K: ToStr>(&'v self, key: K) -> Option<&'v OwnedProp> {
             let key = key.to_str();
 
-            // SAFETY: `buckets` is owned by `Self`, which outlives this function call
             let buckets = unsafe { &*self.buckets };
+            let bucket = buckets[idx(buckets.len(), &key)].get();
 
-            buckets[idx(buckets.len(), &key)].get(&key)
+            unsafe { &*bucket }.get(&key)
         }
     }
 
@@ -783,26 +761,60 @@ mod alloc_support {
     }
 
     impl OwnedPropsBucket {
+        #[inline]
         fn new() -> OwnedPropsBucket {
             OwnedPropsBucket {
-                head: ptr::null_mut(),
+                head: None,
                 tail: Vec::new(),
             }
         }
 
-        fn push(&mut self, mut prop: PropDropGuard) {
-            if self.head.is_null() {
-                self.head = prop.take();
+        #[inline]
+        unsafe fn push(
+            this: *mut Self,
+            head: &mut Option<*const OwnedProp>,
+            tail: &mut Option<*mut OwnedProp>,
+            prop: OwnedProp,
+        ) {
+            let head_field = unsafe { ptr::addr_of_mut!((*this).head) };
+
+            let prop_ptr = if unsafe { &*head_field }.is_none() {
+                unsafe {
+                    *head_field = Some(UnsafeCell::new(prop));
+
+                    (&*head_field).as_ref().unwrap().get()
+                }
             } else {
-                self.tail.reserve(1);
-                self.tail.push(prop.take());
+                let mut guard = BoxDropGuard::new(Box::new(prop));
+                let prop_ptr = guard.as_ptr();
+
+                unsafe {
+                    let tail_field = ptr::addr_of_mut!((*this).tail);
+
+                    (&mut *tail_field).reserve(1);
+                    (&mut *tail_field).push(guard.take());
+                };
+
+                prop_ptr
+            };
+
+            *head = head.or_else(|| Some(prop_ptr as *const _));
+
+            if let Some(tail) = tail {
+                unsafe {
+                    let tail_field = ptr::addr_of_mut!((**tail).next);
+
+                    *tail_field = Some(prop_ptr)
+                }
             }
+
+            *tail = Some(prop_ptr);
         }
 
+        #[inline]
         fn get(&self, k: &Str) -> Option<&OwnedProp> {
-            if !self.head.is_null() {
-                // SAFETY: `prop` is owned by `Self` and follows normal borrowing rules
-                let prop = unsafe { &*self.head };
+            if let Some(prop) = &self.head {
+                let prop = unsafe { &*prop.get() };
 
                 if prop.key == *k {
                     return Some(&prop);
@@ -810,7 +822,6 @@ mod alloc_support {
             }
 
             for prop in &self.tail {
-                // SAFETY: `prop` is owned by `Self` and follows normal borrowing rules
                 let prop = unsafe { &**prop };
 
                 if prop.key == *k {
@@ -822,39 +833,6 @@ mod alloc_support {
         }
     }
 
-    impl OwnedProp {
-        // SAFETY: `head` and `tail` must be valid to dereference within this function call
-        unsafe fn new(
-            head: &mut Option<*const OwnedProp>,
-            tail: &mut Option<*mut OwnedProp>,
-            key: Str<'static>,
-            value: OwnedValue,
-        ) -> PropDropGuard {
-            let guard = PropDropGuard::new(Box::new(OwnedProp {
-                key,
-                value,
-                next: None,
-            }));
-
-            let prop_ptr = guard.0;
-
-            *head = head.or_else(|| Some(prop_ptr));
-
-            if let Some(tail) = tail {
-                debug_assert!(head.is_some());
-
-                // SAFETY: The contract of `new` requires `tail` be valid to dereference
-                let tail = unsafe { &mut **tail };
-
-                debug_assert!(tail.next.is_none());
-                tail.next = Some(prop_ptr);
-            }
-            *tail = Some(prop_ptr);
-
-            guard
-        }
-    }
-
     struct SliceDropGuard<'a> {
         idx: usize,
         value: &'a mut [*mut OwnedProp],
@@ -863,7 +841,6 @@ mod alloc_support {
     impl<'a> Drop for SliceDropGuard<'a> {
         fn drop(&mut self) {
             // Attempt to resume dropping if a destructor panics
-            // SAFETY: We're dropping the value through our exclusive reference
             unsafe {
                 self.drop();
             }
@@ -887,29 +864,34 @@ mod alloc_support {
         }
     }
 
-    struct PropDropGuard(*mut OwnedProp);
+    struct BoxDropGuard<T: ?Sized>(Option<ptr::NonNull<T>>);
 
-    impl PropDropGuard {
-        fn new(prop: Box<OwnedProp>) -> Self {
-            PropDropGuard(Box::into_raw(prop))
+    impl<T: ?Sized> BoxDropGuard<T> {
+        fn new(value: Box<T>) -> Self {
+            BoxDropGuard(ptr::NonNull::new(Box::into_raw(value)))
         }
 
-        fn take(&mut self) -> *mut OwnedProp {
-            mem::replace(&mut self.0, ptr::null_mut())
+        fn as_ptr(&self) -> *mut T {
+            self.0.unwrap().as_ptr()
+        }
+
+        fn take(&mut self) -> *mut T {
+            mem::take(&mut self.0).unwrap().as_ptr()
         }
     }
 
-    impl Drop for PropDropGuard {
+    impl<T: ?Sized> Drop for BoxDropGuard<T> {
         fn drop(&mut self) {
-            if self.0.is_null() {
+            let Some(ptr) = self.0.take() else {
                 return;
-            }
+            };
 
             // SAFETY: We're dropping the value through our exclusive reference
-            drop(unsafe { Box::from_raw(self.0) });
+            drop(unsafe { Box::from_raw(ptr.as_ptr()) });
         }
     }
 
+    #[inline]
     fn idx(buckets: usize, k: &Str) -> usize {
         let mut hash = 0xcbf29ce484222325;
 

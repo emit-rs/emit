@@ -1358,4 +1358,8 @@ impl<P: Props, T: Props> Props for __PrivateMacroExtendedProps<P, T> {
 
         self.1.get(key.by_ref()).or_else(|| self.0.get(key))
     }
+
+    fn size(&self) -> Option<usize> {
+        Some(self.0.size()? + self.1.size()?)
+    }
 }

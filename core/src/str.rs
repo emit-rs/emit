@@ -111,6 +111,7 @@ impl Str<'static> {
     /**
     Create a new string from a value borrowed for `'static`.
     */
+    #[inline]
     pub const fn new(k: &'static str) -> Self {
         Str {
             value: k as *const str,
@@ -126,6 +127,7 @@ impl<'k> Str<'k> {
 
     The [`Str::new`] method should be preferred where possible.
     */
+    #[inline]
     pub const fn new_ref(k: &'k str) -> Str<'k> {
         Str {
             value: k as *const str,
@@ -151,6 +153,7 @@ impl<'k> Str<'k> {
     /**
     Get a reference to the underlying value.
     */
+    #[inline]
     pub const fn get(&self) -> &str {
         // NOTE: It's important here that the lifetime returned is not `'k`
         // If it was it would be possible to return a `&'static str` from
@@ -174,12 +177,14 @@ impl<'k> Str<'k> {
 }
 
 impl<'a> hash::Hash for Str<'a> {
+    #[inline]
     fn hash<H: hash::Hasher>(&self, state: &mut H) {
         self.get().hash(state)
     }
 }
 
 impl<'a, 'b> PartialEq<Str<'b>> for Str<'a> {
+    #[inline]
     fn eq(&self, other: &Str<'b>) -> bool {
         self.get() == other.get()
     }
@@ -188,48 +193,56 @@ impl<'a, 'b> PartialEq<Str<'b>> for Str<'a> {
 impl<'a> Eq for Str<'a> {}
 
 impl<'a> PartialEq<str> for Str<'a> {
+    #[inline]
     fn eq(&self, other: &str) -> bool {
         self.get() == other
     }
 }
 
 impl<'a> PartialEq<Str<'a>> for str {
+    #[inline]
     fn eq(&self, other: &Str<'a>) -> bool {
         self == other.get()
     }
 }
 
 impl<'a, 'b> PartialEq<&'b str> for Str<'a> {
+    #[inline]
     fn eq(&self, other: &&'b str) -> bool {
         self.get() == *other
     }
 }
 
 impl<'a, 'b> PartialEq<Str<'b>> for &'a str {
+    #[inline]
     fn eq(&self, other: &Str<'b>) -> bool {
         *self == other.get()
     }
 }
 
 impl<'a, 'b> PartialOrd<Str<'b>> for Str<'a> {
+    #[inline]
     fn partial_cmp(&self, other: &Str<'b>) -> Option<core::cmp::Ordering> {
         self.get().partial_cmp(other.get())
     }
 }
 
 impl<'a> Ord for Str<'a> {
+    #[inline]
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         self.get().cmp(other.get())
     }
 }
 
 impl<'k> Borrow<str> for Str<'k> {
+    #[inline]
     fn borrow(&self) -> &str {
         self.get()
     }
 }
 
 impl<'k> AsRef<str> for Str<'k> {
+    #[inline]
     fn as_ref(&self) -> &str {
         self.get()
     }

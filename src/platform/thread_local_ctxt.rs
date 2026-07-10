@@ -131,6 +131,14 @@ impl Props for ThreadLocalCtxtFrame {
     fn is_unique(&self) -> bool {
         true
     }
+
+    fn size(&self) -> Option<usize> {
+        if let Some(ref props) = self.props {
+            Some(props.len())
+        } else {
+            Some(0)
+        }
+    }
 }
 
 impl Ctxt for ThreadLocalCtxt {
