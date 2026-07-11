@@ -6,9 +6,11 @@ Events are sent from the caller thread through a [`Channel`] to a background
 */
 
 use std::{
+    collections::HashMap,
     fmt,
     future::Future,
     hash::{BuildHasher, Hash},
+    ops::ControlFlow,
 };
 
 use fnv::FnvBuildHasher;
@@ -127,7 +129,95 @@ pub(crate) struct ChannelItem {
     pub(crate) event: ChannelEvent,
 }
 
-pub(crate) type ChannelEvent = emit::Event<'static, emit::props::OwnedProps>;
+#[derive(Clone)]
+pub(crate) struct ChannelEvent(emit::Event<'static, ChannelProps>);
+
+#[derive(Clone)]
+pub(crate) struct ChannelProps(HashMap<emit::Str<'static>, ChannelValue>);
+
+#[derive(Clone)]
+enum ChannelValue {
+    SpanId(emit::SpanId),
+    TraceId(emit::TraceId),
+    Any(emit::value::OwnedValue),
+}
+
+impl ChannelEvent {
+    pub(crate) fn from_evt(evt: emit::Event<impl emit::Props>) -> Self {
+        ChannelEvent(emit::Event::new(
+            evt.mdl().to_owned(),
+            evt.tpl().to_owned(),
+            evt.extent().cloned(),
+            evt.props().collect(),
+        ))
+    }
+
+    pub(crate) fn get<'a>(&'a self) -> &'a emit::Event<'a, impl emit::Props> {
+        &self.0
+    }
+}
+
+impl ChannelValue {
+    fn from_value(value: emit::Value) -> Self {
+        // Specialize a few common value types
+
+        if let Some(trace_id) = value.downcast_ref() {
+            return ChannelValue::TraceId(*trace_id);
+        }
+
+        if let Some(span_id) = value.downcast_ref() {
+            return ChannelValue::SpanId(*span_id);
+        }
+
+        // Fall back to buffering
+        ChannelValue::Any(value.to_shared())
+    }
+}
+
+impl emit::value::ToValue for ChannelValue {
+    fn to_value(&self) -> emit::Value<'_> {
+        match self {
+            ChannelValue::TraceId(value) => value.to_value(),
+            ChannelValue::SpanId(value) => value.to_value(),
+            ChannelValue::Any(value) => value.to_value(),
+        }
+    }
+}
+
+impl<'kv> emit::props::FromProps<'kv> for ChannelProps {
+    fn from_props<P: emit::Props + ?Sized>(props: &'kv P) -> Self {
+        let mut owned = HashMap::new();
+
+        let _ = props.for_each(|k, v| {
+            owned.insert(k.to_owned(), ChannelValue::from_value(v));
+
+            ControlFlow::Continue(())
+        });
+
+        ChannelProps(owned)
+    }
+}
+
+impl emit::Props for ChannelProps {
+    fn for_each<'a, F: FnMut(emit::Str<'a>, emit::Value<'a>) -> ControlFlow<()>>(
+        &'a self,
+        for_each: F,
+    ) -> ControlFlow<()> {
+        emit::Props::for_each(&self.0, for_each)
+    }
+
+    fn get<'v, K: emit::str::ToStr>(&'v self, key: K) -> Option<emit::Value<'v>> {
+        emit::Props::get(&self.0, key)
+    }
+
+    fn is_unique(&self) -> bool {
+        true
+    }
+
+    fn size(&self) -> Option<usize> {
+        Some(self.0.len())
+    }
+}
 
 impl emit_batcher::Channel for Channel {
     type Item = ChannelItem;
@@ -154,7 +244,7 @@ impl emit_batcher::Channel for Channel {
             "attempt to push to a channel that's already being drained"
         );
 
-        let scope = item.event.mdl();
+        let scope = item.event.get().mdl();
 
         match self.scopes_by_key.entry(
             hash(&scope),
@@ -207,16 +297,16 @@ mod tests {
         let mut channel = Channel::default();
 
         channel.push(ChannelItem {
-            event: emit::evt!(mdl: emit::path!("a"), "Event 1").to_owned(),
+            event: ChannelEvent::from_evt(emit::evt!(mdl: emit::path!("a"), "Event 1")),
         });
         channel.push(ChannelItem {
-            event: emit::evt!(mdl: emit::path!("a"), "Event 2").to_owned(),
+            event: ChannelEvent::from_evt(emit::evt!(mdl: emit::path!("a"), "Event 2")),
         });
         channel.push(ChannelItem {
-            event: emit::evt!(mdl: emit::path!("b"), "Event 3").to_owned(),
+            event: ChannelEvent::from_evt(emit::evt!(mdl: emit::path!("b"), "Event 3")),
         });
         channel.push(ChannelItem {
-            event: emit::evt!(mdl: emit::path!("c"), "Event 4").to_owned(),
+            event: ChannelEvent::from_evt(emit::evt!(mdl: emit::path!("c"), "Event 4")),
         });
 
         assert_eq!(4, channel.len());
@@ -243,7 +333,7 @@ mod tests {
                 channel,
                 case,
                 &Default::default(),
-                |evt| logs::LogsEventEncoder::default().encode_event::<Json>(evt),
+                |evt| logs::LogsEventEncoder::default().encode_event::<Json>(evt.get()),
                 |_| async {
                     *calls.lock().unwrap() += 1;
 
@@ -262,16 +352,16 @@ mod tests {
         let mut channel = Channel::default();
 
         channel.push(ChannelItem {
-            event: emit::evt!(mdl: emit::path!("a"), "Event 1").to_owned(),
+            event: ChannelEvent::from_evt(emit::evt!(mdl: emit::path!("a"), "Event 1")),
         });
         channel.push(ChannelItem {
-            event: emit::evt!(mdl: emit::path!("a"), "Event 2").to_owned(),
+            event: ChannelEvent::from_evt(emit::evt!(mdl: emit::path!("a"), "Event 2")),
         });
         channel.push(ChannelItem {
-            event: emit::evt!(mdl: emit::path!("b"), "Event 3").to_owned(),
+            event: ChannelEvent::from_evt(emit::evt!(mdl: emit::path!("b"), "Event 3")),
         });
         channel.push(ChannelItem {
-            event: emit::evt!(mdl: emit::path!("c"), "Event 4").to_owned(),
+            event: ChannelEvent::from_evt(emit::evt!(mdl: emit::path!("c"), "Event 4")),
         });
 
         assert_eq!(4, channel.len());
@@ -283,7 +373,7 @@ mod tests {
             channel,
             0,
             &Default::default(),
-            |evt| logs::LogsEventEncoder::default().encode_event::<Json>(evt),
+            |evt| logs::LogsEventEncoder::default().encode_event::<Json>(evt.get()),
             |_| async {
                 let mut calls = calls.lock().unwrap();
 
@@ -314,7 +404,7 @@ mod tests {
             channel,
             0,
             &Default::default(),
-            |evt| logs::LogsEventEncoder::default().encode_event::<Json>(evt),
+            |evt| logs::LogsEventEncoder::default().encode_event::<Json>(evt.get()),
             |_| async { Ok(()) },
         )
         .await

@@ -848,11 +848,13 @@ mod alloc_support {
     }
 
     impl<'a> SliceDropGuard<'a> {
+        #[inline]
         fn new(value: &'a mut [*mut OwnedProp]) -> Self {
             SliceDropGuard { value, idx: 0 }
         }
 
         // SAFETY: The value referenced by this guard must be getting dropped
+        #[inline]
         unsafe fn drop(&mut self) {
             while self.idx < self.value.len() {
                 let prop = self.value[self.idx];
@@ -867,14 +869,17 @@ mod alloc_support {
     struct BoxDropGuard<T: ?Sized>(Option<ptr::NonNull<T>>);
 
     impl<T: ?Sized> BoxDropGuard<T> {
+        #[inline]
         fn new(value: Box<T>) -> Self {
             BoxDropGuard(ptr::NonNull::new(Box::into_raw(value)))
         }
 
+        #[inline]
         fn as_ptr(&self) -> *mut T {
             self.0.unwrap().as_ptr()
         }
 
+        #[inline]
         fn take(&mut self) -> *mut T {
             mem::take(&mut self.0).unwrap().as_ptr()
         }
