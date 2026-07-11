@@ -39,6 +39,8 @@ where
     let mut event_index = channel.cursor.event_index;
     let mut remaining_items = channel.cursor.remaining_items;
 
+    // Split our channel into batches roughly by request size
+    // OTLP requires we collect events under the same scope together so we work a scope at a time
     while scope_index < channel.scopes.len() {
         let events = &channel.scopes[scope_index].1;
 
@@ -123,10 +125,6 @@ impl Default for Channel {
             },
         }
     }
-}
-
-pub(crate) struct ChannelItem {
-    pub(crate) event: ChannelEvent,
 }
 
 #[derive(Clone)]
@@ -220,7 +218,7 @@ impl emit::Props for ChannelProps {
 }
 
 impl emit_batcher::Channel for Channel {
-    type Item = ChannelItem;
+    type Item = ChannelEvent;
 
     fn new() -> Self {
         Default::default()
@@ -244,7 +242,7 @@ impl emit_batcher::Channel for Channel {
             "attempt to push to a channel that's already being drained"
         );
 
-        let scope = item.event.get().mdl();
+        let scope = item.get().mdl();
 
         match self.scopes_by_key.entry(
             hash(&scope),
@@ -252,12 +250,12 @@ impl emit_batcher::Channel for Channel {
             |idx| hash(&self.scopes[*idx].0),
         ) {
             hash_table::Entry::Occupied(entry) => {
-                self.scopes[*entry.get()].1.push(item.event);
+                self.scopes[*entry.get()].1.push(item);
             }
             hash_table::Entry::Vacant(entry) => {
                 let idx = self.scopes.len();
 
-                self.scopes.push((scope.to_owned(), vec![item.event]));
+                self.scopes.push((scope.to_owned(), vec![item]));
                 entry.insert(idx);
             }
         }
@@ -296,18 +294,18 @@ mod tests {
     async fn channel_splits_batches_by_size() {
         let mut channel = Channel::default();
 
-        channel.push(ChannelItem {
-            event: ChannelEvent::from_evt(emit::evt!(mdl: emit::path!("a"), "Event 1")),
-        });
-        channel.push(ChannelItem {
-            event: ChannelEvent::from_evt(emit::evt!(mdl: emit::path!("a"), "Event 2")),
-        });
-        channel.push(ChannelItem {
-            event: ChannelEvent::from_evt(emit::evt!(mdl: emit::path!("b"), "Event 3")),
-        });
-        channel.push(ChannelItem {
-            event: ChannelEvent::from_evt(emit::evt!(mdl: emit::path!("c"), "Event 4")),
-        });
+        channel.push(ChannelEvent::from_evt(
+            emit::evt!(mdl: emit::path!("a"), "Event 1"),
+        ));
+        channel.push(ChannelEvent::from_evt(
+            emit::evt!(mdl: emit::path!("a"), "Event 2"),
+        ));
+        channel.push(ChannelEvent::from_evt(
+            emit::evt!(mdl: emit::path!("b"), "Event 3"),
+        ));
+        channel.push(ChannelEvent::from_evt(
+            emit::evt!(mdl: emit::path!("c"), "Event 4"),
+        ));
 
         assert_eq!(4, channel.len());
 
@@ -351,18 +349,18 @@ mod tests {
     async fn channel_retry_resumes_from_cursor() {
         let mut channel = Channel::default();
 
-        channel.push(ChannelItem {
-            event: ChannelEvent::from_evt(emit::evt!(mdl: emit::path!("a"), "Event 1")),
-        });
-        channel.push(ChannelItem {
-            event: ChannelEvent::from_evt(emit::evt!(mdl: emit::path!("a"), "Event 2")),
-        });
-        channel.push(ChannelItem {
-            event: ChannelEvent::from_evt(emit::evt!(mdl: emit::path!("b"), "Event 3")),
-        });
-        channel.push(ChannelItem {
-            event: ChannelEvent::from_evt(emit::evt!(mdl: emit::path!("c"), "Event 4")),
-        });
+        channel.push(ChannelEvent::from_evt(
+            emit::evt!(mdl: emit::path!("a"), "Event 1"),
+        ));
+        channel.push(ChannelEvent::from_evt(
+            emit::evt!(mdl: emit::path!("a"), "Event 2"),
+        ));
+        channel.push(ChannelEvent::from_evt(
+            emit::evt!(mdl: emit::path!("b"), "Event 3"),
+        ));
+        channel.push(ChannelEvent::from_evt(
+            emit::evt!(mdl: emit::path!("c"), "Event 4"),
+        ));
 
         assert_eq!(4, channel.len());
 

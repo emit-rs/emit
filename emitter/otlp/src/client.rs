@@ -50,7 +50,7 @@ mod logs;
 mod metrics;
 mod traces;
 
-pub(crate) use self::channel::{Channel, ChannelEvent, ChannelItem};
+pub(crate) use self::channel::{Channel, ChannelEvent};
 pub use self::{logs::*, metrics::*, traces::*};
 
 const DEFAULT_MAX_REQUEST_SIZE_BYTES: usize = 1024 * 1024; // 1MiB
@@ -665,26 +665,20 @@ impl emit::Emitter for OtlpInner {
 
         if let Some(ref sender) = self.otlp_metrics {
             if emit::kind::is_metric_filter().matches(&evt) {
-                sender.send(ChannelItem {
-                    event: ChannelEvent::from_evt(evt),
-                });
+                sender.send(ChannelEvent::from_evt(evt));
                 return;
             }
         }
 
         if let Some(ref sender) = self.otlp_traces {
             if emit::kind::is_span_filter().matches(&evt) {
-                sender.send(ChannelItem {
-                    event: ChannelEvent::from_evt(evt),
-                });
+                sender.send(ChannelEvent::from_evt(evt));
                 return;
             }
         }
 
         if let Some(ref sender) = self.otlp_logs {
-            sender.send(ChannelItem {
-                event: ChannelEvent::from_evt(evt),
-            });
+            sender.send(ChannelEvent::from_evt(evt));
             return;
         }
 

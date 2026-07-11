@@ -524,6 +524,7 @@ mod alloc_support {
         fn drop(&mut self) {
             match self.owner {
                 OwnedPropsOwner::Box(boxed) => {
+                    // SAFETY: We're dropping the box's owner
                     drop(unsafe { Box::from_raw(boxed) });
                 }
                 OwnedPropsOwner::Shared(_) => {
@@ -533,6 +534,7 @@ mod alloc_support {
         }
     }
 
+    // NOTE: `OwnedPropsBucket` is only ever stored inside a stable allocation
     struct OwnedPropsBucket {
         head: Option<UnsafeCell<OwnedProp>>,
         tail: Vec<*mut OwnedProp>,
@@ -546,6 +548,7 @@ mod alloc_support {
                 drop(head);
             }
 
+            // SAFETY: We're dropping the vec's owner
             unsafe {
                 guard.drop();
             }
@@ -578,45 +581,26 @@ mod alloc_support {
                 let mut buckets = Box::new_uninit_slice(nbuckets);
 
                 for elem in buckets.iter_mut() {
+                    // NOTE: `OwnedPropsBucket::new()` does not allocate
                     elem.write(UnsafeCell::new(OwnedPropsBucket::new()));
                 }
 
+                // SAFETY: All values in `buckets` have been initialized
                 unsafe { buckets.assume_init() }
             };
 
             let mut guard = BoxDropGuard::new(buckets);
 
-            let buckets_ptr = guard.as_ptr();
-
-            let mut nprops = 0;
-            let mut head = None::<*const OwnedProp>;
-            let mut tail = None::<*mut OwnedProp>;
-
-            let _ = props.for_each(|k, v| {
-                let bucket_ptr = unsafe {
-                    let bucket_ptr =
-                        (buckets_ptr as *mut UnsafeCell<OwnedPropsBucket>).add(idx(nbuckets, &k));
-
-                    (&*bucket_ptr).get()
-                };
-
-                if unsafe { &*bucket_ptr }.get(&k).is_some() {
-                    ControlFlow::Continue(())
-                } else {
-                    let prop = OwnedProp {
-                        key: k.to_owned(),
-                        value: v.to_owned(),
-                        next: None,
-                    };
-
-                    unsafe {
-                        OwnedPropsBucket::push(bucket_ptr, &mut head, &mut tail, prop);
-                    }
-                    nprops += 1;
-
-                    ControlFlow::Continue(())
-                }
-            });
+            // SAFETY: `buckets` is valid to dereference and `nbuckets` is within `buckets`
+            let (nprops, head) = unsafe {
+                Self::collect_internal(
+                    guard.as_ptr(),
+                    nbuckets,
+                    props,
+                    |k| k.to_owned(),
+                    |v| v.to_owned(),
+                )
+            };
 
             let buckets_ptr = guard.take();
 
@@ -642,19 +626,49 @@ mod alloc_support {
                 let mut buckets = Arc::new_uninit_slice(nbuckets);
 
                 for elem in Arc::get_mut(&mut buckets).unwrap().iter_mut() {
+                    // NOTE: `OwnedPropsBucket::new()` does not allocate
                     elem.write(UnsafeCell::new(OwnedPropsBucket::new()));
                 }
 
+                // SAFETY: All values in `buckets` have been initialized
                 unsafe { buckets.assume_init() }
             };
 
             let buckets_ptr = Arc::as_ptr(&buckets);
 
+            // SAFETY: `buckets` is valid to dereference and `nbuckets` is within `buckets`
+            let (nprops, head) = unsafe {
+                Self::collect_internal(
+                    buckets_ptr as *mut _,
+                    nbuckets,
+                    props,
+                    |k| k.to_shared(),
+                    |v| v.to_shared(),
+                )
+            };
+
+            OwnedProps {
+                nprops,
+                buckets: buckets_ptr,
+                owner: OwnedPropsOwner::Shared(buckets),
+                head,
+            }
+        }
+
+        #[inline]
+        unsafe fn collect_internal(
+            buckets_ptr: *mut [UnsafeCell<OwnedPropsBucket>],
+            nbuckets: usize,
+            props: impl Props,
+            mk_key: impl Fn(Str) -> Str<'static>,
+            mk_value: impl Fn(Value) -> OwnedValue,
+        ) -> (usize, Option<*const OwnedProp>) {
             let mut nprops = 0;
             let mut head = None::<*const OwnedProp>;
             let mut tail = None::<*mut OwnedProp>;
 
             let _ = props.for_each(|k, v| {
+                // SAFETY: `buckets_ptr` is valid to dereference and `idx` is within `buckets`
                 let bucket_ptr = unsafe {
                     let bucket_ptr =
                         (buckets_ptr as *mut UnsafeCell<OwnedPropsBucket>).add(idx(nbuckets, &k));
@@ -662,15 +676,18 @@ mod alloc_support {
                     (&*bucket_ptr).get()
                 };
 
+                // SAFETY: `bucket_ptr` is valid to dereference
                 if unsafe { &*bucket_ptr }.get(&k).is_some() {
                     ControlFlow::Continue(())
                 } else {
+                    // NOTE: `mk_key` and `mk_value` are user controlled, so may panic
                     let prop = OwnedProp {
-                        key: k.to_shared(),
-                        value: v.to_shared(),
+                        key: mk_key(k),
+                        value: mk_value(v),
                         next: None,
                     };
 
+                    // SAFETY: `bucket_ptr`, `head`, and `tail` are valid to dereference
                     unsafe {
                         OwnedPropsBucket::push(bucket_ptr, &mut head, &mut tail, prop);
                     }
@@ -680,12 +697,7 @@ mod alloc_support {
                 }
             });
 
-            OwnedProps {
-                nprops,
-                buckets: buckets_ptr,
-                owner: OwnedPropsOwner::Shared(buckets),
-                head,
-            }
+            (nprops, head)
         }
 
         /**
@@ -713,6 +725,7 @@ mod alloc_support {
             let mut next = self.head;
 
             while let Some(current) = next.take() {
+                // SAFETY: `current` was initialized via `collect_internal` so is valid to dereference
                 let current = unsafe { &*current };
 
                 for_each(&current)?;
@@ -726,9 +739,11 @@ mod alloc_support {
         fn get<'v, K: ToStr>(&'v self, key: K) -> Option<&'v OwnedProp> {
             let key = key.to_str();
 
+            // SAFETY: `buckets` was initialized via `collect_internal` so is valid to dereference
             let buckets = unsafe { &*self.buckets };
             let bucket = buckets[idx(buckets.len(), &key)].get();
 
+            // SAFETY: `current` was initialized via `collect_internal` so is valid to dereference
             unsafe { &*bucket }.get(&key)
         }
     }
@@ -762,13 +777,14 @@ mod alloc_support {
 
     impl OwnedPropsBucket {
         #[inline]
-        fn new() -> OwnedPropsBucket {
+        const fn new() -> OwnedPropsBucket {
             OwnedPropsBucket {
                 head: None,
                 tail: Vec::new(),
             }
         }
 
+        // SAFETY: Callers must ensure `this` is valid to dereference, and that `head` and `tail` are too
         #[inline]
         unsafe fn push(
             this: *mut Self,
@@ -776,9 +792,16 @@ mod alloc_support {
             tail: &mut Option<*mut OwnedProp>,
             prop: OwnedProp,
         ) {
+            // NOTE: This method is intentionally written to avoid ever creating a `&mut` reference
+            // This is necessary to appease Miri. It makes the code far more arcane than I'd like,
+            // but lets us store the `head` of each bucket inline, instead of in a separate allocation
+
+            // SAETY: `head` is in bounds for `this`
             let head_field = unsafe { ptr::addr_of_mut!((*this).head) };
 
+            // SAFETY: `head_field` inherits validity of `this` ptr
             let prop_ptr = if unsafe { &*head_field }.is_none() {
+                // SAFETY: `head_field` inherits validity of `this` ptr
                 unsafe {
                     *head_field = Some(UnsafeCell::new(prop));
 
@@ -788,6 +811,7 @@ mod alloc_support {
                 let mut guard = BoxDropGuard::new(Box::new(prop));
                 let prop_ptr = guard.as_ptr();
 
+                // SAETY: `tail` is in bounds for `this`, and `tail_field` inherits validity of `this` ptr
                 unsafe {
                     let tail_field = ptr::addr_of_mut!((*this).tail);
 
@@ -801,6 +825,7 @@ mod alloc_support {
             *head = head.or_else(|| Some(prop_ptr as *const _));
 
             if let Some(tail) = tail {
+                // SAETY: `next` is in bounds for `tail`, and `tail_field` inherits validity of `tail` ptr
                 unsafe {
                     let tail_field = ptr::addr_of_mut!((**tail).next);
 
@@ -814,6 +839,7 @@ mod alloc_support {
         #[inline]
         fn get(&self, k: &Str) -> Option<&OwnedProp> {
             if let Some(prop) = &self.head {
+                // SAFETY: `head` was initialized via `collect_internal` so is valid to dereference
                 let prop = unsafe { &*prop.get() };
 
                 if prop.key == *k {
@@ -822,6 +848,7 @@ mod alloc_support {
             }
 
             for prop in &self.tail {
+                // SAFETY: `tail` was initialized via `collect_internal` so is valid to dereference
                 let prop = unsafe { &**prop };
 
                 if prop.key == *k {
@@ -841,6 +868,7 @@ mod alloc_support {
     impl<'a> Drop for SliceDropGuard<'a> {
         fn drop(&mut self) {
             // Attempt to resume dropping if a destructor panics
+            // SAFETY: We own the value being dropped
             unsafe {
                 self.drop();
             }
