@@ -1,0 +1,22 @@
+[package]
+name = "emit_otlp_test_throughput_otel"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[dependencies.opentelemetry]
+version = "0.32"
+features = ["logs"]
+
+[dependencies.opentelemetry_sdk]
+version = "0.32"
+features = ["trace", "logs"]
+
+[dependencies.opentelemetry-otlp]
+version = "0.32"
+default-features = false
+features = ["grpc-tonic", "trace", "logs"]
+
+[dependencies.tokio]
+version = "1"
+features = ["rt-multi-thread", "macros"]
