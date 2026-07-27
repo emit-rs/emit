@@ -130,14 +130,14 @@ impl Default for Channel {
 #[derive(Clone)]
 pub(crate) struct ChannelEvent(emit::Event<'static, ChannelProps>);
 
-#[derive(Clone)]
-pub(crate) struct ChannelProps(HashMap<emit::Str<'static>, ChannelValue>);
-
-#[derive(Clone)]
-enum ChannelValue {
-    SpanId(emit::SpanId),
-    TraceId(emit::TraceId),
-    Any(emit::value::OwnedValue),
+#[derive(Clone, Default)]
+pub(crate) struct ChannelProps {
+    lvl: Option<emit::Level>,
+    trace_id: Option<emit::TraceId>,
+    span_parent: Option<emit::SpanId>,
+    span_id: Option<emit::SpanId>,
+    span_kind: Option<emit::SpanKind>,
+    rest: HashMap<emit::Str<'static>, emit::value::OwnedValue>,
 }
 
 impl ChannelEvent {
@@ -155,65 +155,118 @@ impl ChannelEvent {
     }
 }
 
-impl ChannelValue {
-    fn from_value(value: emit::Value) -> Self {
-        // Specialize a few common value types
-
-        if let Some(trace_id) = value.downcast_ref() {
-            return ChannelValue::TraceId(*trace_id);
-        }
-
-        if let Some(span_id) = value.downcast_ref() {
-            return ChannelValue::SpanId(*span_id);
-        }
-
-        // Fall back to buffering
-        ChannelValue::Any(value.to_shared())
-    }
-}
-
-impl emit::value::ToValue for ChannelValue {
-    fn to_value(&self) -> emit::Value<'_> {
-        match self {
-            ChannelValue::TraceId(value) => value.to_value(),
-            ChannelValue::SpanId(value) => value.to_value(),
-            ChannelValue::Any(value) => value.to_value(),
-        }
-    }
-}
-
 impl<'kv> emit::props::FromProps<'kv> for ChannelProps {
     fn from_props<P: emit::Props + ?Sized>(props: &'kv P) -> Self {
-        let mut owned = HashMap::new();
+        let mut owned = ChannelProps::default();
 
         let _ = props.for_each(|k, v| {
-            owned.insert(k.to_owned(), ChannelValue::from_value(v));
+            match k.get() {
+                // Well-known props
+                emit::well_known::KEY_LVL => {
+                    if let Some(v) = v.by_ref().cast() {
+                        owned.lvl = Some(v);
+
+                        return ControlFlow::Continue(());
+                    }
+                }
+                emit::well_known::KEY_TRACE_ID => {
+                    if let Some(v) = v.by_ref().cast() {
+                        owned.trace_id = Some(v);
+
+                        return ControlFlow::Continue(());
+                    }
+                }
+                emit::well_known::KEY_SPAN_ID => {
+                    if let Some(v) = v.by_ref().cast() {
+                        owned.span_id = Some(v);
+
+                        return ControlFlow::Continue(());
+                    }
+                }
+                emit::well_known::KEY_SPAN_PARENT => {
+                    if let Some(v) = v.by_ref().cast() {
+                        owned.span_parent = Some(v);
+
+                        return ControlFlow::Continue(());
+                    }
+                }
+                emit::well_known::KEY_SPAN_KIND => {
+                    if let Some(v) = v.by_ref().cast() {
+                        owned.span_kind = Some(v);
+
+                        return ControlFlow::Continue(());
+                    }
+                }
+                // Ignored
+                emit::well_known::KEY_EVT_KIND => return ControlFlow::Continue(()),
+                _ => (),
+            }
+
+            // Insert other values
+            owned.rest.insert(k.to_owned(), v.to_owned());
 
             ControlFlow::Continue(())
         });
 
-        ChannelProps(owned)
+        owned
     }
 }
 
 impl emit::Props for ChannelProps {
     fn for_each<'a, F: FnMut(emit::Str<'a>, emit::Value<'a>) -> ControlFlow<()>>(
         &'a self,
-        for_each: F,
+        mut for_each: F,
     ) -> ControlFlow<()> {
-        emit::Props::for_each(&self.0, for_each)
+        use emit::{str::ToStr as _, value::ToValue as _};
+
+        let ChannelProps {
+            lvl,
+            trace_id,
+            span_parent,
+            span_id,
+            span_kind,
+            rest,
+        } = self;
+
+        for_each(emit::well_known::KEY_LVL.to_str(), lvl.to_value())?;
+        for_each(emit::well_known::KEY_TRACE_ID.to_str(), trace_id.to_value())?;
+        for_each(
+            emit::well_known::KEY_SPAN_PARENT.to_str(),
+            span_parent.to_value(),
+        )?;
+        for_each(emit::well_known::KEY_SPAN_ID.to_str(), span_id.to_value())?;
+        for_each(
+            emit::well_known::KEY_SPAN_KIND.to_str(),
+            span_kind.to_value(),
+        )?;
+
+        emit::Props::for_each(rest, for_each)
     }
 
     fn get<'v, K: emit::str::ToStr>(&'v self, key: K) -> Option<emit::Value<'v>> {
-        emit::Props::get(&self.0, key)
+        use emit::value::ToValue as _;
+
+        let ChannelProps {
+            lvl,
+            trace_id,
+            span_parent,
+            span_id,
+            span_kind,
+            rest,
+        } = self;
+
+        match key.to_str().get() {
+            emit::well_known::KEY_LVL => lvl.as_ref().map(|v| v.to_value()),
+            emit::well_known::KEY_TRACE_ID => trace_id.as_ref().map(|v| v.to_value()),
+            emit::well_known::KEY_SPAN_ID => span_id.as_ref().map(|v| v.to_value()),
+            emit::well_known::KEY_SPAN_PARENT => span_parent.as_ref().map(|v| v.to_value()),
+            emit::well_known::KEY_SPAN_KIND => span_kind.as_ref().map(|v| v.to_value()),
+            key => emit::Props::get(rest, key),
+        }
     }
 
     fn is_unique(&self) -> bool {
         true
-    }
-
-    fn size(&self) -> Option<usize> {
-        Some(self.0.len())
     }
 }
 
