@@ -797,7 +797,7 @@ mod alloc_support {
             // but lets us store the `head` of each bucket inline, instead of in a separate allocation
 
             // SAETY: `head` is in bounds for `this`
-            let head_field = unsafe { ptr::addr_of_mut!((*this).head) };
+            let head_field = unsafe { &raw mut (*this).head };
 
             // SAFETY: `head_field` inherits validity of `this` ptr
             let prop_ptr = if unsafe { &*head_field }.is_none() {
@@ -813,7 +813,7 @@ mod alloc_support {
 
                 // SAETY: `tail` is in bounds for `this`, and `tail_field` inherits validity of `this` ptr
                 unsafe {
-                    let tail_field = ptr::addr_of_mut!((*this).tail);
+                    let tail_field = &raw mut (*this).tail;
 
                     (&mut *tail_field).reserve(1);
                     (&mut *tail_field).push(guard.take());
@@ -827,7 +827,7 @@ mod alloc_support {
             if let Some(tail) = tail {
                 // SAETY: `next` is in bounds for `tail`, and `tail_field` inherits validity of `tail` ptr
                 unsafe {
-                    let tail_field = ptr::addr_of_mut!((**tail).next);
+                    let tail_field = &raw mut (**tail).next;
 
                     *tail_field = Some(prop_ptr)
                 }
