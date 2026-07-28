@@ -228,17 +228,27 @@ impl emit::Props for ChannelProps {
             rest,
         } = self;
 
-        for_each(emit::well_known::KEY_LVL.to_str(), lvl.to_value())?;
-        for_each(emit::well_known::KEY_TRACE_ID.to_str(), trace_id.to_value())?;
-        for_each(
-            emit::well_known::KEY_SPAN_PARENT.to_str(),
-            span_parent.to_value(),
-        )?;
-        for_each(emit::well_known::KEY_SPAN_ID.to_str(), span_id.to_value())?;
-        for_each(
-            emit::well_known::KEY_SPAN_KIND.to_str(),
-            span_kind.to_value(),
-        )?;
+        if let Some(lvl) = lvl {
+            for_each(emit::well_known::KEY_LVL.to_str(), lvl.to_value())?;
+        }
+        if let Some(trace_id) = trace_id {
+            for_each(emit::well_known::KEY_TRACE_ID.to_str(), trace_id.to_value())?;
+        }
+        if let Some(span_parent) = span_parent {
+            for_each(
+                emit::well_known::KEY_SPAN_PARENT.to_str(),
+                span_parent.to_value(),
+            )?;
+        }
+        if let Some(span_id) = span_id {
+            for_each(emit::well_known::KEY_SPAN_ID.to_str(), span_id.to_value())?;
+        }
+        if let Some(span_kind) = span_kind {
+            for_each(
+                emit::well_known::KEY_SPAN_KIND.to_str(),
+                span_kind.to_value(),
+            )?;
+        }
 
         emit::Props::for_each(rest, for_each)
     }
