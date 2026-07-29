@@ -132,6 +132,7 @@ pub(crate) struct ChannelEvent(emit::Event<'static, ChannelProps>);
 
 #[derive(Clone, Default)]
 pub(crate) struct ChannelProps {
+    evt_kind: Option<emit::Kind>,
     lvl: Option<emit::Level>,
     trace_id: Option<emit::TraceId>,
     span_parent: Option<emit::SpanId>,
@@ -197,8 +198,13 @@ impl<'kv> emit::props::FromProps<'kv> for ChannelProps {
                         return ControlFlow::Continue(());
                     }
                 }
-                // Ignored
-                emit::well_known::KEY_EVT_KIND => return ControlFlow::Continue(()),
+                emit::well_known::KEY_EVT_KIND => {
+                    if let Some(v) = v.by_ref().cast() {
+                        owned.evt_kind = Some(v);
+
+                        return ControlFlow::Continue(());
+                    }
+                }
                 _ => (),
             }
 
@@ -220,6 +226,7 @@ impl emit::Props for ChannelProps {
         use emit::{str::ToStr as _, value::ToValue as _};
 
         let ChannelProps {
+            evt_kind,
             lvl,
             trace_id,
             span_parent,
@@ -228,6 +235,9 @@ impl emit::Props for ChannelProps {
             rest,
         } = self;
 
+        if let Some(evt_kind) = evt_kind {
+            for_each(emit::well_known::KEY_EVT_KIND.to_str(), evt_kind.to_value())?;
+        }
         if let Some(lvl) = lvl {
             for_each(emit::well_known::KEY_LVL.to_str(), lvl.to_value())?;
         }
@@ -257,6 +267,7 @@ impl emit::Props for ChannelProps {
         use emit::value::ToValue as _;
 
         let ChannelProps {
+            evt_kind,
             lvl,
             trace_id,
             span_parent,
@@ -266,6 +277,7 @@ impl emit::Props for ChannelProps {
         } = self;
 
         match key.to_str().get() {
+            emit::well_known::KEY_EVT_KIND => evt_kind.as_ref().map(|v| v.to_value()),
             emit::well_known::KEY_LVL => lvl.as_ref().map(|v| v.to_value()),
             emit::well_known::KEY_TRACE_ID => trace_id.as_ref().map(|v| v.to_value()),
             emit::well_known::KEY_SPAN_ID => span_id.as_ref().map(|v| v.to_value()),
