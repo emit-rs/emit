@@ -351,6 +351,8 @@ impl Buf for HttpContentCursor {
     }
 }
 
+pub(crate) use super::ClientRequestSender;
+
 fn outgoing_traceparent_header() -> Option<(&'static str, String)> {
     let (trace_id, span_id) = emit::runtime::internal().ctxt().with_current(|props| {
         (

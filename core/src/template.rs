@@ -50,6 +50,8 @@ pub struct Template<'a> {
 enum TemplateKind<'a> {
     Literal([Part<'a>; 1]),
     Parts(&'a [Part<'a>]),
+    StaticLiteral([Part<'static>; 1]),
+    StaticParts(&'static [Part<'static>]),
     #[cfg(feature = "alloc")]
     Owned(Box<[Part<'static>]>),
 }
@@ -59,6 +61,8 @@ impl<'a> TemplateKind<'a> {
         match self {
             TemplateKind::Literal(parts) => parts,
             TemplateKind::Parts(parts) => parts,
+            TemplateKind::StaticLiteral(parts) => parts,
+            TemplateKind::StaticParts(parts) => parts,
             #[cfg(feature = "alloc")]
             TemplateKind::Owned(parts) => parts,
         }
@@ -89,7 +93,7 @@ impl Template<'static> {
     */
     pub const fn new(parts: &'static [Part<'static>]) -> Self {
         Template {
-            kind: TemplateKind::Parts(parts),
+            kind: TemplateKind::StaticParts(parts),
         }
     }
 
@@ -98,7 +102,7 @@ impl Template<'static> {
     */
     pub const fn literal(text: &'static str) -> Self {
         Template {
-            kind: TemplateKind::Literal([Part::text(text)]),
+            kind: TemplateKind::StaticLiteral([Part::text(text)]),
         }
     }
 }
@@ -136,6 +140,20 @@ impl<'a> Template<'a> {
             },
             TemplateKind::Parts(parts) => Template {
                 kind: TemplateKind::Parts(parts),
+            },
+            TemplateKind::StaticLiteral([ref part]) => {
+                if let Some(part) = part.by_static_ref() {
+                    Template {
+                        kind: TemplateKind::StaticLiteral([part]),
+                    }
+                } else {
+                    Template {
+                        kind: TemplateKind::Literal([part.by_ref()]),
+                    }
+                }
+            }
+            TemplateKind::StaticParts(parts) => Template {
+                kind: TemplateKind::StaticParts(parts),
             },
             #[cfg(feature = "alloc")]
             TemplateKind::Owned(ref parts) => Template {
@@ -718,6 +736,25 @@ impl<'a> Part<'a> {
         }
     }
 
+    fn by_static_ref(&self) -> Option<Part<'static>> {
+        Some(match self.0 {
+            PartKind::Text {
+                ref value,
+                needs_escaping,
+            } => Part(PartKind::Text {
+                value: Str::new(value.get_static()?),
+                needs_escaping,
+            }),
+            PartKind::Hole {
+                ref label,
+                ref formatter,
+            } => Part(PartKind::Hole {
+                label: Str::new(label.get_static()?),
+                formatter: formatter.clone(),
+            }),
+        })
+    }
+
     /**
     Set a formatter for a value interpolated into this part to use.
 
@@ -942,17 +979,40 @@ mod alloc_support {
         If the template already contains owned data then this method will simply clone it.
         */
         pub fn to_owned(&self) -> Template<'static> {
-            match self.kind {
-                TemplateKind::Owned(ref parts) => Template::new_owned(parts.clone()),
-                ref parts => {
-                    let mut dst = Vec::new();
+            fn collect_parts(parts: &[Part<'_>]) -> Box<[Part<'static>]> {
+                let mut dst = Vec::new();
 
-                    for part in parts.parts() {
-                        dst.push(part.to_owned());
-                    }
-
-                    Template::new_owned(dst)
+                for part in parts {
+                    dst.push(part.to_owned());
                 }
+
+                dst.into_boxed_slice()
+            }
+
+            match self.kind {
+                TemplateKind::Owned(ref parts) => Template {
+                    kind: TemplateKind::Owned(parts.clone()),
+                },
+                TemplateKind::StaticParts(parts) => Template {
+                    kind: TemplateKind::StaticParts(parts),
+                },
+                TemplateKind::StaticLiteral([ref part]) => {
+                    if let Some(part) = part.by_static_ref() {
+                        Template {
+                            kind: TemplateKind::StaticLiteral([part]),
+                        }
+                    } else {
+                        Template {
+                            kind: TemplateKind::StaticLiteral([part.to_owned()]),
+                        }
+                    }
+                }
+                TemplateKind::Parts(ref parts) => Template {
+                    kind: TemplateKind::Owned(collect_parts(parts)),
+                },
+                TemplateKind::Literal([ref part]) => Template {
+                    kind: TemplateKind::StaticLiteral([part.to_owned()]),
+                },
             }
         }
     }

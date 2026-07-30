@@ -53,6 +53,12 @@ features = ["std"]
 version = "2"
 features = ["std"]
 
+[dependencies.hashbrown]
+version = "0.17"
+
+[dependencies.fnv]
+version = "1"
+
 [target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dependencies.tokio]
 version = "1"
 default-features = false

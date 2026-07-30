@@ -160,7 +160,7 @@ fn check(i: i32) {
 }
 ```
 
-This means you only want to include properties in your `#[span]` template that are ambiently useful, because they'll also appear on all child events.
+This means you only want to include properties in your `#[span]` template that are ambiently useful, because they'll also appear on all child events. It's generally more efficient to use private properties than shared ones.
 
 To make additional properties ambiently available during the execution of a span, see [Context](../logging/context.md#manually).
 

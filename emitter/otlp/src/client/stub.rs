@@ -4,7 +4,8 @@ use std::{sync::Arc, time::Duration};
 
 use crate::{
     Error,
-    client::{Channel, ClientEventEncoder, OtlpBuilder, OtlpInner, OtlpTransport},
+    client::http::HttpConnection,
+    client::{Channel, OtlpBuilder, OtlpInner, SignalSenders, SignalWorker},
     data::{
         logs::{LogsEventEncoder, LogsRequestEncoder},
         metrics::{MetricsEventEncoder, MetricsRequestEncoder},
@@ -17,30 +18,16 @@ pub(super) type Handle = ();
 
 impl OtlpBuilder {
     pub(super) fn try_spawn_inner_imp(
-        _otlp_logs: Option<(
-            ClientEventEncoder<LogsEventEncoder>,
-            emit_batcher::Sender<Channel>,
-        )>,
-        _process_otlp_logs: Option<(
-            OtlpTransport<LogsRequestEncoder>,
-            emit_batcher::Receiver<Channel>,
-        )>,
-        _otlp_traces: Option<(
-            ClientEventEncoder<TracesEventEncoder>,
-            emit_batcher::Sender<Channel>,
-        )>,
-        _process_otlp_traces: Option<(
-            OtlpTransport<TracesRequestEncoder>,
-            emit_batcher::Receiver<Channel>,
-        )>,
-        _otlp_metrics: Option<(
-            ClientEventEncoder<MetricsEventEncoder>,
-            emit_batcher::Sender<Channel>,
-        )>,
-        _process_otlp_metrics: Option<(
-            OtlpTransport<MetricsRequestEncoder>,
-            emit_batcher::Receiver<Channel>,
-        )>,
+        _otlp_logs: Option<emit_batcher::Sender<Channel>>,
+        _worker_logs: Option<SignalWorker<HttpConnection, LogsEventEncoder, LogsRequestEncoder>>,
+        _otlp_traces: Option<emit_batcher::Sender<Channel>>,
+        _worker_traces: Option<
+            SignalWorker<HttpConnection, TracesEventEncoder, TracesRequestEncoder>,
+        >,
+        _otlp_metrics: Option<emit_batcher::Sender<Channel>>,
+        _worker_metrics: Option<
+            SignalWorker<HttpConnection, MetricsEventEncoder, MetricsRequestEncoder>,
+        >,
         _metrics: Arc<InternalMetrics>,
     ) -> Result<OtlpInner, Error> {
         unreachable!()

@@ -4,7 +4,8 @@ use futures_util::{StreamExt, stream::FuturesUnordered};
 
 use crate::{
     Error,
-    client::{Channel, ClientEventEncoder, OtlpBuilder, OtlpInner, OtlpTransport},
+    client::http::HttpConnection,
+    client::{Channel, OtlpBuilder, OtlpInner, SignalWorker},
     data::{
         logs::{LogsEventEncoder, LogsRequestEncoder},
         metrics::{MetricsEventEncoder, MetricsRequestEncoder},
@@ -17,84 +18,60 @@ pub(super) type Handle = std::thread::JoinHandle<()>;
 
 impl OtlpBuilder {
     pub(super) fn try_spawn_inner_imp(
-        otlp_logs: Option<(
-            ClientEventEncoder<LogsEventEncoder>,
-            emit_batcher::Sender<Channel>,
-        )>,
-        process_otlp_logs: Option<(
-            OtlpTransport<LogsRequestEncoder>,
-            emit_batcher::Receiver<Channel>,
-        )>,
-        otlp_traces: Option<(
-            ClientEventEncoder<TracesEventEncoder>,
-            emit_batcher::Sender<Channel>,
-        )>,
-        process_otlp_traces: Option<(
-            OtlpTransport<TracesRequestEncoder>,
-            emit_batcher::Receiver<Channel>,
-        )>,
-        otlp_metrics: Option<(
-            ClientEventEncoder<MetricsEventEncoder>,
-            emit_batcher::Sender<Channel>,
-        )>,
-        process_otlp_metrics: Option<(
-            OtlpTransport<MetricsRequestEncoder>,
-            emit_batcher::Receiver<Channel>,
-        )>,
+        otlp_logs: Option<emit_batcher::Sender<Channel>>,
+        worker_logs: Option<SignalWorker<HttpConnection, LogsEventEncoder, LogsRequestEncoder>>,
+        otlp_traces: Option<emit_batcher::Sender<Channel>>,
+        worker_traces: Option<
+            SignalWorker<HttpConnection, TracesEventEncoder, TracesRequestEncoder>,
+        >,
+        otlp_metrics: Option<emit_batcher::Sender<Channel>>,
+        worker_metrics: Option<
+            SignalWorker<HttpConnection, MetricsEventEncoder, MetricsRequestEncoder>,
+        >,
         metrics: Arc<InternalMetrics>,
     ) -> Result<OtlpInner, Error> {
-        let receive = async move {
-            let processors =
-                FuturesUnordered::<Pin<Box<dyn Future<Output = ()> + Send + 'static>>>::new();
+        let receive = {
+            async move {
+                let processors =
+                    FuturesUnordered::<Pin<Box<dyn Future<Output = ()> + Send + 'static>>>::new();
 
-            if let Some((transport, receiver)) = process_otlp_logs {
-                let transport = Arc::new(transport);
+                if let Some(worker) = worker_logs {
+                    processors.push(Box::pin(emit_batcher::tokio::exec(worker.receiver, {
+                        move |batch| {
+                            let transport = worker.transport.clone();
+                            let metrics = worker.metrics.clone();
 
-                processors.push(Box::pin(emit_batcher::tokio::exec(
-                    receiver,
-                    move |batch| {
-                        let transport = transport.clone();
+                            async move { transport.send(batch, &metrics).await }
+                        }
+                    })));
+                }
 
-                        async move { transport.send(batch).await }
-                    },
-                )));
+                if let Some(worker) = worker_traces {
+                    processors.push(Box::pin(emit_batcher::tokio::exec(worker.receiver, {
+                        move |batch| {
+                            let transport = worker.transport.clone();
+                            let metrics = worker.metrics.clone();
+
+                            async move { transport.send(batch, &metrics).await }
+                        }
+                    })));
+                }
+
+                if let Some(worker) = worker_metrics {
+                    processors.push(Box::pin(emit_batcher::tokio::exec(worker.receiver, {
+                        move |batch| {
+                            let transport = worker.transport.clone();
+                            let metrics = worker.metrics.clone();
+
+                            async move { transport.send(batch, &metrics).await }
+                        }
+                    })));
+                }
+
+                let _ = processors.into_future().await;
             }
-
-            if let Some((transport, receiver)) = process_otlp_traces {
-                let transport = Arc::new(transport);
-
-                processors.push(Box::pin(emit_batcher::tokio::exec(
-                    receiver,
-                    move |batch| {
-                        let transport = transport.clone();
-
-                        async move { transport.send(batch).await }
-                    },
-                )));
-            }
-
-            if let Some((transport, receiver)) = process_otlp_metrics {
-                let transport = Arc::new(transport);
-
-                processors.push(Box::pin(emit_batcher::tokio::exec(
-                    receiver,
-                    move |batch| {
-                        let transport = transport.clone();
-
-                        async move { transport.send(batch).await }
-                    },
-                )));
-            }
-
-            // Process batches from each signal independently
-            // This ensures one signal becoming unavailable doesn't
-            // block the others
-            let _ = processors.into_future().await;
         };
 
-        // Spawn a background thread to process batches
-        // This is a safe way to ensure users of `Otlp` can never
-        // deadlock waiting on the processing of batches
         let handle = std::thread::Builder::new()
             .name("emit_otlp_worker".into())
             .spawn(move || {
@@ -111,7 +88,7 @@ impl OtlpBuilder {
             otlp_traces,
             otlp_metrics,
             metrics,
-            _handle: handle,
+            handle: Some(handle),
         })
     }
 }

@@ -136,9 +136,9 @@ fn assert_emitter(
     let output = otelcol.output();
 
     // Ensure the collector received and accepted the events we emitted
-    assert_exporter(&output, "LogsExporter", &log_uuid);
-    assert_exporter(&output, "TracesExporter", &span_uuid);
-    assert_exporter(&output, "MetricsExporter", &metric_uuid);
+    assert_exporter(&output, "Logs", &log_uuid);
+    assert_exporter(&output, "Traces", &span_uuid);
+    assert_exporter(&output, "Metrics", &metric_uuid);
 }
 
 fn assert_exporter(output: &str, exporter: &str, id: &str) {

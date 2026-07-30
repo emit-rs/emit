@@ -4,7 +4,8 @@ use wasm_bindgen::prelude::*;
 
 use crate::{
     Error,
-    client::{Channel, ClientEventEncoder, OtlpBuilder, OtlpInner, OtlpTransport},
+    client::http::HttpConnection,
+    client::{Channel, OtlpBuilder, OtlpInner, SignalWorker},
     data::{
         logs::{LogsEventEncoder, LogsRequestEncoder},
         metrics::{MetricsEventEncoder, MetricsRequestEncoder},
@@ -17,62 +18,46 @@ pub(super) type Handle = ();
 
 impl OtlpBuilder {
     pub(super) fn try_spawn_inner_imp(
-        otlp_logs: Option<(
-            ClientEventEncoder<LogsEventEncoder>,
-            emit_batcher::Sender<Channel>,
-        )>,
-        process_otlp_logs: Option<(
-            OtlpTransport<LogsRequestEncoder>,
-            emit_batcher::Receiver<Channel>,
-        )>,
-        otlp_traces: Option<(
-            ClientEventEncoder<TracesEventEncoder>,
-            emit_batcher::Sender<Channel>,
-        )>,
-        process_otlp_traces: Option<(
-            OtlpTransport<TracesRequestEncoder>,
-            emit_batcher::Receiver<Channel>,
-        )>,
-        otlp_metrics: Option<(
-            ClientEventEncoder<MetricsEventEncoder>,
-            emit_batcher::Sender<Channel>,
-        )>,
-        process_otlp_metrics: Option<(
-            OtlpTransport<MetricsRequestEncoder>,
-            emit_batcher::Receiver<Channel>,
-        )>,
+        otlp_logs: Option<emit_batcher::Sender<Channel>>,
+        worker_logs: Option<SignalWorker<HttpConnection, LogsEventEncoder, LogsRequestEncoder>>,
+        otlp_traces: Option<emit_batcher::Sender<Channel>>,
+        worker_traces: Option<
+            SignalWorker<HttpConnection, TracesEventEncoder, TracesRequestEncoder>,
+        >,
+        otlp_metrics: Option<emit_batcher::Sender<Channel>>,
+        worker_metrics: Option<
+            SignalWorker<HttpConnection, MetricsEventEncoder, MetricsRequestEncoder>,
+        >,
         metrics: Arc<InternalMetrics>,
     ) -> Result<OtlpInner, Error> {
-        // Spawn the processors as fire-and-forget promises
-        if let Some((transport, receiver)) = process_otlp_logs {
-            let transport = Arc::new(transport);
+        let _ = metrics;
 
-            emit_batcher::web::spawn(receiver, move |batch| {
-                let transport = transport.clone();
+        if let Some(worker) = worker_logs {
+            emit_batcher::web::spawn(worker.receiver, move |batch| {
+                let transport = worker.transport.clone();
+                let metrics = worker.metrics.clone();
 
-                async move { transport.send(batch).await }
+                async move { transport.send(batch, &metrics).await }
             })
             .map_err(|e| Error::new("failed to spawn logs transport", e))?;
         }
 
-        if let Some((transport, receiver)) = process_otlp_traces {
-            let transport = Arc::new(transport);
+        if let Some(worker) = worker_traces {
+            emit_batcher::web::spawn(worker.receiver, move |batch| {
+                let transport = worker.transport.clone();
+                let metrics = worker.metrics.clone();
 
-            emit_batcher::web::spawn(receiver, move |batch| {
-                let transport = transport.clone();
-
-                async move { transport.send(batch).await }
+                async move { transport.send(batch, &metrics).await }
             })
             .map_err(|e| Error::new("failed to spawn traces transport", e))?;
         }
 
-        if let Some((transport, receiver)) = process_otlp_metrics {
-            let transport = Arc::new(transport);
+        if let Some(worker) = worker_metrics {
+            emit_batcher::web::spawn(worker.receiver, move |batch| {
+                let transport = worker.transport.clone();
+                let metrics = worker.metrics.clone();
 
-            emit_batcher::web::spawn(receiver, move |batch| {
-                let transport = transport.clone();
-
-                async move { transport.send(batch).await }
+                async move { transport.send(batch, &metrics).await }
             })
             .map_err(|e| Error::new("failed to spawn metrics transport", e))?;
         }
@@ -82,7 +67,7 @@ impl OtlpBuilder {
             otlp_traces,
             otlp_metrics,
             metrics,
-            _handle: (),
+            handle: None,
         })
     }
 }

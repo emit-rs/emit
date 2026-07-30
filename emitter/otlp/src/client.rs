@@ -6,14 +6,12 @@ This module is a consumer of `data`, using it to encode incoming events. These a
 
 use crate::{
     Error, OtlpMetrics,
-    data::{
-        self, EncodedEvent, EncodedPayload, EncodedScopeItems, RawEncoder, logs::LogsEventEncoder,
-        metrics::MetricsEventEncoder, traces::TracesEventEncoder,
-    },
+    data::{self, EncodedEvent, EncodedPayload, EncodedScopeItems, RawEncoder},
     internal_metrics::InternalMetrics,
 };
+use emit::Filter;
 use emit_batcher::BatchError;
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{cmp, collections::HashMap, fmt, future::Future, sync::Arc, time::Duration};
 
 use self::{
     http::{HttpConnection, HttpVersion},
@@ -46,15 +44,18 @@ mod imp;
 #[path = "client/stub.rs"]
 mod imp;
 
+mod channel;
 mod http;
 mod logs;
 mod metrics;
 mod traces;
 
+pub(crate) use self::channel::{Channel, ChannelEvent};
 pub use self::{logs::*, metrics::*, traces::*};
 
 const DEFAULT_MAX_REQUEST_SIZE_BYTES: usize = 1024 * 1024; // 1MiB
 const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const DEFAULT_CHANNEL_SIZE_EVENTS: usize = 10_000;
 
 /**
 An [`emit::Emitter`] that sends diagnostic events via the OpenTelemetry Protocol (OTLP).
@@ -69,20 +70,18 @@ pub struct Otlp {
 }
 
 struct OtlpInner {
-    otlp_logs: Option<(
-        ClientEventEncoder<LogsEventEncoder>,
-        emit_batcher::Sender<Channel>,
-    )>,
-    otlp_traces: Option<(
-        ClientEventEncoder<TracesEventEncoder>,
-        emit_batcher::Sender<Channel>,
-    )>,
-    otlp_metrics: Option<(
-        ClientEventEncoder<MetricsEventEncoder>,
-        emit_batcher::Sender<Channel>,
-    )>,
     metrics: Arc<InternalMetrics>,
-    _handle: Handle,
+    otlp_logs: Option<emit_batcher::Sender<Channel>>,
+    otlp_traces: Option<emit_batcher::Sender<Channel>>,
+    otlp_metrics: Option<emit_batcher::Sender<Channel>>,
+    #[allow(dead_code)]
+    handle: Option<Handle>,
+}
+
+struct SignalWorker<S, E, R> {
+    pub(crate) transport: Arc<OtlpTransport<S, E, R>>,
+    pub(crate) receiver: emit_batcher::Receiver<Channel>,
+    pub(crate) metrics: Arc<InternalMetrics>,
 }
 
 impl Otlp {
@@ -105,18 +104,18 @@ impl Otlp {
             logs_channel_metrics: self
                 .inner
                 .as_ref()
-                .and_then(|otlp| otlp.otlp_logs.as_ref())
-                .map(|(_, sender)| sender.metric_source()),
+                .and_then(|inner| inner.otlp_logs.as_ref())
+                .map(|signal| signal.metric_source()),
             traces_channel_metrics: self
                 .inner
                 .as_ref()
-                .and_then(|otlp| otlp.otlp_traces.as_ref())
-                .map(|(_, sender)| sender.metric_source()),
+                .and_then(|inner| inner.otlp_traces.as_ref())
+                .map(|signal| signal.metric_source()),
             metrics_channel_metrics: self
                 .inner
                 .as_ref()
-                .and_then(|otlp| otlp.otlp_metrics.as_ref())
-                .map(|(_, sender)| sender.metric_source()),
+                .and_then(|inner| inner.otlp_metrics.as_ref())
+                .map(|signal| signal.metric_source()),
             metrics: self.metrics.clone(),
         }
     }
@@ -187,7 +186,7 @@ impl OtlpBuilder {
 
     Some OTLP receivers accept data without a resource but the OpenTelemetry specification itself mandates it.
     */
-    pub fn resource(mut self, attributes: impl emit::props::Props) -> Self {
+    pub fn resource(mut self, attributes: impl emit::Props) -> Self {
         let mut resource = Resource {
             attributes: HashMap::new(),
         };
@@ -229,49 +228,58 @@ impl OtlpBuilder {
     }
 
     fn try_spawn_inner(self, metrics: Arc<InternalMetrics>) -> Result<OtlpInner, Error> {
-        let (otlp_logs, process_otlp_logs) = match self.otlp_logs {
+        let (otlp_logs, worker_logs) = match self.otlp_logs {
             Some(builder) => {
-                let (encoder, transport) =
-                    builder.build(metrics.clone(), self.resource.as_ref())?;
+                let transport = Arc::new(builder.build(metrics.clone(), self.resource.as_ref())?);
+                let (sender, receiver) = emit_batcher::bounded(DEFAULT_CHANNEL_SIZE_EVENTS);
+                let worker = SignalWorker {
+                    transport,
+                    receiver,
+                    metrics: metrics.clone(),
+                };
 
-                let (sender, receiver) = emit_batcher::bounded(10_000);
-
-                (Some((encoder, sender)), Some((transport, receiver)))
+                (Some(sender), Some(worker))
             }
             None => (None, None),
         };
 
-        let (otlp_traces, process_otlp_traces) = match self.otlp_traces {
+        let (otlp_traces, worker_traces) = match self.otlp_traces {
             Some(builder) => {
-                let (encoder, transport) =
-                    builder.build(metrics.clone(), self.resource.as_ref())?;
+                let transport = Arc::new(builder.build(metrics.clone(), self.resource.as_ref())?);
+                let (sender, receiver) = emit_batcher::bounded(DEFAULT_CHANNEL_SIZE_EVENTS);
+                let worker = SignalWorker {
+                    transport,
+                    receiver,
+                    metrics: metrics.clone(),
+                };
 
-                let (sender, receiver) = emit_batcher::bounded(10_000);
-
-                (Some((encoder, sender)), Some((transport, receiver)))
+                (Some(sender), Some(worker))
             }
             None => (None, None),
         };
 
-        let (otlp_metrics, process_otlp_metrics) = match self.otlp_metrics {
+        let (otlp_metrics, worker_metrics) = match self.otlp_metrics {
             Some(builder) => {
-                let (encoder, transport) =
-                    builder.build(metrics.clone(), self.resource.as_ref())?;
+                let transport = Arc::new(builder.build(metrics.clone(), self.resource.as_ref())?);
+                let (sender, receiver) = emit_batcher::bounded(DEFAULT_CHANNEL_SIZE_EVENTS);
+                let worker = SignalWorker {
+                    transport,
+                    receiver,
+                    metrics: metrics.clone(),
+                };
 
-                let (sender, receiver) = emit_batcher::bounded(10_000);
-
-                (Some((encoder, sender)), Some((transport, receiver)))
+                (Some(sender), Some(worker))
             }
             None => (None, None),
         };
 
         Self::try_spawn_inner_imp(
             otlp_logs,
-            process_otlp_logs,
+            worker_logs,
             otlp_traces,
-            process_otlp_traces,
+            worker_traces,
             otlp_metrics,
-            process_otlp_metrics,
+            worker_metrics,
             metrics,
         )
     }
@@ -354,228 +362,231 @@ impl OtlpTransportBuilder {
         self
     }
 
-    fn build<R>(
+    fn build<E, R>(
         self,
         metrics: Arc<InternalMetrics>,
+        event_encoder: ClientEventEncoder<E>,
         resource: Option<EncodedPayload>,
         request_encoder: ClientRequestEncoder<R>,
-    ) -> Result<OtlpTransport<R>, Error> {
+    ) -> Result<OtlpTransport<HttpConnection, E, R>, Error> {
         let mut url = self.url_base;
 
         if let Some(path) = self.url_path {
             crate::push_path(&mut url, path);
         }
 
-        Ok(match self.protocol {
+        let request_sender = match self.protocol {
             // Configure the transport to use regular HTTP requests
-            Protocol::Http => OtlpTransport::Http {
-                http: HttpConnection::new(
-                    HttpVersion::Http1,
-                    metrics.clone(),
-                    url,
-                    self.allow_compression,
-                    self.headers,
-                    |req| Ok(req),
-                    move |res| {
-                        let metrics = metrics.clone();
+            Protocol::Http => HttpConnection::new(
+                HttpVersion::Http1,
+                metrics.clone(),
+                url,
+                self.allow_compression,
+                self.headers,
+                |req| Ok(req),
+                move |res| {
+                    let metrics = metrics.clone();
 
-                        async move {
-                            let status = res.http_status();
+                    async move {
+                        let status = res.http_status();
 
-                            // A request is considered successful if it returns 2xx status code
-                            if status >= 200 && status < 300 {
-                                metrics.http_batch_sent.increment();
+                        // A request is considered successful if it returns 2xx status code
+                        if status >= 200 && status < 300 {
+                            metrics.http_batch_sent.increment();
 
-                                Ok(())
-                            } else {
-                                metrics.http_batch_failed.increment();
+                            Ok(())
+                        } else {
+                            metrics.http_batch_failed.increment();
 
-                                Err(Error::msg(format_args!(
-                                    "OTLP HTTP server responded {status}"
-                                )))
-                            }
+                            Err(Error::msg(format_args!(
+                                "OTLP HTTP server responded {status}"
+                            )))
                         }
-                    },
-                )?,
-                resource,
-                request_encoder,
-            },
+                    }
+                },
+            )?,
             // Configure the transport to use gRPC requests
             // These are mostly the same as regular HTTP requests, but use
             // a simple message framing protocol and carry status codes in a trailer
             // instead of the response status
-            Protocol::Grpc => OtlpTransport::Http {
-                http: HttpConnection::new(
-                    HttpVersion::Http2,
-                    metrics.clone(),
-                    url,
-                    self.allow_compression,
-                    self.headers,
-                    |req| {
-                        let content_type_header = match req.content_type_header() {
-                            "application/x-protobuf" => "application/grpc+proto",
-                            content_type => {
-                                return Err(Error::msg(format_args!(
-                                    "unsupported content type '{content_type}'"
-                                )));
+            Protocol::Grpc => HttpConnection::new(
+                HttpVersion::Http2,
+                metrics.clone(),
+                url,
+                self.allow_compression,
+                self.headers,
+                |req| {
+                    let content_type_header = match req.content_type_header() {
+                        "application/x-protobuf" => "application/grpc+proto",
+                        content_type => {
+                            return Err(Error::msg(format_args!(
+                                "unsupported content type '{content_type}'"
+                            )));
+                        }
+                    };
+
+                    // Wrap the content in the gRPC frame protocol
+                    // This is a simple length-prefixed format that uses
+                    // 5 bytes to indicate the length and compression of the message
+                    let len = (u32::try_from(req.content_payload_len()).unwrap()).to_be_bytes();
+
+                    Ok(
+                        // If the content is compressed then set the gRPC compression header byte for it
+                        if let Some(compression) = req.content_encoding_header() {
+                            req.with_content_encoding_header(None)
+                                .with_content_type_header(content_type_header)
+                                .with_headers(match compression {
+                                    "gzip" => &[("grpc-encoding", "gzip")],
+                                    compression => {
+                                        return Err(Error::msg(format_args!(
+                                            "unsupported compression '{compression}'"
+                                        )));
+                                    }
+                                })
+                                .with_content_frame([1, len[0], len[1], len[2], len[3]])
+                        }
+                        // If the content is not compressed then leave the gRPC compression header byte unset
+                        else {
+                            req.with_content_type_header(content_type_header)
+                                .with_content_frame([0, len[0], len[1], len[2], len[3]])
+                        },
+                    )
+                },
+                move |res| {
+                    let metrics = metrics.clone();
+
+                    async move {
+                        let mut status = 0;
+                        let mut msg = String::new();
+
+                        res.stream_trailers(|k, v| match k {
+                            "grpc-status" => {
+                                status = v.parse().unwrap_or(0);
                             }
-                        };
-
-                        // Wrap the content in the gRPC frame protocol
-                        // This is a simple length-prefixed format that uses
-                        // 5 bytes to indicate the length and compression of the message
-                        let len = (u32::try_from(req.content_payload_len()).unwrap()).to_be_bytes();
-
-                        Ok(
-                            // If the content is compressed then set the gRPC compression header byte for it
-                            if let Some(compression) = req.content_encoding_header() {
-                                req.with_content_encoding_header(None)
-                                    .with_content_type_header(content_type_header)
-                                    .with_headers(match compression {
-                                        "gzip" => &[("grpc-encoding", "gzip")],
-                                        compression => {
-                                            return Err(Error::msg(format_args!(
-                                                "unsupported compression '{compression}'"
-                                            )));
-                                        }
-                                    })
-                                    .with_content_frame([1, len[0], len[1], len[2], len[3]])
+                            "grpc-message" => {
+                                msg = v.into();
                             }
-                            // If the content is not compressed then leave the gRPC compression header byte unset
-                            else {
-                                req.with_content_type_header(content_type_header)
-                                    .with_content_frame([0, len[0], len[1], len[2], len[3]])
-                            },
-                        )
-                    },
-                    move |res| {
-                        let metrics = metrics.clone();
+                            _ => {}
+                        })
+                        .await?;
 
-                        async move {
-                            let mut status = 0;
-                            let mut msg = String::new();
+                        // A request is considered successful if the grpc-status trailer is 0
+                        if status == 0 {
+                            metrics.grpc_batch_sent.increment();
 
-                            res.stream_trailers(|k, v| match k {
-                                "grpc-status" => {
-                                    status = v.parse().unwrap_or(0);
-                                }
-                                "grpc-message" => {
-                                    msg = v.into();
-                                }
-                                _ => {}
-                            })
-                            .await?;
+                            Ok(())
+                        }
+                        // In any other case the request failed and may carry some diagnostic message
+                        else {
+                            metrics.grpc_batch_failed.increment();
 
-                            // A request is considered successful if the grpc-status trailer is 0
-                            if status == 0 {
-                                metrics.grpc_batch_sent.increment();
-
-                                Ok(())
-                            }
-                            // In any other case the request failed and may carry some diagnostic message
-                            else {
-                                metrics.grpc_batch_failed.increment();
-
-                                if msg.len() > 0 {
-                                    Err(Error::msg(format_args!(
-                                        "OTLP gRPC server responded {status} {msg}"
-                                    )))
-                                } else {
-                                    Err(Error::msg(format_args!(
-                                        "OTLP gRPC server responded {status}"
-                                    )))
-                                }
+                            if msg.len() > 0 {
+                                Err(Error::msg(format_args!(
+                                    "OTLP gRPC server responded {status} {msg}"
+                                )))
+                            } else {
+                                Err(Error::msg(format_args!(
+                                    "OTLP gRPC server responded {status}"
+                                )))
                             }
                         }
-                    },
-                )?,
-                resource,
-                request_encoder,
-            },
+                    }
+                },
+            )?,
+        };
+
+        Ok(OtlpTransport {
+            event_encoder,
+            request_sender,
+            resource,
+            request_encoder,
         })
     }
 }
 
-enum OtlpTransport<R> {
-    Http {
-        http: HttpConnection,
-        resource: Option<EncodedPayload>,
-        request_encoder: ClientRequestEncoder<R>,
-    },
+pub(crate) struct OtlpTransport<S, E, R> {
+    event_encoder: ClientEventEncoder<E>,
+    request_sender: S,
+    resource: Option<EncodedPayload>,
+    request_encoder: ClientRequestEncoder<R>,
 }
 
-impl<R: data::RequestEncoder> OtlpTransport<R> {
-    pub(crate) async fn send(&self, mut channel: Channel) -> Result<(), BatchError<Channel>> {
-        match self {
-            OtlpTransport::Http {
-                http,
-                resource,
-                request_encoder,
-            } => {
-                // Process each request in the batch
-                while let Some(batch) = channel.requests.last() {
-                    match Self::send_batch(http, resource, request_encoder, batch).await {
-                        Ok(()) => {
-                            channel.requests.pop();
-                        }
-                        Err(e) => {
-                            return Err(e.map_retryable(|r| r.map(|_| channel)));
-                        }
+impl<S: ClientRequestSender, E: data::EventEncoder, R: data::RequestEncoder>
+    OtlpTransport<S, E, R>
+{
+    pub(crate) async fn send(
+        &self,
+        channel: Channel,
+        metrics: &InternalMetrics,
+    ) -> Result<(), BatchError<Channel>> {
+        let event_encoder = &self.event_encoder;
+
+        channel::batch(
+            channel,
+            DEFAULT_MAX_REQUEST_SIZE_BYTES,
+            metrics,
+            |event| event_encoder.encode_event(event.get()),
+            |batch| {
+                let batch = batch.clone();
+                async move {
+                    #[emit::span(rt: emit::runtime::internal(), guard: span, "send OTLP batch of {batch_size} events to {uri}", batch_size: batch.total_items(), uri: request_sender.uri())]
+                    async fn send_batch<S: ClientRequestSender, R: data::RequestEncoder>(
+                        request_sender: &S,
+                        resource: &Option<EncodedPayload>,
+                        request_encoder: &ClientRequestEncoder<R>,
+                        batch: &EncodedScopeItems,
+                    ) -> Result<(), BatchError<()>> {
+                        let uri = request_sender.uri();
+                        let batch_size = batch.total_items();
+
+                        match request_sender
+                            .send(
+                                request_encoder.encode_request(resource.as_ref(), &batch)?,
+                                DEFAULT_REQUEST_TIMEOUT,
+                            )
+                            .await
+                        {
+                            Ok(res) => {
+                                span.complete_with(emit::span::completion::from_fn(|evt| {
+                                    emit::debug!(
+                                        rt: emit::runtime::internal(),
+                                        evt,
+                                        "OTLP batch of {batch_size} events to {uri}",
+                                        batch_size,
+                                    )
+                                }));
+
+                                res
+                            }
+                            Err(err) => {
+                                span.complete_with(emit::span::completion::from_fn(|evt| {
+                                    emit::warn!(
+                                        rt: emit::runtime::internal(),
+                                        evt,
+                                        "OTLP batch of {batch_size} events to {uri} failed: {err}",
+                                        batch_size,
+                                        err,
+                                    )
+                                }));
+
+                                return Err(BatchError::retry(err, ()));
+                            }
+                        };
+
+                        Ok(())
                     }
 
-                    channel.requests.pop();
+                    send_batch(
+                        &self.request_sender,
+                        &self.resource,
+                        &self.request_encoder,
+                        &batch,
+                    )
+                    .await
                 }
-            }
-        }
-
-        Ok(())
-    }
-
-    #[emit::span(rt: emit::runtime::internal(), guard: span, "send OTLP batch of {batch_size} events", batch_size: batch.total_items())]
-    pub(crate) async fn send_batch(
-        http: &HttpConnection,
-        resource: &Option<EncodedPayload>,
-        request_encoder: &ClientRequestEncoder<R>,
-        batch: &EncodedScopeItems,
-    ) -> Result<(), BatchError<()>> {
-        let uri = http.uri();
-        let batch_size = batch.total_items();
-
-        match http
-            .send(
-                request_encoder.encode_request(resource.as_ref(), &batch)?,
-                DEFAULT_REQUEST_TIMEOUT,
-            )
-            .await
-        {
-            Ok(res) => {
-                span.complete_with(emit::span::completion::from_fn(|evt| {
-                    emit::debug!(
-                        rt: emit::runtime::internal(),
-                        evt,
-                        "OTLP batch of {batch_size} events to {uri}",
-                        batch_size,
-                    )
-                }));
-
-                res
-            }
-            Err(err) => {
-                span.complete_with(emit::span::completion::from_fn(|evt| {
-                    emit::warn!(
-                        rt: emit::runtime::internal(),
-                        evt,
-                        "OTLP batch of {batch_size} events to {uri} failed: {err}",
-                        batch_size,
-                        err,
-                    )
-                }));
-
-                return Err(BatchError::retry(err, ()));
-            }
-        };
-
-        Ok(())
+            },
+        )
+        .await
     }
 }
 
@@ -605,32 +616,33 @@ impl emit::Emitter for Otlp {
 }
 
 impl OtlpInner {
-    fn configured_signals(&self) -> u32 {
-        self.otlp_logs.as_ref().map(|_| 1).unwrap_or_default()
-            + self.otlp_traces.as_ref().map(|_| 1).unwrap_or_default()
-            + self.otlp_metrics.as_ref().map(|_| 1).unwrap_or_default()
+    fn timeout_per_signal(&self, timeout: Duration) -> Duration {
+        let logs = self.otlp_logs.as_ref().map(|_| 1).unwrap_or(0);
+        let traces = self.otlp_traces.as_ref().map(|_| 1).unwrap_or(0);
+        let metrics = self.otlp_metrics.as_ref().map(|_| 1).unwrap_or(0);
+
+        let budget = cmp::max(1, logs + traces + metrics);
+
+        timeout / budget
     }
 
     async fn flush(&self, timeout: Duration) -> bool {
-        // Same impl as `blocking_flush` below
-        let configured_signals = self.configured_signals();
-        let timeout = timeout / configured_signals;
-
+        let timeout = self.timeout_per_signal(timeout);
         let mut fully_flushed = true;
 
-        if let Some((_, ref sender)) = self.otlp_logs {
+        if let Some(ref sender) = self.otlp_logs {
             if !imp::flush(sender, timeout).await {
                 fully_flushed = false;
             }
         }
 
-        if let Some((_, ref sender)) = self.otlp_traces {
+        if let Some(ref sender) = self.otlp_traces {
             if !imp::flush(sender, timeout).await {
                 fully_flushed = false;
             }
         }
 
-        if let Some((_, ref sender)) = self.otlp_metrics {
+        if let Some(ref sender) = self.otlp_metrics {
             if !imp::flush(sender, timeout).await {
                 fully_flushed = false;
             }
@@ -638,37 +650,36 @@ impl OtlpInner {
 
         fully_flushed
     }
+
+    /** Take the background handle, consuming the inner.
+    Used by tests to verify the worker thread shuts down cleanly. */
+    #[allow(dead_code)]
+    fn take_handle(&mut self) -> Handle {
+        self.handle.take().expect("handle already taken")
+    }
 }
 
 impl emit::Emitter for OtlpInner {
     fn emit<E: emit::event::ToEvent>(&self, evt: E) {
         let evt = evt.to_event();
 
-        if let Some((ref encoder, ref sender)) = self.otlp_metrics {
-            if let Some(event) = encoder.encode_event(&evt) {
-                return sender.send(ChannelItem {
-                    max_request_size_bytes: DEFAULT_MAX_REQUEST_SIZE_BYTES,
-                    event,
-                });
+        if let Some(ref sender) = self.otlp_metrics {
+            if emit::kind::is_metric_filter().matches(&evt) {
+                sender.send(ChannelEvent::from_evt(evt));
+                return;
             }
         }
 
-        if let Some((ref encoder, ref sender)) = self.otlp_traces {
-            if let Some(event) = encoder.encode_event(&evt) {
-                return sender.send(ChannelItem {
-                    max_request_size_bytes: DEFAULT_MAX_REQUEST_SIZE_BYTES,
-                    event,
-                });
+        if let Some(ref sender) = self.otlp_traces {
+            if emit::kind::is_span_filter().matches(&evt) {
+                sender.send(ChannelEvent::from_evt(evt));
+                return;
             }
         }
 
-        if let Some((ref encoder, ref sender)) = self.otlp_logs {
-            if let Some(event) = encoder.encode_event(&evt) {
-                return sender.send(ChannelItem {
-                    max_request_size_bytes: DEFAULT_MAX_REQUEST_SIZE_BYTES,
-                    event,
-                });
-            }
+        if let Some(ref sender) = self.otlp_logs {
+            sender.send(ChannelEvent::from_evt(evt));
+            return;
         }
 
         self.metrics.event_discarded.increment();
@@ -678,87 +689,28 @@ impl emit::Emitter for OtlpInner {
     Wait for up to `timeout` for any pending events to be sent to the backend OTLP service.
     */
     fn blocking_flush(&self, timeout: Duration) -> bool {
-        let configured_signals = self.configured_signals();
-        let timeout = timeout / configured_signals;
+        let timeout = self.timeout_per_signal(timeout);
         let mut fully_flushed = true;
 
-        if let Some((_, ref sender)) = self.otlp_logs {
+        if let Some(ref sender) = self.otlp_logs {
             if !emit_batcher::blocking_flush(sender, timeout) {
                 fully_flushed = false;
             }
         }
 
-        if let Some((_, ref sender)) = self.otlp_traces {
+        if let Some(ref sender) = self.otlp_traces {
             if !emit_batcher::blocking_flush(sender, timeout) {
                 fully_flushed = false;
             }
         }
 
-        if let Some((_, ref sender)) = self.otlp_metrics {
+        if let Some(ref sender) = self.otlp_metrics {
             if !emit_batcher::blocking_flush(sender, timeout) {
                 fully_flushed = false;
             }
         }
 
         fully_flushed
-    }
-}
-
-#[derive(Default)]
-pub(crate) struct Channel {
-    requests: Vec<EncodedScopeItems>,
-    current_request_size_bytes: usize,
-    total_items: usize,
-}
-
-pub(crate) struct ChannelItem {
-    max_request_size_bytes: usize,
-    event: EncodedEvent,
-}
-
-impl emit_batcher::Channel for Channel {
-    type Item = ChannelItem;
-
-    fn new() -> Self {
-        Channel::default()
-    }
-
-    fn push(&mut self, item: Self::Item) {
-        let incoming_size_bytes = item.event.payload.len();
-
-        // If the channel is empty or the current request is over its size limit then begin a new one
-        if self.requests.len() == 0
-            || self.current_request_size_bytes >= item.max_request_size_bytes
-        {
-            let mut request = EncodedScopeItems::new();
-            request.push(item.event);
-
-            self.requests.push(request);
-            self.current_request_size_bytes = incoming_size_bytes;
-        }
-        // If the current request still has capacity then push onto it
-        else {
-            self.requests.last_mut().unwrap().push(item.event);
-            self.current_request_size_bytes += incoming_size_bytes;
-        }
-
-        self.total_items += 1;
-    }
-
-    fn len(&self) -> usize {
-        self.total_items
-    }
-
-    fn clear(&mut self) {
-        let Channel {
-            requests,
-            total_items,
-            current_request_size_bytes,
-        } = self;
-
-        requests.clear();
-        *total_items = 0;
-        *current_request_size_bytes = 0;
     }
 }
 
@@ -786,7 +738,7 @@ impl Encoding {
     }
 }
 
-struct ClientEventEncoder<E> {
+pub(crate) struct ClientEventEncoder<E> {
     encoding: Encoding,
     encoder: E,
 }
@@ -798,10 +750,7 @@ impl<E> ClientEventEncoder<E> {
 }
 
 impl<E: data::EventEncoder> ClientEventEncoder<E> {
-    pub fn encode_event(
-        &self,
-        evt: &emit::event::Event<impl emit::props::Props>,
-    ) -> Option<EncodedEvent> {
+    pub fn encode_event(&self, evt: &emit::event::Event<impl emit::Props>) -> Option<EncodedEvent> {
         match self.encoding {
             Encoding::Proto => self.encoder.encode_event::<data::Proto>(evt),
             Encoding::Json => self.encoder.encode_event::<data::Json>(evt),
@@ -809,7 +758,17 @@ impl<E: data::EventEncoder> ClientEventEncoder<E> {
     }
 }
 
-struct ClientRequestEncoder<R> {
+pub(crate) trait ClientRequestSender {
+    fn uri(&self) -> &(impl fmt::Display + 'static);
+
+    fn send(
+        &self,
+        body: EncodedPayload,
+        timeout: Duration,
+    ) -> impl Future<Output = Result<(), Error>>;
+}
+
+pub(crate) struct ClientRequestEncoder<R> {
     encoding: Encoding,
     encoder: R,
 }
@@ -854,8 +813,6 @@ fn encode_resource(encoding: Encoding, resource: &Resource) -> EncodedPayload {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     #[cfg(not(all(
         target_arch = "wasm32",
@@ -863,12 +820,13 @@ mod tests {
         target_os = "unknown"
     )))]
     fn otlp_empty_closes_bg_thread_on_drop() {
+        use super::*;
+
         let mut otlp = Otlp::builder().spawn();
 
         let handle = {
-            let inner = otlp.inner.take().unwrap();
-
-            inner._handle
+            let mut inner = otlp.inner.take().unwrap();
+            inner.take_handle()
         };
 
         drop(otlp);
@@ -884,6 +842,8 @@ mod tests {
         target_os = "unknown"
     )))]
     fn otlp_non_empty_closes_bg_thread_on_drop() {
+        use super::*;
+
         let mut otlp = Otlp::builder()
             .logs(OtlpLogsBuilder::proto(OtlpTransportBuilder::http(
                 "http://localhost:4319",
@@ -891,41 +851,13 @@ mod tests {
             .spawn();
 
         let handle = {
-            let inner = otlp.inner.take().unwrap();
-
-            inner._handle
+            let mut inner = otlp.inner.take().unwrap();
+            inner.take_handle()
         };
 
         drop(otlp);
 
         // Ensure the background thread is torn down
         handle.join().unwrap();
-    }
-
-    #[test]
-    fn otlp_channel_splits_requests_by_size() {
-        use emit_batcher::Channel as _;
-
-        for (max_request_size_bytes, expected_len) in [(0, 100), (1, 100), (10, 20)] {
-            let mut channel = Channel::new();
-
-            for _ in 0..100 {
-                channel.push(ChannelItem {
-                    max_request_size_bytes,
-                    event: EncodedEvent {
-                        scope: emit::path!("a"),
-                        payload: EncodedPayload::Json(sval_json::JsonStr::boxed("{}")),
-                    },
-                });
-            }
-
-            assert_eq!(100, channel.total_items);
-
-            assert_eq!(
-                expected_len,
-                channel.requests.len(),
-                "{max_request_size_bytes} did not produce {expected_len} items"
-            );
-        }
     }
 }
