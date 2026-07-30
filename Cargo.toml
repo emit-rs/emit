@@ -24,7 +24,7 @@ members = [
 
 [package]
 name = "emit"
-version = "2.21.0"
+version = "2.22.0"
 authors = ["emit contributors"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -49,7 +49,7 @@ implicit_rt = ["emit_core/implicit_rt", "emit_macros/implicit_rt"]
 implicit_internal_rt = ["emit_core/implicit_internal_rt"]
 
 [dependencies.emit_macros]
-version = "2.21.0"
+version = "2.22.0"
 path = "macros"
 
 [dependencies.emit_core]

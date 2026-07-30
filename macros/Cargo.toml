@@ -1,6 +1,6 @@
 [package]
 name = "emit_macros"
-version = "2.21.0"
+version = "2.22.0"
 authors = ["emit contributors"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
