@@ -506,9 +506,16 @@ mod alloc_support {
         head: Option<*const OwnedProp>,
     }
 
-    // SAFETY: `OwnedProps` synchronizes through `Arc` when ownership is shared
+    // SAFETY: `OwnedProps` is `Send` because it owns its buckets uniquely when in the `Box`
+    // variant, and when shared, every handle holds an `Arc` clone of the same buckets.
+    // The payload is `Send`: `Str<'static>` holds only `&'static str`, `Box<str>`, or
+    // `Arc<str>`, and `OwnedValue` is built from `Send` storage.
     unsafe impl Send for OwnedProps {}
-    // SAFETY: `OwnedProps` does not use interior mutability
+    // SAFETY: `OwnedProps` is `Sync` because the bucket contents are only mutated during
+    // construction or teardown, under exclusive ownership. Once a handle is published, no
+    // safe method mutates through `&self`; all readers borrow through `&'v self` and every
+    // shared handle holds an `Arc` clone of the backing storage, so the storage outlives
+    // all outstanding borrows.
     unsafe impl Sync for OwnedProps {}
 
     impl Clone for OwnedProps {
@@ -573,9 +580,7 @@ mod alloc_support {
         Cloning will involve cloning the collection.
         */
         pub fn collect_owned(props: impl Props) -> Self {
-            // We want a reasonable number of buckets to reduce the number of keys to scan
-            // We don't want to overallocate if `props.size()` returns a nonsense value though
-            let nbuckets = cmp::min(128, props.size().unwrap_or(32));
+            let nbuckets = Self::nbuckets(props.size());
 
             let buckets = {
                 let mut buckets = Box::new_uninit_slice(nbuckets);
@@ -618,9 +623,7 @@ mod alloc_support {
         Cloning will involve cloning the `Arc`, which may be cheaper than cloning the collection itself.
         */
         pub fn collect_shared(props: impl Props) -> Self {
-            // We want a reasonable number of buckets to reduce the number of keys to scan
-            // We don't want to overallocate if `props.size()` returns a nonsense value though
-            let nbuckets = cmp::min(128, props.size().unwrap_or(32));
+            let nbuckets = Self::nbuckets(props.size());
 
             let buckets = {
                 let mut buckets = Arc::new_uninit_slice(nbuckets);
@@ -655,6 +658,19 @@ mod alloc_support {
             }
         }
 
+        #[inline]
+        fn nbuckets(size: Option<usize>) -> usize {
+            // We want a reasonable number of buckets to reduce the number of keys to scan
+            // We don't want to overallocate if `props.size()` returns a nonsense value though
+            cmp::max(1, cmp::min(128, size.unwrap_or(32)))
+        }
+
+        // SAFETY: `buckets_ptr` must be valid for reads and writes of `nbuckets` initialized
+        // `OwnedPropsBucket` values and must remain valid for the entire call. `props`'s
+        // `for_each` is called with a closure; `mk_key`/`mk_value` may panic, in which case
+        // this function is allowed to leave the buckets partially populated and the caller
+        // is responsible for cleanup. Each key must be unique per bucket before `push` is
+        // called.
         #[inline]
         unsafe fn collect_internal(
             buckets_ptr: *mut [UnsafeCell<OwnedPropsBucket>],
@@ -796,7 +812,7 @@ mod alloc_support {
             // This is necessary to appease Miri. It makes the code far more arcane than I'd like,
             // but lets us store the `head` of each bucket inline, instead of in a separate allocation
 
-            // SAETY: `head` is in bounds for `this`
+            // SAFETY: `head` is in bounds for `this`
             let head_field = unsafe { &raw mut (*this).head };
 
             // SAFETY: `head_field` inherits validity of `this` ptr
@@ -811,7 +827,7 @@ mod alloc_support {
                 let mut guard = BoxDropGuard::new(Box::new(prop));
                 let prop_ptr = guard.as_ptr();
 
-                // SAETY: `tail` is in bounds for `this`, and `tail_field` inherits validity of `this` ptr
+                // SAFETY: `tail` is in bounds for `this`, and `tail_field` inherits validity of `this` ptr
                 unsafe {
                     let tail_field = &raw mut (*this).tail;
 
@@ -825,7 +841,7 @@ mod alloc_support {
             *head = head.or_else(|| Some(prop_ptr as *const _));
 
             if let Some(tail) = tail {
-                // SAETY: `next` is in bounds for `tail`, and `tail_field` inherits validity of `tail` ptr
+                // SAFETY: `next` is in bounds for `tail`, and `tail_field` inherits validity of `tail` ptr
                 unsafe {
                     let tail_field = &raw mut (**tail).next;
 
@@ -881,7 +897,11 @@ mod alloc_support {
             SliceDropGuard { value, idx: 0 }
         }
 
-        // SAFETY: The value referenced by this guard must be getting dropped
+        // SAFETY: `self` must reference the slice being dropped, and `self.idx` must point
+        // at the next element of that slice. Each `*mut OwnedProp` in `self.value[self.idx..]`
+        // must have been created by `Box::into_raw`, must not have been dropped already, and
+        // must outlive this call. This method takes ownership of each remaining element and
+        // drops it exactly once.
         #[inline]
         unsafe fn drop(&mut self) {
             while self.idx < self.value.len() {
@@ -1438,6 +1458,20 @@ mod alloc_support {
             });
 
             assert_eq!(0, count);
+
+            assert!(props.get("hello").is_none());
+        }
+
+        #[test]
+        fn owned_props_low_ball_size() {
+            // Under-reporting the size must not prevent collection
+            let props = OwnedProps::collect_owned(WrongSize {
+                props: [("a", 1)],
+                size: Some(0),
+            });
+
+            assert_eq!(Some(1), props.size());
+            assert_eq!(1, Props::get(&props, "a").unwrap().cast::<i32>().unwrap());
         }
 
         #[test]
