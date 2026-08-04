@@ -120,6 +120,17 @@ impl HttpResponse {
         self.status
     }
 
+    // NOTE: Only used by the gRPC transport, which fetch doesn't support
+    pub fn header(&self, _name: &str) -> Option<&str> {
+        None
+    }
+
+    pub async fn drain(self) -> Result<(), Error> {
+        // The response body isn't streamed by this transport, so there's
+        // nothing to drain
+        Ok(())
+    }
+
     pub async fn stream_trailers(self, _trailer: impl FnMut(&str, &str)) -> Result<(), Error> {
         Err(Error::msg("streaming trailers is not supported by fetch"))
     }

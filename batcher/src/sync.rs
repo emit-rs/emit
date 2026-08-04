@@ -11,7 +11,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{BatchError, Channel, Receiver, Sender};
+use crate::{BatchError, Channel, Receiver, Sender, Wait};
 
 /**
 Run the receiver synchronously.
@@ -49,8 +49,19 @@ where
     thread::Builder::new()
         .name(thread_name.into())
         .spawn(move || {
-            block_on(receiver.exec(
-                |delay| future::ready(thread::sleep(delay)),
+            let shared = receiver.shared.clone();
+
+            block_on(receiver.exec_inner(
+                move |reason, delay| {
+                    future::ready(match reason {
+                        // Idle waits can be cut short by a sender notification
+                        Wait::Idle => {
+                            shared.receiver_notifier.sync.wait_timeout(delay);
+                        }
+                        // Retry waits are backoff on a failing batch; don't cut them short
+                        Wait::Retry => thread::sleep(delay),
+                    })
+                },
                 move |batch| future::ready(on_batch(batch)),
             ))
         })
@@ -80,11 +91,11 @@ pub fn blocking_flush<T: Channel>(sender: &Sender<T>, timeout: Duration) -> bool
 
     let notifier = Trigger::new();
 
-    sender.when_flushed({
+    sender.when_flushed_inner({
         let notifier = notifier.clone();
 
-        move || {
-            notifier.trigger();
+        move |flushed| {
+            notifier.trigger(flushed);
         }
     });
 
@@ -130,7 +141,7 @@ pub fn blocking_send<T: Channel>(
                 let notifier = notifier.clone();
 
                 move || {
-                    let _ = notifier.trigger();
+                    let _ = notifier.trigger(true);
                 }
             });
 
@@ -142,25 +153,25 @@ pub fn blocking_send<T: Channel>(
 }
 
 #[derive(Clone)]
-struct Trigger(Arc<(Mutex<bool>, Condvar)>);
+pub(crate) struct Trigger(Arc<(Mutex<Option<bool>>, Condvar)>);
 
 impl Trigger {
     pub fn new() -> Self {
-        Trigger(Arc::new((Mutex::new(false), Condvar::new())))
+        Trigger(Arc::new((Mutex::new(None), Condvar::new())))
     }
 
-    pub fn trigger(self) {
-        *(self.0).0.lock().unwrap() = true;
+    pub fn trigger(&self, value: bool) {
+        *(self.0).0.lock().unwrap() = Some(value);
         (self.0).1.notify_all();
     }
 
     pub fn wait_timeout(&self, mut timeout: Duration) -> bool {
-        let mut flushed_slot = (self.0).0.lock().unwrap();
+        let mut triggered_slot = (self.0).0.lock().unwrap();
         loop {
-            // If we flushed then return
-            // This condition may already be set before we start waiting
-            if *flushed_slot {
-                return true;
+            // If we were triggered then return the value we were triggered with
+            // This may already be set before we start waiting
+            if let Some(triggered) = triggered_slot.take() {
+                return triggered;
             }
 
             // If the timeout is 0 then return
@@ -170,9 +181,9 @@ impl Trigger {
             }
 
             let now = Instant::now();
-            match (self.0).1.wait_timeout(flushed_slot, timeout).unwrap() {
-                (flushed, r) if !r.timed_out() => {
-                    flushed_slot = flushed;
+            match (self.0).1.wait_timeout(triggered_slot, timeout).unwrap() {
+                (triggered, r) if !r.timed_out() => {
+                    triggered_slot = triggered;
 
                     // Reduce the remaining timeout just in case we didn't time out,
                     // but woke up spuriously for some reason
@@ -180,15 +191,15 @@ impl Trigger {
                         Some(timeout) => timeout,
                         // We didn't time out, but got close enough that we should now anyways
                         None => {
-                            return *flushed_slot;
+                            return triggered_slot.take().unwrap_or(false);
                         }
                     };
 
                     continue;
                 }
                 // Timed out
-                (flushed, _) => {
-                    return *flushed;
+                (mut triggered_slot, _) => {
+                    return triggered_slot.take().unwrap_or(false);
                 }
             }
         }
@@ -459,6 +470,171 @@ mod tests {
         // Verify the error is non-retryable (no messages to retry)
         let err = result.err().unwrap();
         assert!(err.into_retryable().is_none());
+    }
+
+    #[test]
+    fn flush_reports_failed_batch() {
+        let (sender, receiver) = crate::bounded::<Vec<i32>>(10);
+
+        let handle = spawn("test_receiver", receiver, |_| {
+            Err(BatchError::no_retry(io::Error::new(
+                io::ErrorKind::Other,
+                "explicit failure",
+            )))
+        })
+        .unwrap();
+
+        sender.send(1);
+
+        // The batch is dropped after failing, so the flush must not report success
+        assert!(!blocking_flush(&sender, Duration::from_secs(5)));
+
+        drop(sender);
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn flush_reports_closed_channel() {
+        let (sender, receiver) = crate::bounded::<Vec<i32>>(10);
+
+        sender.send(1);
+
+        // Drop the receiver without processing anything; the pending item
+        // will never be flushed
+        drop(receiver);
+
+        assert!(!blocking_flush(&sender, Duration::from_secs(5)));
+    }
+
+    #[test]
+    fn flush_reports_target_batch_outcome() {
+        let (started_tx, started_rx) = mpsc::channel();
+        let (continue_tx, continue_rx) = mpsc::channel();
+
+        let (sender, receiver) = crate::bounded::<Vec<i32>>(10);
+
+        let handle = spawn("test_receiver", receiver, move |_| {
+            started_tx.send(()).unwrap();
+
+            // Hold the batch in flight until the test says to continue
+            continue_rx.recv().unwrap();
+
+            Err(BatchError::no_retry(io::Error::new(
+                io::ErrorKind::Other,
+                "explicit failure",
+            )))
+        })
+        .unwrap();
+
+        sender.send(1);
+
+        // Wait until the batch is being processed
+        started_rx.recv().unwrap();
+
+        // Ask to be notified while the batch is in flight; the flush outcome
+        // must cover that batch even though nothing else is pending
+        let (flushed_tx, flushed_rx) = mpsc::channel();
+        sender.when_flushed_inner(move |flushed| {
+            flushed_tx.send(flushed).unwrap();
+        });
+
+        // Let the batch fail
+        continue_tx.send(()).unwrap();
+
+        assert!(!flushed_rx.recv().unwrap());
+
+        drop(sender);
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn flush_wakes_idle_receiver() {
+        let received = Arc::new(Mutex::new(0));
+
+        let (sender, receiver) = crate::bounded(10);
+
+        let handle = spawn("test_receiver", receiver, {
+            let received = received.clone();
+
+            move |batch: Vec<()>| {
+                *received.lock().unwrap() += batch.len();
+
+                Ok(())
+            }
+        })
+        .unwrap();
+
+        // Let the receiver's idle backoff grow towards its maximum (500ms);
+        // by 550ms in it's asleep inside a ~500ms delay
+        thread::sleep(Duration::from_millis(550));
+
+        sender.send(());
+
+        // Without a wake the flush would have to wait out the remainder of the
+        // receiver's idle delay, which is longer than this timeout
+        assert!(blocking_flush(&sender, Duration::from_millis(200)));
+        assert_eq!(1, *received.lock().unwrap());
+
+        drop(sender);
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn drop_wakes_idle_receiver() {
+        let (sender, receiver) = crate::bounded::<Vec<()>>(10);
+
+        let handle = spawn("test_receiver", receiver, |_| Ok(())).unwrap();
+
+        // Let the receiver's idle backoff grow towards its maximum (500ms)
+        thread::sleep(Duration::from_millis(550));
+
+        let dropped = Instant::now();
+        drop(sender);
+
+        // Without a wake the receiver would sleep out the remainder of its
+        // idle delay before noticing the channel is closed
+        handle.join().unwrap();
+        assert!(dropped.elapsed() < Duration::from_millis(250));
+    }
+
+    #[test]
+    fn channel_pressure_wakes_idle_receiver() {
+        let received = Arc::new(Mutex::new(0));
+
+        let (sender, receiver) = crate::bounded(10);
+
+        let handle = spawn("test_receiver", receiver, {
+            let received = received.clone();
+
+            move |batch: Vec<()>| {
+                *received.lock().unwrap() += batch.len();
+
+                Ok(())
+            }
+        })
+        .unwrap();
+
+        // Let the receiver's idle backoff grow towards its maximum (500ms)
+        thread::sleep(Duration::from_millis(550));
+
+        // Crossing half the channel's capacity wakes the receiver
+        for _ in 0..5 {
+            sender.send(());
+        }
+
+        // Without a wake the receiver would sleep for longer than this deadline
+        let deadline = Instant::now() + Duration::from_millis(200);
+        while { *received.lock().unwrap() } < 5 {
+            assert!(
+                Instant::now() < deadline,
+                "receiver didn't wake on pressure"
+            );
+
+            thread::sleep(Duration::from_millis(1));
+        }
+
+        drop(sender);
+        handle.join().unwrap();
     }
 
     #[test]

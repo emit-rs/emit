@@ -46,12 +46,17 @@ async fn connect(
             Error::new("failed to connect TCP stream", e)
         })?;
 
+    // Disable Nagle's algorithm; requests are written in several small pieces
+    // (headers, framing, payload chunks), and coalescing them against delayed
+    // ACKs stalls each request by tens of milliseconds
+    let _ = io.set_nodelay(true);
+
     metrics.transport_conn_established.increment();
 
     if uri.is_https() {
         #[cfg(feature = "tls")]
         {
-            let io = tls_handshake(metrics, io, uri).await?;
+            let io = tls_handshake(metrics, io, uri, version).await?;
 
             http_handshake(metrics, version, io).await
         }
@@ -64,7 +69,18 @@ async fn connect(
     }
 }
 
-/*
+#[cfg(feature = "tls")]
+fn alpn_protocol(version: HttpVersion) -> &'static str {
+    // HTTP2 is commonly negotiated via ALPN during the TLS handshake
+    // We don't support protocol downgrades, so only advertise exactly the protocol
+    // we expect to communicate on
+    match version {
+        HttpVersion::Http1 => "http/1.1",
+        HttpVersion::Http2 => "h2",
+    }
+}
+
+/**
 TLS using the native platform
 */
 #[cfg(all(feature = "tls", feature = "tls-native"))]
@@ -72,17 +88,23 @@ async fn tls_handshake(
     metrics: &InternalMetrics,
     io: tokio::net::TcpStream,
     uri: &HttpUri,
+    version: HttpVersion,
 ) -> Result<impl tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin + 'static, Error>
 {
     use tokio_native_tls::{TlsConnector, native_tls};
 
     let domain = uri.host();
 
-    let connector = TlsConnector::from(native_tls::TlsConnector::new().map_err(|e| {
-        metrics.transport_conn_tls_failed.increment();
+    let connector = TlsConnector::from(
+        native_tls::TlsConnector::builder()
+            .request_alpns(&[alpn_protocol(version)])
+            .build()
+            .map_err(|e| {
+                metrics.transport_conn_tls_failed.increment();
 
-        Error::new("failed to create TLS connector", e)
-    })?);
+                Error::new("failed to create TLS connector", e)
+            })?,
+    );
 
     let io = connector.connect(domain, io).await.map_err(|e| {
         metrics.transport_conn_tls_failed.increment();
@@ -95,7 +117,7 @@ async fn tls_handshake(
     Ok(io)
 }
 
-/*
+/**
 TLS using `rustls`
 */
 #[cfg(all(feature = "tls", not(feature = "tls-native")))]
@@ -103,9 +125,10 @@ async fn tls_handshake(
     metrics: &InternalMetrics,
     io: tokio::net::TcpStream,
     uri: &HttpUri,
+    version: HttpVersion,
 ) -> Result<impl tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin + 'static, Error>
 {
-    use tokio_rustls::{TlsConnector, rustls};
+    use tokio_rustls::TlsConnector;
 
     let domain = uri.host().to_owned().try_into().map_err(|e| {
         metrics.transport_conn_tls_failed.increment();
@@ -113,7 +136,41 @@ async fn tls_handshake(
         Error::new(format_args!("could not extract a DNS name from {uri}"), e)
     })?;
 
-    let tls = {
+    let conn = TlsConnector::from(tls_client_config(metrics, version));
+
+    let io = conn.connect(domain, io).await.map_err(|e| {
+        metrics.transport_conn_tls_failed.increment();
+
+        Error::new("failed to connect TLS stream", e)
+    })?;
+
+    metrics.transport_conn_tls_handshake.increment();
+
+    Ok(io)
+}
+
+/**
+Get the shared `rustls` configuration for connections speaking `version`.
+*/
+#[cfg(all(feature = "tls", not(feature = "tls-native")))]
+fn tls_client_config(
+    metrics: &InternalMetrics,
+    version: HttpVersion,
+) -> Arc<tokio_rustls::rustls::ClientConfig> {
+    use std::sync::OnceLock;
+
+    use tokio_rustls::rustls;
+
+    // Cache and re-use configuration across connections; it's expensive to produce
+    static HTTP1: OnceLock<Arc<rustls::ClientConfig>> = OnceLock::new();
+    static HTTP2: OnceLock<Arc<rustls::ClientConfig>> = OnceLock::new();
+
+    let slot = match version {
+        HttpVersion::Http1 => &HTTP1,
+        HttpVersion::Http2 => &HTTP2,
+    };
+
+    slot.get_or_init(|| {
         let mut root_store = rustls::RootCertStore::empty();
 
         let certs = rustls_native_certs::load_native_certs();
@@ -130,24 +187,15 @@ async fn tls_handshake(
             let _ = root_store.add(cert);
         }
 
-        Arc::new(
-            rustls::ClientConfig::builder()
-                .with_root_certificates(root_store)
-                .with_no_client_auth(),
-        )
-    };
+        let mut config = rustls::ClientConfig::builder()
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
 
-    let conn = TlsConnector::from(tls);
+        config.alpn_protocols = vec![alpn_protocol(version).into()];
 
-    let io = conn.connect(domain, io).await.map_err(|e| {
-        metrics.transport_conn_tls_failed.increment();
-
-        Error::new("failed to connect TLS stream", e)
-    })?;
-
-    metrics.transport_conn_tls_handshake.increment();
-
-    Ok(io)
+        Arc::new(config)
+    })
+    .clone()
 }
 
 async fn http_handshake(
@@ -205,7 +253,10 @@ async fn send_request<'a>(
     content: HttpContent,
 ) -> Result<HttpResponse, Error> {
     let res = sender
-        .send_request(metrics, http_request(metrics, uri, headers, content)?)
+        .send_request(
+            metrics,
+            http_request(metrics, sender.version(), uri, headers, content)?,
+        )
         .await?;
 
     Ok(res)
@@ -213,11 +264,28 @@ async fn send_request<'a>(
 
 fn http_request<'a>(
     metrics: &'a InternalMetrics,
+    version: HttpVersion,
     uri: &'a HttpUri,
     headers: impl Iterator<Item = (&'a str, &'a str)>,
     content: HttpContent,
 ) -> Result<Request<HttpContent>, Error> {
-    let mut req = Request::builder().uri(&uri.0).method(Method::POST);
+    let request_uri = match version {
+        // HTTP1 requests to origin servers carry an origin-form target
+        // with the authority in the host header
+        HttpVersion::Http1 => http::Uri::builder()
+            .path_and_query(
+                uri.0
+                    .path_and_query()
+                    .cloned()
+                    .unwrap_or_else(|| http::uri::PathAndQuery::from_static("/")),
+            )
+            .build()
+            .map_err(|e| Error::new("failed to construct request target", e))?,
+        // HTTP2 carries the full URI in its pseudo headers
+        HttpVersion::Http2 => uri.0.clone(),
+    };
+
+    let mut req = Request::builder().uri(request_uri).method(Method::POST);
 
     for (k, v) in content.custom_headers {
         req = req.header(*k, *v);
@@ -308,8 +376,10 @@ impl HttpConnection {
     async fn send(&self, body: EncodedPayload, timeout: Duration) -> Result<(), Error> {
         let res = tokio::time::timeout(timeout, async {
             let mut sender = match self.poison() {
-                Some(sender) => sender,
-                None => connect(&self.metrics, self.version, &self.uri).await?,
+                // Only re-use the previous connection if it's still open; servers
+                // and load balancers regularly close idle or long-lived connections
+                Some(sender) if !sender.is_closed() => sender,
+                _ => connect(&self.metrics, self.version, &self.uri).await?,
             };
 
             let body =
@@ -355,6 +425,20 @@ enum HttpSender {
 }
 
 impl HttpSender {
+    fn version(&self) -> HttpVersion {
+        match self {
+            HttpSender::Http1(_) => HttpVersion::Http1,
+            HttpSender::Http2(_) => HttpVersion::Http2,
+        }
+    }
+
+    fn is_closed(&self) -> bool {
+        match self {
+            HttpSender::Http1(sender) => sender.is_closed(),
+            HttpSender::Http2(sender) => sender.is_closed(),
+        }
+    }
+
     async fn send_request(
         &mut self,
         metrics: &InternalMetrics,
@@ -406,6 +490,15 @@ impl Body for HttpContent {
 impl HttpResponse {
     pub fn http_status(&self) -> u16 {
         self.res.status().as_u16()
+    }
+
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.res.headers().get(name).and_then(|v| v.to_str().ok())
+    }
+
+    pub async fn drain(self) -> Result<(), Error> {
+        // NOTE: Reading trailers requires reading the body too
+        self.stream_trailers(|_, _| {}).await
     }
 
     pub async fn stream_trailers(
@@ -530,6 +623,45 @@ mod tests {
     use crate::data::{Json, RawEncoder};
 
     #[test]
+    fn http1_request_target_is_origin_form() {
+        let metrics = InternalMetrics::default();
+        let uri = HttpUri::new("http://localhost:4718/v1/logs").unwrap();
+        let content =
+            HttpContent::new(false, |content| Ok(content), &metrics, Json::encode(42)).unwrap();
+
+        let req = http_request(
+            &metrics,
+            HttpVersion::Http1,
+            &uri,
+            ([] as [(&str, &str); 0]).into_iter(),
+            content,
+        )
+        .unwrap();
+
+        assert_eq!("/v1/logs", req.uri().to_string());
+        assert_eq!("localhost:4718", req.headers()["host"]);
+    }
+
+    #[test]
+    fn http2_request_target_is_absolute() {
+        let metrics = InternalMetrics::default();
+        let uri = HttpUri::new("http://localhost:4718/v1/logs").unwrap();
+        let content =
+            HttpContent::new(false, |content| Ok(content), &metrics, Json::encode(42)).unwrap();
+
+        let req = http_request(
+            &metrics,
+            HttpVersion::Http2,
+            &uri,
+            ([] as [(&str, &str); 0]).into_iter(),
+            content,
+        )
+        .unwrap();
+
+        assert_eq!("http://localhost:4718/v1/logs", req.uri().to_string());
+    }
+
+    #[test]
     fn default_http_port_is_80() {
         let uri = HttpUri("http://example.com".parse().unwrap());
         assert_eq!(80, uri.port());
@@ -549,7 +681,14 @@ mod tests {
         let content =
             HttpContent::new(false, |content| Ok(content), &metrics, Json::encode(42)).unwrap();
 
-        let req = http_request(&metrics, &uri, headers.into_iter(), content).unwrap();
+        let req = http_request(
+            &metrics,
+            HttpVersion::Http1,
+            &uri,
+            headers.into_iter(),
+            content,
+        )
+        .unwrap();
 
         let agent = req.headers().get("user-agent").unwrap().to_str().unwrap();
 
@@ -564,7 +703,14 @@ mod tests {
         let content =
             HttpContent::new(false, |content| Ok(content), &metrics, Json::encode(42)).unwrap();
 
-        let req = http_request(&metrics, &uri, headers.into_iter(), content).unwrap();
+        let req = http_request(
+            &metrics,
+            HttpVersion::Http1,
+            &uri,
+            headers.into_iter(),
+            content,
+        )
+        .unwrap();
 
         let agent = req.headers().get("user-agent").unwrap().to_str().unwrap();
 

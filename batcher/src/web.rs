@@ -83,7 +83,7 @@ pub async fn send<T: Channel>(
                 let (notifier, notified) = futures::channel::oneshot::channel();
 
                 sender.when_empty(move || {
-                    let _ = notifier.send(());
+                    let _ = notifier.send(true);
                 });
 
                 wait(notified, timeout).await;
@@ -98,17 +98,17 @@ Wait for a channel running in a JavaScript promise to process all items active a
 pub async fn flush<T: Channel>(sender: &Sender<T>, timeout: Duration) -> bool {
     let (notifier, notified) = futures::channel::oneshot::channel();
 
-    sender.when_flushed(move || {
-        let _ = notifier.send(());
+    sender.when_flushed_result(move |flushed| {
+        let _ = notifier.send(flushed);
     });
 
     wait(notified, timeout).await
 }
 
-async fn wait(mut notified: futures::channel::oneshot::Receiver<()>, timeout: Duration) -> bool {
-    // If the trigger has already fired then return immediately
-    if let Ok(Some(())) = notified.try_recv() {
-        return true;
+async fn wait(mut notified: futures::channel::oneshot::Receiver<bool>, timeout: Duration) -> bool {
+    // If the trigger has already fired then return the value it fired with
+    if let Ok(Some(value)) = notified.try_recv() {
+        return value;
     }
 
     // If the timeout is 0 then return immediately
@@ -121,9 +121,10 @@ async fn wait(mut notified: futures::channel::oneshot::Receiver<()>, timeout: Du
 
     match futures::future::select(notified, timeout).await {
         // The notifier was triggered
-        futures::future::Either::Left((Ok(_), _)) => true,
-        // Unexpected hangup; this should mean the channel was closed
-        futures::future::Either::Left((Err(_), _)) => true,
+        futures::future::Either::Left((Ok(value), _)) => value,
+        // Unexpected hangup; the notifier was dropped without firing so
+        // the outcome is unknown; don't report success
+        futures::future::Either::Left((Err(_), _)) => false,
         // The timeout was reached instead
         futures::future::Either::Right(((), _)) => false,
     }

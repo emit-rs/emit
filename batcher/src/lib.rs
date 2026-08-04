@@ -130,6 +130,7 @@ Use [`tokio::spawn`] or [`sync::spawn`] to run the receiver-side of the channel.
 pub fn bounded<T: Channel>(max_capacity: usize) -> (Sender<T>, Receiver<T>) {
     let shared = Arc::new(Shared {
         metrics: Default::default(),
+        receiver_notifier: ReceiverNotifier::new(),
         state: Mutex::new(State {
             next_batch: Batch::new(),
             is_open: true,
@@ -171,6 +172,11 @@ pub struct Sender<T> {
 impl<T> Drop for Sender<T> {
     fn drop(&mut self) {
         self.shared.state.lock().unwrap().is_open = false;
+
+        // Wake the receiver so it can process any last batch and shut down
+        // promptly instead of discovering the closed channel on its next
+        // scheduled wakeup
+        self.shared.receiver_notifier.notify();
     }
 }
 
@@ -197,6 +203,17 @@ impl<T: Channel> Sender<T> {
         }
 
         state.next_batch.channel.push(msg);
+
+        let len = state.next_batch.channel.len();
+        drop(state);
+
+        // If the channel is filling up then wake the receiver so it has a
+        // chance to process a batch before the channel overflows and truncates.
+        // This only fires once as the length crosses the threshold, so a receiver
+        // that can't keep up isn't repeatedly woken
+        if len == self.notify_threshold() {
+            self.shared.receiver_notifier.notify();
+        }
     }
 
     /**
@@ -215,10 +232,23 @@ impl<T: Channel> Sender<T> {
         if state.next_batch.channel.len() < self.max_capacity {
             state.next_batch.channel.push(msg);
 
+            let len = state.next_batch.channel.len();
+            drop(state);
+
+            // If the channel is filling up then wake the receiver so it has a
+            // chance to process a batch before the channel fills completely
+            if len == self.notify_threshold() {
+                self.shared.receiver_notifier.notify();
+            }
+
             Ok(())
         } else {
             Err(BatchError::retry(TrySendError("the channel is full"), msg))
         }
+    }
+
+    fn notify_threshold(&self) -> usize {
+        cmp::max(1, self.max_capacity / 2)
     }
 
     async fn send_or_wait<'a, FWait: Future<Output = ()> + 'a>(
@@ -260,47 +290,76 @@ impl<T: Channel> Sender<T> {
     /**
     Set a callback to fire when the next batch is taken.
 
-    The watcher is guaranteed to trigger at a point where the current batch is empty.
+    The callback is guaranteed to trigger at a point where the current batch is empty, or when the channel is closed and the batch will never be taken.
     */
     pub fn when_empty(&self, f: impl FnOnce() + Send + 'static) {
         let mut state = self.shared.state.lock().unwrap();
 
         // If:
-        // - The next batch is empty
+        // - The next batch is empty (there's nothing to wait for) or
+        // - the channel is closed (the batch will never be taken)
         // Then:
-        // - Call the watcher without scheduling it; there's nothing to wait for
-        if state.next_batch.channel.is_empty() {
+        // - Call the callback without scheduling it
+        if state.next_batch.channel.is_empty() || !state.is_open {
             drop(state);
 
             f();
         } else {
-            state.next_batch.watchers.push_on_take(Box::new(f));
+            state.next_batch.notifiers.push_on_take(Box::new(f));
+            drop(state);
+
+            // Notify the receiver so the callback triggers as soon as the batch
+            // is taken rather than on the receiver's next scheduled wakeup
+            self.shared.receiver_notifier.notify();
         }
     }
 
     /**
     Set a callback to fire when all items in the active batch are processed by the [`Receiver`].
 
-    The watcher is guaranteed to trigger at a point where the batch that was processing at the time this call was made has completed.
+    The callback is guaranteed to trigger at a point where the batch that was processing at the time this call was made has completed, whether or not processing succeeded. To observe the outcome of the flush, use [`sync::blocking_flush`] or one of its asynchronous variants instead.
     */
     pub fn when_flushed(&self, f: impl FnOnce() + Send + 'static) {
+        self.when_flushed_inner(move |_| f())
+    }
+
+    fn when_flushed_inner(&self, f: impl FnOnce(bool) + Send + 'static) {
         let mut state = self.shared.state.lock().unwrap();
 
-        // If:
-        // - We're not in a batch and
-        //   - the next batch is empty (there's no data) or
-        //   - the state is closed
-        // Then:
-        // - Call the watcher without scheduling it; there's nothing to flush
-        if !state.is_in_batch && (state.next_batch.channel.is_empty() || !state.is_open) {
-            // Drop the lock before signalling the watcher
+        // If there's no batch being processed and nothing pending then
+        // there's nothing to flush; the flush is trivially successful
+        if !state.is_in_batch && state.next_batch.channel.is_empty() {
+            // Drop the lock before signaling the callback
             drop(state);
 
-            f();
+            f(true);
         }
-        // If there's active data to flush then schedule the watcher
+        // If the channel is closed then anything pending will never be
+        // processed; the flush has failed
+        else if !state.is_open {
+            // Drop the lock before signaling the callback
+            drop(state);
+
+            f(false);
+        }
+        // If there's active data to flush then schedule the callback
         else {
-            state.next_batch.watchers.push_on_flush(Box::new(f));
+            // If a batch is currently being processed then the caller's items
+            // may be split between it and the next batch, so the outcome needs
+            // to cover both
+            let requires_in_flight = state.is_in_batch;
+
+            state
+                .next_batch
+                .notifiers
+                .push_on_flush(requires_in_flight, Box::new(f));
+
+            // Drop the lock before signaling the receiver
+            drop(state);
+
+            // Wake the receiver so the flush starts immediately rather than
+            // on the receiver's next scheduled wakeup
+            self.shared.receiver_notifier.notify();
         }
     }
 
@@ -387,14 +446,28 @@ impl<T: Channel> Receiver<T> {
         FBatch: Future<Output = Result<(), BatchError<T>>>,
         FWait: Future<Output = ()>,
     >(
-        mut self,
+        self,
         mut wait: impl FnMut(Duration) -> FWait,
+        on_batch: impl FnMut(T) -> FBatch,
+    ) {
+        self.exec_inner(move |_, delay| wait(delay), on_batch).await
+    }
+
+    pub(crate) async fn exec_inner<
+        FBatch: Future<Output = Result<(), BatchError<T>>>,
+        FWait: Future<Output = ()>,
+    >(
+        mut self,
+        mut wait: impl FnMut(Wait, Duration) -> FWait,
         mut on_batch: impl FnMut(T) -> FBatch,
     ) {
         // This variable holds the "next" batch
         // Under the lock all we do is push onto a pre-allocated vec
         // and replace it with another pre-allocated vec
         let mut next_batch = Batch::new();
+
+        // Whether the last *non-empty* batch was processed successfully
+        let mut last_batch_flushed = true;
 
         loop {
             // Pre-take barrier: wait here before batch is taken
@@ -418,17 +491,17 @@ impl<T: Channel> Receiver<T> {
                         state.is_open,
                     )
                 }
-                // If there are no events to emit then mark that we're outside of a batch and take its watchers
+                // If there are no events to emit then mark that we're outside of a batch and take its notifiers
                 else {
                     state.is_in_batch = false;
 
-                    let watchers = mem::take(&mut state.next_batch.watchers);
+                    let notifiers = mem::take(&mut state.next_batch.notifiers);
                     let open = state.is_open;
 
                     (
                         Batch {
                             channel: T::new(),
-                            watchers,
+                            notifiers,
                         },
                         open,
                     )
@@ -436,7 +509,7 @@ impl<T: Channel> Receiver<T> {
             };
 
             // Run outside of the lock
-            current_batch.watchers.notify_on_take();
+            current_batch.notifiers.notify_on_take();
 
             // Post-take barrier: wait here after batch is taken
             #[cfg(all(not(target_arch = "wasm32"), test))]
@@ -450,8 +523,12 @@ impl<T: Channel> Receiver<T> {
                 // Re-allocate our next buffer outside of the lock
                 next_batch = Batch {
                     channel: T::with_capacity(self.capacity.next(current_batch.channel.len())),
-                    watchers: Watchers::new(),
+                    notifiers: SenderNotifiers::new(),
                 };
+
+                // Track whether the batch completed successfully or was abandoned
+                // Assume the batch was abandoned by default
+                let mut batch_flushed = false;
 
                 // Emit the batch, taking care not to panic
                 loop {
@@ -461,6 +538,7 @@ impl<T: Channel> Receiver<T> {
                             match CatchUnwind(AssertUnwindSafe(on_batch_future)).await {
                                 Ok(Ok(())) => {
                                     self.shared.metrics.queue_batch_processed.increment();
+                                    batch_flushed = true;
                                     break;
                                 }
                                 Ok(Err(BatchError { retryable })) => {
@@ -470,11 +548,11 @@ impl<T: Channel> Receiver<T> {
                                         if retryable.len() > 0 && self.retry.next() {
                                             // Delay a bit before trying again; this gives the external service
                                             // a chance to get itself together
-                                            wait(self.retry_delay.next()).await;
+                                            wait(Wait::Retry, self.retry_delay.next()).await;
 
                                             current_batch = Batch {
                                                 channel: retryable,
-                                                watchers: current_batch.watchers,
+                                                notifiers: current_batch.notifiers,
                                             };
 
                                             self.shared.metrics.queue_batch_retry.increment();
@@ -497,17 +575,24 @@ impl<T: Channel> Receiver<T> {
                     }
                 }
 
-                // After the batch has been emitted, notify any watchers
-                current_batch.watchers.notify_on_flush();
+                // After the batch has been emitted, notify any waiting senders
+                current_batch
+                    .notifiers
+                    .notify_on_flush(batch_flushed, last_batch_flushed);
+                last_batch_flushed = batch_flushed;
 
                 // Post-process barrier: wait here after batch is processed
                 #[cfg(all(not(target_arch = "wasm32"), test))]
                 self.test_barriers.wait_post_process().await;
             }
-            // If the batch was empty then notify any watchers (there was nothing to flush)
+            // If the batch was empty then notify any waiting senders (there was nothing to flush)
             // and wait before checking again
             else {
-                current_batch.watchers.notify_on_flush();
+                // Notifiers on an empty batch were scheduled while the previous
+                // batch was in flight; they get its outcome
+                current_batch
+                    .notifiers
+                    .notify_on_flush(true, last_batch_flushed);
 
                 // Post-process barrier: wait here after empty batch
                 #[cfg(all(not(target_arch = "wasm32"), test))]
@@ -520,7 +605,9 @@ impl<T: Channel> Receiver<T> {
                 }
 
                 // If we didn't see any events, then sleep for a bit
-                wait(self.idle_delay.next()).await;
+                // Idle waits may be cut short by a sender wake (a flush,
+                // channel pressure, or the channel closing)
+                wait(Wait::Idle, self.idle_delay.next()).await;
             }
         }
     }
@@ -697,7 +784,17 @@ impl Retry {
 
 struct Shared<T> {
     metrics: InternalMetrics,
+    receiver_notifier: ReceiverNotifier,
     state: Mutex<State<T>>,
+}
+
+/**
+Whether the receiver is waiting because there's nothing to do, or because it's applying backoff.
+*/
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Wait {
+    Idle,
+    Retry,
 }
 
 /**
@@ -736,14 +833,14 @@ struct State<T> {
 
 struct Batch<T> {
     channel: T,
-    watchers: Watchers,
+    notifiers: SenderNotifiers,
 }
 
 impl<T: Channel> Batch<T> {
     fn new() -> Self {
         Batch {
             channel: T::new(),
-            watchers: Watchers::new(),
+            notifiers: SenderNotifiers::new(),
         }
     }
 }
@@ -754,44 +851,109 @@ impl<T: Channel> Default for Batch<T> {
     }
 }
 
-struct Watchers {
-    on_take: Vec<Watcher>,
-    on_flush: Vec<Watcher>,
+/**
+A notification channel from the [`Receiver`] to [`Sender`]s.
+*/
+struct SenderNotifiers {
+    on_take: Vec<SenderNotifier>,
+    on_flush: Vec<SenderFlushNotifier>,
 }
 
-type Watcher = Box<dyn FnOnce() + Send>;
+type SenderNotifier = Box<dyn FnOnce() + Send>;
 
-impl Default for Watchers {
+struct SenderFlushNotifier {
+    chain_with_last_batch: bool,
+    notify: Box<dyn FnOnce(bool) + Send>,
+}
+
+impl Default for SenderNotifiers {
     fn default() -> Self {
-        Watchers::new()
+        SenderNotifiers::new()
     }
 }
 
-impl Watchers {
+impl SenderNotifiers {
     fn new() -> Self {
-        Watchers {
+        SenderNotifiers {
             on_take: Vec::new(),
             on_flush: Vec::new(),
         }
     }
 
-    fn push_on_flush(&mut self, watcher: Watcher) {
-        self.on_flush.push(watcher);
+    fn push_on_flush(&mut self, chain_with_last_batch: bool, notify: Box<dyn FnOnce(bool) + Send>) {
+        self.on_flush.push(SenderFlushNotifier {
+            chain_with_last_batch,
+            notify,
+        });
     }
 
-    fn notify_on_flush(&mut self) {
-        for watcher in mem::take(&mut self.on_flush) {
-            let _ = panic::catch_unwind(AssertUnwindSafe(watcher));
+    fn notify_on_flush(&mut self, target_batch_flushed: bool, last_batch_flushed: bool) {
+        for notifier in mem::take(&mut self.on_flush) {
+            let flushed = if notifier.chain_with_last_batch {
+                // Success depends on both the batch this notifier was attached to,
+                // and the batch that preceded it
+                target_batch_flushed && last_batch_flushed
+            } else {
+                // Success depends only on the batch this notifier was attached to
+                target_batch_flushed
+            };
+
+            let notify = notifier.notify;
+
+            let _ = panic::catch_unwind(AssertUnwindSafe(move || notify(flushed)));
         }
     }
 
-    fn push_on_take(&mut self, watcher: Watcher) {
-        self.on_take.push(watcher);
+    fn push_on_take(&mut self, notifier: SenderNotifier) {
+        self.on_take.push(notifier);
     }
 
     fn notify_on_take(&mut self) {
-        for watcher in mem::take(&mut self.on_take) {
-            let _ = panic::catch_unwind(AssertUnwindSafe(watcher));
+        for notifier in mem::take(&mut self.on_take) {
+            let _ = panic::catch_unwind(AssertUnwindSafe(notifier));
+        }
+    }
+}
+
+/**
+A notification channel from [`Sender`]s to the [`Receiver`].
+*/
+struct ReceiverNotifier {
+    state: Mutex<ReceiverNotifierState>,
+    sync: sync::Trigger,
+    #[cfg(feature = "tokio")]
+    tokio: tokio::Trigger,
+}
+
+struct ReceiverNotifierState {
+    notified: bool,
+}
+
+impl ReceiverNotifier {
+    fn new() -> Self {
+        ReceiverNotifier {
+            state: Mutex::new(ReceiverNotifierState { notified: false }),
+            sync: sync::Trigger::new(),
+            #[cfg(feature = "tokio")]
+            tokio: tokio::Trigger::new(),
+        }
+    }
+
+    fn notify(&self) {
+        let mut state = self.state.lock().unwrap();
+
+        // If a notification is already pending then any waiter has already been woken
+        if state.notified {
+            return;
+        }
+
+        state.notified = true;
+
+        self.sync.trigger(true);
+
+        #[cfg(feature = "tokio")]
+        {
+            self.tokio.trigger(true);
         }
     }
 }

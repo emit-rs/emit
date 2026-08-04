@@ -28,11 +28,13 @@ pub(crate) async fn batch<F>(
     max_request_size: usize,
     metrics: &InternalMetrics,
     mut encode_event: impl FnMut(&ChannelEvent) -> Option<EncodedEvent>,
-    mut send_batch: impl FnMut(&EncodedScopeItems) -> F,
+    mut send_batch: impl FnMut(EncodedScopeItems) -> F,
 ) -> Result<(), BatchError<Channel>>
 where
-    F: Future<Output = Result<(), BatchError<()>>>,
+    F: Future<Output = (EncodedScopeItems, Result<(), BatchError<()>>)>,
 {
+    // The batch is moved into each send future and returned by it, so its
+    // allocations are re-used from one request to the next
     let mut batch = EncodedScopeItems::new();
 
     let mut scope_index = channel.cursor.scope_index;
@@ -59,7 +61,10 @@ where
                 && batch.total_size_bytes() + encoded.size_bytes() > max_request_size
             {
                 // We've reached the maximum size of a single batch; send it then start a new one
-                match send_batch(&batch).await {
+                let (sent, result) = send_batch(batch).await;
+                batch = sent;
+
+                match result {
                     Ok(()) => {
                         batch.clear();
 
@@ -82,7 +87,7 @@ where
 
     // Send the final batch
     if batch.total_items() > 0 {
-        match send_batch(&batch).await {
+        match send_batch(batch).await.1 {
             Ok(()) => Ok(()),
             Err(e) => Err(e.map_retryable(|r| r.map(|_| channel))),
         }
@@ -407,10 +412,10 @@ mod tests {
                 case,
                 &Default::default(),
                 |evt| logs::LogsEventEncoder::default().encode_event::<Json>(evt.get()),
-                |_| async {
+                |batch| async {
                     *calls.lock().unwrap() += 1;
 
-                    Ok(())
+                    (batch, Ok(()))
                 },
             )
             .await
@@ -447,19 +452,22 @@ mod tests {
             0,
             &Default::default(),
             |evt| logs::LogsEventEncoder::default().encode_event::<Json>(evt.get()),
-            |_| async {
+            |batch| async {
                 let mut calls = calls.lock().unwrap();
 
                 *calls += 1;
 
                 if *calls == 2 {
-                    return Err(BatchError::retry(
-                        io::Error::new(io::ErrorKind::Other, "explicit failure"),
-                        (),
-                    ));
+                    return (
+                        batch,
+                        Err(BatchError::retry(
+                            io::Error::new(io::ErrorKind::Other, "explicit failure"),
+                            (),
+                        )),
+                    );
                 }
 
-                Ok(())
+                (batch, Ok(()))
             },
         )
         .await
@@ -478,7 +486,7 @@ mod tests {
             0,
             &Default::default(),
             |evt| logs::LogsEventEncoder::default().encode_event::<Json>(evt.get()),
-            |_| async { Ok(()) },
+            |batch| async { (batch, Ok(())) },
         )
         .await
         .unwrap();
