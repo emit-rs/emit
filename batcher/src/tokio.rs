@@ -52,11 +52,11 @@ pub async fn exec<T: Channel, F: Future<Output = Result<(), BatchError<T>>>>(
 
     receiver
         .exec_inner(
-            move |reason, delay| {
+            move |wait, delay| {
                 let shared = shared.clone();
 
                 async move {
-                    match reason {
+                    match wait {
                         // Idle waits can be cut short by a sender notification
                         Wait::Idle => {
                             shared.receiver_notifier.tokio.wait_timeout(delay).await;

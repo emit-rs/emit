@@ -98,7 +98,7 @@ Wait for a channel running in a JavaScript promise to process all items active a
 pub async fn flush<T: Channel>(sender: &Sender<T>, timeout: Duration) -> bool {
     let (notifier, notified) = futures::channel::oneshot::channel();
 
-    sender.when_flushed_result(move |flushed| {
+    sender.when_flushed_inner(move |flushed| {
         let _ = notifier.send(flushed);
     });
 
@@ -560,8 +560,6 @@ mod tests {
 
     #[wasm_bindgen_test]
     async fn park_zero_duration() {
-        let start = js_sys::Date::new_0().get_time();
-
         // Just ensure we don't panic
         Park::new(Duration::ZERO).await;
     }

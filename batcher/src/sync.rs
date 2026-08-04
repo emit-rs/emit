@@ -52,8 +52,8 @@ where
             let shared = receiver.shared.clone();
 
             block_on(receiver.exec_inner(
-                move |reason, delay| {
-                    future::ready(match reason {
+                move |wait, delay| {
+                    future::ready(match wait {
                         // Idle waits can be cut short by a sender notification
                         Wait::Idle => {
                             shared.receiver_notifier.sync.wait_timeout(delay);
