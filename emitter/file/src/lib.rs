@@ -15,10 +15,10 @@ Add `emit` and `emit_file` to your `Cargo.toml`:
 
 ```toml
 [dependencies.emit]
-version = "2.22.1"
+version = "2.22.2"
 
 [dependencies.emit_file]
-version = "2.22.1"
+version = "2.22.2"
 ```
 
 Initialize `emit` using a rolling file set:
