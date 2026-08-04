@@ -29,7 +29,7 @@ version = "1"
 version = "1"
 
 [dependencies.syn]
-version = "2"
+version = "3"
 features = ["full", "extra-traits", "visit-mut"]
 
 [dependencies.emit_core]
@@ -37,4 +37,4 @@ version = "1.22.1"
 path = "../core"
 
 [dependencies.fv-template]
-version = "0.6"
+version = "0.7"
