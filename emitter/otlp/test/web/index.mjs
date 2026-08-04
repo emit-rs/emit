@@ -18,14 +18,9 @@ otelcol.on('close', (code) => {
   console.log(`otelcol exited with ${code}`);
 });
 
-// Wait for the collector's output to contain the given fragment.
-//
-// The collector acknowledges a request before its output is necessarily
-// delivered to us; even once the bytes are written, our `data` handlers only
-// run when control returns to the event loop. Polling here yields so that
-// pending output can arrive instead of checking a possibly stale snapshot.
+// Wait for output to be delivered
 async function expectOutput(fragment, label) {
-  const deadline = Date.now() + 10000;
+  const deadline = Date.now() + 10000; // 10s
 
   while (!output.match(fragment)) {
     if (Date.now() > deadline) {

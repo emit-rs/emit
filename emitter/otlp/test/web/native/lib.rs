@@ -40,7 +40,7 @@ async fn run_test(builder: emit_otlp::OtlpLogsBuilder) -> String {
     // Emit a log event
     emit::info!(rt, "A log message {fragment}");
 
-    // Flush `emit_otlp`
+    // Flush
     let flushed = rt.emitter().flush(std::time::Duration::from_secs(10)).await;
 
     emit::info!(rt: emit::runtime::internal(), "OTLP asynchronous flush returned {flushed}");
