@@ -116,8 +116,7 @@ impl Parse for Hook {
 
         let expr = items
             .pop()
-            .ok_or_else(|| syn::Error::new(input.span(), "missing expression"))?
-            .into_value();
+            .ok_or_else(|| syn::Error::new(input.span(), "missing expression"))?;
 
         if !items.is_empty() {
             return Err(syn::Error::new(
