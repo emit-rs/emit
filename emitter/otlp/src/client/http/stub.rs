@@ -80,6 +80,14 @@ impl HttpResponse {
         todo!()
     }
 
+    pub fn header(&self, _name: &str) -> Option<&str> {
+        todo!()
+    }
+
+    pub async fn drain(self) -> Result<(), Error> {
+        todo!()
+    }
+
     pub async fn stream_trailers(self, mut _trailer: impl FnMut(&str, &str)) -> Result<(), Error> {
         todo!()
     }

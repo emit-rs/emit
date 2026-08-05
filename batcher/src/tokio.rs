@@ -4,11 +4,13 @@ Run channels in a `tokio` runtime.
 
 use std::{
     future::Future,
-    io, thread,
+    io,
+    sync::Mutex,
+    thread,
     time::{Duration, Instant},
 };
 
-use crate::{BatchError, Channel, Receiver, Sender, sync};
+use crate::{BatchError, Channel, Receiver, Sender, Wait, sync};
 
 /**
 Run [`Receiver::exec`] on a `tokio` runtime in a dedicated background thread.
@@ -26,11 +28,7 @@ pub fn spawn<
 where
     T::Item: Send + 'static,
 {
-    let receive = async move {
-        receiver
-            .exec(|delay| tokio::time::sleep(delay), on_batch)
-            .await
-    };
+    let receive = exec(receiver, on_batch);
 
     thread::Builder::new()
         .name(thread_name.into())
@@ -50,9 +48,49 @@ pub async fn exec<T: Channel, F: Future<Output = Result<(), BatchError<T>>>>(
     receiver: Receiver<T>,
     on_batch: impl FnMut(T) -> F,
 ) {
+    let shared = receiver.shared.clone();
+
     receiver
-        .exec(|delay| tokio::time::sleep(delay), on_batch)
+        .exec_inner(
+            move |wait, delay| {
+                let shared = shared.clone();
+
+                async move {
+                    match wait {
+                        // Idle waits can be cut short by a sender notification
+                        Wait::Idle => {
+                            shared.receiver_notifier.tokio.wait_timeout(delay).await;
+                        }
+                        // Retry waits are backoff on a failing batch; don't cut them short
+                        Wait::Retry => tokio::time::sleep(delay).await,
+                    }
+                }
+            },
+            on_batch,
+        )
         .await
+}
+
+pub(crate) struct Trigger(tokio::sync::Notify, Mutex<Option<bool>>);
+
+impl Trigger {
+    pub fn new() -> Self {
+        Trigger(tokio::sync::Notify::new(), Mutex::new(None))
+    }
+
+    pub fn trigger(&self, value: bool) {
+        *self.1.lock().unwrap() = Some(value);
+        self.0.notify_waiters()
+    }
+
+    pub async fn wait_timeout(&self, timeout: Duration) -> bool {
+        match tokio::time::timeout(timeout, self.0.notified()).await {
+            Ok(()) => self.1.lock().unwrap().take().unwrap_or(false),
+            Err::<(), tokio::time::error::Elapsed>(_) => {
+                self.1.lock().unwrap().take().unwrap_or(false)
+            }
+        }
+    }
 }
 
 /**
@@ -77,8 +115,8 @@ This function is an asynchronous variant of [`blocking_send`].
 pub async fn flush<T: Channel>(sender: &Sender<T>, timeout: Duration) -> bool {
     let (notifier, notified) = tokio::sync::oneshot::channel();
 
-    sender.when_flushed(move || {
-        let _ = notifier.send(());
+    sender.when_flushed_inner(move |flushed| {
+        let _ = notifier.send(flushed);
     });
 
     wait(notified, timeout).await
@@ -121,7 +159,7 @@ pub async fn send<T: Channel>(
                 let (notifier, notified) = tokio::sync::oneshot::channel();
 
                 sender.when_empty(move || {
-                    let _ = notifier.send(());
+                    let _ = notifier.send(true);
                 });
 
                 wait(notified, timeout).await;
@@ -130,10 +168,10 @@ pub async fn send<T: Channel>(
         .await
 }
 
-async fn wait(mut notified: tokio::sync::oneshot::Receiver<()>, timeout: Duration) -> bool {
-    // If the trigger has already fired then return immediately
-    if notified.try_recv().is_ok() {
-        return true;
+async fn wait(mut notified: tokio::sync::oneshot::Receiver<bool>, timeout: Duration) -> bool {
+    // If the trigger has already fired then return the value it fired with
+    if let Ok(value) = notified.try_recv() {
+        return value;
     }
 
     // If the timeout is 0 then return immediately
@@ -144,9 +182,10 @@ async fn wait(mut notified: tokio::sync::oneshot::Receiver<()>, timeout: Duratio
 
     match tokio::time::timeout(timeout, notified).await {
         // The notifier was triggered
-        Ok(Ok(())) => true,
-        // Unexpected hangup; this should mean the channel was closed
-        Ok(Err(_)) => true,
+        Ok(Ok(value)) => value,
+        // Unexpected hangup; the notifier was dropped without firing so
+        // the outcome is unknown; don't report success
+        Ok(Err(_)) => false,
         // The timeout was reached instead
         Err(_) => false,
     }
@@ -314,6 +353,57 @@ mod tests {
         // Clean up - abort the receiver task
         receiver_task.abort();
         let _ = receiver_task.await;
+    }
+
+    #[tokio::test]
+    async fn flush_reports_failed_batch() {
+        let (sender, receiver) = crate::bounded::<Vec<i32>>(10);
+
+        let _ = spawn("test_receiver", receiver, |_| async {
+            Err(BatchError::no_retry(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "explicit failure",
+            )))
+        })
+        .unwrap();
+
+        sender.send(1);
+
+        // The batch is dropped after failing, so the flush must not report success
+        assert!(!flush(&sender, Duration::from_secs(5)).await);
+    }
+
+    #[tokio::test]
+    async fn flush_wakes_idle_receiver() {
+        let received = Arc::new(Mutex::new(0));
+
+        let (sender, receiver) = crate::bounded(10);
+
+        let _ = spawn("test_receiver", receiver, {
+            let received = received.clone();
+
+            move |batch: Vec<()>| {
+                let received = received.clone();
+
+                async move {
+                    *received.lock().unwrap() += batch.len();
+
+                    Ok(())
+                }
+            }
+        })
+        .unwrap();
+
+        // Let the receiver's idle backoff grow towards its maximum (500ms);
+        // by 550ms in it's asleep inside a ~500ms delay
+        tokio::time::sleep(Duration::from_millis(550)).await;
+
+        sender.send(());
+
+        // Without a wake the flush would have to wait out the remainder of the
+        // receiver's idle delay, which is longer than this timeout
+        assert!(flush(&sender, Duration::from_millis(200)).await);
+        assert_eq!(1, *received.lock().unwrap());
     }
 
     #[tokio::test]
@@ -579,8 +669,11 @@ mod tests {
 
         let callback_fired_clone = callback_fired.clone();
         sender.when_flushed(move || {
-            when_flushed_tx.send(()).unwrap();
+            // Set the flag before signalling; the callback runs on the
+            // receiver's thread, and the test resumes as soon as the signal
+            // is sent
             *callback_fired_clone.lock().unwrap() = true;
+            when_flushed_tx.send(()).unwrap();
         });
 
         // Callback shouldn't fire yet (batch not processed)

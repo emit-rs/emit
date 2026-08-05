@@ -390,8 +390,10 @@ impl OtlpTransportBuilder {
                     async move {
                         let status = res.http_status();
 
-                        // A request is considered successful if it returns 2xx status code
-                        if status >= 200 && status < 300 {
+                        // Drain any response body so the connection can be re-used
+                        let _ = res.drain().await;
+
+                        if http_is_success(status) {
                             metrics.http_batch_sent.increment();
 
                             Ok(())
@@ -428,7 +430,9 @@ impl OtlpTransportBuilder {
                     // Wrap the content in the gRPC frame protocol
                     // This is a simple length-prefixed format that uses
                     // 5 bytes to indicate the length and compression of the message
-                    let len = (u32::try_from(req.content_payload_len()).unwrap()).to_be_bytes();
+                    let len = u32::try_from(req.content_payload_len())
+                        .unwrap()
+                        .to_be_bytes();
 
                     Ok(
                         // If the content is compressed then set the gRPC compression header byte for it
@@ -436,7 +440,7 @@ impl OtlpTransportBuilder {
                             req.with_content_encoding_header(None)
                                 .with_content_type_header(content_type_header)
                                 .with_headers(match compression {
-                                    "gzip" => &[("grpc-encoding", "gzip")],
+                                    "gzip" => &[("grpc-encoding", "gzip"), ("te", "trailers")],
                                     compression => {
                                         return Err(Error::msg(format_args!(
                                             "unsupported compression '{compression}'"
@@ -448,6 +452,7 @@ impl OtlpTransportBuilder {
                         // If the content is not compressed then leave the gRPC compression header byte unset
                         else {
                             req.with_content_type_header(content_type_header)
+                                .with_headers(&[("te", "trailers")])
                                 .with_content_frame([0, len[0], len[1], len[2], len[3]])
                         },
                     )
@@ -456,38 +461,51 @@ impl OtlpTransportBuilder {
                     let metrics = metrics.clone();
 
                     async move {
-                        let mut status = 0;
-                        let mut msg = String::new();
+                        let status = res.http_status();
 
-                        res.stream_trailers(|k, v| match k {
-                            "grpc-status" => {
-                                status = v.parse().unwrap_or(0);
+                        // gRPC status may come from either response headers or trailers
+                        let mut grpc_status = res.header("grpc-status").map(str::to_owned);
+                        let mut grpc_message = res.header("grpc-message").map(str::to_owned);
+
+                        // If the request succeeded but there's no gRPC headers then read from trailers
+                        // We only do this on HTTP success because load-balancer failures are unlikely
+                        // to carry trailers or gRPC headers, so don't want to report that instead
+                        if http_is_success(status) && grpc_status.is_none() {
+                            let streamed = res
+                                .stream_trailers(|k, v| match k {
+                                    "grpc-status" => {
+                                        grpc_status = Some(v.into());
+                                    }
+                                    "grpc-message" => {
+                                        grpc_message = Some(v.into());
+                                    }
+                                    _ => {}
+                                })
+                                .await;
+
+                            if let Err(err) = streamed {
+                                metrics.grpc_batch_failed.increment();
+
+                                return Err(err);
                             }
-                            "grpc-message" => {
-                                msg = v.into();
-                            }
-                            _ => {}
-                        })
-                        .await?;
-
-                        // A request is considered successful if the grpc-status trailer is 0
-                        if status == 0 {
-                            metrics.grpc_batch_sent.increment();
-
-                            Ok(())
                         }
-                        // In any other case the request failed and may carry some diagnostic message
-                        else {
-                            metrics.grpc_batch_failed.increment();
 
-                            if msg.len() > 0 {
-                                Err(Error::msg(format_args!(
-                                    "OTLP gRPC server responded {status} {msg}"
-                                )))
-                            } else {
-                                Err(Error::msg(format_args!(
-                                    "OTLP gRPC server responded {status}"
-                                )))
+                        match grpc_is_success(
+                            status,
+                            grpc_status.as_deref(),
+                            grpc_message.as_deref(),
+                        ) {
+                            // The batch succeeded
+                            Ok(()) => {
+                                metrics.grpc_batch_sent.increment();
+
+                                Ok(())
+                            }
+                            // The batch failed
+                            Err(err) => {
+                                metrics.grpc_batch_failed.increment();
+
+                                Err(err)
                             }
                         }
                     }
@@ -527,7 +545,6 @@ impl<S: ClientRequestSender, E: data::EventEncoder, R: data::RequestEncoder>
             metrics,
             |event| event_encoder.encode_event(event.get()),
             |batch| {
-                let batch = batch.clone();
                 async move {
                     #[emit::span(rt: emit::runtime::internal(), guard: span, "send OTLP batch of {batch_size} events to {uri}", batch_size: batch.total_items(), uri: request_sender.uri())]
                     async fn send_batch<S: ClientRequestSender, R: data::RequestEncoder>(
@@ -576,13 +593,15 @@ impl<S: ClientRequestSender, E: data::EventEncoder, R: data::RequestEncoder>
                         Ok(())
                     }
 
-                    send_batch(
+                    let result = send_batch(
                         &self.request_sender,
                         &self.resource,
                         &self.request_encoder,
                         &batch,
                     )
-                    .await
+                    .await;
+
+                    (batch, result)
                 }
             },
         )
@@ -798,6 +817,45 @@ impl<R: data::RequestEncoder> ClientRequestEncoder<R> {
     }
 }
 
+fn http_is_success(status: u16) -> bool {
+    // A request is considered successful if it returns 2xx status code
+    status >= 200 && status < 300
+}
+
+fn grpc_is_success(
+    http_status: u16,
+    grpc_status: Option<&str>,
+    grpc_message: Option<&str>,
+) -> Result<(), Error> {
+    if !http_is_success(http_status) {
+        return Err(Error::msg(format_args!(
+            "OTLP gRPC server responded HTTP {http_status}"
+        )));
+    }
+
+    match grpc_status.map(str::parse::<u64>) {
+        // A request is considered successful if the grpc-status is 0
+        Some(Ok(0)) => Ok(()),
+        // In any other case the request failed and may carry some diagnostic message
+        Some(Ok(status)) => match grpc_message.filter(|msg| !msg.is_empty()) {
+            Some(msg) => Err(Error::msg(format_args!(
+                "OTLP gRPC server responded {status} {msg}"
+            ))),
+            None => Err(Error::msg(format_args!(
+                "OTLP gRPC server responded {status}"
+            ))),
+        },
+        Some(Err(_)) => Err(Error::msg(
+            "OTLP gRPC server responded with an invalid grpc-status",
+        )),
+        // A gRPC response that never carried a status is invalid; don't
+        // assume the request was accepted
+        None => Err(Error::msg(
+            "OTLP gRPC server response did not include a grpc-status",
+        )),
+    }
+}
+
 fn encode_resource(encoding: Encoding, resource: &Resource) -> EncodedPayload {
     let attributes = data::PropsResourceAttributes(&resource.attributes);
 
@@ -813,6 +871,39 @@ fn encode_resource(encoding: Encoding, resource: &Resource) -> EncodedPayload {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn interpret_grpc_response_cases() {
+        for (case, err) in [
+            (grpc_is_success(200, Some("0"), None), None::<&str>),
+            (grpc_is_success(201, Some("0"), None), None::<&str>),
+            (grpc_is_success(200, Some("0"), Some("")), None::<&str>),
+            (
+                grpc_is_success(200, Some("16"), Some("unauthenticated")),
+                Some("OTLP gRPC server responded 16 unauthenticated"),
+            ),
+            (
+                grpc_is_success(200, None, None),
+                Some("OTLP gRPC server response did not include a grpc-status"),
+            ),
+            (
+                grpc_is_success(503, None, None),
+                Some("OTLP gRPC server responded HTTP 503"),
+            ),
+            (
+                grpc_is_success(200, Some("zero"), None),
+                Some("OTLP gRPC server responded with an invalid grpc-status"),
+            ),
+        ] {
+            if let Some(err) = err {
+                assert_eq!(err, case.unwrap_err().to_string());
+            } else {
+                assert!(case.is_ok());
+            }
+        }
+    }
+
     #[test]
     #[cfg(not(all(
         target_arch = "wasm32",

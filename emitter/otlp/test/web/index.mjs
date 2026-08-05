@@ -18,19 +18,27 @@ otelcol.on('close', (code) => {
   console.log(`otelcol exited with ${code}`);
 });
 
+// Wait for output to be delivered
+async function expectOutput(fragment, label) {
+  const deadline = Date.now() + 10000; // 10s
+
+  while (!output.match(fragment)) {
+    if (Date.now() > deadline) {
+      throw new Error(`otelcol output did not contain the expected fragment '${fragment}' from ${label}`);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 wasm.setup();
 
 try {
     let jsonFragment = await wasm.http_json();
     let protoFragment = await wasm.http_proto();
 
-    if (!output.match(jsonFragment)) {
-        throw new Error(`otelcol output did not contain the expected fragment '${jsonFragment}' from HTTP+JSON`);
-    }
-
-    if (!output.match(protoFragment)) {
-        throw new Error(`otelcol output did not contain the expected fragment '${protoFragment}' from HTTP+protobuf`);
-    }
+    await expectOutput(jsonFragment, "HTTP+JSON");
+    await expectOutput(protoFragment, "HTTP+protobuf");
 }
 finally {
     otelcol.kill();

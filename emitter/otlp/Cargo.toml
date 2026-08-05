@@ -15,7 +15,7 @@ exclude = ["test"]
 default = ["tls", "gzip", "web"]
 gzip = ["dep:flate2"]
 tls = ["dep:tokio-rustls", "dep:rustls-native-certs"]
-tls-native = ["tls", "dep:tokio-native-tls"]
+tls-native = ["tls", "dep:tokio-native-tls", "dep:native-tls"]
 web = ["emit/web", "emit_batcher/web", "wasm-bindgen", "wasm-bindgen-futures", "js-sys"]
 
 [dependencies.emit]
@@ -82,6 +82,11 @@ optional = true
 [target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dependencies.tokio-native-tls]
 version = "0.3"
 optional = true
+
+[target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dependencies.native-tls]
+version = "0.2"
+optional = true
+features = ["alpn"]
 
 [target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dependencies.emit_batcher]
 version = "2.22.2"
