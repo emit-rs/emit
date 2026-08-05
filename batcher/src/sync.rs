@@ -564,16 +564,19 @@ mod tests {
         })
         .unwrap();
 
-        // Let the receiver's idle backoff grow towards its maximum (500ms);
-        // by 550ms in it's asleep inside a ~500ms delay
-        thread::sleep(Duration::from_millis(550));
+        for _ in 0..3 {
+            // Let the receiver's idle backoff grow towards its maximum (500ms);
+            // by 550ms in it's asleep inside a ~500ms delay
+            thread::sleep(Duration::from_millis(550));
 
-        sender.send(());
+            sender.send(());
 
-        // Without a wake the flush would have to wait out the remainder of the
-        // receiver's idle delay, which is longer than this timeout
-        assert!(blocking_flush(&sender, Duration::from_millis(200)));
-        assert_eq!(1, *received.lock().unwrap());
+            // Without a wake the flush would have to wait out the remainder of the
+            // receiver's idle delay, which is longer than this timeout
+            assert!(blocking_flush(&sender, Duration::from_millis(200)));
+        }
+
+        assert_eq!(3, *received.lock().unwrap());
 
         drop(sender);
         handle.join().unwrap();

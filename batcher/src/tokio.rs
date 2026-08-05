@@ -80,11 +80,16 @@ impl Trigger {
 
     pub fn trigger(&self, value: bool) {
         *self.1.lock().unwrap() = Some(value);
-        self.0.notify_waiters()
+        self.0.notify_one()
     }
 
     pub async fn wait_timeout(&self, timeout: Duration) -> bool {
-        match tokio::time::timeout(timeout, self.0.notified()).await {
+        let notified = self.0.notified();
+        tokio::pin!(notified);
+
+        notified.as_mut().enable();
+
+        match tokio::time::timeout(timeout, notified).await {
             Ok(()) => self.1.lock().unwrap().take().unwrap_or(false),
             Err::<(), tokio::time::error::Elapsed>(_) => {
                 self.1.lock().unwrap().take().unwrap_or(false)
@@ -394,16 +399,19 @@ mod tests {
         })
         .unwrap();
 
-        // Let the receiver's idle backoff grow towards its maximum (500ms);
-        // by 550ms in it's asleep inside a ~500ms delay
-        tokio::time::sleep(Duration::from_millis(550)).await;
+        for _ in 0..3 {
+            // Let the receiver's idle backoff grow towards its maximum (500ms);
+            // by 550ms in it's asleep inside a ~500ms delay
+            tokio::time::sleep(Duration::from_millis(550)).await;
 
-        sender.send(());
+            sender.send(());
 
-        // Without a wake the flush would have to wait out the remainder of the
-        // receiver's idle delay, which is longer than this timeout
-        assert!(flush(&sender, Duration::from_millis(200)).await);
-        assert_eq!(1, *received.lock().unwrap());
+            // Without a wake the flush would have to wait out the remainder of the
+            // receiver's idle delay, which is longer than this timeout
+            assert!(flush(&sender, Duration::from_millis(200)).await);
+        }
+
+        assert_eq!(3, *received.lock().unwrap());
     }
 
     #[tokio::test]
