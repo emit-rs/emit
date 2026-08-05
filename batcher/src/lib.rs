@@ -305,7 +305,7 @@ impl<T: Channel> Sender<T> {
 
             f();
         } else {
-            state.next_batch.notifiers.push_on_take(Box::new(f));
+            state.next_batch.sender_notifiers.push_on_take(Box::new(f));
             drop(state);
 
             // Notify the receiver so the callback triggers as soon as the batch
@@ -351,7 +351,7 @@ impl<T: Channel> Sender<T> {
 
             state
                 .next_batch
-                .notifiers
+                .sender_notifiers
                 .push_on_flush(requires_in_flight, Box::new(f));
 
             // Drop the lock before signaling the receiver
@@ -495,13 +495,13 @@ impl<T: Channel> Receiver<T> {
                 else {
                     state.is_in_batch = false;
 
-                    let notifiers = mem::take(&mut state.next_batch.notifiers);
+                    let notifiers = mem::take(&mut state.next_batch.sender_notifiers);
                     let open = state.is_open;
 
                     (
                         Batch {
                             channel: T::new(),
-                            notifiers,
+                            sender_notifiers: notifiers,
                         },
                         open,
                     )
@@ -509,7 +509,7 @@ impl<T: Channel> Receiver<T> {
             };
 
             // Run outside of the lock
-            current_batch.notifiers.notify_on_take();
+            current_batch.sender_notifiers.notify_on_take();
 
             // Post-take barrier: wait here after batch is taken
             #[cfg(all(not(target_arch = "wasm32"), test))]
@@ -523,7 +523,7 @@ impl<T: Channel> Receiver<T> {
                 // Re-allocate our next buffer outside of the lock
                 next_batch = Batch {
                     channel: T::with_capacity(self.capacity.next(current_batch.channel.len())),
-                    notifiers: SenderNotifiers::new(),
+                    sender_notifiers: SenderNotifiers::new(),
                 };
 
                 // Track whether the batch completed successfully or was abandoned
@@ -552,7 +552,7 @@ impl<T: Channel> Receiver<T> {
 
                                             current_batch = Batch {
                                                 channel: retryable,
-                                                notifiers: current_batch.notifiers,
+                                                sender_notifiers: current_batch.sender_notifiers,
                                             };
 
                                             self.shared.metrics.queue_batch_retry.increment();
@@ -577,7 +577,7 @@ impl<T: Channel> Receiver<T> {
 
                 // After the batch has been emitted, notify any waiting senders
                 current_batch
-                    .notifiers
+                    .sender_notifiers
                     .notify_on_flush(batch_flushed, last_batch_flushed);
                 last_batch_flushed = batch_flushed;
 
@@ -591,7 +591,7 @@ impl<T: Channel> Receiver<T> {
                 // Notifiers on an empty batch were scheduled while the previous
                 // batch was in flight; they get its outcome
                 current_batch
-                    .notifiers
+                    .sender_notifiers
                     .notify_on_flush(true, last_batch_flushed);
 
                 // Post-process barrier: wait here after empty batch
@@ -833,14 +833,14 @@ struct State<T> {
 
 struct Batch<T> {
     channel: T,
-    notifiers: SenderNotifiers,
+    sender_notifiers: SenderNotifiers,
 }
 
 impl<T: Channel> Batch<T> {
     fn new() -> Self {
         Batch {
             channel: T::new(),
-            notifiers: SenderNotifiers::new(),
+            sender_notifiers: SenderNotifiers::new(),
         }
     }
 }
@@ -919,20 +919,14 @@ impl SenderNotifiers {
 A notification channel from [`Sender`]s to the [`Receiver`].
 */
 struct ReceiverNotifier {
-    state: Mutex<ReceiverNotifierState>,
     sync: sync::Trigger,
     #[cfg(feature = "tokio")]
     tokio: tokio::Trigger,
 }
 
-struct ReceiverNotifierState {
-    notified: bool,
-}
-
 impl ReceiverNotifier {
     fn new() -> Self {
         ReceiverNotifier {
-            state: Mutex::new(ReceiverNotifierState { notified: false }),
             sync: sync::Trigger::new(),
             #[cfg(feature = "tokio")]
             tokio: tokio::Trigger::new(),
@@ -940,15 +934,6 @@ impl ReceiverNotifier {
     }
 
     fn notify(&self) {
-        let mut state = self.state.lock().unwrap();
-
-        // If a notification is already pending then any waiter has already been woken
-        if state.notified {
-            return;
-        }
-
-        state.notified = true;
-
         self.sync.trigger(true);
 
         #[cfg(feature = "tokio")]
