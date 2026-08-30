@@ -11,3 +11,11 @@ help: the trait `emit::__private::Optional<'_>` is not implemented for `Option<{
   | impl<'a, T: ?Sized> Optional<'a> for Option<&'a T> {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   = help: for that trait implementation, expected `&_`, found `{integer}`
+note: required by a bound in `emit::__private::__PrivateOptionalHook::__private_optional`
+ --> $WORKSPACE/src/macro_hooks.rs
+  |
+  |     fn __private_optional<F: FnOnce(&'a <Self as Optional<'a>>::Value) -> Option<U>, U: 'a>(
+  |        ------------------ required by a bound in this associated function
+...
+  |         Self: Optional<'a>;
+  |               ^^^^^^^^^^^^ required by this bound in `__PrivateOptionalHook::__private_optional`
