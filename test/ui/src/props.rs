@@ -471,6 +471,30 @@ fn props_as_display() {
 }
 
 #[test]
+fn props_multiple_as() {
+    struct Data;
+
+    impl fmt::Debug for Data {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            f.write_str("debug")
+        }
+    }
+
+    impl fmt::Display for Data {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            f.write_str("display")
+        }
+    }
+
+    let props = emit::props! {
+        #[emit::as_display] #[emit::as_debug] a: Data,
+    };
+
+    // Last attribute wins
+    assert_eq!("debug", props.get("a").unwrap().to_string());
+}
+
+#[test]
 #[cfg(feature = "std")]
 fn props_move() {
     let a = ::std::string::String::from("short lived");
