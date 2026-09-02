@@ -94,20 +94,28 @@ mod tests {
 
     use prost::Message;
 
-    use crate::data::{
-        generated::{collector::logs::v1 as request, logs::v1 as logs, util::*},
+    use crate::{
+        data::{
+            generated::{collector::logs::v1 as request, logs::v1 as logs, util::*},
+            util::*,
+        },
         util::*,
     };
 
     #[test]
     fn encode_basic() {
-        encode_event::<LogsEventEncoder>(emit::evt!("log for {user}", user: "test"), |buf| {
-            let de = logs::LogRecord::decode(buf).unwrap();
+        encode_event::<LogsEventEncoder>(
+            emit::evt!(extent: ts(1), "log for {user}", user: "test"),
+            |buf| {
+                let de = logs::LogRecord::decode(buf).unwrap();
 
-            assert_eq!(Some(string_value("log for test")), de.body);
+                assert_eq!(1000000000, de.time_unix_nano);
 
-            assert_eq!(Some(string_value("test")), de.attributes[0].value);
-        });
+                assert_eq!(Some(string_value("log for test")), de.body);
+
+                assert_eq!(Some(string_value("test")), de.attributes[0].value);
+            },
+        );
     }
 
     #[test]
