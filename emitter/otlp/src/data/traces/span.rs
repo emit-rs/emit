@@ -223,7 +223,7 @@ impl<
                 &SPAN_LINKS_INDEX,
                 |stream| {
                     stream.value_computed(&PropsLinks {
-                        value: links,
+                        value: links.cast().unwrap_or_default(),
                         _marker: PhantomData::<(TR, SP)>,
                     })
                 },
@@ -315,137 +315,25 @@ impl<
     }
 }
 
-struct PropsLinks<TR, SP, V> {
-    value: V,
+struct PropsLinks<TR, SP> {
+    value: emit::span::SpanLinkSet,
     _marker: PhantomData<(TR, SP)>,
 }
 
-impl<TR: From<emit::TraceId> + sval::Value, SP: From<emit::SpanId> + sval::Value, V: sval::Value>
-    sval::Value for PropsLinks<TR, SP, V>
+impl<TR: From<emit::TraceId> + sval::Value, SP: From<emit::SpanId> + sval::Value> sval::Value
+    for PropsLinks<TR, SP>
 {
     fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(&self, stream: &mut S) -> sval::Result {
-        // Map a sequence of formatted span links like:
-        //   `["{traceid}-{spanid}", ..]`
-        // into a sequence of structured links like:
-        //   `[{traceId, spanId}, ..]`
-        struct TextToLinkElements<'a, TR, SP, S: ?Sized> {
-            stream: &'a mut S,
-            depth: usize,
-            buffered: [u8; 49],
-            buffered_len: usize,
-            _marker: PhantomData<(TR, SP)>,
-        }
-
-        impl<
-            'sval,
-            'a,
-            'b,
-            TR: From<emit::TraceId> + sval::Value,
-            SP: From<emit::SpanId> + sval::Value,
-            S: sval::Stream<'b> + ?Sized,
-        > sval::Stream<'sval> for TextToLinkElements<'a, TR, SP, S>
-        {
-            fn null(&mut self) -> sval::Result {
-                sval::error()
-            }
-
-            fn bool(&mut self, _: bool) -> sval::Result {
-                sval::error()
-            }
-
-            fn text_begin(&mut self, _: Option<usize>) -> sval::Result {
-                if self.depth != 1 {
-                    return sval::error();
-                }
-
-                self.buffered = [0; 49];
-                self.buffered_len = 0;
-
-                Ok(())
-            }
-
-            fn text_fragment_computed(&mut self, fragment: &str) -> sval::Result {
-                if self.depth != 1 {
-                    return sval::error();
-                }
-
-                let start = self.buffered_len;
-                let end = start + fragment.len();
-
-                if end > fragment.len() {
-                    return sval::error();
-                }
-
-                self.buffered[start..end].copy_from_slice(fragment.as_bytes());
-                self.buffered_len = end;
-
-                Ok(())
-            }
-
-            fn text_end(&mut self) -> sval::Result {
-                if self.depth != 1 {
-                    return sval::error();
-                }
-
-                if self.buffered_len != self.buffered.len() {
-                    return sval::error();
-                }
-
-                let buffered = str::from_utf8(&self.buffered).map_err(|_| sval::Error::new())?;
-                let link =
-                    emit::span::SpanLink::try_from_str(buffered).map_err(|_| sval::Error::new())?;
-
-                self.stream.seq_value_begin()?;
-                self.stream.value_computed(&Link {
-                    trace_id: &TR::from(*link.trace_id()),
-                    span_id: &SP::from(*link.span_id()),
-                })?;
-                self.stream.seq_value_end()?;
-
-                Ok(())
-            }
-
-            fn i64(&mut self, _: i64) -> sval::Result {
-                sval::error()
-            }
-
-            fn f64(&mut self, _: f64) -> sval::Result {
-                sval::error()
-            }
-
-            fn map_begin(&mut self, _: Option<usize>) -> sval::Result {
-                sval::error()
-            }
-
-            fn seq_begin(&mut self, _: Option<usize>) -> sval::Result {
-                self.depth += 1;
-
-                Ok(())
-            }
-
-            fn seq_value_begin(&mut self) -> sval::Result {
-                Ok(())
-            }
-
-            fn seq_value_end(&mut self) -> sval::Result {
-                Ok(())
-            }
-
-            fn seq_end(&mut self) -> sval::Result {
-                self.depth -= 1;
-
-                Ok(())
-            }
-        }
-
         stream.seq_begin(None)?;
-        self.value.stream(&mut TextToLinkElements {
-            stream: &mut *stream,
-            depth: 0,
-            buffered: [0; 49],
-            buffered_len: 0,
-            _marker: PhantomData::<(TR, SP)>,
-        })?;
+
+        for link in &self.value {
+            stream.seq_value_begin()?;
+            stream.value_computed(&Link {
+                trace_id: &TR::from(*link.trace_id()),
+                span_id: &SP::from(*link.span_id()),
+            })?;
+            stream.seq_value_end()?;
+        }
         stream.seq_end()
     }
 }
