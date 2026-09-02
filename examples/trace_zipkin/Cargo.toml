@@ -5,9 +5,9 @@ edition = "2024"
 publish = false
 
 [dependencies.emit]
-version = "2.22.3"
+version = "2.22.4"
 path = "../../"
 
 [dependencies.emit_otlp]
-version = "2.22.3"
+version = "2.22.4"
 path = "../../emitter/otlp"
