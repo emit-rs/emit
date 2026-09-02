@@ -9,10 +9,10 @@ These are the technical API docs for `emit`. Also see [the guide](https://emit-r
 
 ```toml
 [dependencies.emit]
-version = "2.22.3"
+version = "2.22.4"
 
 [dependencies.emit_term]
-version = "2.22.3"
+version = "2.22.4"
 ```
 
 ```rust
