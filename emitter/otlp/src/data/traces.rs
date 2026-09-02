@@ -153,6 +153,9 @@ mod tests {
                 assert_eq!("test", de.name);
                 assert_eq!(trace::span::SpanKind::Server as i32, de.kind);
 
+                assert_eq!(1000000000, de.start_time_unix_nano);
+                assert_eq!(13000000000, de.end_time_unix_nano);
+
                 assert_eq!(0x1u128.to_be_bytes(), &*de.trace_id);
                 assert_eq!(0x1u64.to_be_bytes(), &*de.span_id);
             },
@@ -236,6 +239,58 @@ mod tests {
     }
 
     #[test]
+    fn encode_span_kind() {
+        let encoder = TracesEventEncoder {
+            name: default_name_formatter(),
+            kind: default_kind_extractor(),
+        };
+
+        encode_event_with(
+            encoder,
+            emit::evt!(
+                extent: ts(1)..ts(13),
+                "greet {user}",
+                user: "test",
+                evt_kind: "span",
+                trace_id: "00000000000000000000000000000001",
+                span_id: "0000000000000001",
+                span_kind: "server"
+            ),
+            |buf| {
+                let de = trace::Span::decode(buf).unwrap();
+
+                assert_eq!(trace::span::SpanKind::Server as i32, de.kind);
+            },
+        );
+    }
+
+    #[test]
+    fn encode_span_kind_invalid() {
+        let encoder = TracesEventEncoder {
+            name: default_name_formatter(),
+            kind: default_kind_extractor(),
+        };
+
+        encode_event_with(
+            encoder,
+            emit::evt!(
+                extent: ts(1)..ts(13),
+                "greet {user}",
+                user: "test",
+                evt_kind: "span",
+                trace_id: "00000000000000000000000000000001",
+                span_id: "0000000000000001",
+                span_kind: "invalid"
+            ),
+            |buf| {
+                let de = trace::Span::decode(buf).unwrap();
+
+                assert_eq!(trace::span::SpanKind::Unspecified as i32, de.kind);
+            },
+        );
+    }
+
+    #[test]
     fn encode_span_links() {
         let encoder = TracesEventEncoder {
             name: default_name_formatter(),
@@ -262,11 +317,35 @@ mod tests {
 
                 assert_eq!(2, de.links.len());
 
-                assert_eq!(0x1u128.to_be_bytes(), &*de.links[0].trace_id);
-                assert_eq!(0x1u64.to_be_bytes(), &*de.links[0].span_id);
+                assert_eq!(
+                    1,
+                    de.links
+                        .iter()
+                        .filter(|l| l.trace_id == 0x1u128.to_be_bytes())
+                        .count()
+                );
+                assert_eq!(
+                    1,
+                    de.links
+                        .iter()
+                        .filter(|l| l.span_id == 0x1u64.to_be_bytes())
+                        .count()
+                );
 
-                assert_eq!(0x2u128.to_be_bytes(), &*de.links[1].trace_id);
-                assert_eq!(0x2u64.to_be_bytes(), &*de.links[1].span_id);
+                assert_eq!(
+                    1,
+                    de.links
+                        .iter()
+                        .filter(|l| l.trace_id == 0x2u128.to_be_bytes())
+                        .count()
+                );
+                assert_eq!(
+                    1,
+                    de.links
+                        .iter()
+                        .filter(|l| l.span_id == 0x2u64.to_be_bytes())
+                        .count()
+                );
             },
         );
     }
@@ -287,8 +366,7 @@ mod tests {
                 evt_kind: "span",
                 trace_id: "00000000000000000000000000000001",
                 span_id: "0000000000000001",
-                #[emit::as_sval]
-                span_links: [
+                span_links: emit::span::SpanLinkSet::from_iter([
                     emit::span::SpanLink::new(
                         emit::span::TraceId::from_u128(0x1).unwrap(),
                         emit::span::SpanId::from_u64(0x1).unwrap(),
@@ -297,18 +375,42 @@ mod tests {
                         emit::span::TraceId::from_u128(0x2).unwrap(),
                         emit::span::SpanId::from_u64(0x2).unwrap(),
                     ),
-                ],
+                ]),
             ),
             |buf| {
                 let de = trace::Span::decode(buf).unwrap();
 
                 assert_eq!(2, de.links.len());
 
-                assert_eq!(0x1u128.to_be_bytes(), &*de.links[0].trace_id);
-                assert_eq!(0x1u64.to_be_bytes(), &*de.links[0].span_id);
+                assert_eq!(
+                    1,
+                    de.links
+                        .iter()
+                        .filter(|l| l.trace_id == 0x1u128.to_be_bytes())
+                        .count()
+                );
+                assert_eq!(
+                    1,
+                    de.links
+                        .iter()
+                        .filter(|l| l.span_id == 0x1u64.to_be_bytes())
+                        .count()
+                );
 
-                assert_eq!(0x2u128.to_be_bytes(), &*de.links[1].trace_id);
-                assert_eq!(0x2u64.to_be_bytes(), &*de.links[1].span_id);
+                assert_eq!(
+                    1,
+                    de.links
+                        .iter()
+                        .filter(|l| l.trace_id == 0x2u128.to_be_bytes())
+                        .count()
+                );
+                assert_eq!(
+                    1,
+                    de.links
+                        .iter()
+                        .filter(|l| l.span_id == 0x2u64.to_be_bytes())
+                        .count()
+                );
             },
         );
     }
@@ -430,6 +532,27 @@ mod tests {
                     Some(string_value("something went wrong")),
                     de.attributes[0].value
                 );
+            },
+        );
+    }
+
+    #[test]
+    fn encode_zero_width() {
+        encode_event::<TracesEventEncoder>(
+            emit::evt!(
+                extent: ts(1)..ts(1),
+                "greet {user}",
+                user: "test",
+                evt_kind: "span",
+                span_name: "test",
+                span_kind: "server",
+                trace_id: "00000000000000000000000000000001",
+                span_id: "0000000000000001"
+            ),
+            |buf| {
+                let de = trace::Span::decode(buf).unwrap();
+
+                assert_eq!(de.start_time_unix_nano, de.end_time_unix_nano);
             },
         );
     }
