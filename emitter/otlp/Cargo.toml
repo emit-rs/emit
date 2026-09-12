@@ -143,3 +143,4 @@ version = "0.3"
 
 [lints.cargo]
 non_kebab_case_bins = "allow"
+unused_dependencies = "allow"
