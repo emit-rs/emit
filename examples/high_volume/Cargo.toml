@@ -13,3 +13,6 @@ path = "../../emitter/term"
 
 [dependencies.rand]
 version = "0.10"
+
+[lints.cargo]
+non_kebab_case_bins = "allow"

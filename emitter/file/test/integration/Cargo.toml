@@ -15,3 +15,6 @@ path = "../../"
 
 [dependencies.serde_json]
 version = "1"
+
+[lints.cargo]
+non_kebab_case_bins = "allow"

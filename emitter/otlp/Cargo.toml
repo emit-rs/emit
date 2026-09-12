@@ -3,7 +3,6 @@ name = "emit_otlp"
 version = "2.22.4"
 authors = ["emit contributors"]
 license = "MIT OR Apache-2.0"
-readme = "README.md"
 repository = "https://github.com/emit-rs/emit"
 description = "Emit diagnostic events to an OpenTelemetry-compatible collector."
 keywords = ["logging", "tracing", "metrics", "observability"]
@@ -141,3 +140,6 @@ features = ["implicit_rt"]
 
 [target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dev-dependencies.wasm-bindgen-test]
 version = "0.3"
+
+[lints.cargo]
+non_kebab_case_bins = "allow"

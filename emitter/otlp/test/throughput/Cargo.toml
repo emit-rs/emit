@@ -12,3 +12,6 @@ path = "../../"
 
 [dependencies.emit_term]
 path = "../../../term"
+
+[lints.cargo]
+non_kebab_case_bins = "allow"

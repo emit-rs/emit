@@ -20,3 +20,6 @@ features = ["grpc-tonic", "trace", "logs"]
 [dependencies.tokio]
 version = "1"
 features = ["rt-multi-thread", "macros"]
+
+[lints.cargo]
+non_kebab_case_bins = "allow"

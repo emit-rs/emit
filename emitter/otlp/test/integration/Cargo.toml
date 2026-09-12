@@ -19,3 +19,6 @@ path = "../../"
 [dependencies.uuid]
 version = "1"
 features = ["v4"]
+
+[lints.cargo]
+non_kebab_case_bins = "allow"

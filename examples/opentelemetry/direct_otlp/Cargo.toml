@@ -13,3 +13,6 @@ path = "../../../emitter/otlp"
 
 [dependencies.emit_term]
 path = "../../../emitter/term"
+
+[lints.cargo]
+non_kebab_case_bins = "allow"

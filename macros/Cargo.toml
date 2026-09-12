@@ -3,7 +3,6 @@ name = "emit_macros"
 version = "2.22.4"
 authors = ["emit contributors"]
 license = "MIT OR Apache-2.0"
-readme = "README.md"
 repository = "https://github.com/emit-rs/emit"
 description = "Internal proc macro crate for emit."
 keywords = ["logging", "tracing", "metrics", "observability"]
