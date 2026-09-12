@@ -282,6 +282,16 @@ pub fn blocking_flush(timeout: core::time::Duration) -> bool {
 }
 
 /**
+Emit an event.
+
+This method will use [`runtime::shared()`].
+*/
+#[cfg(feature = "implicit_rt")]
+pub fn emit(evt: impl event::ToEvent) {
+    runtime::shared().emit(evt)
+}
+
+/**
 Sample a metric source.
 
 This method will use [`runtime::shared()`] as the source, emitting samples as events directly through the runtime.

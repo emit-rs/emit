@@ -172,7 +172,7 @@ Metrics produced by `sample!` are assumed to be cumultive by default. You can em
 ```rust
 # extern crate emit;
 # use std::time::Duration;
-let end = emit::now();
+let end = emit::clock().now();
 let start = end.map(|end| end - Duration::from_secs(30));
 
 let bytes_written = 6;

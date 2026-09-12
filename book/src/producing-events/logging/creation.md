@@ -21,7 +21,7 @@ fn confirm_email(user: &str, email: &str) {
     let evt = emit::evt!("{user} confirmed {email}");
 
     // We can choose to emit this event manually
-    emit::emit(evt);
+    emit::emit!(evt);
 }
 ```
 
@@ -35,10 +35,10 @@ fn confirm_email(user: &str, email: &str) {
     let evt = emit::Event::new(
         // Where the event came from
         emit::mdl!(),
-        // When the event occurred
-        emit::now(),
         // What the event is about
         emit::tpl!("{user} confirmed {email}"),
+        // When the event occurred
+        emit::clock().now(),
         // Additional properties
         emit::props! {
             user,
