@@ -1,6 +1,6 @@
 # Attaching properties to spans
 
-Properties added to the span macros are added to an ambient context and automatically included on any events emitted within that operation:
+Properties captured in the span macros are added to an ambient context and automatically included on any events emitted within that operation:
 
 ```rust
 # extern crate emit;
@@ -94,11 +94,47 @@ Event {
 
 Notice the `span_parent` of `inner_span` is the same as the `span_id` of `outer_span`. That's because `inner_span` was called within the execution of `outer_span`.
 
+## Adding properties to a span without making them ambient
+
+You can specify properties that should appear on a span's completion event, but not be made part of the ambient context, using the `evt_props` [control parameter](../../reference/control-parameters.md):
+
+```rust
+# extern crate emit;
+#[emit::span(
+    evt_props: emit::props! {
+        sleep_ms,
+    },
+    "wait a bit",
+)]
+fn wait_a_bit(sleep_ms: u64) {
+    std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
+}
+```
+
+```text
+Event {
+    mdl: "my_app",
+    tpl: "wait a bit",
+    extent: Some(
+        "2024-04-27T22:47:33.574839000Z".."2024-04-27T22:47:35.985844000Z",
+    ),
+    props: {
+        "evt_kind": span,
+        "span_name": "wait a bit",
+        "trace_id": d2a5e592546010570472ac6e6457c086,
+        "sleep_ms": 1200,
+        "span_id": ee9fde093b6efd78,
+    },
+}
+```
+
+The `evt_props` control parameter accepts any value that implements [`Props`](https://docs.rs/emit/2.22.4/emit/props/trait.Props.html), such as the [`props!`](https://docs.rs/emit/2.22.4/emit/macro.props.html) macro.
+
 ## Adding properties to a span as it runs
 
-If you bind the implicit span guard created for an instrumented function to an identifier, you can use it in the body of the function to interact with the span before it completes. See [Manual span creation](./manual-span-creation.md) for more details.
+You can bind the implicit [`SpanGuard`](https://docs.rs/emit/2.22.4/emit/span/struct.SpanGuard.html) created for an instrumented function to an identifier using the `guard` [control parameter](../../reference/control-parameters.md). You can then use that identifier in the body of the function to interact with the span before it completes. See [Manual span creation](./manual-span-creation.md) for more details.
 
-With a [`SpanGuard`](https://docs.rs/emit/2.22.4/emit/span/struct.SpanGuard.html), you can attach additional properties collection to the span:
+With a `SpanGuard`, you can attach additional properties collection to the span:
 
 ```rust
 # extern crate emit;
@@ -138,9 +174,9 @@ Attaching additional properties to the span guard is preferrable to adding them 
 
 ## Visibility of properties on spans
 
-Properties on spans have two visibility levels:
+The previous sections show that properties on spans have two visibility levels:
 
-- **Shared:** Added to the ambient context and present on all child events. Properties you add to the [`#[span]`](https://docs.rs/emit/2.22.4/emit/attr.span.html) template are shared.
+- **Ambient:** Added to the ambient context and present on all child events. Properties you add to the [`#[span]`](https://docs.rs/emit/2.22.4/emit/attr.span.html) template are shared.
 - **Private:** Added to the [`SpanGuard`](https://docs.rs/emit/2.22.4/emit/span/struct.SpanGuard.html) and only present on the span event itself. Properties you add through the `evt_props` [control parameter](../../reference/control-parameters.md), and subsequently through the `SpanGuard` are private.
 
 ```rust
@@ -150,8 +186,8 @@ Properties on spans have two visibility levels:
     evt_props: emit::props! {
         private_1: i,
     },
-    "checking {public_1: i}",
-    public_2: i,
+    "checking {ambient_1: i}",
+    ambient_2: i,
 )]
 fn check(i: i32) {
     let _span = span.push_prop("private_2", i);
