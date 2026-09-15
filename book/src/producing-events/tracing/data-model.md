@@ -1,6 +1,6 @@
 # Tracing data model
 
-The tracing data model is based on span events. Span events are an extension of [`emit`'s events](../../reference/events.md). They include the following [well-known properties](https://docs.rs/emit/2.22.4/emit/well_known/index.html):
+The tracing data model is based on span events. Span events are an extension of [`emit`'s events](../../reference/events.md). They include the following [well-known properties](https://docs.rs/emit/2.23.0/emit/well_known/index.html):
 
 - `evt_kind`: with a value of `"span"` to indicate that the event is a span.
 - `trace_id`: an identifier shared by all events in a distributed trace. A `trace_id` is assigned by the first operation.

@@ -1,6 +1,6 @@
 [package]
 name = "emit_term"
-version = "2.22.4"
+version = "2.23.0"
 authors = ["emit contributors"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/emit-rs/emit"
@@ -10,7 +10,7 @@ categories = ["development-tools::debugging"]
 edition = "2024"
 
 [dependencies.emit]
-version = "2.22.4"
+version = "2.23.0"
 path = "../../"
 default-features = false
 features = ["std", "sval"]
@@ -29,6 +29,6 @@ features = ["local-offset"]
 version = "1"
 
 [dev-dependencies.emit]
-version = "2.22.4"
+version = "2.23.0"
 path = "../../"
 features = ["implicit_rt"]

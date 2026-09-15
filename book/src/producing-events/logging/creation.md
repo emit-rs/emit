@@ -1,10 +1,10 @@
 # Log event creation
 
-`emit`'s log events are just regular instances of the [`Event`](https://docs.rs/emit/2.22.4/emit/struct.Event.html) type.
+`emit`'s log events are just regular instances of the [`Event`](https://docs.rs/emit/2.23.0/emit/struct.Event.html) type.
 
 ## Using macros
 
-When you call the [`emit!`](https://docs.rs/emit/2.22.4/emit/macro.emit.html) macro, an `Event` is created in-place and emitted for you:
+When you call the [`emit!`](https://docs.rs/emit/2.23.0/emit/macro.emit.html) macro, an `Event` is created in-place and emitted for you:
 
 ```rust
 # extern crate emit;
@@ -13,7 +13,7 @@ fn confirm_email(user: &str, email: &str) {
 }
 ```
 
-You can also construct an event without emitting it using the [`evt!`](https://docs.rs/emit/2.22.4/emit/macro.evt.html) macro:
+You can also construct an event without emitting it using the [`evt!`](https://docs.rs/emit/2.23.0/emit/macro.evt.html) macro:
 
 ```rust
 # extern crate emit;
@@ -27,7 +27,7 @@ fn confirm_email(user: &str, email: &str) {
 
 ## Using `Event` directly
 
-You can construct an [`Event`](https://docs.rs/emit/2.22.4/emit/struct.Event.html) directly:
+You can construct an [`Event`](https://docs.rs/emit/2.23.0/emit/struct.Event.html) directly:
 
 ```rust
 # extern crate emit;
