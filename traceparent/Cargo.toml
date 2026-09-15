@@ -1,6 +1,6 @@
 [package]
 name = "emit_traceparent"
-version = "2.22.4"
+version = "2.23.0"
 authors = ["emit contributors"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/emit-rs/emit"
@@ -10,9 +10,9 @@ categories = ["development-tools::debugging"]
 edition = "2024"
 
 [dependencies.emit]
-version = "2.22.4"
+version = "2.23.0"
 path = "../"
 
 [dev-dependencies.emit_term]
-version = "2.22.4"
+version = "2.23.0"
 path = "../emitter/term"

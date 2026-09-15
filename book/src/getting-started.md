@@ -4,13 +4,13 @@ Add `emit` to your `Cargo.toml`, along with an _emitter_ to write diagnostics to
 
 ```toml
 [dependencies.emit]
-version = "2.22.4"
+version = "2.23.0"
 
 [dependencies.emit_term]
-version = "2.22.4"
+version = "2.23.0"
 ```
 
-Initialize `emit` at the start of your `main.rs` using [`emit::setup()`](https://docs.rs/emit/2.22.4/emit/setup/index.html), and ensure any emitted diagnostics are flushed by calling [`blocking_flush()`](https://docs.rs/emit/2.22.4/emit/setup/struct.Init.html#method.blocking_flush) at the end:
+Initialize `emit` at the start of your `main.rs` using [`emit::setup()`](https://docs.rs/emit/2.23.0/emit/setup/index.html), and ensure any emitted diagnostics are flushed by calling [`blocking_flush()`](https://docs.rs/emit/2.23.0/emit/setup/struct.Init.html#method.blocking_flush) at the end:
 
 ```rust
 extern crate emit;
@@ -29,13 +29,13 @@ fn main() {
 }
 ```
 
-You can configure `emit` to write to [OpenTelemetry](https://docs.rs/emit_otlp/2.22.4/emit_otlp/index.html), [the console](https://docs.rs/emit_term/2.22.4/emit_term/index.html), [rolling files](https://docs.rs/emit_file/2.22.4/emit_file/index.html), or any custom emitter you create.
+You can configure `emit` to write to [OpenTelemetry](https://docs.rs/emit_otlp/2.23.0/emit_otlp/index.html), [the console](https://docs.rs/emit_term/2.23.0/emit_term/index.html), [rolling files](https://docs.rs/emit_file/2.23.0/emit_file/index.html), or any custom emitter you create.
 
 Start peppering diagnostics through your application with `emit`'s macros.
 
 ## Logging events
 
-When something of note happens, use [`debug!`](https://docs.rs/emit/2.22.4/emit/macro.debug.html) or [`info!`](https://docs.rs/emit/2.22.4/emit/macro.info.html) to log it:
+When something of note happens, use [`debug!`](https://docs.rs/emit/2.23.0/emit/macro.debug.html) or [`info!`](https://docs.rs/emit/2.23.0/emit/macro.info.html) to log it:
 
 ```rust
 # extern crate emit;
@@ -45,7 +45,7 @@ let item = "product-123";
 emit::info!("{user} added {item} to their cart");
 ```
 
-When something fails, use [`warn!`](https://docs.rs/emit/2.22.4/emit/macro.warn.html) or [`error!`](https://docs.rs/emit/2.22.4/emit/macro.error.html):
+When something fails, use [`warn!`](https://docs.rs/emit/2.23.0/emit/macro.warn.html) or [`error!`](https://docs.rs/emit/2.23.0/emit/macro.error.html):
 
 ```rust
 # extern crate emit;
@@ -79,7 +79,7 @@ See [Template syntax and rendering](./reference/templates.md) for details.
 
 ```toml
 [dependencies.emit]
-version = "2.22.4"
+version = "2.23.0"
 features = ["serde"]
 ```
 
@@ -121,7 +121,7 @@ emit::error!("something went wrong: {err}");
 
 ## Tracing functions
 
-Add [`#[span]`](https://docs.rs/emit/2.22.4/emit/attr.span.html) to a significant function in your application to trace its execution:
+Add [`#[span]`](https://docs.rs/emit/2.23.0/emit/attr.span.html) to a significant function in your application to trace its execution:
 
 ```rust
 # extern crate emit;
@@ -156,7 +156,7 @@ async fn add_item(user: &str, item: &str) {
 
 ## Sampling metrics
 
-Use [`sample!`](https://docs.rs/emit/2.22.4/emit/macro.sample.html) to write samples of the metrics your application tracks as events:
+Use [`sample!`](https://docs.rs/emit/2.23.0/emit/macro.sample.html) to write samples of the metrics your application tracks as events:
 
 ```rust
 # extern crate emit;
@@ -185,7 +185,7 @@ See [Delta metrics](./producing-events/metrics/delta-metrics.md) for details.
 
 ## Quick debugging
 
-Use the [`dbg!`](https://docs.rs/emit/2.22.4/emit/macro.dbg.html) macro to help debug code as you're writing it:
+Use the [`dbg!`](https://docs.rs/emit/2.23.0/emit/macro.dbg.html) macro to help debug code as you're writing it:
 
 ```rust
 # extern crate emit;
@@ -211,4 +211,4 @@ You may also want to explore:
 
 - [the source on GitHub](https://github.com/emit-rs/emit).
 - [a set of task-oriented examples](https://github.com/emit-rs/emit/tree/main/examples).
-- [the API docs](https://docs.rs/emit/2.22.4/emit/index.html).
+- [the API docs](https://docs.rs/emit/2.23.0/emit/index.html).

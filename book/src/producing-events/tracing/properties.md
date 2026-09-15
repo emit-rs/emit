@@ -128,11 +128,11 @@ Event {
 }
 ```
 
-The `evt_props` control parameter accepts any value that implements [`Props`](https://docs.rs/emit/2.22.4/emit/props/trait.Props.html), such as the [`props!`](https://docs.rs/emit/2.22.4/emit/macro.props.html) macro.
+The `evt_props` control parameter accepts any value that implements [`Props`](https://docs.rs/emit/2.23.0/emit/props/trait.Props.html), such as the [`props!`](https://docs.rs/emit/2.23.0/emit/macro.props.html) macro.
 
 ## Adding properties to a span as it runs
 
-You can bind the implicit [`SpanGuard`](https://docs.rs/emit/2.22.4/emit/span/struct.SpanGuard.html) created for an instrumented function to an identifier using the `guard` [control parameter](../../reference/control-parameters.md). You can then use that identifier in the body of the function to interact with the span before it completes. See [Manual span creation](./manual-span-creation.md) for more details.
+You can bind the implicit [`SpanGuard`](https://docs.rs/emit/2.23.0/emit/span/struct.SpanGuard.html) created for an instrumented function to an identifier using the `guard` [control parameter](../../reference/control-parameters.md). You can then use that identifier in the body of the function to interact with the span before it completes. See [Manual span creation](./manual-span-creation.md) for more details.
 
 With a `SpanGuard`, you can attach additional properties collection to the span:
 
@@ -176,8 +176,8 @@ Attaching additional properties to the span guard is preferrable to adding them 
 
 The previous sections show that properties on spans have two visibility levels:
 
-- **Ambient:** Added to the ambient context and present on all child events. Properties you add to the [`#[span]`](https://docs.rs/emit/2.22.4/emit/attr.span.html) template are shared.
-- **Private:** Added to the [`SpanGuard`](https://docs.rs/emit/2.22.4/emit/span/struct.SpanGuard.html) and only present on the span event itself. Properties you add through the `evt_props` [control parameter](../../reference/control-parameters.md), and subsequently through the `SpanGuard` are private.
+- **Ambient:** Added to the ambient context and present on all child events. Properties you add to the [`#[span]`](https://docs.rs/emit/2.23.0/emit/attr.span.html) template are shared.
+- **Private:** Added to the [`SpanGuard`](https://docs.rs/emit/2.23.0/emit/span/struct.SpanGuard.html) and only present on the span event itself. Properties you add through the `evt_props` [control parameter](../../reference/control-parameters.md), and subsequently through the `SpanGuard` are private.
 
 ```rust
 # extern crate emit;
