@@ -53,3 +53,7 @@ version = "1"
 
 [lints.rust]
 unexpected_cfgs = { level = "allow", check-cfg = ['cfg(emit_disabled)'] }
+
+[lints.cargo]
+non_kebab_case_bins = "allow"
+unused_dependencies = "allow"

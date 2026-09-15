@@ -9,3 +9,7 @@ See [the crate docs](https://docs.rs/emit/2.22.4/emit/macro.emit.html#control-pa
 ## `#[span]`
 
 See [the crate docs](https://docs.rs/emit/2.22.4/emit/attr.span.html#control-parameters) for control parameters on `#[span]`.
+
+## `sample!`
+
+See [the crate docs](https://docs.rs/emit/2.22.4/emit/macro.sample.html#control-parameters) for control parameters on `sample!`.

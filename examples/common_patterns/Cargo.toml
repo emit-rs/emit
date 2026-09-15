@@ -190,3 +190,6 @@ path = "level_custom.rs"
 [[example]]
 name = "testing"
 path = "testing.rs"
+
+[lints.cargo]
+non_kebab_case_bins = "allow"

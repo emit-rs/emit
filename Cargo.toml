@@ -27,7 +27,6 @@ name = "emit"
 version = "2.22.4"
 authors = ["emit contributors"]
 license = "MIT OR Apache-2.0"
-readme = "README.md"
 repository = "https://github.com/emit-rs/emit"
 description = "Developer-first diagnostics for Rust applications."
 keywords = ["logging", "tracing", "metrics", "observability"]

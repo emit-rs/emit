@@ -11,3 +11,6 @@ path = "../../"
 [dependencies.emit_otlp]
 version = "2.22.4"
 path = "../../emitter/otlp"
+
+[lints.cargo]
+non_kebab_case_bins = "allow"

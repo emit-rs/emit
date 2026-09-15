@@ -71,6 +71,8 @@ emit::info!(
 );
 ```
 
+See [Template syntax and rendering](./reference/templates.md) for details.
+
 ### Structured data
 
 `emit` captures properties using their `Display` implementation by default with special handling for booleans and numbers. It uses attribute syntax to customize how properties are captured, such as using `Serialize` instead:
@@ -102,6 +104,21 @@ emit::info!(
 );
 ```
 
+### Errors
+
+`emit` has [well-known property names](./producing-events/logging/data-model.md) that are understood by components of its runtime. You can use the `err` well-known property [to capture an error](./producing-events/logging/errors.md) using its [`Error`](https://doc.rust-lang.org/std/error/trait.Error.html) implementation:
+
+```rust
+# extern crate emit;
+# let user = "user-123";
+let err = std::io::Error::new(
+    std::io::ErrorKind::Other,
+    "failed to connect to the remote service",
+);
+
+emit::error!("something went wrong: {err}");
+```
+
 ## Tracing functions
 
 Add [`#[span]`](https://docs.rs/emit/2.22.4/emit/attr.span.html) to a significant function in your application to trace its execution:
@@ -116,7 +133,26 @@ async fn add_item(user: &str, item: &str) {
 
 Any diagnostics emitted within a traced function will be correlated with it. Any other traced functions it calls will form a trace hierarchy.
 
+### Macro syntax
+
 `emit`'s tracing attributes use the same syntax and capturing rules as log events.
+
+### Ambient context
+
+Any properties captured in your `#[span]` attribute template will appear on any other events emitted in the body of the span. If a property isn't useful ambiently, but you still want to capture it, you can include it [in the span event's properties](./producing-events/tracing/properties.md#adding-properties-to-a-span-without-making-them-ambient) instead:
+
+```rust
+# extern crate emit;
+#[emit::span(
+    evt_props: emit::props! {
+        item,
+    },
+    "add to {user} cart",
+)]
+async fn add_item(user: &str, item: &str) {
+    // Your code goes here
+}
+```
 
 ## Sampling metrics
 
@@ -128,6 +164,24 @@ let bytes_written = 417;
 
 emit::sample!(value: bytes_written, agg: "count");
 ```
+
+### Cumulative and delta metrics
+
+Metrics produced by `sample!` are assumed to be cumultive by default. You can emit deltas instead by tracking the time range the delta applies to:
+
+```rust
+# extern crate emit;
+# use std::time::Duration;
+let end = emit::clock().now();
+let start = end.map(|end| end - Duration::from_secs(30));
+
+let bytes_written = 6;
+
+// This sample tells us that between `start` and `end`, we wrote `bytes_written` more bytes
+emit::sample!(extent: start..end, value: bytes_written, agg: "count");
+```
+
+See [Delta metrics](./producing-events/metrics/delta-metrics.md) for details.
 
 ## Quick debugging
 

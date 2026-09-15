@@ -3,7 +3,6 @@ name = "emit_term"
 version = "2.22.4"
 authors = ["emit contributors"]
 license = "MIT OR Apache-2.0"
-readme = "README.md"
 repository = "https://github.com/emit-rs/emit"
 description = "Emit diagnostic events to the console."
 keywords = ["logging", "tracing", "metrics", "observability"]
