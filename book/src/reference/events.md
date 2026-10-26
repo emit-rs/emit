@@ -55,9 +55,63 @@ A value can always be formatted or serialized using any of the above frameworks,
 
 The time-oriented part of an event is its [`Extent`](https://docs.rs/emit/2.23.0/emit/struct.Extent.html). Internally, an extent stores [`Timestamp`](https://docs.rs/emit/2.23.0/emit/struct.Timestamp.html)s. An extent can either store one or a pair of timestamps.
 
-An extent that stores a single timestamp is called a point. These are used by log events and other events that represent a point-in-time observation.
+## Point-in-time extents
 
-An extent that stores a pair of timestamps is called a range. These are used by trace spans and other events that represent something happening over time.
+An extent that stores a single timestamp is called a point. These are used by log events and other events that represent a point-in-time observation:
+
+```rust
+# extern crate emit;
+# fn check() -> Option<()> {
+use emit::extent::ToExtent as _;
+
+let now: emit::Timestamp = emit::clock().now()?;
+
+// A timestamp creates a point-in-time extent
+let extent: emit::Extent = now.to_extent();
+
+assert!(extent.is_point());
+# None
+# }
+```
+
+### Time-range extents
+
+An extent that stores a pair of timestamps is called a range. These are used by trace spans and other events that represent something happening over time:
+
+```rust
+# extern crate emit;
+# use std::time::Duration;
+# fn check() -> Option<()> {
+# use emit::extent::ToExtent as _;
+let end = emit::clock().now()?;
+let start = end - Duration::from_secs(1);
+
+// A `Range<Timestamp>` creates a time range extent
+let extent = (start..end).to_extent();
+
+assert!(extent.is_range());
+# None
+# }
+```
+
+A [`Timer`](https://docs.rs/emit/2.23.0/emit/timer/struct.Timer.html) is a convenient way to construct a range extent by tracking the start and end bound for you:
+
+```rust
+# extern crate emit;
+# use std::time::Duration;
+# fn check() -> Option<()> {
+# use emit::extent::ToExtent as _;
+let timer = emit::Timer::start(emit::clock());
+
+// Wait a bit...
+
+// A `Timer` creates a time range extent
+let extent = timer.to_extent();
+
+assert!(extent.is_range());
+# None
+# }
+```
 
 ## Constructing events without macros
 
