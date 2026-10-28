@@ -60,8 +60,6 @@ ctxt.push(emit::ctxt())
 
 This approach can be used, for example, in web frameworks that split request handling across multiple independent function calls.
 
-## Creating spans without any ambient context
-
 Trace and span ids don't need to be managed by `emit` if you have another scheme in mind. In these cases, they can be attached as regular properties to the span event:
 
 ```rust
@@ -81,6 +79,12 @@ emit::emit! {
     sleep_ms,
 }
 ```
+
+The call above shows the minimum set of [well-known span properties](./data-model.md) that are needed to treat an event as a span:
+
+- `extent` given explicitly as a [a time range](../../reference/events.md#time-range-extents), such as a [`Timer`](https://docs.rs/emit/2.23.0/emit/timer/struct.Timer.html), or `Range<Timestamp>`.
+- `evt_kind` with the value `"span"`.
+- `trace_id` and `span_id` with a formatted or structured [`TraceId`](https://docs.rs/emit/2.23.0/emit/span/struct.TraceId.html) and [`SpanId`](https://docs.rs/emit/2.23.0/emit/span/struct.SpanId.html).
 
 `emit` also defines a [`Span`](https://docs.rs/emit/2.23.0/emit/span/struct.Span.html) type, which are a kind of [`Event`](https://docs.rs/emit/2.23.0/emit/struct.Event.html) specialized for spans in a distributed trace. You can construct a `Span` event manually:
 

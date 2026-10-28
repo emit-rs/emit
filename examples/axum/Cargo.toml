@@ -1,0 +1,27 @@
+[package]
+name = "emit_example_axum"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies.tokio]
+version = "1"
+features = ["full"]
+
+[dependencies.axum]
+version = "0.8"
+
+[dependencies.tower]
+version = "0.5"
+
+[dependencies.emit]
+path = "../../"
+
+[dependencies.emit_traceparent]
+path = "../../traceparent"
+
+[dependencies.emit_term]
+path = "../../emitter/term"
+
+[dependencies.emit_otlp]
+path = "../../emitter/otlp"
