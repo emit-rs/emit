@@ -67,7 +67,7 @@ use emit::extent::ToExtent as _;
 let now: emit::Timestamp = emit::clock().now()?;
 
 // A timestamp creates a point-in-time extent
-let extent: emit::Extent = now.to_extent();
+let extent: emit::Extent = now.to_extent()?;
 
 assert!(extent.is_point());
 # None
@@ -87,7 +87,7 @@ let end = emit::clock().now()?;
 let start = end - Duration::from_secs(1);
 
 // A `Range<Timestamp>` creates a time range extent
-let extent = (start..end).to_extent();
+let extent = (start..end).to_extent()?;
 
 assert!(extent.is_range());
 # None
@@ -106,7 +106,7 @@ let timer = emit::Timer::start(emit::clock());
 // Wait a bit...
 
 // A `Timer` creates a time range extent
-let extent = timer.to_extent();
+let extent = timer.to_extent()?;
 
 assert!(extent.is_range());
 # None

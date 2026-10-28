@@ -10,8 +10,8 @@ jobs:
     - name: Install Rust
       run: |
         rustup set profile minimal
-        rustup toolchain install stable
-        rustup default stable
+        rustup toolchain install nightly
+        rustup default nightly
     - name: Install latest mdbook
       run: |
         tag=$(curl 'https://api.github.com/repos/rust-lang/mdbook/releases/latest' | jq -r '.tag_name')
@@ -24,4 +24,4 @@ jobs:
     - name: Run tests
       run: |
         cargo build --all --all-features
-        mdbook test book -L target/debug/deps
+        mdbook test book -L "$(find target/debug/build -type f -name '*.d' -exec dirname {} \; | sort -u | paste -sd, -)"
