@@ -10,7 +10,7 @@ note: the lint level is defined here
   |
 1 | #![deny(unused_must_use)]
   |         ^^^^^^^^^^^^^^^
-help: use `let _ = ...` to ignore the resulting value
+help: use `let _unused = ...` to ignore the resulting value without dropping it immediately
   |
-5 |     let _ = emit::metric!(value: my_metric);
-  |     +++++++
+5 |     let _unused = emit::metric!(value: my_metric);
+  |     +++++++++++++
