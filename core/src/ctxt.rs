@@ -6,7 +6,7 @@ Context is a shared place to store and retrieve data from the environment. It ca
 Context is modeled like a stack. Pushing properties returns a frame which can be entered and exited to make those properties active on the current thread. Accessing the current context includes the properties for all active frames. This approach makes it possible to isolate context on different threads, as well is in different futures cooperatively executing on the same thread.
 */
 
-use crate::{empty::Empty, props::Props};
+use crate::{empty::Empty, event::ToEvent, props::Props, well_known::KEY_CTXT_DISCARD};
 
 /**
 Storage for ambient [`Props`].
@@ -41,14 +41,39 @@ pub trait Ctxt {
     }
 
     /**
-    Create a disabled frame.
+    Create a frame that will set the context to just the properties in `P`, explained by the event `evt`.
 
-    The properties in `P` will not be made live when the frame is entered but may still be tracked by the underlying context using the returned frame. This method can be used to inform a context about properties that would have been used under some other conditions.
+    See [`Ctxt::open_root`].
+
+    The properties on `evt` aren't included in the frame.
+    They're additional context for the properties that explains what they're for, or what eventual event will be produced within the frame.
+    If `evt` carries the well-known [`KEY_CTXT_DISCARD`] property with the value `true`, then `props` should be discarded, and a frame covering the current state of the context returned instead.
     */
-    fn open_disabled<P: Props>(&self, props: P) -> Self::Frame {
-        let _ = props;
+    fn open_root_for<E: ToEvent, P: Props>(&self, evt: E, props: P) -> Self::Frame {
+        if evt.to_event().props().pull(KEY_CTXT_DISCARD) == Some(true) {
+            #[allow(deprecated)]
+            self.open_disabled(props)
+        } else {
+            self.open_root(props)
+        }
+    }
 
-        self.open_push(Empty)
+    /**
+    Create a frame that will set the context to its current set, plus the properties in `P`.
+
+    See [`Ctxt::open_push`].
+
+    The properties on `evt` aren't included in the frame.
+    They're additional context for the properties that explains what they're for, or what eventual event will be produced within the frame.
+    If `evt` carries the well-known [`KEY_CTXT_DISCARD`] property with the value `true`, then `props` should be discarded, and a frame covering the current state of the context returned instead.
+    */
+    fn open_push_for<E: ToEvent, P: Props>(&self, evt: E, props: P) -> Self::Frame {
+        if evt.to_event().props().pull(KEY_CTXT_DISCARD) == Some(true) {
+            #[allow(deprecated)]
+            self.open_disabled(props)
+        } else {
+            self.open_push(props)
+        }
     }
 
     /**
@@ -80,6 +105,17 @@ pub trait Ctxt {
     This method should be called whenever a frame is finished. Failing to do so may leak.
     */
     fn close(&self, frame: Self::Frame);
+
+    #[doc(hidden)]
+    #[deprecated(
+        since = "2.24.0",
+        note = "use `open_push_for` with an event carrying the property `evt_status: \"disabled\"`"
+    )]
+    fn open_disabled<P: Props>(&self, props: P) -> Self::Frame {
+        let _ = props;
+
+        self.open_push(Empty)
+    }
 }
 
 impl<'a, C: Ctxt + ?Sized> Ctxt for &'a C {
@@ -94,6 +130,7 @@ impl<'a, C: Ctxt + ?Sized> Ctxt for &'a C {
         (**self).open_push(props)
     }
 
+    #[allow(deprecated)]
     fn open_disabled<P: Props>(&self, props: P) -> Self::Frame {
         (**self).open_disabled(props)
     }
@@ -136,6 +173,15 @@ impl<C: Ctxt> Ctxt for Option<C> {
         self.as_ref().map(|ctxt| ctxt.open_push(props))
     }
 
+    fn open_root_for<E: ToEvent, P: Props>(&self, evt: E, props: P) -> Self::Frame {
+        self.as_ref().map(|ctxt| ctxt.open_root_for(evt, props))
+    }
+
+    fn open_push_for<E: ToEvent, P: Props>(&self, evt: E, props: P) -> Self::Frame {
+        self.as_ref().map(|ctxt| ctxt.open_push_for(evt, props))
+    }
+
+    #[allow(deprecated)]
     fn open_disabled<P: Props>(&self, props: P) -> Self::Frame {
         self.as_ref().map(|ctxt| ctxt.open_disabled(props))
     }
@@ -176,6 +222,15 @@ impl<'a, C: Ctxt + ?Sized + 'a> Ctxt for alloc::boxed::Box<C> {
         (**self).open_push(props)
     }
 
+    fn open_root_for<E: ToEvent, P: Props>(&self, evt: E, props: P) -> Self::Frame {
+        (**self).open_root_for(evt, props)
+    }
+
+    fn open_push_for<E: ToEvent, P: Props>(&self, evt: E, props: P) -> Self::Frame {
+        (**self).open_push_for(evt, props)
+    }
+
+    #[allow(deprecated)]
     fn open_disabled<P: Props>(&self, props: P) -> Self::Frame {
         (**self).open_disabled(props)
     }
@@ -210,6 +265,15 @@ impl<'a, C: Ctxt + ?Sized + 'a> Ctxt for alloc::sync::Arc<C> {
         (**self).open_push(props)
     }
 
+    fn open_root_for<E: ToEvent, P: Props>(&self, evt: E, props: P) -> Self::Frame {
+        (**self).open_root_for(evt, props)
+    }
+
+    fn open_push_for<E: ToEvent, P: Props>(&self, evt: E, props: P) -> Self::Frame {
+        (**self).open_push_for(evt, props)
+    }
+
+    #[allow(deprecated)]
     fn open_disabled<P: Props>(&self, props: P) -> Self::Frame {
         (**self).open_disabled(props)
     }
@@ -240,6 +304,14 @@ impl Ctxt for Empty {
     }
 
     fn open_push<P: Props>(&self, _: P) -> Self::Frame {
+        Empty
+    }
+
+    fn open_root_for<E: ToEvent, P: Props>(&self, _: E, _: P) -> Self::Frame {
+        Empty
+    }
+
+    fn open_push_for<E: ToEvent, P: Props>(&self, _: E, _: P) -> Self::Frame {
         Empty
     }
 
@@ -289,6 +361,7 @@ mod internal {
 
 #[cfg(feature = "alloc")]
 mod alloc_support {
+    use crate::event::Event;
     use crate::props::ErasedProps;
 
     use super::*;
@@ -298,6 +371,7 @@ mod alloc_support {
         use core::{marker::PhantomData, mem, mem::MaybeUninit, ops::ControlFlow, ptr};
 
         use crate::{
+            event::Event,
             props::{ErasedProps, Props},
             str::Str,
             value::Value,
@@ -308,10 +382,22 @@ mod alloc_support {
 
             fn dispatch_open_root(&self, props: &dyn ErasedProps) -> ErasedFrame;
             fn dispatch_open_push(&self, props: &dyn ErasedProps) -> ErasedFrame;
-            fn dispatch_open_disabled(&self, props: &dyn ErasedProps) -> ErasedFrame;
+            fn dispatch_open_root_for(
+                &self,
+                evt: Event<&dyn ErasedProps>,
+                props: &dyn ErasedProps,
+            ) -> ErasedFrame;
+            fn dispatch_open_push_for(
+                &self,
+                evt: Event<&dyn ErasedProps>,
+                props: &dyn ErasedProps,
+            ) -> ErasedFrame;
             fn dispatch_enter(&self, frame: &mut ErasedFrame);
             fn dispatch_exit(&self, frame: &mut ErasedFrame);
             fn dispatch_close(&self, frame: ErasedFrame);
+
+            #[deprecated]
+            fn dispatch_open_disabled(&self, props: &dyn ErasedProps) -> ErasedFrame;
         }
 
         pub trait SealedCtxt {
@@ -486,6 +572,23 @@ mod alloc_support {
             internal::ErasedFrame::new(self.open_push(props))
         }
 
+        fn dispatch_open_root_for(
+            &self,
+            evt: Event<&dyn ErasedProps>,
+            props: &dyn ErasedProps,
+        ) -> internal::ErasedFrame {
+            internal::ErasedFrame::new(self.open_root_for(evt, props))
+        }
+
+        fn dispatch_open_push_for(
+            &self,
+            evt: Event<&dyn ErasedProps>,
+            props: &dyn ErasedProps,
+        ) -> internal::ErasedFrame {
+            internal::ErasedFrame::new(self.open_push_for(evt, props))
+        }
+
+        #[allow(deprecated)]
         fn dispatch_open_disabled(&self, props: &dyn ErasedProps) -> internal::ErasedFrame {
             internal::ErasedFrame::new(self.open_disabled(props))
         }
@@ -526,6 +629,19 @@ mod alloc_support {
             self.erase_ctxt().0.dispatch_open_push(&props)
         }
 
+        fn open_root_for<E: ToEvent, P: Props>(&self, evt: E, props: P) -> Self::Frame {
+            self.erase_ctxt()
+                .0
+                .dispatch_open_root_for(evt.to_event().erase(), &props)
+        }
+
+        fn open_push_for<E: ToEvent, P: Props>(&self, evt: E, props: P) -> Self::Frame {
+            self.erase_ctxt()
+                .0
+                .dispatch_open_push_for(evt.to_event().erase(), &props)
+        }
+
+        #[allow(deprecated)]
         fn open_disabled<P: Props>(&self, props: P) -> Self::Frame {
             self.erase_ctxt().0.dispatch_open_disabled(&props)
         }
@@ -559,6 +675,15 @@ mod alloc_support {
             (self as &(dyn ErasedCtxt + 'a)).open_push(props)
         }
 
+        fn open_root_for<E: ToEvent, P: Props>(&self, evt: E, props: P) -> Self::Frame {
+            (self as &(dyn ErasedCtxt + 'a)).open_root_for(evt, props)
+        }
+
+        fn open_push_for<E: ToEvent, P: Props>(&self, evt: E, props: P) -> Self::Frame {
+            (self as &(dyn ErasedCtxt + 'a)).open_push_for(evt, props)
+        }
+
+        #[allow(deprecated)]
         fn open_disabled<P: Props>(&self, props: P) -> Self::Frame {
             (self as &(dyn ErasedCtxt + 'a)).open_disabled(props)
         }
@@ -690,6 +815,7 @@ pub use alloc_support::*;
 mod tests {
     use super::*;
 
+    use crate::{event::Event, path::Path, template::Template, timestamp::Timestamp};
     use core::{cell::Cell, ops::ControlFlow};
 
     #[test]
@@ -779,5 +905,54 @@ mod tests {
 
             ctxt.close(frame);
         }
+    }
+
+    #[test]
+    fn open_for_disabled() {
+        struct MyCtxt {
+            count: Cell<usize>,
+        }
+
+        impl Ctxt for MyCtxt {
+            type Current = Empty;
+            type Frame = ();
+
+            fn open_root<P: Props>(&self, _: P) -> Self::Frame {
+                todo!()
+            }
+
+            #[allow(deprecated)]
+            fn open_disabled<P: Props>(&self, props: P) -> Self::Frame {
+                assert_eq!(Some(1), props.pull("prop"));
+
+                self.count.set(self.count.get() + 1);
+            }
+
+            fn enter(&self, _: &mut Self::Frame) {}
+
+            fn with_current<R, F: FnOnce(&Self::Current) -> R>(&self, _: F) -> R {
+                todo!()
+            }
+
+            fn exit(&self, _: &mut Self::Frame) {}
+
+            fn close(&self, _: Self::Frame) {}
+        }
+
+        let ctxt = MyCtxt {
+            count: Cell::new(0),
+        };
+
+        let _ = ctxt.open_root_for(
+            Event::new(
+                Path::new("test").unwrap(),
+                Template::literal("test"),
+                Timestamp::MIN,
+                (KEY_CTXT_DISCARD, true),
+            ),
+            ("prop", 1),
+        );
+
+        assert_eq!(1, ctxt.count.get());
     }
 }

@@ -9,7 +9,7 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
-use emit_core::{ctxt::Ctxt, empty::Empty, props::Props, str::Str, value::Value};
+use emit_core::{ctxt::Ctxt, empty::Empty, event::ToEvent, props::Props, str::Str, value::Value};
 
 /**
 A set of ambient properties that are cleaned up automatically.
@@ -45,6 +45,19 @@ impl<C: Ctxt> Frame<C> {
     }
 
     /**
+    Get a frame with the given `props` pushed to the current set.
+
+    This method accepts an `evt` with additional context for the `props` that aren't pushed with them.
+    */
+    #[track_caller]
+    #[must_use = "call `enter`, `call`, `in_fn`, or `in_future` to make the pushed properties active"]
+    pub fn push_for(ctxt: C, evt: impl ToEvent, props: impl Props) -> Self {
+        let scope = ctxt.open_push_for(evt, props);
+
+        Self::from_parts(ctxt, scope)
+    }
+
+    /**
     Get a frame for just the properties in `props`.
     */
     #[track_caller]
@@ -56,16 +69,14 @@ impl<C: Ctxt> Frame<C> {
     }
 
     /**
-    Get a disabled frame.
+    Get a frame for just the properties in `props`.
 
-    The properties in `props` will not be visible when the frame is entered. This method should be used when `props` could have been pushed, but were filtered out.
-
-    Even though this frame isn't expected to have a visible impact on the current set of ambient properties it's still expected to be entered and exited as normal.
+    This method accepts an `evt` with additional context for the `props` that aren't pushed with them.
     */
     #[track_caller]
-    #[must_use = "call `enter`, `call`, `in_fn`, or `in_future` to make the properties active"]
-    pub fn disabled(ctxt: C, props: impl Props) -> Self {
-        let scope = ctxt.open_disabled(props);
+    #[must_use = "call `enter`, `call`, `in_fn`, or `in_future` to make the pushed properties active"]
+    pub fn root_for(ctxt: C, evt: impl ToEvent, props: impl Props) -> Self {
+        let scope = ctxt.open_root_for(evt, props);
 
         Self::from_parts(ctxt, scope)
     }
@@ -186,6 +197,20 @@ impl<C: Ctxt> Frame<C> {
         mem::forget(self);
 
         (ctxt, scope)
+    }
+
+    #[track_caller]
+    #[must_use = "call `enter`, `call`, `in_fn`, or `in_future` to make the properties active"]
+    #[doc(hidden)]
+    #[deprecated(
+        since = "2.24.0",
+        note = "use `push_for` with an event carrying the property `evt_status: \"disabled\"`"
+    )]
+    #[allow(deprecated)]
+    pub fn disabled(ctxt: C, props: impl Props) -> Self {
+        let scope = ctxt.open_disabled(props);
+
+        Self::from_parts(ctxt, scope)
     }
 }
 

@@ -28,8 +28,8 @@ use emit_core::{
     timestamp::Timestamp,
     value::{FromValue, ToValue, Value},
     well_known::{
-        KEY_EVT_KIND, KEY_SPAN_ID, KEY_SPAN_KIND, KEY_SPAN_NAME, KEY_SPAN_PARENT, KEY_TRACE_ID,
-        SPAN_KIND_CLIENT, SPAN_KIND_CONSUMER, SPAN_KIND_INTERNAL, SPAN_KIND_PRODUCER,
+        KEY_CTXT_DISCARD, KEY_EVT_KIND, KEY_SPAN_ID, KEY_SPAN_KIND, KEY_SPAN_NAME, KEY_SPAN_PARENT,
+        KEY_TRACE_ID, SPAN_KIND_CLIENT, SPAN_KIND_CONSUMER, SPAN_KIND_INTERNAL, SPAN_KIND_PRODUCER,
         SPAN_KIND_SERVER,
     },
 };
@@ -2484,25 +2484,33 @@ impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
 
         let span_ctxt = SpanCtxt::current(&ctxt).new_child(rng);
 
-        // Check whether the span should be constructed using a dummy event
+        let evt = Span::new(
+            span_mdl.by_ref(),
+            Empty,
+            (&span_props).and_props(&ctxt_props).and_props(&span_ctxt),
+        )
+        .with_tpl(START_TEMPLATE.by_ref());
+
+        // Check whether the span should be by filtering on a dummy event
         let is_enabled = ctxt.with_current(|current_ctxt_props| {
             filter.matches(
-                Span::new(
-                    span_mdl.by_ref(),
-                    Empty,
-                    (&span_props)
-                        .and_props(&ctxt_props)
-                        .and_props(span_ctxt)
-                        .and_props(current_ctxt_props),
-                )
-                .to_event()
-                .with_tpl(START_TEMPLATE.by_ref()),
+                &evt.to_event()
+                    .map_props(|props| props.and_props(current_ctxt_props)),
             )
         });
 
-        // Create a guard for the span
-        // This can be completed automatically by dropping
-        // or manually through the `complete` method
+        // Create a frame based on the same dummy event
+        let frame = if is_enabled {
+            Frame::push_for(ctxt, evt, (&ctxt_props).and_props(&span_ctxt))
+        } else {
+            Frame::push_for(
+                ctxt,
+                evt.map_props(|props| props.and_props((KEY_CTXT_DISCARD, true))),
+                (&ctxt_props).and_props(&span_ctxt),
+            )
+        };
+
+        // Construct our guard type over the completion
         let guard = SpanGuard {
             state: SpanGuardState::Initial(clock),
             data: Some(SpanGuardData {
@@ -2513,21 +2521,7 @@ impl<'a, T: Clock, P: Props, F: Completion> SpanGuard<'a, T, P, F> {
             completion: if is_enabled { Some(completion) } else { None },
         };
 
-        // Create a frame for the span props
-        // This includes the trace and span ids
-        let frame = guard.push_ctxt(ctxt, ctxt_props);
-
         (guard, frame)
-    }
-
-    fn push_ctxt<C: Ctxt>(&self, ctxt: C, ctxt_props: impl Props) -> Frame<C> {
-        let span_ctxt = self.data.as_ref().expect("span is already complete").ctxt;
-
-        if self.is_enabled() {
-            Frame::push(ctxt, ctxt_props.and_props(span_ctxt))
-        } else {
-            Frame::disabled(ctxt, ctxt_props.and_props(span_ctxt))
-        }
     }
 
     /**
