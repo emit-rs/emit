@@ -45,8 +45,8 @@ pub trait Ctxt {
 
     See [`Ctxt::open_root`].
 
-    The properties on `evt` aren't included in the frame.
-    They're additional context for the properties that explains what they're for, or what eventual event will be produced within the frame.
+    The `evt` passed alongside `props` is an informational event that describes an operation the returned frame will wrap.
+    The properties on `evt` itself aren't included in the frame, but may influence how `props` is interpreted.
     If `evt` carries the well-known [`KEY_CTXT_DISCARD`] property with the value `true`, then `props` should be discarded, and a frame covering the current state of the context returned instead.
     */
     fn open_root_for<E: ToEvent, P: Props>(&self, evt: E, props: P) -> Self::Frame {
@@ -63,8 +63,8 @@ pub trait Ctxt {
 
     See [`Ctxt::open_push`].
 
-    The properties on `evt` aren't included in the frame.
-    They're additional context for the properties that explains what they're for, or what eventual event will be produced within the frame.
+    The `evt` passed alongside `props` is an informational event that describes an operation the returned frame will wrap.
+    The properties on `evt` itself aren't included in the frame, but may influence how `props` is interpreted.
     If `evt` carries the well-known [`KEY_CTXT_DISCARD`] property with the value `true`, then `props` should be discarded, and a frame covering the current state of the context returned instead.
     */
     fn open_push_for<E: ToEvent, P: Props>(&self, evt: E, props: P) -> Self::Frame {
@@ -109,7 +109,7 @@ pub trait Ctxt {
     #[doc(hidden)]
     #[deprecated(
         since = "2.24.0",
-        note = "use `open_push_for` with an event carrying the property `evt_status: \"disabled\"`"
+        note = "use `open_push_for` or `open_root_for` with an event carrying the property `ctxt_discard: true`"
     )]
     fn open_disabled<P: Props>(&self, props: P) -> Self::Frame {
         let _ = props;

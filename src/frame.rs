@@ -45,9 +45,10 @@ impl<C: Ctxt> Frame<C> {
     }
 
     /**
-    Get a frame with the given `props` pushed to the current set.
+    Get a frame with the given `props` pushed to the current set for an operation described by `evt`.
 
-    This method accepts an `evt` with additional context for the `props` that aren't pushed with them.
+    The properties on `evt` aren't included in the resulting frame, but may influence how `props` is interpreted.
+    If `evt` carries the well-known [`crate::well_known::KEY_CTXT_DISCARD`] property with the value `true`, then the resulting frame will be equivalent to [`Frame::current`].
     */
     #[track_caller]
     #[must_use = "call `enter`, `call`, `in_fn`, or `in_future` to make the pushed properties active"]
@@ -69,9 +70,10 @@ impl<C: Ctxt> Frame<C> {
     }
 
     /**
-    Get a frame for just the properties in `props`.
+    Get a frame for just the properties in `props` for an operation described by `evt`.
 
-    This method accepts an `evt` with additional context for the `props` that aren't pushed with them.
+    The properties on `evt` aren't included in the resulting frame, but may influence how `props` is interpreted.
+    If `evt` carries the well-known [`crate::well_known::KEY_CTXT_DISCARD`] property with the value `true`, then the resulting frame will be equivalent to [`Frame::current`].
     */
     #[track_caller]
     #[must_use = "call `enter`, `call`, `in_fn`, or `in_future` to make the pushed properties active"]
@@ -204,7 +206,7 @@ impl<C: Ctxt> Frame<C> {
     #[doc(hidden)]
     #[deprecated(
         since = "2.24.0",
-        note = "use `push_for` with an event carrying the property `evt_status: \"disabled\"`"
+        note = "use `push_for` or `root_for` with an event carrying the property `ctxt_discard: true`"
     )]
     #[allow(deprecated)]
     pub fn disabled(ctxt: C, props: impl Props) -> Self {
